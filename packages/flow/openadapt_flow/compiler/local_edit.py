@@ -324,7 +324,7 @@ def _click_edit(step: Step, steps: Sequence[Step], k: int) -> Optional[LocalEdit
     role = (target.role or "").lower()
     label = _label(step) or ""
     if role in {"button", "link"} and _DISMISS_LABEL.match(label):
-        # An informational dialog's dismiss (MockMed's What's New "Continue
+        # An informational dialog's dismiss (e.g. a What's New "Continue
         # to tasks"): the page stays, and the control is gone afterwards.
         return LocalEdit(
             step.id,

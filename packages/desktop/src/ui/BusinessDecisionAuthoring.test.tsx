@@ -15,7 +15,7 @@ function project(): QualificationProject {
   return {
     ok: true,
     workflow_id: "wf-1",
-    policy: "clinical-write",
+    policy: "record-write",
     project: { revision: 3 },
     controls: {
       parameters: [],

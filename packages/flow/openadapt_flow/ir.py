@@ -46,6 +46,7 @@ from pydantic import (
 
 from openadapt_flow import run_invocation as _run_invocation
 from openadapt_flow.approval_mode.model import ApprovalModeItemEvidence
+from openadapt_flow.input_evidence import FreshActuationEvent as FreshActuationEvent
 from openadapt_flow.job_authoring import (
     JobAuthoringBinding,
     check_workflow_input,
@@ -58,12 +59,7 @@ from openadapt_flow.job_authoring import (
     validate_authoring_model_json,
 )
 from openadapt_flow.qualification_faults import FaultMutationReceipt
-from openadapt_flow.records.schema import (
-    FieldRead,
-    FieldSpec,
-    GradeGate,
-    ReadProof,
-)
+from openadapt_flow.records.schema import FieldRead, FieldSpec, GradeGate, ReadProof
 
 if TYPE_CHECKING:
     # Type-only import for the Step.effects forward reference. The RUNTIME
@@ -125,6 +121,7 @@ class ActionKind(str, Enum):
     # does not know the value, refuses the whole bundle instead of driving the
     # wrong window (docs/MULTI_SURFACE.md).
     SWITCH_SURFACE = "switch_surface"
+    SECOND_FACTOR = "second_factor"  # a person's sign-in code (second_factor.py)
 
 
 class Landmark(BaseModel):
@@ -343,32 +340,22 @@ class IdentityTemplate(BaseModel):
         ),
     )
     structured: Optional[str] = Field(
-        default=None, description="salted hash of the structured identity string"
+        default=None, description="salted hash of structured identity"
     )
     structured_params: list[str] = Field(
         default_factory=list,
-        description=(
-            "Workflow parameters embedded in the structured identity. Their "
-            "demonstrated values are replaced by fixed sentinels before "
-            "hashing; replay substitutes the run's value before exact compare."
-        ),
+        description="Workflow params replaced by fixed sentinels in structured identity.",
     )
     signal_hashes: dict[str, str] = Field(
         default_factory=dict,
-        description=(
-            "Salted hashes of strict exact/explicitly-normalized identity "
-            "evidence, including operator-selected extracted fields. Keys are "
-            "produced by identity_signals."
-        ),
+        description="Salted hashes of strict identity_signals evidence.",
     )
     context_params: list[str] = Field(
         default_factory=list,
-        description=(
-            "Workflow parameters replaced by fixed sentinels before the "
-            "captured-context signal hashes were computed."
-        ),
+        description="Workflow params replaced by sentinels in captured-context signal hashes.",
     )
     param_token_indices: dict[str, list[int]] = Field(default_factory=dict)
+    sibling_generic_hashes: list[str] = Field(default_factory=list)
     rests_on_confusable_identifier: bool = False
     record_key: Optional[str] = Field(
         default=None,
@@ -424,6 +411,8 @@ class IdentityTemplate(BaseModel):
             data.pop("signal_hashes", None)
         if not self.context_params:
             data.pop("context_params", None)
+        if not self.sibling_generic_hashes:
+            data.pop("sibling_generic_hashes", None)
         if self.record_key is None:
             data.pop("record_key", None)
         if self.structured_row is None:
@@ -2363,6 +2352,7 @@ class Step(BaseModel):
             " compiler.annotate.FieldLabelAnnotator)."
         ),
     )
+    one_time: Optional[Literal["code", "approval"]] = None  # second_factor.py
     native_selection: Optional[NativeSelectContract] = None
     choice: Optional[OptionChoice] = Field(
         default=None,
@@ -2572,13 +2562,16 @@ class Step(BaseModel):
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         """Keep steps without a selected-record parameter byte-identical."""
         data: dict[str, Any] = handler(self)
-        if self.target_param is None:
-            data.pop("target_param", None)
-        if self.native_selection is None:
-            data.pop("native_selection", None)
-        if self.choice is None:
-            data.pop("choice", None)
+        for key in ("target_param", "one_time", "native_selection", "choice"):
+            if getattr(self, key) is None:
+                data.pop(key, None)
         return data
+
+    @model_validator(mode="after")
+    def _validate_one_time(self) -> "Step":
+        from openadapt_flow.second_factor import check_step_shape
+
+        return check_step_shape(self)
 
     @model_validator(mode="after")
     def _validate_target_param(self) -> "Step":
@@ -4360,37 +4353,6 @@ class ActionDeliveryUncertainty(BaseModel):
     postconditions_confirmed: Optional[bool] = None
     effects_confirmed: Optional[bool] = None
     resolved_by_contract: bool = False
-
-
-class FreshActuationEvent(BaseModel):
-    """PHI-free evidence for one pre-input actuation-frame mismatch.
-
-    The runtime records only the number and geometry of changed pixels.  It
-    does not retain the rejected frame or its pixel values.  ``retried`` is
-    true only when no earlier input edge crossed for this workflow step and a
-    bounded reacquisition remained available.
-    """
-
-    attempt: int = Field(ge=1)
-    operation: str = Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
-    changed_pixel_count: int = Field(ge=1)
-    changed_bbox: Region
-    frame_size: tuple[int, int]
-    target_intersection: Optional[bool] = None
-    identity_intersection: Optional[bool] = None
-    retried: bool
-
-    @model_validator(mode="after")
-    def _valid_geometry(self) -> "FreshActuationEvent":
-        frame_width, frame_height = self.frame_size
-        x, y, width, height = self.changed_bbox
-        if frame_width <= 0 or frame_height <= 0:
-            raise ValueError("fresh-actuation frame size must be positive")
-        if x < 0 or y < 0 or width <= 0 or height <= 0:
-            raise ValueError("fresh-actuation bounding box must be positive")
-        if x + width > frame_width or y + height > frame_height:
-            raise ValueError("fresh-actuation bounding box exceeds the frame")
-        return self
 
 
 class IdentitySignalEvidence(BaseModel):
@@ -6224,7 +6186,7 @@ class ReportRedaction(BaseModel):
 
     pointer: str = Field(description="RFC 6901 JSON pointer to the string.")
     reason: str = Field(
-        description="What was removed, e.g. url_param:token_main or header:cookie."
+        description="What was removed, e.g. url_param:session_token or header:cookie."
     )
     by: Optional[str] = Field(
         default=None,

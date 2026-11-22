@@ -670,11 +670,10 @@ def test_cancellation_reports_effect_evidence_and_releases_the_lease(tmp_path, p
     assert result["callback_accepted"] and len(cp.callbacks) == len(cp.acks) == 1
     body, ack = cp.callbacks[0]["body"], cp.acks[0]
     assert "synthetic-record" not in json.dumps(body)
-    if phase in {"before_start", "at_spawn", "after_write"}:
+    if phase in {"before_start", "at_spawn"}:
         assert storage.written == {}
         assert body["report_path"] is None
         assert "report_sha256" not in body["metrics"]
-    if phase in {"before_start", "at_spawn"}:
         assert not record.exists()
         assert result["status"] == body["status"] == ack["status"] == "failed"
         assert ack["error_code"] == "cancelled_by_control_plane"
@@ -692,6 +691,10 @@ def test_cancellation_reports_effect_evidence_and_releases_the_lease(tmp_path, p
             assert ack["error_code"] == body["error_code"]
             assert ack["error_code"] == "cancelled_after_child_start"
             assert "failure_signal" not in body
+            if phase == "after_write":
+                assert storage.written == {}
+                assert body["report_path"] is None
+                assert "report_sha256" not in body["metrics"]
 
 
 def test_report_write_failure_lease_is_not_acked_failed():
@@ -996,7 +999,7 @@ def test_local_diagnostic_keeps_child_output_and_refusal_off_the_wire(
     result = run_once(client, _settings(storage_root=str(root)), runner=runner)
     expected = {
         "before_child": "governance_refused",
-        "no_report": "child_no_report",
+        "no_report": "child_outcome_unknown",
         "missing_target": "child_report_missing_target",
         "wrong_target": "target_kind_mismatch",
     }

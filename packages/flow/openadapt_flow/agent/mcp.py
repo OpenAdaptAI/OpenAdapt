@@ -26,7 +26,6 @@ from typing import Any, Iterator
 import anyio
 import mcp.server.stdio as _mcp_stdio
 import mcp.types as types
-from jsonschema import ValidationError, validate
 from mcp.server.lowlevel import Server
 from mcp.server.stdio import stdio_server
 
@@ -34,6 +33,7 @@ from openadapt_flow.agent import __version__
 from openadapt_flow.agent.attended import ATTENDED_TOOLS
 from openadapt_flow.agent.authoring import AuthoringBridge
 from openadapt_flow.agent.bridge import AgentBridge, BridgeError
+from openadapt_flow.agent.contract_call import call_with_ledger, validate_arguments
 
 __all__ = ["HUMAN_CONFIRMED_TOOLS", "build_server", "serve"]
 
@@ -369,14 +369,8 @@ def build_server(
                 raise BridgeError("unknown or unavailable tool name")
             # MCP 2 removed the low-level decorator's schema validation.
             # Keep it explicit on both SDKs, before confirmation or dispatch.
-            # ValidationError text contains input values, so never return it.
-            try:
-                validate(arguments or {}, spec.input_schema)
-            except ValidationError:
-                raise BridgeError(
-                    getattr(spec, "usage", None)
-                    or "tool arguments do not match the input schema"
-                ) from None
+            # The same gate serves the A2A adapter (contract_call).
+            validate_arguments(spec, arguments)
             human_confirmed = False
             teaching = teach is not None and teach.handles(name)
             held_by_person: str | None = None
@@ -418,25 +412,14 @@ def build_server(
                 person = await _ask_person_name(context, message)
 
             def call() -> dict[str, Any]:
-                payload = dict(arguments or {})
-                if ledger is None:
-                    return dispatch(payload)
-                if ledger.handles(name):
-                    return ledger.dispatch(name, payload)
                 # A taught workflow's own tool is a run_workflow call.
-                taught_run = teaching and name in teach.taught
-                if name == "run_workflow" or taught_run:
-                    ledger.check_run(payload)
-                result = dispatch(payload)
-                # Item status comes only from this server's own results. A
-                # ledger failure never hides a run's result from the caller.
-                try:
-                    ledger.observe(
-                        "run_workflow" if taught_run else name, payload, result
-                    )
-                except Exception:
-                    _LOG.exception("could not record a result in the task ledger")
-                return result
+                return call_with_ledger(
+                    ledger,
+                    name,
+                    dict(arguments or {}),
+                    dispatch,
+                    taught_run=bool(teaching and name in teach.taught),
+                )
 
             def dispatch(payload: dict[str, Any]) -> dict[str, Any]:
                 if guard is not None and guard.handles(name):

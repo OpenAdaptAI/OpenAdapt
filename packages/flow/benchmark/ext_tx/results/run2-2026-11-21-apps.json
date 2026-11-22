@@ -1,0 +1,1453 @@
+{
+  "acrfence": {
+    "mail": {
+      "blocked": 20,
+      "control_duplicates": 20,
+      "double_effects_through": 0,
+      "identical_replays_not_sent": 20,
+      "trials": 20
+    },
+    "rest": {
+      "blocked": 20,
+      "control_duplicates": 20,
+      "double_effects_through": 0,
+      "identical_replays_not_sent": 20,
+      "trials": 20
+    },
+    "sql": {
+      "blocked": 20,
+      "control_duplicates": 20,
+      "double_effects_through": 0,
+      "identical_replays_not_sent": 20,
+      "trials": 20
+    }
+  },
+  "apps": {
+    "database": "Dolibarr 21.0.4 on MariaDB 11.4.13",
+    "email": "Mailpit v1.27.10",
+    "rest": "Vikunja 2.7.1"
+  },
+  "code_sha": "2668a20f6d955de4fb7cd50b5a79a91e515b9b6f",
+  "crash": {
+    "rest": {
+      "crashed_after_send": 5,
+      "double_effects_through": 0,
+      "trials": 5
+    },
+    "sql": {
+      "crashed_after_send": 5,
+      "double_effects_through": 0,
+      "trials": 5
+    }
+  },
+  "dolibarr_lab_rows_left": 0,
+  "finished_at": "2026-11-21T07:44:22Z",
+  "phase": "measured",
+  "receipts": {
+    "tx-apply": {
+      "approval_bound_to_plan_digest": 250,
+      "approver_agent": 250,
+      "runs": 250,
+      "verified": 250
+    },
+    "tx-plan": {
+      "approver_none": 260,
+      "runs": 260,
+      "verified": 260
+    },
+    "tx-release": {
+      "approval_bound_to_plan_digest": 50,
+      "approver_agent": 50,
+      "runs": 50,
+      "verified": 50
+    },
+    "tx-undo": {
+      "approval_bound_to_plan_digest": 50,
+      "approver_agent": 50,
+      "runs": 50,
+      "verified": 50
+    }
+  },
+  "rounds": {
+    "mail": [
+      {
+        "anomalies": 0,
+        "apply": {
+          "confirmed": 0,
+          "false_diffs": 0,
+          "held": 10,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 0,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "COMPLETED_UNVERIFIED",
+        "collateral": [
+          "message/ik-212ce3fc14c65eccb470c7e6af0b47e1a4b09578@openadapt.tx#1",
+          "message/ik-238a5b980427bf3728cda70b51fceca24b9c3fba@openadapt.tx#1",
+          "message/ik-350180d9e182657ce5896ef7041ed36aacce52ad@openadapt.tx#1",
+          "message/ik-43993b3a70fd7c366215031ac982b4ae3da5cdf5@openadapt.tx#1",
+          "message/ik-726586335eb1c3ea149e1aa43a5d7002c68b91a2@openadapt.tx#1"
+        ],
+        "digest": "a8a147a2d32a84a2",
+        "dry_run": {
+          "outbox": "holdback"
+        },
+        "false": [],
+        "mailbox": {
+          "cancelled_never_sent": 5,
+          "cancelled_sent": 0,
+          "released_exactly_once": 5,
+          "released_other": 0
+        },
+        "missed": [],
+        "release": {
+          "adopted": 0,
+          "double": 0,
+          "phase": "release",
+          "released": 5,
+          "waiting": 0
+        },
+        "undo": {
+          "cancelled": 5,
+          "codes": {
+            "cancelled": 5,
+            "irreversible_released": 5
+          },
+          "collateral_changes": 5,
+          "irreversible_released": 5,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 0,
+          "undo_verified": 0,
+          "writes": 10
+        },
+        "undo_outcome": "RECONCILIATION_REQUIRED"
+      },
+      {
+        "anomalies": 0,
+        "apply": {
+          "confirmed": 0,
+          "false_diffs": 0,
+          "held": 10,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 0,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "COMPLETED_UNVERIFIED",
+        "collateral": [
+          "message/ik-0962988d960dac52cd8a756ad74159daae33c4e0@openadapt.tx#1",
+          "message/ik-0f04c6afd57267b35e8ccb27e50eba4a83af6906@openadapt.tx#1",
+          "message/ik-34f272154df36fae37664998b8808a0d637066fe@openadapt.tx#1",
+          "message/ik-37293458449fa277bd2632500fbbe9e5607f39d6@openadapt.tx#1",
+          "message/ik-6fbb3e956c3a87a4c848842291c71c9f348d7a78@openadapt.tx#1"
+        ],
+        "digest": "484338e0f734cf1c",
+        "dry_run": {
+          "outbox": "holdback"
+        },
+        "false": [],
+        "mailbox": {
+          "cancelled_never_sent": 5,
+          "cancelled_sent": 0,
+          "released_exactly_once": 5,
+          "released_other": 0
+        },
+        "missed": [],
+        "release": {
+          "adopted": 0,
+          "double": 0,
+          "phase": "release",
+          "released": 5,
+          "waiting": 0
+        },
+        "undo": {
+          "cancelled": 5,
+          "codes": {
+            "cancelled": 5,
+            "irreversible_released": 5
+          },
+          "collateral_changes": 5,
+          "irreversible_released": 5,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 0,
+          "undo_verified": 0,
+          "writes": 10
+        },
+        "undo_outcome": "RECONCILIATION_REQUIRED"
+      },
+      {
+        "anomalies": 0,
+        "apply": {
+          "confirmed": 0,
+          "false_diffs": 0,
+          "held": 10,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 0,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "COMPLETED_UNVERIFIED",
+        "collateral": [
+          "message/ik-311016aede42b37c82ebfb94ff3f3377c0725bb3@openadapt.tx#1",
+          "message/ik-32ed2fd64f22328d356a8d9e934908a9d461e01f@openadapt.tx#1",
+          "message/ik-42dc5cbc288dc48a2a23fb71c4e2f69e4672fc08@openadapt.tx#1",
+          "message/ik-4c6693c36355d63f488e4c9a051ba5ae36ea1292@openadapt.tx#1",
+          "message/ik-8a1b98d8ba02fd0a166bc7736a4178aa89e46e47@openadapt.tx#1"
+        ],
+        "digest": "f85f6e6e9544fa8e",
+        "dry_run": {
+          "outbox": "holdback"
+        },
+        "false": [],
+        "mailbox": {
+          "cancelled_never_sent": 5,
+          "cancelled_sent": 0,
+          "released_exactly_once": 5,
+          "released_other": 0
+        },
+        "missed": [],
+        "release": {
+          "adopted": 0,
+          "double": 0,
+          "phase": "release",
+          "released": 5,
+          "waiting": 0
+        },
+        "undo": {
+          "cancelled": 5,
+          "codes": {
+            "cancelled": 5,
+            "irreversible_released": 5
+          },
+          "collateral_changes": 5,
+          "irreversible_released": 5,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 0,
+          "undo_verified": 0,
+          "writes": 10
+        },
+        "undo_outcome": "RECONCILIATION_REQUIRED"
+      },
+      {
+        "anomalies": 0,
+        "apply": {
+          "confirmed": 0,
+          "false_diffs": 0,
+          "held": 10,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 0,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "COMPLETED_UNVERIFIED",
+        "collateral": [
+          "message/ik-0496d034bf8a2bedb911f4f3d653bd18d3184405@openadapt.tx#1",
+          "message/ik-06e0870b27ca13a0bb237b4ed140cfb98751b201@openadapt.tx#1",
+          "message/ik-266bd30f72fe37264b2f7626ce15fe53034feb6b@openadapt.tx#1",
+          "message/ik-40216d46e7119003a630245f4c210a36d3c70aca@openadapt.tx#1",
+          "message/ik-7841f4157913b940c98cc9275fc63ff0f4dcd375@openadapt.tx#1"
+        ],
+        "digest": "b5b481ccd7708818",
+        "dry_run": {
+          "outbox": "holdback"
+        },
+        "false": [],
+        "mailbox": {
+          "cancelled_never_sent": 5,
+          "cancelled_sent": 0,
+          "released_exactly_once": 5,
+          "released_other": 0
+        },
+        "missed": [],
+        "release": {
+          "adopted": 0,
+          "double": 0,
+          "phase": "release",
+          "released": 5,
+          "waiting": 0
+        },
+        "undo": {
+          "cancelled": 5,
+          "codes": {
+            "cancelled": 5,
+            "irreversible_released": 5
+          },
+          "collateral_changes": 5,
+          "irreversible_released": 5,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 0,
+          "undo_verified": 0,
+          "writes": 10
+        },
+        "undo_outcome": "RECONCILIATION_REQUIRED"
+      },
+      {
+        "anomalies": 0,
+        "apply": {
+          "confirmed": 0,
+          "false_diffs": 0,
+          "held": 10,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 0,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "COMPLETED_UNVERIFIED",
+        "collateral": [
+          "message/ik-2388b18e1e3f44793e24a6e3f8605f793dcbd095@openadapt.tx#1",
+          "message/ik-308a8ed475341b3b893966fe901a0b976b62eb0d@openadapt.tx#1",
+          "message/ik-61633babee15afe48d7a1dc68750d6d1a75ca847@openadapt.tx#1",
+          "message/ik-77edbf25ae65bf49b1dd3d11c68daf709db3acbe@openadapt.tx#1",
+          "message/ik-8d737d91e7fea494061d546d870b45a2a4b9c97b@openadapt.tx#1"
+        ],
+        "digest": "d3d36fb4f96d9222",
+        "dry_run": {
+          "outbox": "holdback"
+        },
+        "false": [],
+        "mailbox": {
+          "cancelled_never_sent": 5,
+          "cancelled_sent": 0,
+          "released_exactly_once": 5,
+          "released_other": 0
+        },
+        "missed": [],
+        "release": {
+          "adopted": 0,
+          "double": 0,
+          "phase": "release",
+          "released": 5,
+          "waiting": 0
+        },
+        "undo": {
+          "cancelled": 5,
+          "codes": {
+            "cancelled": 5,
+            "irreversible_released": 5
+          },
+          "collateral_changes": 5,
+          "irreversible_released": 5,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 0,
+          "undo_verified": 0,
+          "writes": 10
+        },
+        "undo_outcome": "RECONCILIATION_REQUIRED"
+      },
+      {
+        "anomalies": 0,
+        "apply": {
+          "confirmed": 0,
+          "false_diffs": 0,
+          "held": 10,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 0,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "COMPLETED_UNVERIFIED",
+        "collateral": [
+          "message/ik-14c47e5f56cc796f02c0ee235c7be281c4ab54c8@openadapt.tx#1",
+          "message/ik-1935b77e38c06666512fe46b6e329772573714d1@openadapt.tx#1",
+          "message/ik-2003812e082bb3a92065fe246e794f8af2c2de0d@openadapt.tx#1",
+          "message/ik-8709a6483d899e8171e67f5effbf3737f6b38357@openadapt.tx#1",
+          "message/ik-88a302c41e49b48e30562ac006a36beb0aa1c291@openadapt.tx#1"
+        ],
+        "digest": "256ec39f9af9d65a",
+        "dry_run": {
+          "outbox": "holdback"
+        },
+        "false": [],
+        "mailbox": {
+          "cancelled_never_sent": 5,
+          "cancelled_sent": 0,
+          "released_exactly_once": 5,
+          "released_other": 0
+        },
+        "missed": [],
+        "release": {
+          "adopted": 0,
+          "double": 0,
+          "phase": "release",
+          "released": 5,
+          "waiting": 0
+        },
+        "undo": {
+          "cancelled": 5,
+          "codes": {
+            "cancelled": 5,
+            "irreversible_released": 5
+          },
+          "collateral_changes": 5,
+          "irreversible_released": 5,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 0,
+          "undo_verified": 0,
+          "writes": 10
+        },
+        "undo_outcome": "RECONCILIATION_REQUIRED"
+      },
+      {
+        "anomalies": 0,
+        "apply": {
+          "confirmed": 0,
+          "false_diffs": 0,
+          "held": 10,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 0,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "COMPLETED_UNVERIFIED",
+        "collateral": [
+          "message/ik-002569508a96582d7a7193a506247cf31959d718@openadapt.tx#1",
+          "message/ik-14a492d674b663e0a5390717a10a7c11d21d60ca@openadapt.tx#1",
+          "message/ik-333deffd996f1ba39dabc9b38080b30b1b889a23@openadapt.tx#1",
+          "message/ik-339d3b7d52cea9c8e5ea5bfe0820916bfdaa3a60@openadapt.tx#1",
+          "message/ik-8f38897fa22229d303d3ab478793e7cc46fecc1a@openadapt.tx#1"
+        ],
+        "digest": "817fac506911eb39",
+        "dry_run": {
+          "outbox": "holdback"
+        },
+        "false": [],
+        "mailbox": {
+          "cancelled_never_sent": 5,
+          "cancelled_sent": 0,
+          "released_exactly_once": 5,
+          "released_other": 0
+        },
+        "missed": [],
+        "release": {
+          "adopted": 0,
+          "double": 0,
+          "phase": "release",
+          "released": 5,
+          "waiting": 0
+        },
+        "undo": {
+          "cancelled": 5,
+          "codes": {
+            "cancelled": 5,
+            "irreversible_released": 5
+          },
+          "collateral_changes": 5,
+          "irreversible_released": 5,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 0,
+          "undo_verified": 0,
+          "writes": 10
+        },
+        "undo_outcome": "RECONCILIATION_REQUIRED"
+      },
+      {
+        "anomalies": 0,
+        "apply": {
+          "confirmed": 0,
+          "false_diffs": 0,
+          "held": 10,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 0,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "COMPLETED_UNVERIFIED",
+        "collateral": [
+          "message/ik-0292a108fa14691f5ef26aa71719f1639c23a598@openadapt.tx#1",
+          "message/ik-0eb4fbe71b59474c13c6d733e3f735a17a4eafda@openadapt.tx#1",
+          "message/ik-238137802a35b2698b3dd1d741ff836b01610e5c@openadapt.tx#1",
+          "message/ik-29485f966bb7a315ba9ff0bd5ce46c55ad8c7c0c@openadapt.tx#1",
+          "message/ik-78a20bb57ea7a387ed412ecd5c57fcf402e40406@openadapt.tx#1"
+        ],
+        "digest": "a2ce720e5d14f09c",
+        "dry_run": {
+          "outbox": "holdback"
+        },
+        "false": [],
+        "mailbox": {
+          "cancelled_never_sent": 5,
+          "cancelled_sent": 0,
+          "released_exactly_once": 5,
+          "released_other": 0
+        },
+        "missed": [],
+        "release": {
+          "adopted": 0,
+          "double": 0,
+          "phase": "release",
+          "released": 5,
+          "waiting": 0
+        },
+        "undo": {
+          "cancelled": 5,
+          "codes": {
+            "cancelled": 5,
+            "irreversible_released": 5
+          },
+          "collateral_changes": 5,
+          "irreversible_released": 5,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 0,
+          "undo_verified": 0,
+          "writes": 10
+        },
+        "undo_outcome": "RECONCILIATION_REQUIRED"
+      },
+      {
+        "anomalies": 0,
+        "apply": {
+          "confirmed": 0,
+          "false_diffs": 0,
+          "held": 10,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 0,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "COMPLETED_UNVERIFIED",
+        "collateral": [
+          "message/ik-2b8f3147cca6e9b8408ce66b34883f516e5f8c66@openadapt.tx#1",
+          "message/ik-4c493af1fc9040e98782f63c3bb74e663fb4e668@openadapt.tx#1",
+          "message/ik-8b2de8aaca6de375a0b12fd43429f6d8c9897942@openadapt.tx#1",
+          "message/ik-9aaa6a702d8ab044d03b6d68741838524186fe66@openadapt.tx#1",
+          "message/ik-9c84cdd17df69f052b916160340a87a0255bb728@openadapt.tx#1"
+        ],
+        "digest": "cb84b19c279f8697",
+        "dry_run": {
+          "outbox": "holdback"
+        },
+        "false": [],
+        "mailbox": {
+          "cancelled_never_sent": 5,
+          "cancelled_sent": 0,
+          "released_exactly_once": 5,
+          "released_other": 0
+        },
+        "missed": [],
+        "release": {
+          "adopted": 0,
+          "double": 0,
+          "phase": "release",
+          "released": 5,
+          "waiting": 0
+        },
+        "undo": {
+          "cancelled": 5,
+          "codes": {
+            "cancelled": 5,
+            "irreversible_released": 5
+          },
+          "collateral_changes": 5,
+          "irreversible_released": 5,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 0,
+          "undo_verified": 0,
+          "writes": 10
+        },
+        "undo_outcome": "RECONCILIATION_REQUIRED"
+      },
+      {
+        "anomalies": 0,
+        "apply": {
+          "confirmed": 0,
+          "false_diffs": 0,
+          "held": 10,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 0,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "COMPLETED_UNVERIFIED",
+        "collateral": [
+          "message/ik-3b292b9848c145f66886d248c866ea0e7353ce59@openadapt.tx#1",
+          "message/ik-58b71d8db2542a4532fb6c1805e6af0aad44f55d@openadapt.tx#1",
+          "message/ik-720a018417c52a5bc1c9791fea462666fd5da79e@openadapt.tx#1",
+          "message/ik-848334ea52cdded908ab966e3fe825ca9195061b@openadapt.tx#1",
+          "message/ik-8bd40722b991cb3c44f43280a3bf963a28c4d5c4@openadapt.tx#1"
+        ],
+        "digest": "8626414711df8865",
+        "dry_run": {
+          "outbox": "holdback"
+        },
+        "false": [],
+        "mailbox": {
+          "cancelled_never_sent": 5,
+          "cancelled_sent": 0,
+          "released_exactly_once": 5,
+          "released_other": 0
+        },
+        "missed": [],
+        "release": {
+          "adopted": 0,
+          "double": 0,
+          "phase": "release",
+          "released": 5,
+          "waiting": 0
+        },
+        "undo": {
+          "cancelled": 5,
+          "codes": {
+            "cancelled": 5,
+            "irreversible_released": 5
+          },
+          "collateral_changes": 5,
+          "irreversible_released": 5,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 0,
+          "undo_verified": 0,
+          "writes": 10
+        },
+        "undo_outcome": "RECONCILIATION_REQUIRED"
+      }
+    ],
+    "rest": [
+      {
+        "anomalies": 0,
+        "apply": {
+          "confirmed": 10,
+          "false_diffs": 0,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 10,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "VERIFIED",
+        "collateral": [],
+        "digest": "353865e289ff6af9",
+        "dry_run": {
+          "vikunja": "computed"
+        },
+        "false": [],
+        "mailbox": null,
+        "missed": [],
+        "release": null,
+        "undo": {
+          "cancelled": 0,
+          "codes": {
+            "undone": 10
+          },
+          "collateral_changes": 0,
+          "irreversible_released": 0,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 10,
+          "undo_verified": 10,
+          "writes": 10
+        },
+        "undo_outcome": "ROLLED_BACK"
+      },
+      {
+        "anomalies": 0,
+        "apply": {
+          "confirmed": 10,
+          "false_diffs": 0,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 10,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "VERIFIED",
+        "collateral": [],
+        "digest": "204bdc5fcffe4130",
+        "dry_run": {
+          "vikunja": "computed"
+        },
+        "false": [],
+        "mailbox": null,
+        "missed": [],
+        "release": null,
+        "undo": {
+          "cancelled": 0,
+          "codes": {
+            "undone": 10
+          },
+          "collateral_changes": 0,
+          "irreversible_released": 0,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 10,
+          "undo_verified": 10,
+          "writes": 10
+        },
+        "undo_outcome": "ROLLED_BACK"
+      },
+      {
+        "anomalies": 0,
+        "apply": {
+          "confirmed": 10,
+          "false_diffs": 0,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 10,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "VERIFIED",
+        "collateral": [],
+        "digest": "737af10f84d89c75",
+        "dry_run": {
+          "vikunja": "computed"
+        },
+        "false": [],
+        "mailbox": null,
+        "missed": [],
+        "release": null,
+        "undo": {
+          "cancelled": 0,
+          "codes": {
+            "undone": 10
+          },
+          "collateral_changes": 0,
+          "irreversible_released": 0,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 10,
+          "undo_verified": 10,
+          "writes": 10
+        },
+        "undo_outcome": "ROLLED_BACK"
+      },
+      {
+        "anomalies": 0,
+        "apply": {
+          "confirmed": 10,
+          "false_diffs": 0,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 10,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "VERIFIED",
+        "collateral": [],
+        "digest": "6e4de5398803083e",
+        "dry_run": {
+          "vikunja": "computed"
+        },
+        "false": [],
+        "mailbox": null,
+        "missed": [],
+        "release": null,
+        "undo": {
+          "cancelled": 0,
+          "codes": {
+            "undone": 10
+          },
+          "collateral_changes": 0,
+          "irreversible_released": 0,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 10,
+          "undo_verified": 10,
+          "writes": 10
+        },
+        "undo_outcome": "ROLLED_BACK"
+      },
+      {
+        "anomalies": 0,
+        "apply": {
+          "confirmed": 10,
+          "false_diffs": 0,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 10,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "VERIFIED",
+        "collateral": [],
+        "digest": "997b6482f6073145",
+        "dry_run": {
+          "vikunja": "computed"
+        },
+        "false": [],
+        "mailbox": null,
+        "missed": [],
+        "release": null,
+        "undo": {
+          "cancelled": 0,
+          "codes": {
+            "undone": 10
+          },
+          "collateral_changes": 0,
+          "irreversible_released": 0,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 10,
+          "undo_verified": 10,
+          "writes": 10
+        },
+        "undo_outcome": "ROLLED_BACK"
+      },
+      {
+        "anomalies": 0,
+        "apply": {
+          "confirmed": 10,
+          "false_diffs": 0,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 10,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "VERIFIED",
+        "collateral": [],
+        "digest": "f82a6487df64cd5a",
+        "dry_run": {
+          "vikunja": "computed"
+        },
+        "false": [],
+        "mailbox": null,
+        "missed": [],
+        "release": null,
+        "undo": {
+          "cancelled": 0,
+          "codes": {
+            "undone": 10
+          },
+          "collateral_changes": 0,
+          "irreversible_released": 0,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 10,
+          "undo_verified": 10,
+          "writes": 10
+        },
+        "undo_outcome": "ROLLED_BACK"
+      },
+      {
+        "anomalies": 0,
+        "apply": {
+          "confirmed": 10,
+          "false_diffs": 0,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 10,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "VERIFIED",
+        "collateral": [],
+        "digest": "a0252b4e9b43a7f7",
+        "dry_run": {
+          "vikunja": "computed"
+        },
+        "false": [],
+        "mailbox": null,
+        "missed": [],
+        "release": null,
+        "undo": {
+          "cancelled": 0,
+          "codes": {
+            "undone": 10
+          },
+          "collateral_changes": 0,
+          "irreversible_released": 0,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 10,
+          "undo_verified": 10,
+          "writes": 10
+        },
+        "undo_outcome": "ROLLED_BACK"
+      },
+      {
+        "anomalies": 0,
+        "apply": {
+          "confirmed": 10,
+          "false_diffs": 0,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 10,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "VERIFIED",
+        "collateral": [],
+        "digest": "2fea2844d8394609",
+        "dry_run": {
+          "vikunja": "computed"
+        },
+        "false": [],
+        "mailbox": null,
+        "missed": [],
+        "release": null,
+        "undo": {
+          "cancelled": 0,
+          "codes": {
+            "undone": 10
+          },
+          "collateral_changes": 0,
+          "irreversible_released": 0,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 10,
+          "undo_verified": 10,
+          "writes": 10
+        },
+        "undo_outcome": "ROLLED_BACK"
+      },
+      {
+        "anomalies": 0,
+        "apply": {
+          "confirmed": 10,
+          "false_diffs": 0,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 10,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "VERIFIED",
+        "collateral": [],
+        "digest": "6d1bdc119d8762cb",
+        "dry_run": {
+          "vikunja": "computed"
+        },
+        "false": [],
+        "mailbox": null,
+        "missed": [],
+        "release": null,
+        "undo": {
+          "cancelled": 0,
+          "codes": {
+            "undone": 10
+          },
+          "collateral_changes": 0,
+          "irreversible_released": 0,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 10,
+          "undo_verified": 10,
+          "writes": 10
+        },
+        "undo_outcome": "ROLLED_BACK"
+      },
+      {
+        "anomalies": 0,
+        "apply": {
+          "confirmed": 10,
+          "false_diffs": 0,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 10,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "VERIFIED",
+        "collateral": [],
+        "digest": "ab903c539a5a0646",
+        "dry_run": {
+          "vikunja": "computed"
+        },
+        "false": [],
+        "mailbox": null,
+        "missed": [],
+        "release": null,
+        "undo": {
+          "cancelled": 0,
+          "codes": {
+            "undone": 10
+          },
+          "collateral_changes": 0,
+          "irreversible_released": 0,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 10,
+          "undo_verified": 10,
+          "writes": 10
+        },
+        "undo_outcome": "ROLLED_BACK"
+      }
+    ],
+    "sql": [
+      {
+        "anomalies": 2,
+        "apply": {
+          "confirmed": 10,
+          "false_diffs": 0,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 10,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "VERIFIED",
+        "collateral": [],
+        "digest": "4d3dc38f9888cec4",
+        "dry_run": {
+          "dolibarr": "staged_transaction"
+        },
+        "false": [],
+        "mailbox": null,
+        "missed": [],
+        "release": null,
+        "undo": {
+          "cancelled": 0,
+          "codes": {
+            "undone": 10
+          },
+          "collateral_changes": 0,
+          "irreversible_released": 0,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 10,
+          "undo_verified": 10,
+          "writes": 10
+        },
+        "undo_outcome": "ROLLED_BACK"
+      },
+      {
+        "anomalies": 2,
+        "apply": {
+          "confirmed": 10,
+          "false_diffs": 0,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 10,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "VERIFIED",
+        "collateral": [],
+        "digest": "4eafddd9308d735c",
+        "dry_run": {
+          "dolibarr": "staged_transaction"
+        },
+        "false": [],
+        "mailbox": null,
+        "missed": [],
+        "release": null,
+        "undo": {
+          "cancelled": 0,
+          "codes": {
+            "undone": 10
+          },
+          "collateral_changes": 0,
+          "irreversible_released": 0,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 10,
+          "undo_verified": 10,
+          "writes": 10
+        },
+        "undo_outcome": "ROLLED_BACK"
+      },
+      {
+        "anomalies": 2,
+        "apply": {
+          "confirmed": 10,
+          "false_diffs": 0,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 10,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "VERIFIED",
+        "collateral": [],
+        "digest": "eb89f0d6de67712a",
+        "dry_run": {
+          "dolibarr": "staged_transaction"
+        },
+        "false": [],
+        "mailbox": null,
+        "missed": [],
+        "release": null,
+        "undo": {
+          "cancelled": 0,
+          "codes": {
+            "undone": 10
+          },
+          "collateral_changes": 0,
+          "irreversible_released": 0,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 10,
+          "undo_verified": 10,
+          "writes": 10
+        },
+        "undo_outcome": "ROLLED_BACK"
+      },
+      {
+        "anomalies": 2,
+        "apply": {
+          "confirmed": 10,
+          "false_diffs": 0,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 10,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "VERIFIED",
+        "collateral": [],
+        "digest": "3e7b0221cf51611b",
+        "dry_run": {
+          "dolibarr": "staged_transaction"
+        },
+        "false": [],
+        "mailbox": null,
+        "missed": [],
+        "release": null,
+        "undo": {
+          "cancelled": 0,
+          "codes": {
+            "undone": 10
+          },
+          "collateral_changes": 0,
+          "irreversible_released": 0,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 10,
+          "undo_verified": 10,
+          "writes": 10
+        },
+        "undo_outcome": "ROLLED_BACK"
+      },
+      {
+        "anomalies": 2,
+        "apply": {
+          "confirmed": 10,
+          "false_diffs": 0,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 10,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "VERIFIED",
+        "collateral": [],
+        "digest": "3827a3c86405f394",
+        "dry_run": {
+          "dolibarr": "staged_transaction"
+        },
+        "false": [],
+        "mailbox": null,
+        "missed": [],
+        "release": null,
+        "undo": {
+          "cancelled": 0,
+          "codes": {
+            "undone": 10
+          },
+          "collateral_changes": 0,
+          "irreversible_released": 0,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 10,
+          "undo_verified": 10,
+          "writes": 10
+        },
+        "undo_outcome": "ROLLED_BACK"
+      },
+      {
+        "anomalies": 2,
+        "apply": {
+          "confirmed": 10,
+          "false_diffs": 0,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 10,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "VERIFIED",
+        "collateral": [],
+        "digest": "400de555e6b9a36c",
+        "dry_run": {
+          "dolibarr": "staged_transaction"
+        },
+        "false": [],
+        "mailbox": null,
+        "missed": [],
+        "release": null,
+        "undo": {
+          "cancelled": 0,
+          "codes": {
+            "undone": 10
+          },
+          "collateral_changes": 0,
+          "irreversible_released": 0,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 10,
+          "undo_verified": 10,
+          "writes": 10
+        },
+        "undo_outcome": "ROLLED_BACK"
+      },
+      {
+        "anomalies": 2,
+        "apply": {
+          "confirmed": 10,
+          "false_diffs": 0,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 10,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "VERIFIED",
+        "collateral": [],
+        "digest": "bdb565e1a7e59c7f",
+        "dry_run": {
+          "dolibarr": "staged_transaction"
+        },
+        "false": [],
+        "mailbox": null,
+        "missed": [],
+        "release": null,
+        "undo": {
+          "cancelled": 0,
+          "codes": {
+            "undone": 10
+          },
+          "collateral_changes": 0,
+          "irreversible_released": 0,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 10,
+          "undo_verified": 10,
+          "writes": 10
+        },
+        "undo_outcome": "ROLLED_BACK"
+      },
+      {
+        "anomalies": 2,
+        "apply": {
+          "confirmed": 10,
+          "false_diffs": 0,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 10,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "VERIFIED",
+        "collateral": [],
+        "digest": "13e26bef1d32c6f3",
+        "dry_run": {
+          "dolibarr": "staged_transaction"
+        },
+        "false": [],
+        "mailbox": null,
+        "missed": [],
+        "release": null,
+        "undo": {
+          "cancelled": 0,
+          "codes": {
+            "undone": 10
+          },
+          "collateral_changes": 0,
+          "irreversible_released": 0,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 10,
+          "undo_verified": 10,
+          "writes": 10
+        },
+        "undo_outcome": "ROLLED_BACK"
+      },
+      {
+        "anomalies": 2,
+        "apply": {
+          "confirmed": 10,
+          "false_diffs": 0,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 10,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "VERIFIED",
+        "collateral": [],
+        "digest": "a37bdb402a01c2e8",
+        "dry_run": {
+          "dolibarr": "staged_transaction"
+        },
+        "false": [],
+        "mailbox": null,
+        "missed": [],
+        "release": null,
+        "undo": {
+          "cancelled": 0,
+          "codes": {
+            "undone": 10
+          },
+          "collateral_changes": 0,
+          "irreversible_released": 0,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 10,
+          "undo_verified": 10,
+          "writes": 10
+        },
+        "undo_outcome": "ROLLED_BACK"
+      },
+      {
+        "anomalies": 2,
+        "apply": {
+          "confirmed": 10,
+          "false_diffs": 0,
+          "missed_effects": 0,
+          "phase": "apply",
+          "refuted": 0,
+          "sent": 10,
+          "stopped": null,
+          "writes": 10
+        },
+        "apply_outcome": "VERIFIED",
+        "collateral": [],
+        "digest": "132ea6ac98115196",
+        "dry_run": {
+          "dolibarr": "staged_transaction"
+        },
+        "false": [],
+        "mailbox": null,
+        "missed": [],
+        "release": null,
+        "undo": {
+          "cancelled": 0,
+          "codes": {
+            "undone": 10
+          },
+          "collateral_changes": 0,
+          "irreversible_released": 0,
+          "no_generated_undo": 0,
+          "phase": "undo",
+          "undo_supported": 10,
+          "undo_verified": 10,
+          "writes": 10
+        },
+        "undo_outcome": "ROLLED_BACK"
+      }
+    ]
+  },
+  "schema": "openadapt.ext-tx-lab/v1",
+  "seeded_faults": {
+    "rest": {
+      "collateral_caught": 5,
+      "missed_effect_caught": 5,
+      "not_caught": [],
+      "trials": 5
+    },
+    "sql": {
+      "collateral_caught": 5,
+      "missed_effect_caught": 5,
+      "not_caught": [],
+      "trials": 5
+    }
+  },
+  "spec_sha256": "8eeaa89d5cf2f8e6ebf87e692fa966edd628668f9d2a4204328fd603d5ea4088",
+  "started_at": "2026-11-21T07:33:23Z",
+  "summary": {
+    "blocked_double_effects": 60,
+    "control_duplicates": 60,
+    "double_effects_through": 0,
+    "kill_criteria_tripped": [],
+    "mail": {
+      "apply_verified_rounds": 10,
+      "cancelled_in_holdback": 50,
+      "cancelled_never_sent": 50,
+      "cancelled_sent": 0,
+      "false_diffs": 0,
+      "irreversible_released": 50,
+      "missed_effects": 0,
+      "release_double_sends": 0,
+      "released_exactly_once": 50,
+      "released_other": 0,
+      "rounds": 10,
+      "undo_success_rate": null,
+      "undo_supported": 0,
+      "undo_verified": 0,
+      "writes": 100
+    },
+    "rest": {
+      "apply_verified_rounds": 10,
+      "cancelled_in_holdback": 0,
+      "cancelled_never_sent": 0,
+      "cancelled_sent": 0,
+      "false_diffs": 0,
+      "irreversible_released": 0,
+      "missed_effects": 0,
+      "release_double_sends": 0,
+      "released_exactly_once": 0,
+      "released_other": 0,
+      "rounds": 10,
+      "undo_success_rate": 1.0,
+      "undo_supported": 100,
+      "undo_verified": 100,
+      "writes": 100
+    },
+    "sql": {
+      "apply_verified_rounds": 10,
+      "cancelled_in_holdback": 0,
+      "cancelled_never_sent": 0,
+      "cancelled_sent": 0,
+      "false_diffs": 0,
+      "irreversible_released": 0,
+      "missed_effects": 0,
+      "release_double_sends": 0,
+      "released_exactly_once": 0,
+      "released_other": 0,
+      "rounds": 10,
+      "undo_success_rate": 1.0,
+      "undo_supported": 100,
+      "undo_verified": 100,
+      "writes": 100
+    }
+  }
+}

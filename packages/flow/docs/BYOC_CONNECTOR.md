@@ -143,11 +143,15 @@ service runs that installation's `python.exe`, and `install` refuses a venv.
 - **Stop.** A job already running finishes and reports. A lease returned while
   the service is stopping never starts; it is left unacknowledged for the
   control plane to reconcile, rather than reported as completed.
-- **Token replacement.** The service account reads its configuration and can
-  write only to its log directory. Replace the enrollment token as an
-  administrator while the service is stopped, then start it again. Automatic
-  token persistence needs a separate writable-state contract; the wrapper's
-  authorization-refusal check does not prove token rotation.
+- **Token rotation.** For a file-enrolled connector, the service stores the
+  active and pending rotation in its virtual account's Windows Credential
+  Manager. The entry is local to the machine. The service retries the pending
+  candidate after restart before polling. Clearing an old pending field in
+  the enrollment file preserves the committed rotation. The service waits
+  between failed confirmations. If Cloud can no longer confirm the candidate,
+  replace the enrollment token as an administrator and restart the service.
+  An environment override for the token, control-plane URL or organization
+  leaves rotation with the operator.
 
 Update by stopping the service, installing the pinned version, and starting
 it again:
@@ -158,9 +162,11 @@ pip install "openadapt-flow[vision,connector-windows]==<new version>"
 openadapt-flow connector service start
 ```
 
-Uninstall with `openadapt-flow connector service remove`. The config
-directory, with the token, is kept; delete it to remove the enrollment, and
-revoke the token in Cloud settings.
+Uninstall with `openadapt-flow connector service remove`. Removal preserves
+the enrollment and its local rotation state for reinstallation. To
+decommission the connector, revoke it in Cloud and remove its config directory.
+The service requires that enrollment before it can use the stored rotation
+state. Starting with a replacement enrollment discards the old credential.
 
 On other operating systems, `connector service` prints a message and exits
 with code 2; run `connector run` under systemd or launchd instead.

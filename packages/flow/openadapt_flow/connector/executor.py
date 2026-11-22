@@ -17,8 +17,9 @@ Fail-closed application of the control-plane-delivered policy:
   ``api_key_env`` is NOT set in the Connector's own environment, the job is
   refused — the org required a governed control this machine cannot honor, so we
   halt rather than silently run without it;
-* the resolved policy is written to ``<run_dir>/governed_policy.json`` for the
-  operator's local audit trail.
+* the resolved policy is written to ``governed_policy.json`` in the job's
+  private staging directory (beside the run directory, never in it) for the
+  operator's local audit trail while the job runs.
 
 The PHI-bearing report.json is written to the CUSTOMER'S storage and stays
 local; only PHI-free status/metrics are returned for the callback.
@@ -182,13 +183,20 @@ def cancel_job(job_id: str) -> bool:
         _CHILDREN.cancelled.add(job_id)
         proc = _CHILDREN.procs.get(job_id)
     if proc is not None and proc.poll() is None:
-        proc.terminate()
-        try:
-            proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+        _stop(proc)
         return True
     return False
+
+
+def _stop(proc: "subprocess.Popen[Any]") -> None:
+    if proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
 
 
 def job_cancelled(job_id: Optional[str]) -> bool:
@@ -290,6 +298,10 @@ def _subprocess_runner(
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 env=dict(child_env),
+                # Its own session: an operator Ctrl-C or a service stop signals
+                # the daemon's process group, not the governed child. The daemon
+                # stops children itself (cancel_job), so each outcome is judged.
+                start_new_session=True,
             )
         except OSError as exc:
             raise _ChildNotStarted(type(exc).__name__) from exc
@@ -297,21 +309,63 @@ def _subprocess_runner(
             _CHILDREN.procs[job_id] = proc
     try:
         output = child_output(proc)
+    except BaseException:
+        # Interrupted while waiting (an inline run's Ctrl-C): never leave the
+        # child running in its own session. The interrupt still propagates,
+        # so the lease is not acked and the plane reaps it as uncertain.
+        _stop(proc)
+        raise
     finally:
         proc.wait()
         if job_id:
             with _CHILDREN.lock:
                 _CHILDREN.procs.pop(job_id, None)
-    report_path = run_dir / "report.json"
-    report: dict[str, Any] = {}
-    if report_path.is_file():
-        try:
-            document = json.loads(report_path.read_text(encoding="utf-8"))
-            if isinstance(document, dict):
-                report = document
-        except (OSError, ValueError):
-            report = {}
-    return RunOutcome(returncode=proc.returncode, report=report, output=output)
+    return RunOutcome(
+        returncode=proc.returncode,
+        report=_read_report(run_dir / "report.json", key=_run_key(child_env)),
+        output=output,
+    )
+
+
+def _run_key(child_env: Mapping[str, str]) -> Optional[str]:
+    """The key the child seals its run with, from the child's own environment.
+
+    A key delivered only through the job's ``secrets_ref`` reaches the child
+    but not this process, so the report is opened with the same value. It is
+    held in memory for the read only, never logged or written.
+    """
+    from openadapt_flow import crypto
+    from openadapt_flow import sealed_set as _sealed
+
+    return child_env.get(crypto.ENV_KEY) or child_env.get(_sealed.RECORDING_ENV_KEY)
+
+
+def _read_report(report_path: Path, key: Optional[str] = None) -> dict[str, Any]:
+    """The child's report, or ``{}`` when it is missing or cannot be read.
+
+    The run of a sealed bundle writes its report encrypted
+    (:mod:`openadapt_flow.sealed_set`), so it is read through the sealed set,
+    with ``key`` when given (the child's key) and otherwise this process's.
+    Any failure (no file, no key, a bad tag, invalid JSON) is ``{}``, which
+    the executor treats as an unknown outcome, never as a clean failure.
+    """
+    from openadapt_flow import sealed_set as _sealed
+
+    try:
+        root = _sealed.sealed_root(report_path)
+        if root is not None and key:
+            rel = report_path.resolve().relative_to(root.resolve()).as_posix()
+            text = _sealed.open_set(root, key).read_bytes(rel).decode("utf-8")
+        elif _sealed.is_sealed_path(report_path):
+            text = _sealed.read_text(report_path)
+        elif report_path.is_file():
+            text = report_path.read_text(encoding="utf-8")
+        else:
+            return {}
+        report = json.loads(text)
+    except Exception:  # noqa: BLE001 - unreadable is an unknown outcome
+        return {}
+    return report if isinstance(report, dict) else {}
 
 
 def status_from_report(returncode: int, report: dict[str, Any]) -> str:
@@ -341,6 +395,16 @@ def status_from_report(returncode: int, report: dict[str, Any]) -> str:
     ):
         return "success"
     return "failed"
+
+
+def _reported_terminal_outcome(report: dict[str, Any]) -> bool:
+    """True when the child's report records how its run ended."""
+    return bool(report) and (
+        report.get("execution_outcome") is not None
+        or report.get("terminal_outcome") is not None
+        or report.get("halt") is not None
+        or isinstance(report.get("success"), bool)
+    )
 
 
 def precise_outcome_from_report(report: dict[str, Any]) -> Optional[dict[str, Any]]:
@@ -394,7 +458,7 @@ def halt_object(report: dict[str, Any]) -> Optional[dict[str, Any]]:
     return None
 
 
-def _write_params_file(params: dict[str, Any], run_dir: Path) -> Optional[Path]:
+def _write_params_file(params: dict[str, Any], staging: Path) -> Optional[Path]:
     """Write runtime params to a 0600 file so values stay OFF the process table.
 
     Drops the internal ``target_kind`` routing hint (not a workflow param).
@@ -402,7 +466,7 @@ def _write_params_file(params: dict[str, Any], run_dir: Path) -> Optional[Path]:
     clean = {k: v for k, v in params.items() if k != "target_kind"}
     if not clean:
         return None
-    pf = run_dir / "params.json"
+    pf = staging / "params.json"
     pf.write_text(json.dumps(clean), encoding="utf-8")
     try:
         os.chmod(pf, 0o600)
@@ -411,10 +475,10 @@ def _write_params_file(params: dict[str, Any], run_dir: Path) -> Optional[Path]:
     return pf
 
 
-def _write_policy_audit(job: ByocJob, run_dir: Path) -> None:
+def _write_policy_audit(job: ByocJob, staging: Path) -> None:
     """Record the delivered governed policy locally for the operator audit."""
     try:
-        (run_dir / "governed_policy.json").write_text(
+        (staging / "governed_policy.json").write_text(
             json.dumps(
                 {
                     "run_id": job.run_id,
@@ -517,7 +581,7 @@ def _verify_program_reference(job: ByocJob, bundle: Path, key_dir: Path) -> None
 
 
 def _stage_qualification_authority(
-    job: ByocJob, settings: ConnectorSettings, bundle: Path, run_dir: Path
+    job: ByocJob, settings: ConnectorSettings, bundle: Path, staging: Path
 ) -> Path:
     """Use independent local authority context; never self-assert expectations."""
     from openadapt_flow.ir import Workflow
@@ -560,7 +624,7 @@ def _stage_qualification_authority(
         raise ByocGovernanceError(
             "local qualification context changed during verification"
         )
-    destination = run_dir / "qualification-authority.json"
+    destination = staging / "qualification-authority.json"
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(destination, flags, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
@@ -727,11 +791,20 @@ def _execute_job(
         bundle_scratch = tmp_path / "bundle"
         run_dir = tmp_path / "run"
         readback_dir = tmp_path / "readback"
+        # The connector's own plaintext inputs (policy audit, params, dispatch
+        # envelope, qualification context) live beside the run, never in it:
+        # a sealed bundle's run directory is a sealed set that refuses any
+        # plaintext file at finalize, which would halt every sealed job.
+        # tmp_path is a 0700 directory removed when the job ends, however it
+        # ends; staging is 0700 too.
+        staging = tmp_path / "staging"
         bundle_scratch.mkdir(parents=True, exist_ok=True)
         run_dir.mkdir(parents=True, exist_ok=True)
         readback_dir.mkdir(parents=True, exist_ok=True)
+        staging.mkdir(mode=0o700)
+        os.chmod(staging, 0o700)
 
-        _write_policy_audit(job, run_dir)
+        _write_policy_audit(job, staging)
 
         # 2. Copy and verify the EXACT approved archive bytes from the customer's
         # storage before extraction.
@@ -796,7 +869,7 @@ def _execute_job(
         if admission is None:
             try:
                 qualification_authority_file = _stage_qualification_authority(
-                    job, settings, bundle_dir, run_dir
+                    job, settings, bundle_dir, staging
                 )
             except Exception:
                 return _refused(
@@ -806,7 +879,7 @@ def _execute_job(
                 )
 
         try:
-            params_file = _write_params_file(job.params, run_dir)
+            params_file = _write_params_file(job.params, staging)
             managed_dispatch_file = None
             child_env = os.environ.copy()
             # Never let a long-running Connector inherit stale authority from
@@ -827,7 +900,7 @@ def _execute_job(
                 child_env["OPENADAPT_JIT_KEY_DIR"] = str(key_dir)
             if job.managed_dispatch is not None:
                 managed_dispatch_file = write_managed_dispatch_envelope_value(
-                    run_dir / "managed-dispatch.json", job.flow_dispatch()
+                    staging / "managed-dispatch.json", job.flow_dispatch()
                 )
                 child_env[REMOTE_AUTHORITY_URL_ENV] = str(
                     job.managed_delivery_authority_url
@@ -840,7 +913,7 @@ def _execute_job(
             # Independent read-back, before: a private baseline of the system
             # of record. It holds raw records and never leaves this directory.
             baseline = readback_dir / "baseline.json"
-            readback_params = run_dir / "readback-params.json"
+            readback_params = staging / "readback-params.json"
             if readback_sha256:
                 readback_params.write_text(
                     json.dumps(
@@ -927,6 +1000,24 @@ def _execute_job(
         error_code: Optional[str] = None
         report_target_kind = report.get("execution_target_kind")
         outcome_envelope = precise_outcome_from_report(report)
+        # After the child started, no readable report, or a nonzero exit with
+        # a report that claims success, does not say whether the write landed:
+        # a cancel, a service stop, an OOM kill or a crash can end a child
+        # that already saved (or reported success and was still sealing).
+        # That is never a clean failure (a re-run could repeat the write); it
+        # stops for reconciliation (fail-open class: lost-outcome-as-failure).
+        # A report that records a refusal or a halt keeps its own outcome.
+        claims_success = (
+            report.get("execution_outcome") == "VERIFIED"
+            or report.get("success") is True
+            or report.get("terminal_outcome") == "success"
+        )
+        # A missing or unreadable report says nothing either, whatever the
+        # exit code: a child that exits 0 may still have saved (a sealed run
+        # whose report could not be read, a report that never got written).
+        outcome_unknown = not _reported_terminal_outcome(report) or (
+            outcome.returncode != 0 and claims_success
+        )
         # Cancellation can race with both the write and the child's final report.
         # Retain a validated terminal success or halt for this substrate. Otherwise
         # the stop cannot establish what happened to the system of record.
@@ -934,32 +1025,35 @@ def _execute_job(
             report_target_kind != job.target_kind
             or outcome_envelope is None
             or status == "failed"
+            or outcome_unknown
         ):
             status = "halt"
             error_code = "cancelled_after_child_start"
             outcome_error = (
                 "cancelled after child start; reconcile the system of record"
             )
-        elif not report or report_target_kind is None:
-            # Exit status alone cannot establish what happened to the record.
-            status = "halt"
-            error_code = (
-                "child_no_report" if not report else "child_report_missing_target"
-            )
-            outcome_error = (
-                f"governed child exited with code {outcome.returncode} and "
-                + (
-                    "no readable report"
-                    if not report
-                    else "no execution_target_kind in its report"
-                )
-            )
-        elif report_target_kind != job.target_kind:
+        elif report_target_kind is not None and report_target_kind != job.target_kind:
             status = "failed"
             error_code = "target_kind_mismatch"
             outcome_error = (
                 "governed child report execution_target_kind does not match "
                 "the signed dispatch target_kind (fail closed)"
+            )
+        elif outcome_unknown:
+            status = "halt"
+            error_code = "child_outcome_unknown"
+            outcome_error = (
+                "the governed child ended without a report it could stand by "
+                "(cancelled, stopped or killed while running, or killed after "
+                "reporting success), so a write may have landed"
+            )
+        elif report_target_kind is None:
+            # Exit status alone cannot establish what happened to the record.
+            status = "halt"
+            error_code = "child_report_missing_target"
+            outcome_error = (
+                f"governed child exited with code {outcome.returncode} and "
+                "no execution_target_kind in its report"
             )
         else:
             outcome_error = None
@@ -1004,7 +1098,8 @@ def _execute_job(
         report_ref: Optional[str] = job.report_ref() if report else None
         halt = halt_object(report)
         if status == "halt" and (
-            halt is None or error_code == "cancelled_after_child_start"
+            halt is None
+            or error_code in ("cancelled_after_child_start", "child_outcome_unknown")
         ):
             halt = {"present": True}
         if error_code is not None and outcome_envelope is not None:

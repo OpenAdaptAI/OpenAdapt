@@ -16,7 +16,6 @@ use serde_json::{json, Value};
 use tauri::{
     AppHandle, LogicalSize, Manager, PhysicalPosition, PhysicalSize, Position, Size, State,
 };
-use tauri_plugin_shell::ShellExt;
 use url::Url;
 
 use crate::sidecar::SidecarHandle;
@@ -220,16 +219,90 @@ fn validated_external_url(value: &str) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn open_external(app: AppHandle, url: String) -> Result<(), String> {
-    let safe_url = validated_external_url(&url)?;
-    app.shell()
-        .open(safe_url, None)
-        .map_err(|error| format!("failed to open URL: {error}"))
+pub fn open_external(url: String) -> Result<(), String> {
+    open_external_with(&url, |safe_url| {
+        // The Rust API does not enforce plugin scopes: our validation is
+        // mandatory. No general opener capability is exposed to the webview.
+        tauri_plugin_opener::open_url(safe_url, None::<&str>)
+    })
+}
+
+fn open_external_with<E>(
+    url: &str,
+    launch: impl FnOnce(String) -> Result<(), E>,
+) -> Result<(), String> {
+    let safe_url = validated_external_url(url)?;
+    launch(safe_url).map_err(|_| "failed to open URL".to_string())
 }
 
 #[cfg(test)]
 mod external_url_tests {
-    use super::validated_external_url;
+    use super::{open_external_with, validated_external_url};
+
+    #[test]
+    fn shared_url_model_dispatches_each_accepted_native_case_once() {
+        let model: serde_json::Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/system-url-launch.json"))
+                .unwrap();
+        for case in model["cases"].as_array().unwrap() {
+            let url = case["url"].as_str().unwrap();
+            let allowed = case["native"].as_bool().unwrap_or_else(|| {
+                assert_eq!(case["native"].as_str(), Some("macos"));
+                cfg!(target_os = "macos")
+            });
+            let mut calls = 0;
+            let result = open_external_with(url, |value| {
+                calls += 1;
+                assert_eq!(value, url);
+                Ok::<(), String>(())
+            });
+            assert_eq!(result.is_ok(), allowed, "{url:?}");
+            assert_eq!(calls, usize::from(allowed), "{url:?}");
+        }
+    }
+
+    #[test]
+    fn only_validated_urls_reach_the_default_handler() {
+        for value in [
+            "https://example.test/",
+            "http://localhost/",
+            "openadapt://pair",
+        ] {
+            open_external_with(value, |url| {
+                assert_eq!(url, value);
+                Ok::<(), String>(())
+            })
+            .unwrap();
+        }
+        for value in [
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "https://u:p@example.test/",
+            "https://example.test/\n",
+        ] {
+            assert!(open_external_with(value, |_| -> Result<(), String> {
+                panic!("invalid URL reached the default handler")
+            })
+            .is_err());
+        }
+    }
+
+    #[test]
+    fn platform_settings_scheme_keeps_its_existing_platform_boundary() {
+        let value = "x-apple.systempreferences:com.apple.preference.security";
+        assert_eq!(
+            validated_external_url(value).is_ok(),
+            cfg!(target_os = "macos")
+        );
+    }
+
+    #[test]
+    fn launcher_error_does_not_disclose_url_contents() {
+        assert_eq!(
+            open_external_with("https://example.test/?state=synthetic", Err::<(), _>).unwrap_err(),
+            "failed to open URL"
+        );
+    }
 
     #[test]
     fn accepts_clean_web_url() {

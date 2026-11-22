@@ -63,6 +63,8 @@ if TYPE_CHECKING:  # the fleet package imports this module at run time
 _ACTIVE_NAME = "ACTIVE.json"
 _CANDIDATES_DIR = "candidates"
 _BUNDLES_DIR = "bundles"
+# A candidate id names a file under candidates/: no separators, no "..".
+_CANDIDATE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 
 
 class RepairLifecycleError(ValueError):
@@ -252,7 +254,25 @@ class RepairStore:
     # -- paths ---------------------------------------------------------------
 
     def candidate_path(self, candidate_id: str) -> Path:
-        return self.root / _CANDIDATES_DIR / f"{candidate_id}.json"
+        """Return the record path for ``candidate_id``, refusing any id that
+        is not a plain file name (a separator or ``..`` could leave the store).
+        """
+        if (
+            not isinstance(candidate_id, str)
+            or not _CANDIDATE_ID.fullmatch(candidate_id)
+            or ".." in candidate_id
+        ):
+            raise RepairLifecycleError(
+                f"refused: candidate id {candidate_id!r} is not a plain name "
+                "(letters, digits, '.', '_' or '-')"
+            )
+        directory = os.path.normpath(os.path.join(self.root, _CANDIDATES_DIR))
+        path = os.path.normpath(os.path.join(directory, f"{candidate_id}.json"))
+        if not path.startswith(directory + os.sep):
+            raise RepairLifecycleError(
+                f"refused: candidate id {candidate_id!r} leaves the store {self.root}"
+            )
+        return Path(path)
 
     def bundle_path(self, content_digest: str) -> Path:
         return self.root / _BUNDLES_DIR / content_digest

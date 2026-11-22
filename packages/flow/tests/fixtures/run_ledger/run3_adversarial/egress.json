@@ -1,0 +1,8 @@
+{
+  "cost_source": "metered",
+  "cost_usd": 0.0,
+  "enforced": true,
+  "mode": "blocked",
+  "model_calls": 0,
+  "refused_requests": 0
+}
