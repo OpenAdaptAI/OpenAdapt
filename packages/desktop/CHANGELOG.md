@@ -13,6 +13,13 @@
   answered on its own, here or on a paired phone, and the answer is signed
   with the same approver key as other stop answers.
 
+### Bug Fixes
+
+- **guard**: The phone's approval card for an agent's save no longer says
+  "exactly what will be saved" when OpenAdapt could not read the values the
+  save sends. It shows the task's value beside each sent value, flags a
+  difference, and says plainly when the sent values were not read or checked.
+
 
 
 ## v0.30.6 (2026-11-19)

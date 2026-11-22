@@ -148,11 +148,19 @@ or the paired phone) lists every field the task writes:
 | Column | Where it comes from |
 |---|---|
 | Now | The record's value before the save, read through `verify.yaml`. Empty for a save that adds a record. |
-| Saved | The task's `intended_fields` value, or, with `write_adapter`, the value the held request carries. |
+| Saved | The value the held request carries, read by the app's `write_adapter`, the same reader the guard checks the write with. Without a `write_adapter`, or when the adapter can't read the body, it is `not read`. |
+| Task says | The task's `intended_fields` value, beside Saved. Marked `Differs` when the held request sends another value. |
 | Source | The value the task's `provenance` cites, checked a second time against the source document. A value the document doesn't confirm is marked `Differs` and shows what the document says. |
 
 A value the guard can't read shows `not read`, never a blank, and the card
-says the approval doesn't cover it.
+says the approval doesn't cover it. The guard doesn't parse request bodies
+itself, so without a `write_adapter` it can't say what the save sends. The
+card then says that the values this save sends could not be read and were not
+checked before saving, and asks the person to compare the screen with the
+task's values. It says "exactly what will be saved" only when every value came
+from the held request. With a `write_adapter`, a save whose values differ
+from the task's is blocked before any card is shown. Either way, the read-back
+after the save still catches a value that differs.
 
 The Now and Saved values are in the approval request and its digest, so the
 person's answer covers exactly them. The source column is kept beside the
@@ -168,19 +176,36 @@ screenshot only.
 After each read-back or blocked save, the guard writes two files in `--out`:
 
 - `guard_ledger_row.json` (`openadapt.guard-ledger-row/v1`): `task_id`,
-  `verdict`, `fields_checked`, `fields_differing` (field names), `hold_ms`,
-  `approver_kind`, `approval_opened_at`, `approval_decided_at`,
-  `readback_tier` and `diff_path`. It holds no record values.
+  `verdict`, `guard_verdict`, `verdict_reason`, `fields_checked`,
+  `fields_differing` (field names), `hold_ms`, `approver_kind`,
+  `approval_opened_at`, `approval_decided_at`, `readback_tier` and
+  `diff_path`. It holds no record values.
 - `guard_diff.private.json` (mode 0600): for each field, the value intended,
   the value before, the value the read-back found, and `same`, `differs` or
   `not_read`.
 
-`verdict` is `VERIFIED`, `CAUGHT_ERROR` (a blocked save, a declined approval,
-or a read-back that shows another value or another write), `ESCALATED` (the
-save went through and couldn't be confirmed, or nobody answered the approval
-before it expired) or `FAILED` (the guard couldn't do its job, for example the
-system of record couldn't be read before the save, or the approval's answer
-was unusable).
+`verdict` comes only from the guard's own verdict, the `verdict` in
+`summary.json` (repeated as `guard_verdict`), or, for a save blocked before it
+was sent, from the block's code. `verdict_reason` names the rule, in the run
+ledger's words:
+
+| Guard verdict or block | `verdict` | `verdict_reason` |
+|---|---|---|
+| `VERIFIED`, independent read-back | `VERIFIED` | `readback_verified` |
+| `VERIFIED`, screen read-back | `UNKNOWN` | `screen_readback_only` |
+| `VERIFIED`, a field differs in the diff | `UNKNOWN` | `readback_fields_disagree` |
+| `REFUTED` | `CAUGHT_ERROR` | `readback_refuted` |
+| `RECONCILIATION_REQUIRED` | `UNKNOWN` | `reconciliation_required` |
+| Blocked: wrong record, another origin, a second save, outside the teach scope | `CAUGHT_ERROR` | `save_blocked_*` |
+| Blocked: a person declined | `ESCALATED` | `person_declined` |
+| Blocked: nobody answered in time | `ESCALATED` | `approval_declined` |
+| Blocked: the guard couldn't check (store unreadable, unusable answer) | `FAILED` | `policy_rejected_no_write` |
+| Blocked: any other code | `UNKNOWN` | `unmapped_outcome` |
+
+A save the guard calls `RECONCILIATION_REQUIRED` (sent, and the read-back
+couldn't confirm it, for example because it never landed) is `UNKNOWN`, not
+`ESCALATED`. The run ledger decides its own bucket from `summary.json` and
+reads only the row's field names, times and tier.
 
 There is one row per run. A blocked second save after a read-back keeps the
 read-back's row; a read-back after a blocked save replaces the blocked row.

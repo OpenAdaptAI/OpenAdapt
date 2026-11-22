@@ -97,20 +97,32 @@ def test_the_request_carries_before_after_and_source_for_each_field(
     guard = guarded.begin(task, screen_text=FakeAgent(sor[0]).open_chart("p1"))
     guard.commit(screenshot_png=tiny_png())
     request = guard._request
-    # A create: nothing was there before, the value saved is the task's.
+    # A create: nothing was there before. No request is held here (the
+    # caller sends the save itself), so what it sends is not read: the task's
+    # value is shown beside it, never in its place.
     assert [f.model_dump() for f in request.fields] == [
-        {"label": "note", "before": None, "after": NOTE}
+        {"label": "note", "before": None, "after": NOT_READ}
     ]
     sources = read_sources_for(guard.dir, request)
     assert sources == [
-        {"label": "note", "source": NOTE, "status": "agree", "differs": False}
+        {
+            "label": "note",
+            "source": NOTE,
+            "status": "agree",
+            "differs": False,
+            "intended": NOTE,
+            "held_differs": False,
+        }
     ]
     assert (guard.dir / SOURCES_FILENAME).stat().st_mode & 0o777 == 0o600
     # The phone's presentation shows both, from the console that serves it.
     [row] = list_save_approvals(tmp_path)
     shown = save_approval_detail(tmp_path, row.request_id)["presentation"]
-    assert shown["fields"] == [{"label": "note", "before": None, "after": NOTE}]
+    assert shown["fields"] == [{"label": "note", "before": None, "after": NOT_READ}]
     assert shown["sources"] == sources
+    assert shown["values_checked"] is False
+    assert "exactly" not in shown["explanation"].lower()
+    assert "not checked before saving" in shown["explanation"]
     # The signed task the phone answers is PHI-free; the values stay local.
     task_doc = save_approval_detail(tmp_path, row.request_id)["task"]
     assert NOTE not in json.dumps(task_doc)
@@ -124,7 +136,8 @@ def test_a_source_that_disagrees_shows_what_the_document_says(
     card = build_card(task, parse_verify_config(verify_yaml(sor[0])))
     [source] = card.sources
     assert (source.source, source.status, source.differs) == (NOTE, "disagree", True)
-    assert card.fields[0].after == MISREAD
+    assert source.intended == MISREAD
+    assert card.fields[0].after == NOT_READ
 
 
 def test_a_value_that_cant_be_read_is_not_read_never_blank(tmp_path: Path) -> None:
@@ -134,7 +147,7 @@ def test_a_value_that_cant_be_read_is_not_read_never_blank(tmp_path: Path) -> No
     data = verify_yaml("http://127.0.0.1:9")
     data["effects"][0]["count_new_only"] = False
     cfg = parse(data)
-    card = build_card(_task(), cfg)
+    card = build_card(_task(), cfg, claim_fields={"note": NOTE})
     [row] = card.fields
     assert row.before == NOT_READ and row.after == NOTE
     assert card.not_covered == ["note"]
@@ -145,9 +158,31 @@ def test_a_write_adapter_claim_is_what_the_card_shows(sor) -> None:
     cfg = parse_verify_config(verify_yaml(sor[0]))
     card = build_card(_task(), cfg, claim_fields={"note": "what the request sends"})
     assert card.fields[0].after == "what the request sends"
+    # Beside the task's value, flagged: the request sends another note.
+    assert card.sources[0].intended == NOTE
+    assert card.sources[0].held_differs is True
+    assert card.values_read is True and card.values_how == "write_adapter"
+    assert "not checked" not in card.intent_note()
+    same = build_card(_task(), cfg, claim_fields={"note": NOTE})
+    assert same.sources[0].held_differs is False and same.values_read is True
     unread = build_card(_task(), cfg, claim_fields={})
     assert unread.fields[0].after == NOT_READ
     assert unread.not_covered == ["note"]
+    assert unread.values_read is False
+    assert "could not be read, so they were not checked" in unread.intent_note()
+
+
+def test_no_held_values_never_shows_the_task_value_as_what_is_sent(sor) -> None:
+    """The e2e finding: with no write adapter the card showed the task's note
+    as the value saved, under "exactly what OpenAdapt will save", while the
+    agent had typed another one."""
+
+    cfg = parse_verify_config(verify_yaml(sor[0]))
+    card = build_card(_task(), cfg, claim_fields=None, values_how="no_write_adapter")
+    assert card.fields[0].after == NOT_READ
+    assert card.sources[0].intended == NOTE
+    assert card.values_read is False and card.values_how == "no_write_adapter"
+    assert "could not be read, so they were not checked" in card.intent_note()
 
 
 def test_the_card_can_be_turned_off(sor, tmp_path: Path) -> None:

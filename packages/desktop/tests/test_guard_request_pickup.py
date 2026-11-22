@@ -182,8 +182,15 @@ def test_desktop_shows_a_guard_request_from_a_state_dir_in_its_runs_folder(
     )
     assert status == 200
     presentation = json.loads(body)["presentation"]
-    # The card carries the field the save writes, from the guard's request.
-    assert presentation["fields"] == [{"label": "note", "before": None, "after": NOTE}]
+    # The card carries the field the save writes. No request is held here
+    # (the harness sends the save itself), so the value sent is not read and
+    # the card says so; the task's value is shown beside it, never in its place.
+    assert presentation["fields"] == [
+        {"label": "note", "before": None, "after": "not read"}
+    ]
+    assert presentation["sources"][0]["intended"] == NOTE
+    assert presentation["values_checked"] is False
+    assert "exactly" not in presentation["explanation"].lower()
 
 
 def test_a_state_dir_two_folders_down_is_not_shown(

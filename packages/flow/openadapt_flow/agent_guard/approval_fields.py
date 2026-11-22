@@ -8,13 +8,23 @@ document says. :func:`build_card` makes those rows for one guarded save:
   the same ``verify.yaml`` reader the guard's baseline uses, before anything
   is written. ``None`` when the save creates a record (nothing was there) or
   the current value can't be read.
-* ``after``: the value the task says to write, or, when the app's write
-  adapter is configured, the value the held request actually carries.
+* ``after``: the value the held request actually carries, read by the app's
+  write adapter, the same parser the guard checks the write with
+  (:meth:`openadapt_flow.teach_scope.TeachScope.request_refusal`). With no
+  write adapter, or a body the adapter can't read, it is ``not read``: the
+  guard does not parse request bodies itself, so it can't say what the save
+  sends. It is never the task's intended value standing in for it.
+* ``intended``: the value the task says to write, beside ``after``, with
+  ``held_differs`` set when the two differ by the read-back's value
+  comparison.
 * ``source``: the value the task's provenance cites, checked a second way
   against the source document (:func:`openadapt_flow.provenance.cross_check`).
 
 A value that can't be resolved is shown as ``not read``, never blank, and the
-card's intent says that the approval does not cover it.
+card's intent says that the approval does not cover it. When any value the
+save sends is not read, the card says that the values were not read and were
+not checked before saving (``values_read`` false), never that it shows exactly
+what will be saved.
 
 The ``before`` and ``after`` rows go into the item-approval request as its
 ``fields`` (inside the request digest, local only, never sent to Cloud). The
@@ -66,6 +76,11 @@ class SourceRow:
     #: The source disagrees with the value saved, by the same value
     #: comparison the read-back uses. The phone only renders this.
     differs: bool = False
+    #: The task's intended value for this field.
+    intended: Optional[str] = None
+    #: The value the held request sends differs from ``intended``. False when
+    #: the sent value was not read (the card then says it wasn't checked).
+    held_differs: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -73,6 +88,8 @@ class SourceRow:
             "source": self.source,
             "status": self.status,
             "differs": self.differs,
+            "intended": self.intended,
+            "held_differs": self.held_differs,
         }
 
 
@@ -84,15 +101,26 @@ class ApprovalCard:
     sources: list[SourceRow]
     #: Field names whose value the card can't show (``not read``).
     not_covered: list[str] = field(default_factory=list)
+    #: Every value the save sends was read from the held request.
+    values_read: bool = False
+    #: How the sent values were read: ``write_adapter``, or why not
+    #: (``no_held_request``, ``no_write_adapter``, ``unreadable``).
+    values_how: str = "no_held_request"
 
     def intent_note(self) -> str:
         """The sentence the card's intent carries when something is unread."""
 
-        if not self.not_covered:
-            return ""
-        return ". Not read, so this approval does not cover: " + ", ".join(
-            sorted(self.not_covered)
-        )
+        note = ""
+        if not self.values_read:
+            note += (
+                ". The values this save sends could not be read, so they were "
+                "not checked before saving"
+            )
+        if self.not_covered:
+            note += ". Not read, so this approval does not cover: " + ", ".join(
+                sorted(self.not_covered)
+            )
+        return note
 
 
 def _text(value: Any) -> str:
@@ -209,12 +237,15 @@ def build_card(
     claim_fields: Optional[Mapping[str, Any]] = None,
     records: Optional[Sequence[Mapping[str, Any]]] = None,
     read: bool = True,
+    values_how: Optional[str] = None,
 ) -> ApprovalCard:
     """The approval card's rows for one guarded save. Never raises.
 
     ``claim_fields`` are the values the held request carries, per the app's
-    write adapter, keyed by task field name. ``records`` is a read the caller
-    already made; otherwise one is made now when ``read``.
+    write adapter, keyed by task field name; None when they weren't read
+    (every ``after`` is then ``not read``). ``records`` is a read the caller
+    already made; otherwise one is made now when ``read``. ``values_how``
+    says why the values weren't read, for the card's sources file.
     """
 
     from openadapt_flow.approval_mode.item_approval import MAX_SAVE_FIELDS, SaveField
@@ -239,24 +270,56 @@ def build_card(
                 # Which record, or its value, isn't known: shown, not hidden.
                 before = NOT_READ
                 not_covered.append(name)
-        if claim_fields is not None:
-            if name in claim_fields and claim_fields[name] is not None:
-                after = _text(claim_fields[name])
-            else:
-                after = NOT_READ
-                if name not in not_covered:
-                    not_covered.append(name)
+        intended = _text(task.intended_fields[name])
+        if (
+            claim_fields is not None
+            and name in claim_fields
+            and claim_fields[name] is not None
+        ):
+            after = _text(claim_fields[name])
         else:
-            after = _text(task.intended_fields[name])
+            # Never the task's value in its place: what is sent is unknown.
+            after = NOT_READ
+            if name not in not_covered:
+                not_covered.append(name)
         rows.append(SaveField(label=name[:128], before=before, after=after))
         row = sources.get(name) or SourceRow(name, None, "no_source")
-        row = replace(row, differs=_source_differs(row, after))
+        row = replace(
+            row,
+            differs=_source_differs(row, intended if after == NOT_READ else after),
+            intended=intended,
+            held_differs=after != NOT_READ and _differs(intended, after),
+        )
         source_rows.append(row)
         if row.source == NOT_READ and name not in not_covered:
             not_covered.append(name)
     if len(task.intended_fields) > MAX_SAVE_FIELDS:
         not_covered.extend(sorted(task.intended_fields)[MAX_SAVE_FIELDS:])
-    return ApprovalCard(fields=rows, sources=source_rows, not_covered=not_covered)
+    values_read = (
+        claim_fields is not None
+        and bool(rows)
+        and all(r.after != NOT_READ for r in rows)
+        and len(task.intended_fields) <= MAX_SAVE_FIELDS
+    )
+    if values_read:
+        how = "write_adapter"
+    elif values_how is not None:
+        how = values_how
+    else:
+        how = "no_held_request" if claim_fields is None else "unreadable"
+    return ApprovalCard(
+        fields=rows,
+        sources=source_rows,
+        not_covered=not_covered,
+        values_read=values_read,
+        values_how=how,
+    )
+
+
+def _differs(intended: str, sent: str) -> bool:
+    from openadapt_flow.agent_guard.readback import same_value
+
+    return not same_value(intended, sent)
 
 
 def write_sources(run_dir: Path, request: Any, card: ApprovalCard) -> Path:
@@ -273,6 +336,7 @@ def write_sources(run_dir: Path, request: Any, card: ApprovalCard) -> Path:
             "request_sha256": request.digest(),
             "rows": [row.to_dict() for row in card.sources],
             "not_covered": sorted(card.not_covered),
+            "values": {"read": card.values_read, "how": card.values_how},
         },
     )
     return path
@@ -307,31 +371,45 @@ def read_sources_for(run_dir: Path, request: Any) -> Optional[list[dict[str, Any
         source = row.get("source")
         if source is not None and not isinstance(source, str):
             return None
+        intended = row.get("intended")
+        if intended is not None and not isinstance(intended, str):
+            return None
         rows.append(
             {
                 "label": row["label"][:128],
                 "source": None if source is None else source[:_MAX_VALUE],
                 "status": str(row.get("status") or "")[:32],
                 "differs": row.get("differs") is True,
+                "intended": None if intended is None else intended[:_MAX_VALUE],
+                "held_differs": row.get("held_differs") is True,
             }
         )
     return rows
 
 
 def card_for_request(guard: Any, request: Any, scope: Any) -> Any:
-    """The commit guard's card for a held save, with the values the request
-    carries when the app's write adapter can read them. None: let the guard
-    build the task's card itself (or none, when the card is turned off)."""
+    """The commit guard's card for a held save: the values the held request
+    carries, read by the app's write adapter (the parser the guard checks
+    writes with), beside the task's values. With no adapter, or a body it
+    can't read, every sent value is ``not read`` and the card says they were
+    not checked. None when no card is asked for (or it is turned off)."""
 
     owner = guard.owner
     asked = owner.approval == "each_item" or guard.source_check == "hold"
-    adapter = getattr(scope, "write_adapter", None) if scope is not None else None
-    if not owner.approval_fields or not asked or adapter is None:
+    if not owner.approval_fields or not asked:
         return None
+    adapter = getattr(scope, "write_adapter", None) if scope is not None else None
+    if adapter is None:
+        return build_card(
+            guard.task, owner.verify, claim_fields=None, values_how="no_write_adapter"
+        )
     try:
         body = request.post_data.encode("utf-8") if request.post_data else None
         claim = adapter.claim(request.method, request.url, body)
-        claimed = dict(claim.fields) if claim is not None else {}
     except Exception:  # noqa: BLE001 - unread: every value shows not read
-        claimed = {}
-    return build_card(guard.task, owner.verify, claim_fields=claimed)
+        claim = None
+    if claim is None:
+        return build_card(
+            guard.task, owner.verify, claim_fields=None, values_how="unreadable"
+        )
+    return build_card(guard.task, owner.verify, claim_fields=dict(claim.fields))
