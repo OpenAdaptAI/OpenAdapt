@@ -21,7 +21,8 @@ symlink, a junction) is refused before it is opened, the opened file must be
 the one that was checked, and its owner and access control list are read from
 the open handle. The owner must be this user, and only this user, SYSTEM and
 Administrators (what a user's profile folder grants by default) may hold any
-right on it. When that can't be read, no card is shown.
+right on it (OWNER RIGHTS, which means the owner, too). When that can't be
+read, no card is shown.
 
 An answer is the closed answer signed with the approver key Desktop already
 uses for the stop queue (Touch ID on a Mac, the portal's key for a phone).
@@ -71,8 +72,10 @@ _CARD_FILE = re.compile(r"^card-([0-9a-f]{64})\.json$")
 _SUMMARY_MAX = 200
 _FILE_ATTRIBUTE_REPARSE_POINT = 0x400
 #: Who besides this user may hold rights on a card on Windows: SYSTEM and
-#: Administrators, which a user's profile folder grants by default.
-_WINDOWS_TRUSTED_SIDS = frozenset({"S-1-5-18", "S-1-5-32-544"})
+#: Administrators, which a user's profile folder grants by default, and OWNER
+#: RIGHTS (S-1-3-4), which names the file's owner, already required to be
+#: this user.
+_WINDOWS_TRUSTED_SIDS = frozenset({"S-1-5-18", "S-1-5-32-544", "S-1-3-4"})
 
 
 def _canonical(value: Any) -> bytes:

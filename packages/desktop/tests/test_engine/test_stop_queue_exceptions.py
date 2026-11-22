@@ -433,6 +433,9 @@ _PROFILE_ACL = [
     [
         (_ME, _PROFILE_ACL, False),
         ("S-1-5-32-544", _PROFILE_ACL, False),  # an elevated process's default owner
+        # What an elevated process's temp files get: no entry for the user, OWNER RIGHTS.
+        ("S-1-5-32-544", [*_PROFILE_ACL[:2], Ace(0, 0x10, 0x1F01FF, "S-1-3-4")], False),
+        ("S-1-5-21-1-2-3-1002", [Ace(0, 0x10, 0x1F01FF, "S-1-3-4")], True),
         ("S-1-5-21-1-2-3-1002", _PROFILE_ACL, True),  # another user's file
         (_ME, None, True),  # a NULL DACL: everyone has full control
         (_ME, [*_PROFILE_ACL, Ace(0, 0, 0x120089, "S-1-1-0")], True),  # Everyone may read
