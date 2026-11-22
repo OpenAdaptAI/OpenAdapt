@@ -109,6 +109,10 @@
   ],
   "not_run_outcomes": [
     {
+      "symbol": "openadapt_types/run_ledger.py RunLedgerOutcome (verified, escalated, caught_error, failed, unknown)",
+      "reason": "An accounting bucket that openadapt_flow/run_ledger/outcome.py derives from the run's own outcome and evidence. It sums runs for a ledger and never replaces the run's outcome."
+    },
+    {
       "symbol": "openadapt_flow/runtime/effects/effect.py Verdict (confirmed, refuted, indeterminate)",
       "reason": "One effect check inside a step. The run's outcome already accounts for it."
     },

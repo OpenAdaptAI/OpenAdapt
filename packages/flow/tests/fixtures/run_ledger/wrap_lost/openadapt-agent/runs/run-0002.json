@@ -1,0 +1,11 @@
+{
+  "host": "synthetic",
+  "mode": "skill-cache",
+  "pid": null,
+  "request_id": "req-0002",
+  "run_id": "run-0002",
+  "schema": "openadapt-agent.run/v1",
+  "started_at": "2026-11-20T08:00:00+00:00",
+  "state": "running",
+  "workflow": "wrap:abc"
+}

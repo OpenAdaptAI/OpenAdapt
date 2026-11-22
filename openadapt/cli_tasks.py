@@ -73,6 +73,7 @@ FLOW_NAMES = {
     "jit": "compile --jit",
     "known-ids": "verify known-ids",
     "learn": "teach --learn",
+    "ledger": "inspect ledger",
     "lint": "inspect lint",
     "local-seal": "verify local-seal",
     "login": "setup login",
