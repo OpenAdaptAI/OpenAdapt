@@ -1,0 +1,36 @@
+{
+  "execution_outcome": "HALTED",
+  "executor": {
+    "agent": "claude-code",
+    "kind": "agent"
+  },
+  "finished_at": "2026-11-21T06:36:55Z",
+  "hold_key": "cc4be15fdf10d9f55786c98838df157d197d88de343506e388a903c1f020ea08",
+  "model_calls": 0,
+  "outcome": "BLOCKED",
+  "outcome_envelope": {
+    "passed_contracts": {
+      "authorization": 0,
+      "effect": 0
+    },
+    "required_contracts": {
+      "authorization": 1,
+      "effect": 0
+    }
+  },
+  "reasons": [
+    "blocked: a compound command that reaches clinic-db. clinic-db is a declared system of record and openadapt.systems.yaml declares no such write"
+  ],
+  "results": [
+    {
+      "actuation": "api",
+      "ok": false
+    }
+  ],
+  "run_id": "hk-bdb55e83345cda8b",
+  "schema_version": "openadapt.hook-report/v1",
+  "started_at": "2026-11-21T06:36:55Z",
+  "system": "clinic-db",
+  "workflow_name": "clinic-db.undeclared",
+  "write": null
+}
