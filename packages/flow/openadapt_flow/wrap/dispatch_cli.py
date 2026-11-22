@@ -97,8 +97,13 @@ def finish(
     if "outcome" in result and "fallback" in result:
         # Already a dispatch envelope (stored, then replayed on a retry).
         return dict(result)
+    from openadapt_flow.wrap.fallback import FALLBACK_PATH
+
     out = dict(result)
-    out["path"] = dispatch_path(result)
+    # A fallback that started speaks for this request, even when it raised
+    # before returning a result (then the status is RECONCILIATION_REQUIRED).
+    started = fallback is not None and fallback.get("fallback") is True
+    out["path"] = FALLBACK_PATH if started else dispatch_path(result)
     out["outcome"] = outcome(result)
     out["fallback"] = dict(fallback) if fallback is not None else None
     return out
@@ -199,9 +204,8 @@ def add_run_arguments(p: argparse.ArgumentParser) -> None:
     p.add_argument(
         "--fallback-approval-wait-s",
         type=float,
-        default=60.0,
         help="With --fallback-gate item-approval: seconds to wait for each "
-        "answer (less than --max-run-seconds)",
+        "answer (default 60; less than --max-run-seconds)",
     )
     p.add_argument(
         "--fallback-approver-root",
@@ -307,6 +311,13 @@ def child_request_id(parent: str) -> str:
     return f"fallback-{digest[:40]}"
 
 
+def _wait_s(args: argparse.Namespace) -> float:
+    from openadapt_flow.wrap.approval_gate import DEFAULT_WAIT_S
+
+    wait = args.fallback_approval_wait_s
+    return DEFAULT_WAIT_S if wait is None else float(wait)
+
+
 def item_approval_gate(args: argparse.Namespace) -> Any:
     """The non-terminal gate from the ``--fallback-*`` flags."""
 
@@ -321,7 +332,7 @@ def item_approval_gate(args: argparse.Namespace) -> Any:
     )
     return ItemApprovalGate(
         approvals_dir=args.fallback_approvals_dir,
-        wait_s=args.fallback_approval_wait_s,
+        wait_s=_wait_s(args),
         key_dir=key_dir,
         approver_root=args.fallback_approver_root,
         config_only=bool(args.fallback_approvers_config),
@@ -365,15 +376,37 @@ def run(
     cap = args.fallback_max_cost_usd
     if fallback_on and (cap is None or not math.isfinite(cap) or cap <= 0):
         raise SystemExit("--fallback agent requires a positive --fallback-max-cost-usd")
+    gate_options = (
+        args.fallback_approvals_dir,
+        args.fallback_approval_wait_s,
+        args.fallback_approver_root,
+        args.fallback_approvers_config,
+    )
     if not fallback_on and (
         cap is not None
         or args.fallback_request_id
         or args.fallback_gate != "terminal"
-        or args.fallback_approvals_dir
+        or any(option is not None for option in gate_options)
     ):
         raise SystemExit("the --fallback-* options need --fallback agent")
+    if args.fallback_gate != "item-approval" and any(
+        option is not None for option in gate_options
+    ):
+        raise SystemExit(
+            "--fallback-approvals-dir, --fallback-approval-wait-s, "
+            "--fallback-approver-root and --fallback-approvers-config need "
+            "--fallback-gate item-approval"
+        )
+    if args.fallback_request_id is not None:
+        from openadapt_flow.wrap.fallback import valid_request_id
+
+        if not valid_request_id(args.fallback_request_id):
+            raise SystemExit(
+                "--fallback-request-id is 1 to 128 of [A-Za-z0-9._-], "
+                "not starting with '.'"
+            )
     if args.fallback_gate == "item-approval" and not (
-        0 < args.fallback_approval_wait_s < args.max_run_seconds
+        0 < _wait_s(args) < args.max_run_seconds
     ):
         raise SystemExit(
             "--fallback-approval-wait-s must be more than 0 and less than "

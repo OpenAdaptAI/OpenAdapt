@@ -99,6 +99,8 @@ def test_a_signed_person_approval_lets_the_save_through(tmp_path, approver) -> N
     assert asked.run_id == "fallback-abc" and asked.provenance.actor.startswith(
         "agent:"
     )
+    # The record's on-screen identity is only in the screenshot.
+    assert "Synthetic record" not in asked.step_intent
     # The person is shown the gate screenshot itself.
     assert store.read_frame(asked) == FRAME
 

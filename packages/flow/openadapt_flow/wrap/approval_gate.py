@@ -229,10 +229,9 @@ class ItemApprovalGate:
                 workflow_name=WORKFLOW_NAME,
                 step_id=f"save-{index + 1}",
                 step_index=index,
-                step_intent=(
-                    f"Press '{request.control}' on the record showing "
-                    + ", ".join(identity)
-                ),
+                # The control only: the record's on-screen identity stays in
+                # the screenshot, not in text that lists and summaries show.
+                step_intent=f"Press '{request.control}' (agent fallback save)",
                 mode=ApprovalMode.EACH_ITEM,
                 bundle_content_digest=None,
                 runtime_inputs_digest=None,

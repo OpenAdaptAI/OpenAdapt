@@ -537,3 +537,76 @@ def test_the_gate_flags_need_the_fallback(task) -> None:
                 "200",
             )
         )
+
+
+# -- a fallback that raises still names itself ----------------------------------
+
+
+def test_a_crashed_fallback_is_stored_as_a_possible_write(
+    task, monkeypatch, run1
+) -> None:
+    """From the reviewer's probe: the agent raises after the fallback started.
+    The stored envelope says agent_fallback and RECONCILIATION_REQUIRED, with
+    the child request and the error class, on the first call and on retry;
+    result.json is written."""
+    from openadapt_flow.wrap.fallback import fallback_root
+
+    install_reply(task.model, monkeypatch)
+    agent = Agent(raises=True)
+    args = run_args(task, "r1", "one", *FALLBACK)
+    crashed = dc.run(args, agent=agent, gate=lambda r: True)
+    assert crashed["path"] == "agent_fallback"
+    assert crashed["status"] == "RECONCILIATION_REQUIRED"
+    assert crashed["outcome"] == "ESCALATED" and crashed["verified"] is False
+    child = dc.child_request_id("r1")
+    assert crashed["fallback"]["request_id"] == child
+    assert crashed["fallback"]["error"] == "RuntimeError"
+    assert crashed["fallback"]["parent_request_id"] == "r1"
+    root = fallback_root(task.setup.cache, PROMPT, {"value": ""})
+    saved = json.loads((root / child / "result.json").read_text())
+    assert saved["path"] == "agent_fallback"
+    assert saved["status"] == "RECONCILIATION_REQUIRED" and saved["verified"] is False
+    assert saved["replay"]["fallback"]["error"] == "RuntimeError"
+    again = dc.run(args, agent=agent, gate=lambda r: pytest.fail("asked again"))
+    assert again["replayed"] is True and agent.calls == 1
+    assert {k: again[k] for k in ("path", "status", "outcome", "fallback")} == {
+        k: crashed[k] for k in ("path", "status", "outcome", "fallback")
+    }
+
+
+def test_a_repair_desk_failure_keeps_the_verified_save(task, monkeypatch, run1) -> None:
+    install_reply(task.model, monkeypatch)
+
+    def broken(*_a, **_k):
+        raise OSError("repair desk unavailable")
+
+    monkeypatch.setattr(task.setup.cache, "open_repair", broken)
+    result = dc.run(
+        run_args(task, "r1", "one", *FALLBACK), agent=Agent(), gate=lambda r: True
+    )
+    assert result["verified"] and result["path"] == "agent_fallback"
+    assert result["fallback"]["repair"] == {
+        "opened": False,
+        "reason": "repair_failed:OSError",
+    }
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        ("--fallback-approver-root", "a" * 64),
+        ("--fallback-approvers-config", "deployment.yaml"),
+        ("--fallback-approval-wait-s", "10"),
+        (*FALLBACK, "--fallback-approver-root", "a" * 64),
+        (*FALLBACK, "--fallback-approvals-dir", "approvals"),
+    ],
+)
+def test_gate_options_without_the_item_approval_gate_are_refused(task, extra) -> None:
+    with pytest.raises(SystemExit):
+        dc.run(run_args(task, "r1", "one", *extra))
+
+
+@pytest.mark.parametrize("bad", ["a/b", ".hidden", "x" * 129, ""])
+def test_a_bad_fallback_request_id_is_a_clean_error(task, bad) -> None:
+    with pytest.raises(SystemExit, match="fallback-request-id"):
+        dc.run(run_args(task, "r1", "one", *FALLBACK, "--fallback-request-id", bad))

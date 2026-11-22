@@ -129,6 +129,13 @@ checks the record and runs
 `wrap-dispatch release TASK --person NAME --after-reconciling`. A run removes
 the marker only while it is still its own.
 
+A fallback that raises after it started still answers its request: the
+stored result has `path: agent_fallback`, `status: RECONCILIATION_REQUIRED`,
+and `fallback` naming the fallback request ID, its gate decisions and the
+exception's class; `result.json` in the run directory says the same, and a
+retry returns it. A failure to open the repair candidate after a confirmed
+save leaves the save `VERIFIED` with `repair.reason: repair_failed:<class>`.
+
 ## The gate without a terminal
 
 `--fallback-gate item-approval` (`openadapt_flow.wrap.approval_gate.ItemApprovalGate`)

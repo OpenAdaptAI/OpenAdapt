@@ -78,6 +78,16 @@ _REQUEST_CHARS = frozenset(
 )
 
 
+def valid_request_id(value: Any) -> bool:
+    """A fallback request id: a plain file name of 1 to 128 safe characters."""
+    return (
+        isinstance(value, str)
+        and 0 < len(value) <= 128
+        and set(value) <= _REQUEST_CHARS
+        and not value.startswith(".")
+    )
+
+
 class PreCommitGate(Protocol):
     """Asked before every save in a fallback run; True lets that save through.
 
@@ -348,12 +358,7 @@ class FallbackPolicy:
         self.cache = cache
         self.max_cost_usd = _cap(max_cost_usd)
         self.gate: PreCommitGate = gate if gate is not None else TerminalGate()
-        if request_id is not None and (
-            not isinstance(request_id, str)
-            or not 0 < len(request_id) <= 128
-            or not set(request_id) <= _REQUEST_CHARS
-            or request_id.startswith(".")
-        ):
+        if request_id is not None and not valid_request_id(request_id):
             raise ValueError("a fallback request id is 1 to 128 of [A-Za-z0-9._-]")
         self.request_id = request_id
         self.repair_desk = repair_desk
@@ -478,13 +483,30 @@ class FallbackPolicy:
                     started,
                     request_id=request_id,
                 )
-            bind = getattr(self.gate, "bind", None)
-            if callable(bind):
-                # A gate that keeps its own evidence learns which run it serves.
-                bind(run_root, request_id)
-            return self._run_agent(
-                prompt, params, agent, first, marker, run_root, started
-            )
+            decisions: list[str] = []
+            # Recorded before the agent starts: if anything below raises, the
+            # dispatch result still names this fallback, as a possible write.
+            self.last = {
+                "fallback": True,
+                "request_id": request_id,
+                "parent_request_id": self.parent_request_id,
+                "status": "RECONCILIATION_REQUIRED",
+                "run_status": None,
+                "decisions": decisions,
+                "admitted": False,
+                "error": None,
+            }
+            try:
+                bind = getattr(self.gate, "bind", None)
+                if callable(bind):
+                    # A gate that keeps its own evidence learns its run.
+                    bind(run_root, request_id)
+                return self._run_agent(
+                    prompt, params, agent, first, marker, run_root, started, decisions
+                )
+            except BaseException as exc:
+                self._crashed(first, run_root, started, exc)
+                raise
         finally:
             # A run that did not prove what it wrote (or raised) keeps the
             # marker, marked ended, for a person; a cleared one is gone.
@@ -499,12 +521,12 @@ class FallbackPolicy:
         marker: fallback_marker.Marker,
         run_root: Path,
         started: float,
+        decisions: list[str],
     ) -> SkillRun:
         from openadapt_flow.compile_agent import FirstRunCompiler
 
         request_id = run_root.name
         cap = self.max_cost_usd
-        decisions: list[str] = []
 
         def hold(request: GateRequest) -> bool:
             spent = _spent(agent)
@@ -654,6 +676,35 @@ class FallbackPolicy:
             marker.clear()
         return run
 
+    def _crashed(
+        self, first: SkillRun, run_root: Path, started: float, exc: BaseException
+    ) -> None:
+        """A fallback that raised: keep what is known, as a possible write."""
+        assert self.last is not None
+        self.last.update(
+            status="RECONCILIATION_REQUIRED",
+            error=type(exc).__name__,
+            gate_answers=[
+                dict(row) for row in getattr(self.gate, "decisions", None) or []
+            ],
+        )
+        run = SkillRun(
+            path=FALLBACK_PATH,
+            status="RECONCILIATION_REQUIRED",
+            verified=False,
+            model_calls=None,
+            cost_usd=None,
+            seconds=round(time.monotonic() - started, 3),
+            detail="The fallback run raised; a save may exist.",
+            replay={"program": first.replay, "fallback": self.last},
+            usage=None,
+            usage_known=False,
+        )
+        try:
+            _write(run_root / _RESULT, run.to_dict())
+        except OSError:
+            pass  # The marker stays; a person reconciles without the file.
+
     def _open_repair(
         self, prompt: str, params: Mapping[str, Any], run_root: Path
     ) -> dict[str, Any]:
@@ -665,6 +716,8 @@ class FallbackPolicy:
             reply = self.cache.open_repair(prompt, params, repair_desk=self.repair_desk)
         except RepairError:
             return {"opened": False, "reason": "no_one_step_repair"}
+        except Exception as exc:  # noqa: BLE001 - the verified save stands
+            return {"opened": False, "reason": f"repair_failed:{type(exc).__name__}"}
         # The repair token is a one-use capability for the person who
         # demonstrates the fix; it stays in a private local file.
         _write(run_root / "repair.json", reply)
