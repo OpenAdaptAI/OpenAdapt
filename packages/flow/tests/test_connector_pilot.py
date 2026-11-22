@@ -15,6 +15,7 @@ import hmac
 import io
 import json
 import os
+import signal
 import sys
 import threading
 import time
@@ -55,7 +56,7 @@ from openadapt_flow.connector.storage import InMemoryCustomerStorage
 from tests.connector_v3_fixtures import build_program_case
 
 CANARY_RECORD = "ZQX-CANARY-RECORD-7731"
-CANARY_SECRET = "ZQX-CANARY-SECRET-p4ssw0rd"
+CANARY_LOCAL_ENV_MARKER = "ZQX-CANARY-LOCAL-MARKER-9941"
 CANARY_PARAM = "ZQX-CANARY-PARAM-ALICE"
 TOKEN = "oaconn_" + "d" * 64
 
@@ -228,7 +229,7 @@ def _leaky_report() -> dict:
             {
                 "step_id": "s2",
                 "ok": False,
-                "error": f"saw {CANARY_RECORD} and {CANARY_SECRET}",
+                "error": f"saw {CANARY_RECORD} and {CANARY_LOCAL_ENV_MARKER}",
             },
         ],
         "ocr": CANARY_RECORD,
@@ -241,7 +242,7 @@ def test_no_canary_leaves_the_machine(tmp_path, outcome_kind):
     secrets_dir = tmp_path / "secrets"
     secrets_dir.mkdir()
     secret_file = secrets_dir / "notes-reader.env"
-    secret_file.write_text(f"NOTES_PASSWORD={CANARY_SECRET}\n")
+    secret_file.write_text(f"NOTES_PASSWORD={CANARY_LOCAL_ENV_MARKER}\n")
     os.chmod(secret_file, 0o600)
     plane = RecordingPlane()
     plane.jobs.append(
@@ -263,7 +264,9 @@ def test_no_canary_leaves_the_machine(tmp_path, outcome_kind):
     def runner(argv, run_dir: Path, child_env) -> RunOutcome:
         seen_env.update(child_env)
         if outcome_kind == "child_crash":
-            raise RuntimeError(f"crashed holding {CANARY_RECORD} {CANARY_SECRET}")
+            raise RuntimeError(
+                f"crashed holding {CANARY_RECORD} {CANARY_LOCAL_ENV_MARKER}"
+            )
         report = _leaky_report()
         (run_dir / "report.json").write_text(json.dumps(report))
         return RunOutcome(returncode=1, report=report)
@@ -279,12 +282,12 @@ def test_no_canary_leaves_the_machine(tmp_path, outcome_kind):
     )
     assert rc == 0
     # The secret reached only the governed child.
-    assert seen_env.get("NOTES_PASSWORD") == CANARY_SECRET
+    assert seen_env.get("NOTES_PASSWORD") == CANARY_LOCAL_ENV_MARKER
     # The run reported and acked.
     paths = [r.url.path for r in plane.requests]
     assert "/api/internal/run-callback" in paths and "/api/connector/ack" in paths
     sent = plane.all_bytes() + (tmp_path / "egress.jsonl").read_bytes()
-    for canary in (CANARY_RECORD, CANARY_SECRET, CANARY_PARAM):
+    for canary in (CANARY_RECORD, CANARY_LOCAL_ENV_MARKER, CANARY_PARAM):
         assert canary.encode() not in sent, canary
     # The PHI-bearing report stayed in customer storage.
     if outcome_kind == "halt_report":
@@ -353,13 +356,15 @@ def test_ack_and_poll_guards():
 
 def test_serialize_refuses_any_encoding_of_a_secret():
     with pytest.raises(egress.EgressViolation):
-        egress.serialize_checked({"run_id": CANARY_SECRET}, [CANARY_SECRET])
+        egress.serialize_checked(
+            {"run_id": CANARY_LOCAL_ENV_MARKER}, [CANARY_LOCAL_ENV_MARKER]
+        )
     import base64
 
-    encoded = base64.b64encode(CANARY_SECRET.encode()).decode()
+    encoded = base64.b64encode(CANARY_LOCAL_ENV_MARKER.encode()).decode()
     with pytest.raises(egress.EgressViolation):
-        egress.serialize_checked({"x": encoded}, [CANARY_SECRET])
-    assert egress.serialize_checked({"run_id": "r1"}, [CANARY_SECRET])
+        egress.serialize_checked({"x": encoded}, [CANARY_LOCAL_ENV_MARKER])
+    assert egress.serialize_checked({"run_id": "r1"}, [CANARY_LOCAL_ENV_MARKER])
 
 
 # --------------------------------------------------------------------------
@@ -533,6 +538,221 @@ def test_cancel_after_the_child_reported_keeps_its_real_outcome(tmp_path):
         result.outcome["workflow_contract_sha256"]
         == envelope["workflow_contract_sha256"]
     )
+
+
+@pytest.mark.parametrize(
+    "report",
+    [
+        {"success": True, "execution_outcome": "VERIFIED", "results": [{"ok": True}]},
+        {"success": True, "results": [{"ok": True}]},
+    ],
+    ids=["verified", "legacy"],
+)
+def test_cancel_that_kills_a_child_after_it_reported_success_is_uncertain(
+    tmp_path, report
+):
+    """Killed after writing success (a seal still running): the write landed."""
+    lease = f"bjob_post_{len(report)}"
+    job = parse_job(_payload(), lease_job_id=lease)
+
+    def runner(argv, run_dir, env):
+        cancel_job(lease)
+        return RunOutcome(
+            returncode=-15, report={"execution_target_kind": "web", **report}
+        )
+
+    result = execute_job(
+        job,
+        _configured_settings(),
+        InMemoryCustomerStorage(PLAIN_BUNDLE),
+        runner=runner,
+    )
+    assert result.status == "halt"
+    assert result.error_code == "cancelled_after_child_start"
+    assert result.halt == {"present": True} and result.outcome is None
+
+
+@pytest.mark.parametrize(
+    "returncode,report,status,error_code",
+    [
+        # No cancel: a stop, an OOM kill or a crash after the child started.
+        (-2, {}, "halt", "child_outcome_unknown"),
+        (
+            -9,
+            {"execution_outcome": "VERIFIED", "success": True},
+            "halt",
+            "child_outcome_unknown",
+        ),
+        (1, {"success": True}, "halt", "child_outcome_unknown"),
+        (-15, {"terminal_outcome": "success"}, "halt", "child_outcome_unknown"),
+        # A report that records a refusal or a halt keeps its own outcome.
+        (
+            1,
+            {"execution_outcome": "FAILED", "success": False},
+            "failed",
+            "governed_run_failed",
+        ),
+        (1, {"execution_outcome": "HALTED", "success": False}, "halt", None),
+    ],
+    ids=["no-report", "verified", "legacy", "terminal-success", "refused", "halted"],
+)
+def test_a_nonzero_exit_after_start_is_judged_without_a_cancel(
+    tmp_path, returncode, report, status, error_code
+):
+    job = parse_job(_payload(), lease_job_id=f"bjob_exit_{returncode}_{len(report)}")
+
+    def runner(argv, run_dir, env):
+        body = {"execution_target_kind": "web", **report} if report else {}
+        return RunOutcome(returncode=returncode, report=body)
+
+    result = execute_job(
+        job,
+        _configured_settings(),
+        InMemoryCustomerStorage(PLAIN_BUNDLE),
+        runner=runner,
+    )
+    assert result.status == status
+    assert result.error_code == error_code
+    if error_code == "child_outcome_unknown":
+        assert result.halt == {"present": True} and result.outcome is None
+
+
+def test_a_clean_exit_with_no_readable_report_is_uncertain_not_failed(tmp_path):
+    """Exit 0 but no report the connector can read (a sealed run's report it
+    could not decrypt, or none written): a write may have landed."""
+    job = parse_job(_payload(), lease_job_id="bjob_exit0_noreport")
+
+    def runner(argv, run_dir, env):
+        return RunOutcome(returncode=0, report={})
+
+    result = execute_job(
+        job,
+        _configured_settings(),
+        InMemoryCustomerStorage(PLAIN_BUNDLE),
+        runner=runner,
+    )
+    assert result.status == "halt"
+    assert result.error_code == "child_outcome_unknown"
+    assert result.halt == {"present": True} and result.outcome is None
+
+
+def test_the_report_is_read_through_the_sealed_set(tmp_path, monkeypatch):
+    from openadapt_flow import sealed_set
+
+    report = tmp_path / "report.json"
+    assert executor_mod._read_report(report) == {}  # missing
+    report.write_text("{not json", encoding="utf-8")
+    assert executor_mod._read_report(report) == {}  # unreadable
+    report.write_text('["a list"]', encoding="utf-8")
+    assert executor_mod._read_report(report) == {}  # not an object
+    report.write_text('{"success": true}', encoding="utf-8")
+    assert executor_mod._read_report(report) == {"success": True}
+
+    # A sealed run's report is decrypted by the sealed set, and a sealed
+    # report that can't be read (no key, a bad tag) is unknown, not plaintext.
+    monkeypatch.setattr(sealed_set, "is_sealed_path", lambda path: True)
+    monkeypatch.setattr(
+        sealed_set, "read_text", lambda path, encoding="utf-8": '{"halt": {}}'
+    )
+    assert executor_mod._read_report(report) == {"halt": {}}
+
+    def refuse(path, encoding="utf-8"):
+        raise ValueError("no key for this sealed set")
+
+    monkeypatch.setattr(sealed_set, "read_text", refuse)
+    assert executor_mod._read_report(report) == {}
+
+
+@pytest.mark.skipif(not hasattr(os, "getsid"), reason="POSIX sessions")
+@pytest.mark.parametrize("signame", ["SIGINT", "SIGTERM", "SIGHUP"])
+def test_a_daemon_stop_mid_run_stops_the_child_and_reports_it_uncertain(
+    tmp_path, signame
+):
+    """Ctrl-C, a service stop, kill or a closed terminal while a real child
+    runs: the daemon stops the child and reports halt, never failed."""
+    if not hasattr(signal, signame):
+        pytest.skip(f"no {signame} here")
+    plane = RecordingPlane()
+    job_id = f"bjob_stop_{signame.lower()}"
+    plane.jobs.append({"id": job_id, "status": "queued", "payload": _payload()})
+    started = threading.Event()
+    child: dict = {}
+
+    client = _client(plane)
+
+    def interrupt() -> None:
+        # The operator's Ctrl-C (or the unit's SIGINT) reaches this process
+        # while the child runs. Only this process: the test runner's own
+        # process group is left alone.
+        # Signal even if the child never started, so a regression fails the
+        # assertions below instead of leaving the loop polling forever.
+        started.wait(10)
+        time.sleep(0.5)
+        os.kill(os.getpid(), getattr(signal, signame))
+
+    threading.Thread(target=interrupt, daemon=True).start()
+
+    def runner(argv, run_dir, env):
+        real = [sys.executable, "-c", "import time; time.sleep(30)"]
+        original = executor_mod.subprocess.Popen
+
+        def spy(*args, **kwargs):
+            proc = original(*args, **kwargs)
+            child["proc"] = proc
+            started.set()
+            return proc
+
+        executor_mod.subprocess.Popen = spy
+        try:
+            return _subprocess_runner(real, run_dir, {"PATH": os.environ["PATH"]})
+        finally:
+            executor_mod.subprocess.Popen = original
+
+    settings = _configured_settings(
+        control_plane_url="https://cloud.test",
+        token=TOKEN,
+        poll_wait_s=0,
+        max_workers=2,
+    )
+    began = time.monotonic()
+    run_loop(
+        client,
+        settings,
+        runner=runner,
+        storage_factory=lambda job: InMemoryCustomerStorage(PLAIN_BUNDLE),
+        log=lambda _m: None,
+    )
+    assert time.monotonic() - began < 20  # stopped, not waited out
+    assert "proc" in child, "the governed child never started"
+    proc = child["proc"]
+    assert proc.poll() is not None  # the daemon stopped its child
+    acks = [
+        json.loads(r.content)
+        for r in plane.requests
+        if r.url.path == "/api/connector/ack"
+    ]
+    assert len(acks) == 1 and acks[0]["job_id"] == job_id
+    assert acks[0]["status"] != "failed"
+    assert acks[0].get("error_code") == "cancelled_after_child_start"
+
+
+@pytest.mark.skipif(not hasattr(os, "getsid"), reason="POSIX sessions")
+def test_the_governed_child_runs_in_its_own_session(tmp_path):
+    """A signal to the daemon's process group does not reach the child."""
+    seen: dict = {}
+    original = executor_mod.subprocess.Popen
+
+    def spy(*args, **kwargs):
+        proc = original(*args, **kwargs)
+        seen["sid"] = os.getsid(proc.pid)
+        return proc
+
+    executor_mod.subprocess.Popen = spy
+    try:
+        _subprocess_runner([sys.executable, "-c", "pass"], tmp_path, dict(os.environ))
+    finally:
+        executor_mod.subprocess.Popen = original
+    assert seen["sid"] != os.getsid(0)
 
 
 def test_concurrency_runs_up_to_the_server_cap(tmp_path):

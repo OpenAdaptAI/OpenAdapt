@@ -63,7 +63,7 @@ publish() {
 runner() {
   $CTR rm -f byoc-runner >/dev/null 2>&1 || true
   $CTR run -d --name byoc-runner --network byoc-private \
-    --read-only --tmpfs /tmp --tmpfs /home/openadapt \
+    --read-only --tmpfs /tmp --tmpfs /home/openadapt:uid=10001,gid=10001,mode=0700 \
     -e HTTPS_PROXY="$PROXY" -e HTTP_PROXY="$PROXY" -e NO_PROXY="$APP_HOST" \
     -e OPENADAPT_HOME=/etc/openadapt \
     -v "$STATE/runner-etc:/etc/openadapt" -v "$STATE/runner-storage:/srv/openadapt" \

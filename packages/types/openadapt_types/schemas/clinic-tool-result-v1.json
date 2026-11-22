@@ -9,13 +9,13 @@
       "title": "ClinicMcpToolNameV1",
       "type": "string"
     },
-    "ClinicToolStatusV1": {
+    "ManagedToolStatusV1": {
       "enum": [
         "VERIFIED",
         "HALTED",
         "RECONCILIATION_REQUIRED"
       ],
-      "title": "ClinicToolStatusV1",
+      "title": "ManagedToolStatusV1",
       "type": "string"
     }
   },
@@ -34,7 +34,7 @@
       "type": "string"
     },
     "status": {
-      "$ref": "#/$defs/ClinicToolStatusV1"
+      "$ref": "#/$defs/ManagedToolStatusV1"
     },
     "tool": {
       "$ref": "#/$defs/ClinicMcpToolNameV1"

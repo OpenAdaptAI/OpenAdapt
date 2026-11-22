@@ -86,7 +86,8 @@ def test_every_legacy_leaf_retains_namespace_errors_and_handler(parsers):
     parser, legacy = parsers
     cases = list(_cases(parser))
     assert set(_children(parser)) == set(cli_tasks.FLOW_NAMES) | (
-        set(_children(parser)) & set(cli_tasks.INTEGRATION_NAMES)
+        set(_children(parser))
+        & (set(cli_tasks.INTEGRATION_NAMES) | set(cli_tasks.RENAMED_LEAVES))
     )
     assert len(cases) >= 170
     successes = 0
@@ -364,7 +365,7 @@ def test_launcher_native_alias_labels_and_help_already_come_from_registered_rout
     from openadapt import cli_tasks as launcher_tasks
 
     for canonical, legacy in launcher_tasks.NATIVE_ROUTES.items():
-        if canonical == legacy or legacy == ("setup",):
+        if canonical == legacy or legacy in launcher_tasks._UNANNOUNCED:
             continue
         argv = [_UntrustedNoticeSpelling(token) for token in legacy]
         assert launcher_tasks.legacy_names([*argv, "SYNTHETIC-TAIL-VALUE"]) == (

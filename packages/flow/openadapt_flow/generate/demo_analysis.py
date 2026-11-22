@@ -786,7 +786,7 @@ def _date_part(
     values: Sequence[Optional[str]], demos: Sequence["Demo"]
 ) -> Optional[str]:
     """Is the column the year, month, ISO week or day of one date value the
-    task gives, in every row? (Redmine stores a time entry's ``tyear``,
+    task gives, in every row? (Some apps store a derived year column,
     ``tmonth`` and ``tweek``.) The app computes it, so it isn't pinned."""
 
     if len({v for v in values}) < 2:

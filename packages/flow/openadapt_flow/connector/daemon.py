@@ -14,10 +14,12 @@ patient identifier.
 
 from __future__ import annotations
 
+import signal
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Any, Callable, Optional
+from contextlib import contextmanager
+from typing import Any, Callable, Iterator, Optional
 
 import httpx
 
@@ -253,10 +255,14 @@ class _ActiveJobs:
     def __init__(self) -> None:
         self.lock = threading.Lock()
         self.futures: dict[str, Future[dict[str, Any]]] = {}
+        #: Jobs about to be submitted: listed before ``pool.submit`` so a stop
+        #: signal between the submit and the future's registration still
+        #: reaches the job through shutdown's ``cancel_job``.
+        self.pending: set[str] = set()
 
     def ids(self) -> list[str]:
         with self.lock:
-            return list(self.futures)
+            return list(self.futures) + sorted(self.pending - set(self.futures))
 
     def reap(self, log: Callable[[str], None]) -> int:
         done = 0
@@ -335,6 +341,38 @@ def finish_rotation(
     return False
 
 
+def _raise_interrupt(signum: int, _frame: Any) -> None:
+    raise KeyboardInterrupt(f"signal {signum}")
+
+
+@contextmanager
+def _stop_signals_interrupt() -> Iterator[None]:
+    """SIGTERM and SIGHUP stop the loop the way Ctrl-C (SIGINT) does.
+
+    Each governed child runs in its own session, so a signal to the daemon
+    never reaches it. Without this, SIGTERM (``kill``, ``docker stop``) or
+    SIGHUP (a closed terminal) would end the daemon without its shutdown and
+    leave the child running unsupervised. Mapped to KeyboardInterrupt, both
+    take the same path: cancel every child, judge each outcome, then exit.
+    Signal handlers can only be set from the main thread; elsewhere the
+    process's existing handling is kept.
+    """
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    names = ("SIGTERM", "SIGHUP")
+    previous = {}
+    for name in names:
+        number = getattr(signal, name, None)
+        if number is not None:
+            previous[number] = signal.signal(number, _raise_interrupt)
+    try:
+        yield
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
+
+
 def run_loop(
     client: ConnectorClient,
     settings: ConnectorSettings,
@@ -347,6 +385,42 @@ def run_loop(
     persist_token: Optional[TokenPersister] = None,
     persist_pending: Optional[TokenPersister] = None,
     heartbeat_s: float = HEARTBEAT_S,
+    stop_requested: Optional[threading.Event] = None,
+) -> int:
+    """Poll -> execute -> callback -> ack until interrupted.
+
+    SIGINT, SIGTERM and SIGHUP all interrupt it the same way (see
+    :func:`_stop_signals_interrupt`). The rest is :func:`_run_loop`.
+    """
+    with _stop_signals_interrupt():
+        return _run_loop(
+            client,
+            settings,
+            runner=runner,
+            storage_factory=storage_factory,
+            once=once,
+            require_run_token=require_run_token,
+            log=log,
+            persist_token=persist_token,
+            persist_pending=persist_pending,
+            heartbeat_s=heartbeat_s,
+            stop_requested=stop_requested,
+        )
+
+
+def _run_loop(
+    client: ConnectorClient,
+    settings: ConnectorSettings,
+    *,
+    runner: Runner,
+    storage_factory: Optional[StorageFactory] = None,
+    once: bool = False,
+    require_run_token: bool = True,
+    log: Callable[[str], None] = print,
+    persist_token: Optional[TokenPersister] = None,
+    persist_pending: Optional[TokenPersister] = None,
+    heartbeat_s: float = HEARTBEAT_S,
+    stop_requested: Optional[threading.Event] = None,
 ) -> int:
     """Poll -> execute -> callback -> ack until interrupted.
 
@@ -361,6 +435,9 @@ def run_loop(
     log(f"[connector] polling {settings.control_plane_url} (org {settings.org_id})")
 
     if once:
+        if settings.pending_token and persist_token is not None:
+            if not finish_rotation(client, settings.pending_token, persist_token, log):
+                return 1
         try:
             result = run_once(
                 client,
@@ -384,6 +461,7 @@ def run_loop(
 
     active = _ActiveJobs()
     stop = threading.Event()
+    retry_stop = stop_requested if stop_requested is not None else stop
     pool = ThreadPoolExecutor(
         max_workers=settings.max_workers, thread_name_prefix="oa-job"
     )
@@ -403,7 +481,16 @@ def run_loop(
     handled = 0
     backoff = 1.0
     try:
-        while True:
+        while not retry_stop.is_set():
+            # A lost rotate response or failed local commit leaves one durable
+            # candidate. Confirm it before polling or minting another token.
+            if settings.pending_token and persist_token is not None:
+                if not finish_rotation(
+                    client, settings.pending_token, persist_token, log, attempts=1
+                ):
+                    retry_stop.wait(backoff)
+                    backoff = min(MAX_BACKOFF_S, backoff * 2)
+                    continue
             handled += active.reap(log)
             cap = min(settings.max_workers, client.control.max_concurrent_leases)
             if len(active.ids()) >= cap:
@@ -433,6 +520,8 @@ def run_loop(
             job = _job_from_envelope(client, envelope)
             if job is None or not job.lease_job_id:
                 continue
+            with active.lock:
+                active.pending.add(job.lease_job_id)
             fut = pool.submit(
                 handle_job,
                 client,
@@ -444,10 +533,17 @@ def run_loop(
             )
             with active.lock:
                 active.futures[job.lease_job_id] = fut
+                active.pending.discard(job.lease_job_id)
     except KeyboardInterrupt:  # operator Ctrl-C or service stop
         log("[connector] interrupted; exiting")
     finally:
         stop.set()
+        # Stop every governed child before draining. Each now runs in its own
+        # session, so a service stop or Ctrl-C reaches only this daemon; a
+        # stopped child is judged by the executor (a write may have landed:
+        # halt, child_outcome_unknown), never acked as a clean failure.
+        for job_id in active.ids():
+            cancel_job(job_id)
         pool.shutdown(wait=True)
         handled += active.reap(log)
     log(f"[connector] loop exiting; jobs handled this session: {handled}")

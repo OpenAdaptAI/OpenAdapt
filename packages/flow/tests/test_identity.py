@@ -608,3 +608,95 @@ class TestContextFromLines:
             )
             is None
         )
+
+
+class TestSiblingChromeDerivation:
+    def test_heading_only_band_abstains_without_sibling_rows(self):
+        # Single-band heading-only verification preserves abstention when
+        # sibling-row evidence is unavailable.
+        check = verify_target_identity(
+            "Patient Chart Appointment 01/15/1980",
+            "Patient Chart Appointment 01/15/1980",
+        )
+        assert check.status == "abstain"
+
+    def test_shared_heading_across_records_abstains_plain_and_template(self):
+        from openadapt_flow.runtime.identity import derive_sibling_chrome_words
+        from openadapt_flow.runtime.identity_template import (
+            _punctuation_metadata_complete,
+            build_identity_template,
+            verify_template_identity,
+        )
+
+        # Non-healthcare ERP invoice rows sharing chrome words ("Invoice",
+        # "Approved", "View") across separate records.
+        sibling_rows = [
+            "INV-1001 Acme Corp Invoice Approved View",
+            "INV-1002 Globex Ltd Invoice Approved View",
+            "INV-1003 Initech LLC Invoice Approved View",
+        ]
+        chrome = derive_sibling_chrome_words(sibling_rows)
+        assert "approved" in chrome
+        assert "acme" not in chrome
+        assert "globex" not in chrome
+
+        # 1. A distinct record band with shared headings + a date must VERIFY
+        # for the matching record and MISMATCH for a different record in both
+        # plaintext and hashed-template verification.
+        record_a = "Acme Corp Invoice Approved View 2026-08-15"
+        record_b = "Globex Ltd Invoice Approved View 2026-08-15"
+        assert (
+            verify_target_identity(record_a, record_a, sibling_rows=sibling_rows).status
+            == "verified"
+        )
+        assert (
+            verify_target_identity(record_a, record_b, sibling_rows=sibling_rows).status
+            == "mismatch"
+        )
+
+        record_tmpl = build_identity_template(record_a, sibling_rows=sibling_rows)
+        assert record_tmpl is not None
+        assert _punctuation_metadata_complete(record_tmpl) is True
+        assert verify_template_identity(record_tmpl, record_a).status == "verified"
+        assert verify_template_identity(record_tmpl, record_b).status == "mismatch"
+
+        # 2. A heading-only band containing only shared chrome words + a date
+        # must ABSTAIN in both plaintext and hashed-template verification (and
+        # the template must pass metadata validation rather than early-exiting
+        # as malformed).
+        heading_band = "Invoice Approved View 2026-08-15"
+        plain = verify_target_identity(
+            heading_band, heading_band, sibling_rows=sibling_rows
+        )
+        assert plain.status == "abstain"
+
+        tmpl = build_identity_template(heading_band, sibling_rows=sibling_rows)
+        assert tmpl is not None
+        assert _punctuation_metadata_complete(tmpl) is True
+        hashed = verify_template_identity(tmpl, heading_band)
+        assert hashed.status == "abstain"
+
+    def test_lowercase_entity_name_with_date_verifies_without_sibling_rows(self):
+        from openadapt_flow.runtime.identity_template import (
+            _punctuation_metadata_complete,
+            build_identity_template,
+            verify_template_identity,
+        )
+
+        # Lowercase entity names have bearing=False for coverage but still
+        # carry name evidence when no sibling-row exclusion applies.
+        band = "acme 2026-08-15"
+        assert verify_target_identity(band, band).status == "verified"
+
+        tmpl = build_identity_template(band)
+        assert tmpl is not None
+        assert tmpl.sibling_generic_hashes == []
+        assert "sibling_generic_hashes" not in tmpl.model_dump()
+        assert _punctuation_metadata_complete(tmpl) is True
+        assert verify_template_identity(tmpl, band).status == "verified"
+
+    def test_derive_sibling_chrome_words_requires_multiple_rows(self):
+        from openadapt_flow.runtime.identity import derive_sibling_chrome_words
+
+        assert derive_sibling_chrome_words([]) == frozenset()
+        assert derive_sibling_chrome_words(["Only One Row Here"]) == frozenset()

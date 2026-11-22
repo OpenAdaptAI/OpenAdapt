@@ -1,0 +1,49 @@
+{
+  "checked": {
+    "delta": "not_checked",
+    "frame": "not_checked",
+    "source": "instruction"
+  },
+  "effect_receipt_sha256": "99e7dbd51e1bd61feeefc8ef2b9e140d1282f3a7a5a98b9e8656ecb041cdae3c",
+  "execution_outcome": "RECONCILIATION_REQUIRED",
+  "executor": {
+    "agent": "codex",
+    "kind": "agent"
+  },
+  "finished_at": "2026-11-21T06:39:24Z",
+  "hold_key": "b825ec06d31971a10938e2ea1db40e0eba08f77deef5bea769fa2ffc74d192b5",
+  "model_calls": 0,
+  "outcome": "UNCERTAIN",
+  "outcome_envelope": {
+    "passed_contracts": {
+      "authorization": 1,
+      "effect": 0
+    },
+    "required_contracts": {
+      "authorization": 1,
+      "effect": 1
+    }
+  },
+  "reasons": [
+    "record_written was indeterminate: observed unknown, None of None expected record(s)",
+    "what else changed could not be read, so the frame is not checked"
+  ],
+  "results": [
+    {
+      "actuation": "api",
+      "effect_approved_unverified": true,
+      "effect_contract_hashes": [
+        "83758138b3f923c8e22b46ba4eec956407133ade9addedac428bd8e5bea58454"
+      ],
+      "effect_verified": null,
+      "ok": false
+    }
+  ],
+  "run_id": "hk-4bbe7d211bdab090",
+  "schema_version": "openadapt.hook-report/v1",
+  "started_at": "2026-11-21T06:39:22Z",
+  "system": "notes-api",
+  "verifier_outcome": "UNCERTAIN",
+  "workflow_name": "notes-api.add-note",
+  "write": "add-note"
+}

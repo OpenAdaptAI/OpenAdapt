@@ -159,7 +159,7 @@ class SystemOfRecordBackend(Protocol):
     write actually reached the system of record — a partial save, a phantom
     optimistic-UI success, a duplicate submission all look identical on screen
     (``docs/LIMITS.md`` "5 of 7 write faults silent"). A backend that can read
-    the app's authoritative store (a JSON ``/api/db`` endpoint, an EMR's own
+    the app's authoritative store (a JSON records endpoint, an app's own
     API) exposes it here; the recorder snapshots it before and after each event
     (``sor_before`` / ``sor_after`` on the event, exactly as it already records
     ``url_before`` / ``url_after``), and the compiler's effect miner

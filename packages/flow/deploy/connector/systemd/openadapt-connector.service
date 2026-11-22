@@ -18,9 +18,14 @@ Environment=OPENADAPT_HOME=/etc/openadapt
 ExecStart=/opt/openadapt/bin/openadapt-flow connector run
 Restart=on-failure
 RestartSec=10
-# Stopping the service ends the loop; a job mid-run is reaped as uncertain
-# by the control plane and never re-run automatically.
+# Stopping the service ends the loop. The connector stops each governed run
+# itself and reports one that was mid-run as uncertain (child_outcome_unknown,
+# held for a person, never re-run automatically). KillMode=mixed sends SIGINT
+# to the connector only, so the default control-group kill does not signal
+# the governed children first; anything still left at TimeoutStopSec is
+# killed.
 KillSignal=SIGINT
+KillMode=mixed
 TimeoutStopSec=60
 
 # Hardening
