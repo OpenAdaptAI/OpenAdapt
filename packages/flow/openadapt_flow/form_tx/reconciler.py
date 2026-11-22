@@ -526,15 +526,17 @@ class FormReconciler:
         pack = session.pack
         dossier = session.dossier
 
+        primary_kinds = (
+            frozenset(pack.primary_entity_kinds)
+            if pack.primary_entity_kinds is not None
+            else _PRIMARY_ENTITY_KINDS
+        )
         for spec in pack.entity_tables:
             expected_entities: list[DossierEntity] = list(
                 dossier.entities_of_kind(spec.entity_kind)
             )
             for ent in dossier.entities:
-                if (
-                    ent.entity_kind in _PRIMARY_ENTITY_KINDS
-                    and ent not in expected_entities
-                ):
+                if ent.entity_kind in primary_kinds and ent not in expected_entities:
                     if all(kf in ent.fields for kf in spec.key_fields):
                         expected_entities.append(ent)
 

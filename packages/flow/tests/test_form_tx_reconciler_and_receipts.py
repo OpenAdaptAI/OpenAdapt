@@ -1342,6 +1342,54 @@ def test_ppr_conditional_cascade_human_resume_popup_summary_and_receipt() -> Non
         assert pii_token not in serialized_receipt
 
 
+def test_a_pack_can_override_the_primary_entity_kinds() -> None:
+    """The engine's default list (presets/words/primary_entity_kinds.json)
+    lets the dossier's primary applicant ground its own table row. A pack
+    that names no primary kinds makes that row an unlisted entity."""
+    grounded_row = {"first_name": "Elena", "last_name": "Vance"}
+    dossier = _build_dossier(has_pool="No")
+
+    default_pack = _build_pack()
+    assert default_pack.primary_entity_kinds is None
+    surface = FakeStatefulFormSurface(entity_rows=[grounded_row])
+    reconciler = FormReconciler(surface)
+    done = reconciler.run_until_halt_or_done(
+        reconciler.create_session(default_pack, dossier)
+    )
+    assert done.outcome == FormTxOutcome.VERIFIED_DONE
+
+    same = default_pack.model_copy(
+        update={"primary_entity_kinds": ("primary_applicant",)}
+    )
+    surface = FakeStatefulFormSurface(entity_rows=[grounded_row])
+    reconciler = FormReconciler(surface)
+    assert (
+        reconciler.run_until_halt_or_done(
+            reconciler.create_session(same, dossier)
+        ).outcome
+        == FormTxOutcome.VERIFIED_DONE
+    )
+
+    none = default_pack.model_copy(update={"primary_entity_kinds": ()})
+    surface = FakeStatefulFormSurface(entity_rows=[grounded_row])
+    reconciler = FormReconciler(surface)
+    halted = reconciler.run_until_halt_or_done(reconciler.create_session(none, dossier))
+    assert halted.outcome == FormTxOutcome.HALTED_NEEDS_HUMAN
+    assert halted.halts[0].kind == FormHaltKind.PREFILL_ENTITY_CONFLICT
+
+
+def test_an_unset_override_keeps_the_pack_digest() -> None:
+    from openadapt_flow.form_tx.types import canonical_sha256
+
+    pack = _build_pack()
+    old_style = pack.model_dump(mode="json")
+    old_style.pop("primary_entity_kinds")
+    assert pack.digest() == canonical_sha256(old_style)
+    assert (
+        pack.model_copy(update={"primary_entity_kinds": ()}).digest() != pack.digest()
+    )
+
+
 def test_entity_table_prefill_conflict_dismiss_accept_and_broken_dismiss() -> None:
     grounded_row = {"first_name": "Elena", "last_name": "Vance"}
     unlisted_spouse = {"first_name": "Marcus", "last_name": "Vance"}
