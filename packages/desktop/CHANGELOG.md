@@ -15,6 +15,10 @@
 - **desktop**: require Capture 1.4 for core recorder imports
 - preserve raw evidence bytes on Windows
 
+### Build
+
+- **engine**: bundle openadapt-flow 3.4.0 (was 2.4.1) and openadapt-privacy 1.1.4; the lock no longer carries mako
+
 
 
 ## v0.30.6 (2026-11-19)
