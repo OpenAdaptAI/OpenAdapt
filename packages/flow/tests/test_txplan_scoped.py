@@ -937,6 +937,9 @@ def test_a_marker_search_without_its_results_is_not_empty() -> None:
     assert _search(Adapter(bundle), fhir, "m1", "id") == []
     with pytest.raises(AdapterError):
         _search(Adapter({"resourceType": "OperationOutcome"}), fhir, "m1", "id")
+    # A Bundle that says it matched something but carries no entries is partial.
+    with pytest.raises(AdapterError):
+        _search(Adapter({**bundle, "total": 1}), fhir, "m1", "id")
     assert _search(Adapter({"items": [{"id": 3}]}), scoped, "m1", "id") == ["3"]
 
 

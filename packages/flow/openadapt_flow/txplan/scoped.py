@@ -277,9 +277,16 @@ def _search(
         raise AdapterError("the marker search did not return an object")
     head = scoped.search_items.split(".", 1)[0] if scoped.search_items else ""
     empty = scoped.search_empty
-    declared_empty = bool(empty) and any(
-        str(v) == str(empty.get("equals"))
-        for v in pick(got, str(empty.get("path", "")))
+    # The declared empty shape counts only when the answer claims no matches:
+    # one that reports a total above zero but carries no items is partial,
+    # never empty.
+    declared_empty = (
+        bool(empty)
+        and got.get("total") in (None, 0)
+        and any(
+            str(v) == str(empty.get("equals"))
+            for v in pick(got, str(empty.get("path", "")))
+        )
     )
     if head and head not in got and got.get("total") != 0 and not declared_empty:
         # Missing-evidence class: no results field is not an empty result,
