@@ -156,7 +156,9 @@ and `timeline_path` in a flight file are not read.
 nothing (dedupe on task id and run digest). A run whose files changed (an
 approval answered after the first `add`) gets a new row; `summary`, `export`
 and `push` use the newest row per run. Writes go through a temporary file and
-a rename under an exclusive lock.
+a rename under an exclusive lock (`flock` on POSIX, `msvcrt.locking` on
+Windows). On Windows the files rely on the user profile's ACL, since there is
+no POSIX mode to set.
 
 ## Commands
 
@@ -174,10 +176,18 @@ a rename under an exclusive lock.
 - a value from any local sidecar appears in what they would send;
 - a row has a key outside its schema, or fails validation;
 - openadapt-privacy's text scrubber is installed and would rewrite a label
-  (task id, task type, executor label or field name). Without the scrubber,
-  `export` says so and relies on the sidecar check; `--require-scrubber`
-  refuses instead.
+  (task id, task type, executor label or field name), or can't run (for
+  example, its spaCy model is missing). Without the scrubber, `export` says
+  so and relies on the sidecar check; `--require-scrubber` refuses instead.
 
 `push` also refuses before anything else when `OPENADAPT_API_KEY` isn't set,
 and sends only to a destination the hosted destination policy accepts (the
 same check `ingest-report` uses).
+
+The task view also lists the verb as `openadapt inspect ledger`
+(`openadapt verify ledger` is the protected-write ledger, a different thing).
+
+The verb needs an openadapt-types release that has
+`openadapt_types.run_ledger`. Building the parser doesn't import it, so an
+install with an older openadapt-types still starts; `ledger` itself then
+says to upgrade openadapt-types.

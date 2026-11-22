@@ -1,35 +1,84 @@
 # @openadapt/seal-view
 
-One run's Seal as a React component, and an offline viewer built from it. Give
-it a run's `report.json`, its `seal.json` and the Seal keys you trust, and it
-checks the Ed25519 signature over the exact report in the browser, draws the
-Seal from what the report recorded, plays the run back over the step table and
+One run's receipt as a React component, and an offline viewer built from it.
+A receipt is a signed, itemized record of one run: what it changed, how each
+change was checked, and who signed it. It doesn't grade the run. Give the
+viewer a run's `report.json`, its signature file (`seal.json`, the older
+`local-seal/v1` format) and the keys you trust, and it checks the Ed25519
+signature over the exact report in the browser, draws the receipt from what
+the report recorded, plays the run back over the step table and
 the program map, and lets a reader change a copy of either file to watch the
 check fail.
 
-openadapt.ai's Seal pages and `openadapt quickstart` use the same code.
+openadapt.ai's receipt pages and `openadapt quickstart` use the same code.
+
+The package and directory keep the name `seal-view` for now; every string a
+reader sees says "receipt".
 
 ## What it shows
 
-- **The Seal.** An arc per program step, a tick per screen check, a dot per
+- **The receipt.** An arc per program step, a tick per screen check, a dot per
   read of the saved record, a short arc per right-record check, and an iris
-  drawn from the report's SHA-256 and the Seal's own digest. A change to
+  drawn from the report's SHA-256 and the signature file's own digest. A change to
   either file changes the iris.
+- **The signer line.** Always shown under the verdict: "Signed by this
+  computer", "Demo key: checks only in this demo" (a host passes
+  `signer: 'demo'`), or "Not verified: unknown signer" when the key isn't one
+  the page pins. A `local-seal/v1` file is marked "older format".
 - **The check.** The report's SHA-256 computed in the browser against the one
-  the Seal signed, then the signature against the pinned key. A failure names
+  the signature covers, then the signature against the pinned key. A failure names
   its reason and code (`subject_mismatch`, `bad_signature`, `unknown_key` and
   the others `openadapt-flow local-seal verify` uses).
 - **The replay.** One frame index drives the ring, the step line, the step
   table, the read-back table and the full program workbench
   ([`@openadapt/program-graph`](../program-graph/README.md)): sections,
   inspector, evidence lanes, stop rules and a tour. While the inspector shows
-  the step the Seal certifies (the save, or the stop), a card at its top says
-  so and goes back up to the Seal.
-- **Tamper with it.** Change the outcome or the AI call count in a copy of the
-  report, or the outcome in a copy of the Seal, and check the copy.
+  the step the receipt covers (the save, or the stop), a card at its top says
+  so. On a receipt page the card has no button: the split view keeps the
+  receipt and verdict on screen. On a landing page it links to the receipt
+  ("Open the receipt →").
+- **Try changing it.** One click flips the outcome in a copy of the report and
+  checks that copy at once. The verdict card shows the failure, the from→to
+  line and "The published files are unchanged; this was a copy in your
+  browser", with "Restore" and the other two changes (one more AI model call
+  in the report, the outcome in the signature file). Verify always checks the
+  originals.
+- **No screenshots in the receipt.** A receipt never holds screenshots, typed
+  values, URLs or page text. A host may show a step's pictures from a local run
+  folder; they are captioned "From this computer's run folder: not part of the
+  receipt, never uploaded" (the host's `mediaNote`).
 - **Witnesses.** A Sigstore Rekor entry (`seal.anchor.json`) and an RFC 3161
   timestamp (`seal.tsa.json` naming its token file `seal.tsr`) are checked
   offline and shown only when the run has them.
+
+## Layout
+
+One screen, like an app. From 900 px wide it is a split view: the program
+map fills the left pane (drag the divider, or focus it and use the arrow
+keys; "Expand map" or Enter gives the map the whole width), the receipt and the
+verdict sit top right, and the details sit bottom right in four tabs:
+
+- **Summary**: the counts, the AI model calls and program time, and the
+  signature check (the report's SHA-256 in this browser against the one the
+  signature covers).
+- **Steps**: every step, with its result and checks. Up and Down move, Enter
+  or a click opens the step's evidence.
+- **Evidence**: the picked step (on the map, the ring or the list): its
+  checks, its pictures when the host has them, and its record checks.
+- **Raw**: the signed fields, the witnesses, the files and the commands.
+
+Narrower, the page is one column (the receipt and the verdict, then the tabs)
+and the map is a fifth tab. The verdict stays in the top bar at every width
+and on every tab. The URL's fragment keeps the tab and the step
+(`#tab=evidence&step=6`, steps from 1), so a link can open one step. `j` and
+`k` move to the next and previous step from anywhere but a field.
+
+Light and dark come from the shared semantic theme roles (`--oa-*`,
+openadapt-web's `styles/semantic-theme.css`). The host provides them; the
+offline viewer inlines a pinned copy without fonts
+(`src/vendor/semantic-theme`, with its provenance). The visitor's choice is
+`data-theme` on `<html>` and `oa-theme` in local storage, the same as
+openadapt.ai's own switch; with no choice, the system setting.
 
 ## Use it
 
@@ -37,6 +86,7 @@ openadapt.ai's Seal pages and `openadapt quickstart` use the same code.
 import { SealPage, sealPageProps } from '@openadapt/seal-view'
 import '@openadapt/program-graph/styles.css'
 import '@openadapt/seal-view/styles.css'
+// and the --oa-* theme roles, e.g. openadapt-web's styles/semantic-theme.css
 
 const files = { report: reportBytes, sealText }  // exact bytes and text
 const { page } = await sealPageProps({ files, keys, program: { spec } })
@@ -62,7 +112,7 @@ slot that `openadapt seal view RUN_DIR` fills with the run's files. Its
 Content-Security-Policy allows no requests, so it works from `file://` with
 the network off and uploads nothing.
 
-Size, measured on 2026-10-24: 212,474 bytes (68,660 gzipped). The budget is
+Size, measured on 2026-11-20: 231,185 bytes (73,653 gzipped). The budget is
 262,144 bytes (`VIEWER_BUDGET` in `scripts/build.mjs`, and
 `tests/snapshots/seal_viewer_size.json` at the repository root);
 `node scripts/build.mjs --check` fails over it or when the launcher's copy is
@@ -77,9 +127,9 @@ node scripts/build.mjs
 ```
 
 The browser tests are in the launcher's suite: `tests/test_seal_view.py` opens
-a real quickstart run's Seal pages from `file://` in Chromium and records
+a real quickstart run's receipt pages from `file://` in Chromium and records
 every request.
 
 ## License
 
-MIT. Extracted from openadapt.ai's Seal page.
+MIT. Extracted from openadapt.ai's receipt page.

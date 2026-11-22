@@ -33,7 +33,17 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "home"
     monkeypatch.setenv("OPENADAPT_HOME", str(path))
     monkeypatch.delenv("OPENADAPT_API_KEY", raising=False)
+    # A deterministic stand-in for openadapt-privacy's scrubber, so these
+    # tests don't depend on a spaCy model being installed.
+    import openadapt_flow.privacy as privacy
+
+    monkeypatch.setattr(privacy, "get_text_scrubber", lambda: _PassThrough())
     return path
+
+
+class _PassThrough:
+    def scrub_text(self, text: str, is_separated: bool = False) -> str:
+        return text
 
 
 def _add_all(capsys: pytest.CaptureFixture[str]) -> None:
@@ -237,3 +247,37 @@ def test_push_dry_run_needs_no_key(capsys):
     assert main(["ledger", "push", "--dry-run"]) == 0
     payload = json.loads(capsys.readouterr().out.splitlines()[0])
     assert payload["schema"] == "openadapt.agent-run-summary/v1"
+
+
+def test_the_parser_registers_ledger_without_the_types_schema(monkeypatch):
+    # A released install whose openadapt-types predates run_ledger must still
+    # build the parser (``--version``); only the ledger verb itself refuses.
+    import argparse
+    import importlib
+    import sys
+
+    for name in [m for m in sys.modules if m.startswith("openadapt_flow.run_ledger")]:
+        monkeypatch.delitem(sys.modules, name)
+    monkeypatch.setitem(sys.modules, "openadapt_types.run_ledger", None)
+    cli = importlib.import_module("openadapt_flow.run_ledger.cli")
+    parser = argparse.ArgumentParser(allow_abbrev=False)
+    cli.register(parser.add_subparsers(dest="command"))
+    args = parser.parse_args(["ledger", "list"])
+    with pytest.raises(SystemExit) as refused:
+        args.func(args)
+    assert "upgrade openadapt-types" in str(refused.value.code)
+
+
+def test_export_refuses_when_the_scrubber_cannot_run(tmp_path, monkeypatch, capsys):
+    import openadapt_flow.privacy as privacy
+
+    class Broken:
+        def scrub_text(self, text: str, is_separated: bool = False) -> str:
+            raise RuntimeError("model not installed")
+
+    monkeypatch.setattr(privacy, "get_text_scrubber", lambda: Broken())
+    assert main(["ledger", "add", str(FIXTURES / "flight_held")]) == 0
+    out = tmp_path / "e.jsonl"
+    assert main(["ledger", "export", "--out", str(out)]) == 2
+    assert "could not run" in capsys.readouterr().err
+    assert not out.exists()

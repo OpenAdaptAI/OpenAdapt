@@ -22,14 +22,41 @@ model, or uses the network except ``ledger push``.
 
 from __future__ import annotations
 
-from openadapt_flow.run_ledger.collect import Collected, collect
-from openadapt_flow.run_ledger.outcome import Signal, decide
-from openadapt_flow.run_ledger.store import (
-    LedgerStore,
-    PrivateSidecar,
-    build_row,
-    ledger_home,
-)
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from openadapt_flow.run_ledger.collect import Collected, collect
+    from openadapt_flow.run_ledger.outcome import Signal, decide
+    from openadapt_flow.run_ledger.store import (
+        LedgerStore,
+        PrivateSidecar,
+        build_row,
+        ledger_home,
+    )
+
+# Loaded on first use so that ``openadapt-flow``'s parser can register the
+# ``ledger`` verb (``from openadapt_flow.run_ledger.cli import register``)
+# without importing the schema in openadapt-types.
+_EXPORTS = {
+    "Collected": "collect",
+    "collect": "collect",
+    "Signal": "outcome",
+    "decide": "outcome",
+    "LedgerStore": "store",
+    "PrivateSidecar": "store",
+    "build_row": "store",
+    "ledger_home": "store",
+}
+
+
+def __getattr__(name: str) -> Any:
+    module = _EXPORTS.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    from importlib import import_module
+
+    return getattr(import_module(f"{__name__}.{module}"), name)
+
 
 __all__ = [
     "Collected",

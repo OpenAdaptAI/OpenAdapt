@@ -23,9 +23,10 @@ import statistics
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Optional, Sequence
 
-from openadapt_flow.run_ledger.store import LedgerStore
+if TYPE_CHECKING:
+    from openadapt_flow.run_ledger.store import LedgerStore
 
 API_KEY_ENV = "OPENADAPT_API_KEY"
 INGEST_PATH = "/api/runs/ingest-agent-run"
@@ -107,6 +108,16 @@ def register(sub: argparse._SubParsersAction) -> None:
 
 
 def _store(args: argparse.Namespace) -> LedgerStore:
+    # Imported here so that building the parser (``--version``, ``--help``)
+    # never needs the ledger schema: an install whose openadapt-types predates
+    # it still starts, and only ``ledger`` itself refuses.
+    try:
+        from openadapt_flow.run_ledger.store import LedgerStore
+    except ImportError as exc:
+        raise SystemExit(
+            "ledger: this install's openadapt-types has no run ledger schema "
+            f"({exc}); upgrade openadapt-types"
+        ) from None
     return LedgerStore(args.home)
 
 
@@ -314,7 +325,14 @@ def outbound_lines(
         model.model_validate(doc)
         if scrubber is not None:
             for where, label in _label_values(doc):
-                if scrubber.scrub_text(label) != label:
+                try:
+                    scrubbed = scrubber.scrub_text(label)
+                except Exception as exc:  # a scrubber that can't run refuses
+                    raise LedgerRefused(
+                        f"the text scrubber could not run ({type(exc).__name__}); "
+                        "nothing was written"
+                    ) from exc
+                if scrubbed != label:
                     raise LedgerRefused(
                         f"row {row.row_id}: the scrubber would rewrite its {where}"
                     )
@@ -445,7 +463,7 @@ def cmd_push(args: argparse.Namespace) -> int:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    parser = argparse.ArgumentParser(prog="openadapt-flow")
+    parser = argparse.ArgumentParser(prog="openadapt-flow", allow_abbrev=False)
     register(parser.add_subparsers(dest="command", required=True))
     args = parser.parse_args(argv)
     return int(args.func(args))

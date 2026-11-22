@@ -22,7 +22,6 @@ machine can't interleave.
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import hashlib
 import json
 import os
@@ -43,6 +42,7 @@ from openadapt_types.run_ledger import (
     RunLedgerRowV1,
 )
 
+from openadapt_flow.fleet._lock import exclusive_lock
 from openadapt_flow.run_ledger.collect import (
     _TIER_RANK,
     Collected,
@@ -325,7 +325,10 @@ def _write_private(path: Path, data: bytes) -> None:
     os.chmod(path.parent, 0o700)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-")
     try:
-        os.fchmod(fd, 0o600)
+        # mkstemp already creates 0600 on POSIX; Windows has no fchmod and
+        # keeps the file under the user's profile ACL.
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
         with os.fdopen(fd, "wb") as handle:
             handle.write(data)
             handle.flush()
@@ -354,12 +357,9 @@ class LedgerStore:
     def _locked(self) -> Iterator[None]:
         self.root.mkdir(parents=True, exist_ok=True)
         os.chmod(self.root, 0o700)
-        with open(self.root / ".lock", "a+") as lock:
-            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
-            try:
-                yield
-            finally:
-                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+        # flock on POSIX, msvcrt.locking on Windows.
+        with exclusive_lock(self.root / ".lock"):
+            yield
 
     def entries(self) -> list[dict[str, Any]]:
         if not self.rows_path.is_file():

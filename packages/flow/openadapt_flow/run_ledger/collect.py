@@ -54,7 +54,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Optional
+from typing import Any, Callable, Iterable, Mapping, Optional, cast
 
 from openadapt_types.approval import CHECKED_HOW_TIER
 
@@ -423,7 +423,8 @@ def collect_run_report(path: Path) -> Contribution:
     tier: Optional[str] = None
     readback = doc.get("readback")
     if isinstance(readback, dict):
-        tier = CHECKED_HOW_TIER.get(readback.get("checked_how"))  # type: ignore[call-overload]
+        tiers = cast("Mapping[str, str]", CHECKED_HOW_TIER)
+        tier = tiers.get(str(readback.get("checked_how")))
     receipt_path = path.parent / "receipt.json"
     if receipt_path.is_file():
         receipt = collect_run_receipt(receipt_path)
