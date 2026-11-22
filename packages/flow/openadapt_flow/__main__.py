@@ -10194,7 +10194,7 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("variant_set", help="Variant-set directory")
     q.set_defaults(func=_cmd_variants)
     p.set_defaults(func=_cmd_variants)
-
+    __import__("openadapt_flow.wrap.dispatch_cli", fromlist=["_"]).register(sub)
     p = sub.add_parser(
         "route",
         help=(
