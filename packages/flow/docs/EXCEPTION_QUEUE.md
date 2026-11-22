@@ -82,9 +82,13 @@ browser. A verified `continue` or `done_by_person` lifts the hold. Any other
 outcome (a stop answer, an expiry, an answer off the roster) blocks every
 later save for the rest of the run, and the watch exits 3.
 
-The watch and the guard each pause requests in their own DevTools session.
-Chromium hands a paused request to each session in turn, so a save the watch
-blocks is never sent, whichever of the two attached first.
+The watch and the guard each pause requests in their own DevTools session,
+and Chromium hands a paused request to the session that attached last first.
+Start the watch after the guard has attached (`guard: attached` on its
+stderr), so the watch decides a save before the guard sees it. In the other
+order a save the watch blocks is still never sent, but the guard has already
+let it go: it reads back no write, ends the run unconfirmed, and refuses the
+agent's later save. Only the guard-first order is tested.
 
 The run's folder in the registry is `--run-ref`, or else the `--run-dir`
 folder's name. `--run-dir` also gets `exceptions_watch.jsonl`: each card
@@ -102,7 +106,10 @@ What the watch sees and raises:
 | `ambiguous_record`, `cannot_complete` | No: only the agent knows |
 
 Not covered: agents that don't drive a Chromium, saves over a WebSocket (CDP
-`Fetch` doesn't see them), and a run with no watch running. The watch is not a
+`Fetch` doesn't see them), tabs other than the one the watch picked (the
+first on the app's origin, or `--page-url`), a save sent in the moment
+between a prompt appearing and the watch's next look at the page
+(`--poll-s`), and a run with no watch running. The watch is not a
 sandbox: an agent with another way to reach the app, or that stops the watch,
 gets past it. Tested in headless Chromium on MockMed with the guard attached:
 an agent that never calls the tool hits a synthetic code prompt, its save is

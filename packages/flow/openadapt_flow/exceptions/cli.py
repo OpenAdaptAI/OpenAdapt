@@ -73,7 +73,12 @@ def register(sub: argparse._SubParsersAction) -> None:
         help="Watch the agent's Chromium, raise cards without the agent, and "
         "block its saves while a card is open",
     )
-    w.add_argument("--cdp", required=True, help="the agent's DevTools endpoint")
+    w.add_argument(
+        "--cdp",
+        required=True,
+        help="the agent's DevTools endpoint (start the watch after the guard "
+        "has attached to it)",
+    )
     w.add_argument(
         "--config",
         required=True,

@@ -22,16 +22,19 @@ for a second factor) goes through, so a person can type the code in the live
 browser. Reads always go through.
 
 The watch and the guard each pause requests in their own DevTools session.
-Chromium hands a paused request to each session in turn, so a save the
-watch blocks is never sent, whichever attached first.
+Chromium hands a paused request to the session that attached last first, so
+start the watch after the guard: it then decides a save before the guard
+sees it. (In the other order a blocked save is still never sent, but the
+guard has already let it go and ends the run unconfirmed.)
 
 Covered, from what the page shows: ``second_factor``, ``unexpected_dialog``,
 ``session_expired`` (a password field after the watch has seen a save) and,
 with ``stall_s``, ``timeout_or_stall`` (no request and no screen change).
 Not covered: ``possible_duplicate`` (it needs a read of the app's records),
 ``ambiguous_record`` and ``cannot_complete`` (only the agent knows),
-non-browser agents, saves over a WebSocket (``Fetch`` doesn't see them), and
-a run with no watch running. The watch is not a sandbox: it can't stop an
+non-browser agents, saves over a WebSocket (``Fetch`` doesn't see them),
+tabs other than the one watched, a save sent before the next look at the page
+(``poll_s``), and a run with no watch running. The watch is not a sandbox: it can't stop an
 agent that has its own way to the app, or one that kills the watch.
 """
 
