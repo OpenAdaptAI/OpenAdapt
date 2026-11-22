@@ -768,6 +768,39 @@ def _quickstart_root(out: Optional[Path]) -> Path:
     return root
 
 
+def _quickstart_own(root: Path, url: Optional[str], watch: bool) -> None:
+    """`openadapt quickstart --own`: see openadapt/quickstart/own.py."""
+    from functools import partial
+
+    from openadapt.quickstart.engine import display_available
+    from openadapt.quickstart.own import OwnTaskError, run_own, share_runs
+
+    def ask(prompt: str) -> str:
+        return input(prompt)
+
+    from contextlib import nullcontext
+
+    context = _synthetic_scrub_off() if url is None else nullcontext()
+    try:
+        with context:
+            run_own(
+                root,
+                url=url,
+                visible=_watch_window(watch),
+                can_record_here=sys.stdin.isatty() and display_available(),
+                ask=ask,
+                say=click.echo,
+                hint=_hint,
+                quote=_shell_quote,
+                share=partial(share_runs, ask=ask, say=click.echo, command=_hint),
+            )
+    except OwnTaskError as error:
+        raise click.ClickException(str(error)) from error
+    except KeyboardInterrupt:
+        click.echo(f"\nStopped. Anything written so far is in {root}", err=True)
+        raise click.exceptions.Exit(130)
+
+
 @main.command(
     "quickstart",
     context_settings={
@@ -834,6 +867,19 @@ def _quickstart_root(out: Optional[Path]) -> Path:
 # --headed is the older spelling of --watch. --headless was the opt-out when
 # the window showed by default; hidden is the default now, so it changes
 # nothing and is kept so older commands still run.
+@click.option(
+    "--own",
+    is_flag=True,
+    help=(
+        "Your own task: record it once (in the sample app, or your web app "
+        "with --url), run it with new inputs, and end with an agent tool."
+    ),
+)
+@click.option(
+    "--url",
+    default=None,
+    help="With --own: your web app's address. Recording opens a browser window.",
+)
 @click.option("--headed", is_flag=True, hidden=True)
 @click.option("--headless", is_flag=True, hidden=True)
 @click.option("--break-it", "break_it", is_flag=True, hidden=True)
@@ -847,6 +893,8 @@ def quickstart(
     no_break: bool,
     verbose: bool,
     more: bool,
+    own: bool,
+    url: Optional[str],
     headed: bool,
     headless: bool,
     break_it: bool,
@@ -873,6 +921,11 @@ def quickstart(
         _quickstart_more(out, app)
         return
     _require_supported_python()
+    if url is not None and not own:
+        raise click.UsageError("--url works with --own.")
+    if own:
+        _quickstart_own(_quickstart_root(out), url, watch or headed)
+        return
     _refuse_unknown_tutorial_options(command_ctx.args)
     openemr = _openemr_checkout(command_ctx.args) if app == "openemr" else None
     root = _quickstart_root(out)
