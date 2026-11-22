@@ -112,6 +112,18 @@ has no row in these tables.
 
 ## Sources
 
+The ledger reads only an allowlist of file names
+(`openadapt_flow.run_ledger.collect.ALLOWED_NAMES`): the producer files below,
+`item-approval/request-*.json` and `answer-*.json`, `jobs/job-*.json`,
+`runs/run-*.json`, `egress/timeline.jsonl`, and the run's own `task.json`,
+`guard_task.json` and `verify.yaml`. A file named directly with `ledger add
+FILE` may also be a `run-*.json` record or a `*result*.json` /
+`*envelope*.json` dispatcher result. Every other file in a run directory is
+never opened, hashed into the run digest, copied into a sidecar, exported or
+pushed. That covers P3's `egress/pseudonyms.json`, which holds real values,
+as well as screenshots, logs and stray files. `--config` takes only a guard
+task or a `verify.yaml`; any other file is ignored.
+
 The collectors are in `openadapt_flow/run_ledger/collect.py`, one function
 per source. Each reads files only and refuses a schema version it doesn't
 know: the row is then UNKNOWN with `schema_unrecognised`.

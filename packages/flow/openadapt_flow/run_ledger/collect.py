@@ -971,9 +971,66 @@ def _worse(current: Optional[str], new: str) -> str:
     return new if _CHECK_RANK[new] > _CHECK_RANK[current] else current
 
 
+#: The only files the ledger reads, by name: what the producers it knows
+#: write. Anything else in a run directory (P3's ``egress/pseudonyms.json``,
+#: which holds real values; screenshots; logs; a stray file) is never
+#: opened, digested, copied to a sidecar or sent.
+ALLOWED_NAMES = frozenset(
+    {
+        "summary.json",
+        "guard_events.jsonl",
+        "effect-receipt.json",
+        "report.json",
+        "receipt.json",
+        "run1.json",
+        "agent_ledger.json",
+        "proposed_write.json",
+        "flight.json",
+        "guard_ledger_row.json",
+        "result.json",
+        # P1 readiness run directory
+        "run.json",
+        "case.json",
+        "usage.json",
+        "egress.json",
+        # the run's own config (declared field names and task ids)
+        "task.json",
+        "guard_task.json",
+        "verify.yaml",
+    }
+)
+#: Allowed by folder and name pattern: (parent folder name, prefix, suffix).
+_ALLOWED_PATTERNS = (
+    ("item-approval", "request-", ".json"),
+    ("item-approval", "answer-", ".json"),
+    ("jobs", "job-", ".json"),  # task ledger: job-<hex>.json
+    ("runs", "run-", ".json"),  # wrap's run store: run-<hex>.json
+    ("egress", "timeline", ".jsonl"),
+)
+#: A file named directly (``ledger add FILE``) may also be a wrap run record
+#: (``run-<id>.json``) or a ``wrap-dispatch --result`` envelope.
+_DIRECT_FILE = re.compile(
+    r"^(run-[A-Za-z0-9._-]+|[A-Za-z0-9._-]*(result|envelope)[A-Za-z0-9._-]*)\.json$"
+)
+
+
+def allowed_file(path: Path, *, direct: bool = False) -> bool:
+    """Whether the ledger may read ``path`` at all (see :data:`ALLOWED_NAMES`)."""
+
+    name, parent = path.name, path.parent.name
+    if name == "timeline.jsonl":
+        return parent == "egress"
+    if name in ALLOWED_NAMES:
+        return True
+    for folder, prefix, suffix in _ALLOWED_PATTERNS:
+        if parent == folder and name.startswith(prefix) and name.endswith(suffix):
+            return True
+    return direct and bool(_DIRECT_FILE.match(name))
+
+
 def _files(root: Path) -> list[Path]:
     if root.is_file():
-        return [root]
+        return [root] if allowed_file(root, direct=True) else []
     found: list[Path] = []
     stack = [(root, 0)]
     while stack and len(found) < MAX_FILES:
@@ -988,7 +1045,7 @@ def _files(root: Path) -> list[Path]:
             if entry.is_dir():
                 if depth < MAX_DEPTH:
                     stack.append((entry, depth + 1))
-            elif entry.is_file():
+            elif entry.is_file() and allowed_file(entry):
                 found.append(entry)
     return sorted(found)
 
@@ -1163,7 +1220,8 @@ def collect(
     )
 
     run = Path(run)
-    config = [Path(c) for c in config]
+    # Only a guard task (task.json, guard_task.json) or a verify.yaml.
+    config = [Path(c) for c in config if allowed_file(Path(c)) and Path(c).is_file()]
     contributions: list[Contribution] = []
     approval_folders: set[Path] = set()
     found = _files(run)

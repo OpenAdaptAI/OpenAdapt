@@ -114,7 +114,7 @@ def _timeline_moments(path: Path, out: Contribution) -> list[str]:
     proxy saw the agent's first and last model traffic. Nothing else in the
     timeline is read."""
 
-    if not path.is_file() or path.is_symlink():
+    if not path.is_file() or path.is_symlink() or path.name != "timeline.jsonl":
         return []
     try:
         if path.stat().st_size > 16 * 1024 * 1024:

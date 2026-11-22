@@ -820,3 +820,93 @@ def test_export_writes_the_good_rows_and_exits_non_zero(tmp_path, monkeypatch, c
     assert main(["ledger", "export", "--out", str(out)]) == 2
     assert len(out.read_text().splitlines()) == 1
     assert "refused row" in capsys.readouterr().err
+
+
+# -- round 4: an allowlist of files, nothing else is read ---------------------------
+
+PLANTED = ("Zelda Quintanilla-Hart", "MRN-PLANTED-7731")
+
+
+def _planted_run(tmp_path: Path) -> Path:
+    """A real readiness run plus P3's pseudonym map (real values, 0600) and a
+    stray file, both unreadable so any attempt to open them would show."""
+
+    run = tmp_path / "run"
+    shutil.copytree(FIXTURES / "run2_claude_no_write", run)
+    pseudonyms = run / "egress" / "pseudonyms.json"
+    pseudonyms.write_text(
+        json.dumps({"<PERSON_1>": PLANTED[0], "<ID_1>": PLANTED[1]}), encoding="utf-8"
+    )
+    stray = run / "notes.json"
+    stray.write_text(
+        json.dumps(
+            {
+                "schema": "openadapt.flight-run/v1",
+                "task_id": PLANTED[1],
+                "note": PLANTED[0],
+            }
+        )
+    )
+    for path in (pseudonyms, stray):
+        path.chmod(0o000)
+    return run
+
+
+def test_files_off_the_allowlist_never_leave(tmp_path):
+    run = _planted_run(tmp_path)
+    clean, _, _ = build_row(FIXTURES / "run2_claude_no_write")
+    try:
+        store = _store(tmp_path)
+        row = store.add(run, task_type="intake").row
+        assert _outcome(row) == _outcome(clean)
+        assert "egress/pseudonyms.json" not in row.sources
+        assert "notes.json" not in row.sources
+        payloads = push(store, dry_run=True, environ={}, scrubber=_Presidio())
+        exported = outbound_lines(store, summary=False, scrubber=_Presidio())
+        stored = store.rows_path.read_text()
+        sidecars = "".join(p.read_text() for p in store.private_root.rglob("*.json"))
+        for text in (json.dumps(payloads), "".join(exported), stored, sidecars):
+            for value in PLANTED:
+                assert value not in text
+    finally:
+        for path in (run / "egress" / "pseudonyms.json", run / "notes.json"):
+            path.chmod(0o600)
+
+
+def test_a_file_off_the_allowlist_named_directly_or_as_config_is_ignored(tmp_path):
+    run = _planted_run(tmp_path)
+    pseudonyms = run / "egress" / "pseudonyms.json"
+    try:
+        row, _, _ = build_row(pseudonyms)
+        assert _outcome(row) == ("UNKNOWN", "no_sources") and row.sources == ()
+        collected = collect(run, config=(pseudonyms, run / "notes.json"))
+        assert collected.config_paths == []
+        assert all(
+            p.name not in ("pseudonyms.json", "notes.json") for p in collected.files
+        )
+    finally:
+        for path in (pseudonyms, run / "notes.json"):
+            path.chmod(0o600)
+
+
+@pytest.mark.parametrize(
+    ("name", "direct", "allowed"),
+    [
+        ("egress/pseudonyms.json", False, False),
+        ("egress/pseudonyms.json", True, False),
+        ("egress/timeline.jsonl", False, True),
+        ("timeline.jsonl", False, False),
+        ("notes.json", False, False),
+        ("run.json", False, True),
+        ("item-approval/request-abc.json", False, True),
+        ("item-approval/consumed-abc", False, False),
+        ("runs/run-0001.json", False, True),
+        ("runs/pseudonyms.json", False, False),
+        ("result-drift-approved.json", True, True),
+        ("verify.proposed.yaml", False, False),
+    ],
+)
+def test_the_allowlist(name, direct, allowed):
+    from openadapt_flow.run_ledger.collect import allowed_file
+
+    assert allowed_file(Path("/x") / name, direct=direct) is allowed
