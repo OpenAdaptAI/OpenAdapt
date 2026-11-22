@@ -120,6 +120,8 @@ def _normalize_with_codec(val: Any, codec: FieldCodec) -> Any:
     kind = codec.kind
     if kind == "exact":
         return val
+    if kind == "null_empty":
+        return "" if val is None else val
     if kind == "bijection":
         s = str(val)
         return codec.mapping.get(s, s)
@@ -275,6 +277,8 @@ class _FallbackExactAndFrameJudge:
         volatile_fields: tuple[str, ...] = (),
         field_codecs: Optional[Mapping[str, FieldCodec]] = None,
     ) -> JudgeVerdict:
+        from openadapt_flow.tx.judge import null_empty_equivalent
+
         codecs = dict(field_codecs or {})
         flat_r1 = _flatten_leaves(r1)
         flat_delta = _flatten_leaves(intended_delta)
@@ -378,7 +382,20 @@ class _FallbackExactAndFrameJudge:
 
             in_r0 = path in flat_r0
             in_r1 = path in flat_r1
-            if in_r0 and in_r1 and flat_r0[path] == flat_r1[path]:
+            if (
+                in_r0
+                and in_r1
+                and null_empty_equivalent(path, flat_r0[path], flat_r1[path], codecs)
+            ):
+                verdicts.append(
+                    FieldVerdict(
+                        field_path=path,
+                        category="frame",
+                        passed=True,
+                        tier_used="codec",
+                    )
+                )
+            elif in_r0 and in_r1 and flat_r0[path] == flat_r1[path]:
                 verdicts.append(
                     FieldVerdict(
                         field_path=path,

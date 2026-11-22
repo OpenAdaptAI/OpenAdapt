@@ -513,6 +513,19 @@ class Engine:
         effect = {"VERIFIED": True, "REFUTED": False}.get(label)
         sent = label != "BLOCKED"
         name = ".".join(x for x in (system, write or "undeclared") if x)
+        contract_hash = f"sha256:{_sha(contract or 'undeclared')}"
+        evidence: list[dict[str, Any]] = []
+        if sent and effect is not None:
+            evidence.append(
+                {
+                    "effect_contract_hash": contract_hash,
+                    "substrate": "api",
+                    "initial_verdict": "confirmed" if effect else "refuted",
+                    "final_verdict": "confirmed" if effect else "refuted",
+                    "observed_effect": "present" if effect else "absent",
+                    "verification_tier": 1,
+                }
+            )
         report: dict[str, Any] = {
             "schema_version": REPORT_SCHEMA,
             "workflow_name": name[:48],
@@ -528,8 +541,11 @@ class Engine:
             "system": system,
             "write": write,
             "hold_sha256": digest,
+            "change_ledger": [],
             "results": [
                 {
+                    "step_id": write_id,
+                    "intent": f"hook {name}",
                     "ok": label == "VERIFIED",
                     "actuation": "api",
                     **(
@@ -539,7 +555,8 @@ class Engine:
                             # says effect_not_declared. A declared write whose
                             # read-back didn't settle says approved_unverified
                             # (record/run/v1 has no read-back-failed code).
-                            "effect_contract_hashes": [_sha(contract or "undeclared")],
+                            "effect_contract_hashes": [contract_hash],
+                            "effect_evidence": evidence,
                             "effect_approved_unverified": bool(contract)
                             and effect is None,
                         }
@@ -547,7 +564,15 @@ class Engine:
                         else {}
                     ),
                     **(
-                        {"effect_field_checks": ["delta"]}
+                        {
+                            "effect_field_checks": [
+                                {
+                                    "field": "delta",
+                                    "matched": True,
+                                    "verification_tier": 1,
+                                }
+                            ]
+                        }
                         if result is not None
                         and (result.checked or {}).get("delta") == "held"
                         else {}
