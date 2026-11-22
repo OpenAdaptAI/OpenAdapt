@@ -29,6 +29,7 @@ from openadapt_flow.onboard.types import (
     OnboardSpec,
     PlantedFaultOutcome,
     QualificationResult,
+    _validate_ident,
 )
 from openadapt_flow.runtime.effects.sql import assert_read_only_sql
 from openadapt_flow.verifier import (
@@ -45,10 +46,16 @@ def _slug(fields: Sequence[str]) -> str:
 
 
 def _sqlite_table_columns(db: Path, table: str) -> list[str]:
+    _validate_ident(table, "sqlite table")
     con = sqlite3.connect(db)
     try:
         rows = con.execute(f"PRAGMA table_info({table})").fetchall()
-        return [str(r[1]) for r in rows]
+        cols: list[str] = []
+        for r in rows:
+            col = str(r[1])
+            _validate_ident(col, f"{table} column")
+            cols.append(col)
+        return cols
     finally:
         con.close()
 
@@ -268,7 +275,8 @@ def _perturb(value: Any, field: str) -> Any:
 
 
 def _sqlite_insert(db: Path, table: str, row: Mapping[str, Any]) -> None:
-    cols = list(row.keys())
+    _validate_ident(table, "sqlite table")
+    cols = [_validate_ident(str(c), f"{table} insert column") for c in row.keys()]
     placeholders = ", ".join("?" for _ in cols)
     con = sqlite3.connect(db)
     try:
@@ -287,8 +295,11 @@ def _sqlite_update(
     updates: Mapping[str, Any],
     where: Mapping[str, Any],
 ) -> None:
-    set_clause = ", ".join(f"{c} = ?" for c in updates)
-    where_clause = " AND ".join(f"{c} = ?" for c in where)
+    _validate_ident(table, "sqlite table")
+    upd_cols = [_validate_ident(str(c), f"{table} update column") for c in updates]
+    where_cols = [_validate_ident(str(c), f"{table} where column") for c in where]
+    set_clause = ", ".join(f"{c} = ?" for c in upd_cols)
+    where_clause = " AND ".join(f"{c} = ?" for c in where_cols)
     con = sqlite3.connect(db)
     try:
         con.execute(
@@ -682,6 +693,36 @@ def qualify_pack(
             + ", ".join(escaped)
         )
 
+    # Require every mandatory fault class to be planted for every kind (fail closed
+    # on sparse/empty databases where sibling_edit or wrong_target could not run).
+    classes_by_kind: dict[str, set[str]] = {}
+    for f in fault_outcomes:
+        classes_by_kind.setdefault(f.kind, set()).add(f.fault_class)
+    for ks in spec.kinds:
+        required_classes = (
+            {
+                "wrong_value",
+                "null_vs_value",
+                "missing_write",
+                "duplicate_row",
+                "sibling_edit",
+            }
+            if ks.mode == "create"
+            else {
+                "wrong_value",
+                "null_vs_value",
+                "missing_write",
+                "wrong_target",
+                "sibling_edit",
+            }
+        )
+        missing_classes = sorted(required_classes - classes_by_kind.get(ks.kind, set()))
+        if missing_classes:
+            refusal_reasons.append(
+                f"kind {ks.kind!r} missing required planted fault class(es): "
+                + ", ".join(missing_classes)
+            )
+
     # Step 2: Clean-write verification (including novel composed field sets & explicit nulls).
     kind_specs = {ks.kind: ks for ks in spec.kinds}
     clean_outcomes: list[CleanWriteOutcome] = []
@@ -769,6 +810,16 @@ def qualify_pack(
 
     clean_total = len(clean_outcomes)
     clean_verified = sum(1 for c in clean_outcomes if c.confirmed)
+    if clean_total == 0:
+        refusal_reasons.append(
+            "no clean writes were verified (at least one verified clean write "
+            "with a signed record/run/v1 receipt is required for certification)"
+        )
+    elif len(receipt_paths) < clean_verified:
+        refusal_reasons.append(
+            f"signed receipts issued ({len(receipt_paths)}) fewer than "
+            f"verified clean writes ({clean_verified})"
+        )
     false_stop_rate = (
         round((clean_total - clean_verified) / clean_total, 4)
         if clean_total > 0
@@ -778,7 +829,9 @@ def qualify_pack(
     certified = (
         faults_total > 0
         and faults_caught == faults_total
+        and clean_total > 0
         and clean_verified == clean_total
+        and len(receipt_paths) == clean_verified
         and not refusal_reasons
     )
 

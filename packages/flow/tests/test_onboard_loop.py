@@ -585,10 +585,60 @@ def test_onboard_refuses_certification_when_db_unreadable(tmp_path: Path) -> Non
     assert res.refusal_reasons
 
 
+def test_onboard_refuses_certification_when_required_fault_class_unplanted(
+    tmp_path: Path,
+) -> None:
+    """Blocker 2: an empty table cannot plant sibling_edit, so certification MUST refuse."""
+    db = tmp_path / "empty.sqlite"
+    con = sqlite3.connect(db)
+    con.execute(
+        "CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)"
+    )
+    con.commit()
+    con.close()
+
+    spec = OnboardSpec(
+        name="empty-table-pack",
+        read={"sqlite_database": str(db)},
+        kinds=(
+            KindOnboardingSpec(
+                kind="create_item",
+                mode="create",
+                table="items",
+                required_fields=("name",),
+                demonstrated_field_sets=(("name",),),
+            ),
+        ),
+    )
+
+    def _insert_clean() -> None:
+        c = sqlite3.connect(db)
+        c.execute("INSERT INTO items (name) VALUES (?)", ("Widget",))
+        c.commit()
+        c.close()
+
+    res = onboard_pack(
+        spec,
+        tmp_path / "out_empty",
+        [
+            CleanWriteCase(
+                kind="create_item",
+                values={"name": "Widget"},
+                apply_write=_insert_clean,
+            )
+        ],
+    )
+    assert not res.certified
+    assert any(
+        "missing required planted fault class" in r and "sibling_edit" in r
+        for r in res.refusal_reasons
+    ), res.refusal_reasons
+
+
 def test_onboard_cli_end_to_end_and_dry_run(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    db, _url, server = _start_erp_fixture(tmp_path)
+    db, base_url, server = _start_erp_fixture(tmp_path)
     try:
         spec_path = tmp_path / "erp_onboard.yaml"
         spec_doc = {
@@ -635,13 +685,60 @@ def test_onboard_cli_end_to_end_and_dry_run(
         assert dry_out["dry_run"] is True
         assert dry_out["certified"] is False
 
-        # Full CLI run via task route ``setup onboard`` certifies with 100% planted faults caught.
+        # Blocker 1: CLI without clean writes refuses vacuous certification (exit 2).
+        rc_no_clean = flow_cli.main(
+            [
+                "onboard",
+                "--spec",
+                str(spec_path),
+                "--out",
+                str(tmp_path / "cli_no_clean"),
+                "--json",
+            ]
+        )
+        assert rc_no_clean == 2
+        no_clean_out = json.loads(capsys.readouterr().out)
+        assert no_clean_out["certified"] is False
+        assert no_clean_out["clean_writes_total"] == 0
+        assert any("no clean writes" in r for r in no_clean_out["refusal_reasons"])
+
+        # Full CLI run via task route ``setup onboard`` WITH --clean-writes certifies
+        # and issues a signed record/run/v1 receipt.
+        clean_path = tmp_path / "erp_clean_writes.yaml"
+        clean_doc = [
+            {
+                "kind": "create_order",
+                "name": "cli_live_order",
+                "values": {
+                    "order_code": "ORD-901",
+                    "sku": "SKU-CLI-2",
+                    "qty": "7",
+                    "warehouse": "WEST-1",
+                },
+                "http": {
+                    "url": f"{base_url}/orders",
+                    "method": "POST",
+                    "body": {
+                        "order_code": "ORD-901",
+                        "sku": "SKU-CLI-2",
+                        "qty": "7",
+                        "warehouse": "WEST-1",
+                    },
+                },
+            }
+        ]
+        clean_path.write_text(
+            yaml.safe_dump(clean_doc, sort_keys=False), encoding="utf-8"
+        )
+
         rc = flow_cli.main(
             [
                 "setup",
                 "onboard",
                 "--spec",
                 str(spec_path),
+                "--clean-writes",
+                str(clean_path),
                 "--out",
                 str(tmp_path / "cli_full"),
                 "--json",
@@ -652,6 +749,10 @@ def test_onboard_cli_end_to_end_and_dry_run(
         assert full_out["certified"] is True
         assert full_out["planted_faults_total"] >= 10
         assert full_out["planted_faults_caught"] == full_out["planted_faults_total"]
+        assert full_out["clean_writes_total"] == 1
+        assert full_out["clean_writes_verified"] == 1
+        assert full_out["receipts_issued"] == 1
+        _assert_signed_receipt(full_out["receipt_paths"][0])
     finally:
         server.shutdown()
         server.server_close()
