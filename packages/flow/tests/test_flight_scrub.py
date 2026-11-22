@@ -533,3 +533,113 @@ def test_a_deeply_nested_request_refuses_instead_of_crashing():
         node = [node]
     with pytest.raises(ScrubRefused, match="nested"):
         scrub_request({"messages": node}, CountingScrub())
+
+
+# -- review round: the reviewer's wrapped-base64 probes, as tests ------------
+
+
+class BmpStub:
+    """Text unchanged; images counted (the probes' payloads are BMPs)."""
+
+    def __init__(self) -> None:
+        self.images = 0
+
+    def text(self, value: str) -> str:
+        return value
+
+    def image(self, raw: bytes) -> tuple[bytes, bool]:
+        assert raw.startswith(b"BM")
+        self.images += 1
+        return b"\x89PNG\r\n\x1a\nSCRUBBED", True
+
+
+def _bmp(extra: int = 0) -> bytes:
+    import struct
+
+    pixels = b"\x10\x20\x30" * 600 + b"\x01" * extra
+    return b"BM" + struct.pack("<I", 54 + len(pixels)) + b"\0" * 48 + pixels
+
+
+_BMP64 = base64.b64encode(_bmp()).decode()
+
+
+def _wrap(text: str, width: int = 76, sep: str = "\n") -> str:
+    return sep.join(text[i : i + width] for i in range(0, len(text), width))
+
+
+def _scrubbed(text: str) -> tuple[int, str]:
+    stub = BmpStub()
+    out = scrub_request({"messages": [{"role": "user", "content": text}]}, stub)
+    return stub.images, out["messages"][0]["content"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "screenshot:\n" + _wrap(_BMP64),
+        '<img alt="scan" src="data:image/bmp;base64,' + _wrap("x" * 43 + _BMP64)[43:],
+        "dump:\n" + _wrap(_BMP64, 32),
+        "-----BEGIN-----\n" + _wrap(_BMP64, 64) + "\n-----END-----",
+        "file: " + _BMP64[:30] + "\n" + _wrap(_BMP64[30:]),
+        "  " + _wrap(_BMP64).replace("\n", "\r\n    "),
+        "data " + " ".join(_BMP64[i : i + 76] for i in range(0, len(_BMP64), 76)),
+        _wrap("Attachment from the referral letter: " + _BMP64),
+        "tool output: " + json.dumps({"file": _wrap(_BMP64)}),
+        "tool output: " + json.dumps({"file": _wrap(_BMP64, sep="\r\n")}),
+        "Content-Type: image/bmp\nContent-Transfer-Encoding: base64\n\n"
+        + _wrap(_BMP64),
+        "attachment\n" + base64.encodebytes(_bmp()).decode(),
+        '<p>see</p><img src="data:image/bmp;base64,' + _BMP64 + '"> more',
+    ],
+    ids=[
+        "mime76",
+        "img-prefix-same-line",
+        "wrap32",
+        "pem64",
+        "first-line-short",
+        "crlf-indent",
+        "space-separated",
+        "folded-prefix",
+        "json-escaped-lf",
+        "json-escaped-crlf",
+        "mime-headers",
+        "encodebytes",
+        "html-unwrapped",
+    ],
+)
+def test_a_wrapped_image_in_any_shape_is_scrubbed(text):
+    images, out = _scrubbed(text)
+    assert images == 1
+    flat = "".join(out.replace("\\n", "").replace("\\r", "").split())
+    assert _BMP64[200:600] not in flat
+
+
+@pytest.mark.parametrize("extra", [0, 1, 2])
+def test_a_padded_mime_part_before_its_boundary_is_scrubbed(extra):
+    b64 = base64.b64encode(_bmp(extra)).decode()
+    part = (
+        "Content-Type: image/bmp\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+        + _wrap(b64, sep="\r\n")
+        + "\r\n--boundary--"
+    )
+    images, out = _scrubbed(part)
+    assert images == 1 and out.endswith("\r\n--boundary--")
+
+
+def test_a_base64_run_in_the_place_of_a_host_is_not_kept_as_one():
+    b64 = base64.b64encode(b"BM" + b"\x41" * 400).decode().replace("/", "A")
+    images, out = _scrubbed("see https://" + b64)
+    assert images == 1 and b64[50:150] not in out
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "\n".join(["see the patient chart and add a note"] * 20),
+        "short\n" + "\n".join(["abcdefghij" * 5] * 3) + "\nend",
+        "word\n" + "x" * 45 + "\n" + "y" * 45,
+    ],
+)
+def test_prose_with_long_words_is_not_refused(text):
+    images, _out = _scrubbed(text)
+    assert images == 0

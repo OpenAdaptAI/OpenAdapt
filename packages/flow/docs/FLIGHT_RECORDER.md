@@ -44,7 +44,9 @@ For that one run you get:
    1. scrubs the request body;
    2. checks the spend cap;
    3. forwards the body over HTTPS with your agent's own headers, including
-      its API key. The key is never logged or written.
+      its API key. The key is never logged or written. The request's URL
+      path, query and headers go to the provider as your agent set them;
+      only the body is scrubbed.
    4. passes the response back, streamed or not, and reads the usage from it.
 4. Your command also gets `OPENADAPT_FLIGHT_GATE_URL`. A `GatedComputer` or
    `GatedComputerCall` in your process uses it to log actions and to ask the

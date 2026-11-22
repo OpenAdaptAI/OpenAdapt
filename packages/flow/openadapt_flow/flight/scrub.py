@@ -177,6 +177,8 @@ def _split_url(url: str) -> tuple[str, int, int]:
         origin = f"{parts.scheme}://{parts.netloc}"
     except ValueError:
         return "", end, len(url)
+    if len(parts.netloc) > 253 or len(parts.hostname or "") > 253:
+        return "", end, len(url)  # longer than any host name: not a host
     if "@" in parts.netloc:  # credentials in the authority
         return f"{parts.scheme}://", end, len(url)
     return origin, end, len(url)
@@ -858,40 +860,72 @@ _IMAGE_MAGIC = (b"\x89PNG", b"\xff\xd8\xff", b"GIF8", b"BM", b"II*\x00", b"MM\x0
 #: Lines may break between groups (76-column MIME, PEM-style dumps): a run
 #: is base64 characters with line breaks (and indentation) between them.
 _B64_RUN = re.compile(
-    r"[A-Za-z0-9+/_-]{16,}={0,2}(?:[ \t]*\r?\n[ \t]*[A-Za-z0-9+/_-]{4,}={0,2})*"
+    r"[A-Za-z0-9+/_-]{16,}"
+    # Between groups: a line break, real (LF, CRLF) or JSON-escaped (\n,
+    # \r\n written as two characters), with indentation around it, or
+    # spaces. A continuation group doesn't start with "-", so a MIME
+    # "--boundary" line ends the run.
+    r"(?:(?:[ \t]*(?:\r?\n|\\r\\n|\\n)[ \t]*|[ \t]+)[A-Za-z0-9+/_][A-Za-z0-9+/_-]{3,})*"
+    # Padding comes only at the very end.
+    r"={0,2}"
 )
-#: Base64 lines shorter than this, other than the last, are prose that
-#: happens to use base64 letters ("see\nthe\npatient").
-_B64_LINE_MIN = 40
+_B64_GROUP = re.compile(r"[A-Za-z0-9+/_-]+={0,2}")
+_ESCAPED_BREAK = re.compile(r"\\r\\n|\\n")
+#: Middle groups of a wrapped run are at least this long; shorter ones are
+#: words that happen to use base64 letters. The first group can be short (a
+#: prefix on the same line), and so can the last.
+_B64_LINE_MIN = 16
+
+Run = tuple[int, int, list[tuple[int, int, str]]]
 
 
-def _runs(value: str) -> list[tuple[int, int, str]]:
-    """(start, end, base64 text without whitespace) of each payload-sized
-    base64 run in ``value``, wrapped or not."""
-    out = []
+def _runs(value: str) -> list[Run]:
+    """(start, end, groups) of each payload-sized base64 run in ``value``,
+    wrapped across real or escaped line breaks or spaces, or not. Each group
+    is (start, end, text) in ``value``."""
+    out: list[Run] = []
     for m in _B64_RUN.finditer(value):
-        lines = m.group(0).split()
-        compact = "".join(lines)
-        if len(compact) < _BLOB_MIN:
+        text = _ESCAPED_BREAK.sub(lambda e: " " * len(e.group(0)), m.group(0))
+        groups = [
+            (m.start() + g.start(), m.start() + g.end(), g.group(0))
+            for g in _B64_GROUP.finditer(text)
+        ]
+        if len(groups) > 1:
+            gap = text[groups[-2][1] - m.start() : groups[-1][0] - m.start()]
+            if "\n" not in gap and len(groups[-1][2]) < _B64_LINE_MIN:
+                # A short word after a space ("... done") is text, not the
+                # payload's last group.
+                groups = groups[:-1]
+        if sum(len(g[2]) for g in groups) < _BLOB_MIN:
             continue
-        if len(lines) > 1 and any(len(line) < _B64_LINE_MIN for line in lines[:-1]):
+        middle = groups[1:-1]
+        if any(len(g[2]) < _B64_LINE_MIN for g in middle):
             continue
-        out.append((m.start(), m.end(), compact))
+        out.append((m.start(), groups[-1][1], groups))
     return out
 
 
-def _decode_run(compact: str) -> Optional[bytes]:
-    """The run's bytes; when a stray character before it shifts the
-    alignment, the offset that decodes to an image wins."""
-    first = None
-    for skip in range(4):
-        blob = _base64_blob(compact[skip:])
-        if blob is None:
+def _decode_run(run: Run) -> tuple[Optional[bytes], int]:
+    """(bytes, end in the text) of a run. When stray characters before it
+    shift the alignment (a word glued onto the first group), or a word after
+    it was taken for its last group, the reading that decodes to an image
+    wins; otherwise the whole run's bytes (or None)."""
+    start, end, groups = run
+    first: Optional[bytes] = None
+    for drop in (0, 1):
+        used = groups[: len(groups) - drop] if drop else groups
+        if not used:
             continue
-        if _is_image(blob):
-            return blob
-        first = blob if first is None else first
-    return first
+        compact = "".join(g[2] for g in used)
+        for skip in range(min(16, len(compact))):
+            blob = _base64_blob(compact[skip:])
+            if blob is None:
+                continue
+            if _is_image(blob):
+                return blob, used[-1][1]
+            if first is None and drop == 0:
+                first = blob
+    return first, end
 
 
 def _base64_blob(value: str) -> Optional[bytes]:
@@ -969,7 +1003,7 @@ def scrub_request(
             and not value[: runs[0][0]].strip()
             and not value[runs[0][1] :].strip()
         )
-        blob = _decode_run(runs[0][2]) if whole else None
+        blob = _decode_run(runs[0])[0] if whole else None
         if blob is None and runs:
             return embedded(value)
         if blob is not None:
@@ -996,15 +1030,22 @@ def scrub_request(
         A run that is not an image refuses. A run inside a URL is left to
         the URL cut. No recursion: the text pieces go to the text scrubber
         directly."""
-        urls = [m.span() for m in _URL.finditer(value)] + [
-            m.span() for m in _BARE_URL.finditer(value)
-        ]
+        # A run in a URL's path or query is left to the URL cut. A run in
+        # the place of a host (right after "https://") is no host: it is
+        # decoded like any other.
+        urls = []
+        for m in _URL.finditer(value):
+            origin = _split_url(m.group(0))[0]
+            if origin and not origin.endswith("://"):
+                urls.append(m.span())
+        urls += [m.span() for m in _BARE_URL.finditer(value)]
         out = []
         last = 0
-        for start, end, compact in _runs(value):
-            if any(us <= start and end <= ue for us, ue in urls):
+        for run in _runs(value):
+            start = run[0]
+            if any(us <= start and run[1] <= ue for us, ue in urls):
                 continue
-            blob = _decode_run(compact)
+            blob, end = _decode_run(run)
             if blob is None or not _is_image(blob):
                 raise ScrubRefused(
                     "a base64 payload that is not an image can't be scrubbed"
