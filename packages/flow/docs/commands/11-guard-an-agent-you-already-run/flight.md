@@ -1,0 +1,1 @@
+Record any agent you already run: meter and price its model calls through a loopback proxy, scrub every string and screenshot before it leaves the machine, block other egress on macOS, log its actions, and hold each click that is not known to be safe for a person.
