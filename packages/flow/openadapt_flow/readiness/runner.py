@@ -7,7 +7,9 @@ For each episode, one at a time:
 
 1. The operator's ``--reset-cmd`` (if any) puts the sandbox back to its
    synthetic "before" state.
-2. The runner starts a headless Chromium with a DevTools port, opens one tab
+2. The runner starts a headless Chromium with DevTools on a pipe only (no
+   TCP port; the candidate reaches it through a token-gated loopback relay,
+   :mod:`openadapt_flow.readiness.devtools_relay`), opens one tab
    at ``--app-url`` (service workers blocked), and puts
    :class:`~openadapt_flow.agent_guard.shadow_hold.ShadowHoldGuard` on it
    over CDP (every request of the tab is paused and decided). A
@@ -17,9 +19,9 @@ For each episode, one at a time:
 3. It starts the candidate through an :class:`~openadapt_flow.readiness.launcher.AgentLauncher`
    and decides the tab's requests until the save was held (and then
    ``--linger`` seconds more), the candidate exits, or ``--timeout`` passes.
-4. It stops the candidate *before* the guard lets go of the tab, so a retried
-   save can't slip through once requests are no longer paused, then blocks
-   anything still paused and closes the browser.
+4. It stops the candidate, then closes the browser (every tab, popup and
+   worker with it) while the holds are still on; no hold is released while
+   a page could still send.
 
 Signed-in session (``--storage-state FILE``, ``--keep-session``): every task
 gets a new browser, hold and run folder. ``--storage-state`` loads a
@@ -49,7 +51,6 @@ import datetime as _dt
 import json
 import os
 import shlex
-import socket
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -57,6 +58,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
 from openadapt_flow.agent_guard.requests import NotASave, origin_of
+from openadapt_flow.readiness.devtools_relay import DevToolsRelay, headless_shell
 from openadapt_flow.readiness.egress import EgressRefused
 from openadapt_flow.readiness.launcher import AgentLauncher, AgentResult, LaunchJob
 
@@ -145,12 +147,6 @@ def _write_private(path: Path, payload: Any) -> None:
     with os.fdopen(fd, "wb") as fh:
         fh.write(data)
     os.replace(tmp, path)
-
-
-def _free_port() -> int:
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return int(sock.getsockname()[1])
 
 
 def _now() -> str:
@@ -264,8 +260,8 @@ def run_one(
         "notes": [],
     }
     _reset(cfg)
-    port = _free_port()
     pw = sync_playwright().start()
+    relay = None
     browser = None
     context = None
     agent = None
@@ -273,9 +269,11 @@ def run_one(
     gate = None
     guard = None
     try:
-        browser = pw.chromium.launch(
-            headless=cfg.headless, args=[f"--remote-debugging-port={port}"]
-        )
+        # No TCP debugging port: the browser speaks DevTools over a pipe the
+        # relay owns, and every client needs the run's token (see
+        # readiness/devtools_relay.py).
+        relay = DevToolsRelay(headless_shell(pw.chromium.executable_path)).start()
+        browser = pw.chromium.connect_over_cdp(relay.http_url)
         width, height = cfg.viewport
         state_in = _session_in(out, cfg)
         context = browser.new_context(
@@ -294,9 +292,7 @@ def run_one(
             tab, screen_selector=cfg.screen_selector, all_resources=True
         )
         main_target = cdp_page.cdp.send("Target.getTargetInfo", {})["targetInfo"]
-        gate = TargetGate(
-            f"http://127.0.0.1:{port}", main_target_id=str(main_target["targetId"])
-        ).start()
+        gate = TargetGate(relay.http_url, main_target_id=str(main_target["targetId"])).start()
         guard = ShadowHoldGuard(
             guarded,
             task,
@@ -312,7 +308,7 @@ def run_one(
             task_id=task_id,
             instruction=str(inputs.get("instruction") or ""),
             inputs=dict(inputs.get("inputs") or {}),
-            cdp_url=f"http://127.0.0.1:{port}",
+            cdp_url=relay.http_url,
             page_url=cfg.app_url,
             run_dir=run_dir,
             record_keys=tuple(inputs.get("record_keys") or ()),
@@ -389,17 +385,19 @@ def run_one(
                 if record.get("egress") is None:
                     record["egress"] = summary
         if gate is not None:
-            # From here every request the gate sees is blocked, until the
-            # browser is gone; the tab's own hold is released after it.
+            # From here every request the gate sees is blocked.
             gate.close_hold()
             record["target_gate"] = gate.status()
-        if cdp_page is not None:
-            cdp_page.release()
         if cfg.keep_session and context is not None and guard is not None:
             try:
                 _write_private(_session_carry(out), context.storage_state())
             except Exception as exc:  # noqa: BLE001 - the next task signs in again
                 record["notes"].append(f"session not kept: {type(exc).__name__}")
+        # The browser and every target in it are closed while both holds
+        # are still on: a page timer can't send once a hold lets go,
+        # because no hold lets go before the browser is gone.
+        if relay is not None:
+            relay.close()
         if browser is not None:
             try:
                 browser.close()

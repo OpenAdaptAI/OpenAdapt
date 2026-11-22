@@ -62,6 +62,8 @@ SAVINGS_FORMULA = (
     "x matched cases / 60 x hourly cost - model cost = estimated value"
 )
 _ERROR_KINDS = ("mismatched", "missing", "extra", "uncompared", "wrong_record")
+#: ``field_errors[].field`` for a field outside the person's save.
+UNDECLARED_FIELD = "undeclared_field"
 TASK_TYPE_DEFAULT = "unspecified"
 _TASK_TYPE = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,63}$")
 EGRESS_MODES = ("scrubbed", "blocked", "unscrubbed")
@@ -159,8 +161,12 @@ def build_scorecard(
             continue
         for row in case.get("fields") or []:
             if row["kind"] in _ERROR_KINDS:
+                # A field the person didn't save is named by the agent's
+                # write (it can be anything, a value included): only a
+                # placeholder leaves the machine.
+                field = UNDECLARED_FIELD if row.get("undeclared") else row["name"]
                 field_errors.append(
-                    {"task_id": case["task_id"], "field": row["name"], "kind": row["kind"]}
+                    {"task_id": case["task_id"], "field": field, "kind": row["kind"]}
                 )
     agent_times = [
         float(c["agent_time_s"]) for c in cases if isinstance(c.get("agent_time_s"), (int, float))

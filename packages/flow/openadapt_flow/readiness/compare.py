@@ -301,7 +301,10 @@ def compare_case(
         rows.append(row)
     declared = {f["name"] for f in human} | set(expected) | set(ignore_fields)
     for name, mine in got.items():
-        if name in declared or name == _UNCOMPARED_BODY:
+        # No name is exempt: a field literally named ``<body>`` is an extra
+        # field like any other, and the hold's own unparsed-body marker is
+        # uncompared, so neither case can be MATCHED.
+        if name in declared:
             continue
         rows.append(
             {
@@ -309,6 +312,8 @@ def compare_case(
                 "kind": "uncompared" if mine.get("parse") == "uncompared" else "extra",
                 "human": None,
                 "proposed": mine.get("value"),
+                # The agent's name for it: kept out of the exported scorecard.
+                "undeclared": True,
             }
         )
     case["fields"] = rows
