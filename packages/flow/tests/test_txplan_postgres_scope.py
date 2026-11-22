@@ -117,7 +117,9 @@ def _reset_remote(cur: Any) -> None:
     cur.execute("DROP DATABASE IF EXISTS remote WITH (FORCE)")
 
 
-def _ctx(cluster: dict[str, Any], tmp_path: Path) -> Ctx:
+def _ctx(
+    cluster: dict[str, Any], tmp_path: Path, reviewed: tuple[str, ...] = ()
+) -> Ctx:
     spec = TxSpec.model_validate(
         {
             "schema_version": "openadapt.tx/v1",
@@ -129,6 +131,7 @@ def _ctx(cluster: dict[str, Any], tmp_path: Path) -> Ctx:
                     "driver": "psycopg2",
                     "connect_args": cluster,
                     "tables": {"customers": "id"},
+                    "reviewed_triggers": list(reviewed),
                 }
             ],
         }
@@ -217,57 +220,70 @@ def test_a_write_that_stays_in_the_schema_is_verified(db: Any, tmp_path: Path) -
     assert _balance(cur, 2) == 7
 
 
-def test_a_trigger_that_truncates_another_schema_is_never_verified(
-    db: Any, tmp_path: Path
-) -> None:
-    # TRUNCATE zeroes the transaction's row counts for the table, so the
-    # count check sees nothing, and the frame never reads side.notes.
+def _update(rid: int, balance: int) -> dict[str, Any]:
+    return {
+        "system": "crm",
+        "collection": "customers",
+        "op": "update",
+        "id": rid,
+        "fields": {"balance": balance},
+    }
+
+
+def _sql(text: str) -> dict[str, Any]:
+    return {"system": "crm", "op": "sql", "fields": {"sql": text}}
+
+
+def _capped(out: Any, code: str) -> None:
+    """Capped, not refused, with ``code`` among the reasons."""
+    assert isinstance(out, dict), out
+    assert out["outcome"] == "COMPLETED_UNVERIFIED", out
+    assert code in out["tx"]["not_covered"], out["tx"]
+
+
+_WIPE = (
+    "CREATE FUNCTION wipe() RETURNS boolean LANGUAGE plpgsql AS $$ "
+    "BEGIN TRUNCATE side.notes; RETURN true; END $$"
+)
+
+
+@pytest.fixture
+def notes(db: Any) -> Any:
+    """Four rows in side.notes, and wipe(), which truncates them (TRUNCATE
+    zeroes the transaction's row counts, so no count check sees it)."""
     cluster, cur = db
     cur.execute(
         "INSERT INTO side.notes (customer) SELECT g FROM generate_series(1, 4) g"
     )
+    cur.execute(_WIPE)
+    yield cluster, cur
+    cur.execute("DROP FUNCTION IF EXISTS wipe() CASCADE")
+
+
+def test_a_trigger_that_truncates_another_schema_is_never_verified(
+    notes: Any, tmp_path: Path
+) -> None:
+    cluster, cur = notes
     cur.execute(
-        "CREATE FUNCTION wipe_elsewhere() RETURNS trigger LANGUAGE plpgsql AS $$ "
-        "BEGIN TRUNCATE side.notes; RETURN NULL; END $$"
-    )
-    cur.execute(
+        "CREATE FUNCTION wipe_t() RETURNS trigger LANGUAGE plpgsql AS $$ "
+        "BEGIN TRUNCATE side.notes; RETURN NULL; END $$;"
         "CREATE TRIGGER wipe AFTER UPDATE ON customers "
-        "FOR EACH STATEMENT EXECUTE FUNCTION wipe_elsewhere()"
+        "FOR EACH STATEMENT EXECUTE FUNCTION wipe_t()"
     )
     try:
-        out = _attempt(
-            _ctx(cluster, tmp_path),
-            {
-                "system": "crm",
-                "collection": "customers",
-                "op": "update",
-                "id": 3,
-                "fields": {"balance": 9},
-            },
-        )
+        out = _attempt(_ctx(cluster, tmp_path), _update(3, 9))
     finally:
-        cur.execute("DROP FUNCTION wipe_elsewhere() CASCADE")
-    assert isinstance(out, dict), out  # capped, not refused
-    assert out["outcome"] == "COMPLETED_UNVERIFIED", out
-    assert "truncate" in out["tx"]["not_covered"]
+        cur.execute("DROP FUNCTION wipe_t() CASCADE")
+    _capped(out, "trigger")
     assert _notes(cur) == 0 and _balance(cur, 3) == 9  # it ran, unverified
 
 
 def test_a_planned_truncate_of_another_schema_is_never_verified(
-    db: Any, tmp_path: Path
+    notes: Any, tmp_path: Path
 ) -> None:
-    cluster, cur = db
-    cur.execute(
-        "INSERT INTO side.notes (customer) SELECT g FROM generate_series(1, 4) g"
-    )
-    out = _attempt(
-        _ctx(cluster, tmp_path),
-        {"system": "crm", "op": "sql", "fields": {"sql": "TRUNCATE side.notes"}},
-    )
-    assert not (isinstance(out, dict) and out["outcome"] == "VERIFIED"), out
-    if isinstance(out, dict):
-        assert out["outcome"] == "COMPLETED_UNVERIFIED", out
-        assert "truncate" in out["tx"]["not_covered"]
+    cluster, cur = notes
+    out = _attempt(_ctx(cluster, tmp_path), _sql("TRUNCATE side.notes"))
+    _capped(out, "truncate")
 
 
 def test_a_trigger_writing_a_foreign_table_is_never_verified(
@@ -306,86 +322,138 @@ def test_a_trigger_writing_a_foreign_table_is_never_verified(
         """
     )
     try:
-        out = _attempt(
-            _ctx(cluster, tmp_path),
-            {
-                "system": "crm",
-                "collection": "customers",
-                "op": "update",
-                "id": 2,
-                "fields": {"balance": 8},
-            },
-        )
+        out = _attempt(_ctx(cluster, tmp_path), _update(2, 8))
         fc = far.cursor()
         fc.execute("SELECT count(*) FROM notes")
         left = int(fc.fetchone()[0])
     finally:
         far.close()
         cur.execute("DROP FUNCTION wipe_far() CASCADE")
-    assert isinstance(out, dict), out  # capped, not refused
-    assert out["outcome"] == "COMPLETED_UNVERIFIED", out
-    assert {"foreign_data", "remote_link"} <= set(out["tx"]["not_covered"])
+    _capped(out, "foreign_data")
+    assert "remote_link" in out["tx"]["not_covered"]
     assert left == 0 and _balance(cur, 2) == 8  # it ran, unverified
 
 
-@pytest.mark.parametrize("how", ["from", "when"])
+@pytest.mark.parametrize("how", ["from", "when", "pg_catalog"])
 def test_a_trigger_reaching_a_user_function_another_way_is_never_verified(
-    db: Any, tmp_path: Path, how: str
+    notes: Any, tmp_path: Path, how: str
 ) -> None:
-    # The trigger function itself is local; the write outside the frame is a
-    # TRUNCATE (no row count shows it) in a helper called from a FROM clause,
-    # or from the trigger's WHEN condition.
-    cluster, cur = db
+    # The trigger's own body looks local; the TRUNCATE is in a helper called
+    # from a FROM clause, from the WHEN condition, or the trigger function sits
+    # in pg_catalog (a superuser can put it there).
+    cluster, cur = notes
+    fn = "pg_catalog.calls_wipe" if how == "pg_catalog" else "calls_wipe"
+    body = "PERFORM 1 FROM wipe();" if how in ("from", "pg_catalog") else ""
+    when = "WHEN (wipe())" if how == "when" else ""
     cur.execute(
-        "INSERT INTO side.notes (customer) SELECT g FROM generate_series(1, 4) g"
+        f"CREATE FUNCTION {fn}() RETURNS trigger LANGUAGE plpgsql AS $$ "
+        f"BEGIN {body} RETURN NULL; END $$;"
+        f"CREATE TRIGGER via AFTER UPDATE ON customers FOR EACH ROW {when} "
+        f"EXECUTE FUNCTION {fn}()"
     )
-    cur.execute(
-        "CREATE FUNCTION helper() RETURNS boolean LANGUAGE plpgsql AS $$ "
-        "BEGIN TRUNCATE side.notes; RETURN true; END $$"
-    )
-    if how == "from":
-        cur.execute(
-            "CREATE FUNCTION calls_helper() RETURNS trigger LANGUAGE plpgsql AS $$ "
-            "BEGIN PERFORM 1 FROM helper(); RETURN NULL; END $$"
-        )
-        cur.execute(
-            "CREATE TRIGGER via AFTER UPDATE ON customers "
-            "FOR EACH ROW EXECUTE FUNCTION calls_helper()"
-        )
-    else:
-        cur.execute(
-            "CREATE FUNCTION calls_helper() RETURNS trigger LANGUAGE plpgsql AS $$ "
-            "BEGIN RETURN NULL; END $$"
-        )
-        cur.execute(
-            "CREATE TRIGGER via AFTER UPDATE ON customers "
-            "FOR EACH ROW WHEN (helper()) EXECUTE FUNCTION calls_helper()"
-        )
     try:
-        out = _attempt(
-            _ctx(cluster, tmp_path),
-            {
-                "system": "crm",
-                "collection": "customers",
-                "op": "update",
-                "id": 5,
-                "fields": {"balance": 3},
-            },
-        )
+        out = _attempt(_ctx(cluster, tmp_path), _update(5, 3))
     finally:
-        cur.execute("DROP FUNCTION calls_helper() CASCADE; DROP FUNCTION helper()")
-    assert isinstance(out, dict), out  # capped, not refused
-    assert out["outcome"] == "COMPLETED_UNVERIFIED", out
-    assert "user_function" in out["tx"]["not_covered"]
+        cur.execute(f"DROP FUNCTION {fn}() CASCADE")
+    _capped(out, "trigger")
     assert _notes(cur) == 0
 
 
-def test_a_trigger_that_stays_in_the_schema_is_verified(
+def test_a_dollar_sign_identifier_cannot_hide_a_call(
+    notes: Any, tmp_path: Path
+) -> None:
+    # PostgreSQL allows $ in identifiers. A text strip that reads $a$ as a
+    # dollar quote hides wipe() from the planned statement.
+    cluster, cur = notes
+    cur.execute('ALTER TABLE customers ADD COLUMN "v$a$" integer')
+    try:
+        out = _attempt(
+            _ctx(cluster, tmp_path),
+            _sql(
+                "UPDATE customers SET v$a$ = 1 WHERE id = 2 AND wipe() AND v$a$ IS NULL"
+            ),
+        )
+    finally:
+        cur.execute('ALTER TABLE customers DROP COLUMN "v$a$"')
+    _capped(out, "user_function")
+    assert _notes(cur) == 0
+
+
+@pytest.mark.parametrize("how", ["domain", "cast", "view", "query_to_xml"])
+def test_a_user_function_reached_through_the_catalog_is_never_verified(
+    notes: Any, tmp_path: Path, how: str
+) -> None:
+    # Each reaches wipe() without naming it in any trigger or statement text:
+    # a domain's CHECK, an assignment cast, a view, or SQL passed as a string.
+    cluster, cur = notes
+    write: dict[str, Any]
+    if how == "domain":
+        cur.execute(
+            "CREATE DOMAIN checked AS integer CHECK (VALUE IS NULL OR wipe());"
+            "ALTER TABLE customers ADD COLUMN flag checked"
+        )
+        write = {
+            "system": "crm",
+            "collection": "customers",
+            "op": "update",
+            "id": 1,
+            "fields": {"flag": 1},
+        }
+        code, undo = (
+            "user_type",
+            "ALTER TABLE customers DROP COLUMN flag; DROP DOMAIN checked",
+        )
+    elif how == "cast":
+        cur.execute(
+            "CREATE TYPE token AS (v text);"
+            "CREATE FUNCTION to_int(token) RETURNS integer LANGUAGE plpgsql AS $$ "
+            "BEGIN PERFORM wipe(); RETURN 1; END $$;"
+            "CREATE CAST (token AS integer) WITH FUNCTION to_int(token) AS ASSIGNMENT"
+        )
+        write = _sql("UPDATE customers SET balance = ROW('x')::token WHERE id = 1")
+        code, undo = "user_cast_or_operator", "DROP TYPE token CASCADE"
+    elif how == "view":
+        cur.execute("CREATE VIEW gate AS SELECT wipe() AS ok")
+        write = _sql(
+            "UPDATE customers SET balance = 1 WHERE id = 1 AND (SELECT ok FROM gate)"
+        )
+        code, undo = "user_function", "DROP VIEW gate"
+    else:
+        write = _sql(
+            "UPDATE customers SET balance = 1 WHERE id = 1 AND "
+            "query_to_xml('SELECT wipe()', true, false, '') IS NOT NULL"
+        )
+        code, undo = "system_function_with_effects", "SELECT 1"
+    try:
+        out = _attempt(_ctx(cluster, tmp_path), write)
+    finally:
+        cur.execute(undo)
+    _capped(out, code)
+    assert _notes(cur) == 0
+
+
+def test_an_event_trigger_in_the_database_caps_every_write(
     db: Any, tmp_path: Path
 ) -> None:
-    # The inventory is an allowlist, not a refusal of triggers: a PL/pgSQL
-    # trigger that writes the frame's own schema and calls only built-ins
-    # keeps the write VERIFIED.
+    cluster, cur = db
+    cur.execute(
+        "CREATE FUNCTION on_ddl() RETURNS event_trigger LANGUAGE plpgsql AS $$ "
+        "BEGIN NULL; END $$;"
+        "CREATE EVENT TRIGGER watch ON ddl_command_end EXECUTE FUNCTION on_ddl()"
+    )
+    try:
+        out = _attempt(_ctx(cluster, tmp_path), _update(4, 1))
+    finally:
+        cur.execute("DROP EVENT TRIGGER watch; DROP FUNCTION on_ddl()")
+    _capped(out, "event_trigger")
+
+
+def test_a_reviewed_trigger_counts_only_while_its_digest_matches(
+    db: Any, tmp_path: Path
+) -> None:
+    # Coverage comes from the catalog, not from reading the body: a trigger
+    # caps the write until an operator lists its digest, and again as soon
+    # as its function changes.
     cluster, cur = db
     cur.execute(
         """
@@ -397,19 +465,25 @@ def test_a_trigger_that_stays_in_the_schema_is_verified(
         """
     )
     try:
-        out = _attempt(
-            _ctx(cluster, tmp_path),
-            {
-                "system": "crm",
-                "collection": "customers",
-                "op": "update",
-                "id": 4,
-                "fields": {"balance": 1},
-            },
+        from openadapt_flow.txplan.adapters import SqlAdapter
+
+        ctx = _ctx(cluster, tmp_path)
+        _capped(_attempt(ctx, _update(4, 1)), "trigger")
+        adapter = ctx.adapter("crm")
+        assert isinstance(adapter, SqlAdapter)
+        digests = tuple(adapter.trigger_digests().values())
+        assert len(digests) == 1
+        out = _attempt(_ctx(cluster, tmp_path / "b", digests), _update(4, 2))
+        assert isinstance(out, dict) and out["outcome"] == "VERIFIED", out
+        cur.execute(
+            "CREATE OR REPLACE FUNCTION note_here() RETURNS trigger LANGUAGE plpgsql "
+            "AS $$ BEGIN INSERT INTO audit (customer) VALUES (NEW.id); RETURN NULL; END $$"
+        )
+        _capped(
+            _attempt(_ctx(cluster, tmp_path / "c", digests), _update(4, 3)), "trigger"
         )
     finally:
         cur.execute("DROP FUNCTION note_here() CASCADE; DROP TABLE audit")
-    assert isinstance(out, dict) and out["outcome"] == "VERIFIED", out
 
 
 # -- always on: the statement order, and MySQL's trigger inventory -------------
@@ -475,12 +549,11 @@ def test_postgres_fires_deferred_triggers_before_the_scope_check_on_every_op() -
         ), (write["op"], cur.sql)
 
 
-# -- always on: the closed write-scope inventory, one cap at a time ------------
-# Each case is a planned update run through ``_exec`` on a recording cursor
-# whose catalog answers hold exactly one open item. The head before the
-# inventory reports nothing for any of them.
+# -- always on: the catalog inventory on a recording cursor --------------------
+# Each case answers the catalog queries with exactly one open item.
 
 _UPDATE = {"collection": "customers", "op": "update", "id": 1, "fields": {"b": 2}}
+_PLAN = [([{"Plan": {"Node Type": "ModifyTable", "Schema": "public", "Plans": []}}],)]
 
 
 def _pg(**over: Any) -> dict[str, Any]:
@@ -490,18 +563,33 @@ def _pg(**over: Any) -> dict[str, Any]:
         "current_schemas": [("public", ["public"])],
         "pg_foreign_data_wrapper": [(0,)],
         "pg_extension": [(0,)],
-        "pg_operator": [(0,)],
-        "pg_rewrite": [(0,)],
-        "pg_depend": [(0,)],
-        "pg_trigger": [],
-        "nspname = ANY": [],
+        "pg_event_trigger": [(0,)],
+        "pg_cast": [(0,)],
+        "pg_get_triggerdef": [],
+        "a.classid::regclass::text": [],
+        "d.refclassid::regclass::text": [],
+        "pg_attribute a JOIN": [(0,)],
+        "pg_get_expr(adbin": [],
+        "EXPLAIN": _PLAN,
         "proname = ANY": [],
     }
     return {**base, **over}
 
 
-def _plpgsql(body: str) -> list[tuple[Any, ...]]:
-    return [("plpgsql", False, False, "public", body)]
+def _explain(*outputs: str, schema: str = "public") -> list[tuple[Any, ...]]:
+    return [
+        (
+            [
+                {
+                    "Plan": {
+                        "Node Type": "Seq Scan",
+                        "Schema": schema,
+                        "Output": list(outputs),
+                    }
+                }
+            ],
+        )
+    ]
 
 
 @pytest.mark.parametrize(
@@ -510,84 +598,84 @@ def _plpgsql(body: str) -> list[tuple[Any, ...]]:
         (_pg(current_schemas=[("public", ["public", "side"])]), "", "search_path_open"),
         (_pg(pg_foreign_data_wrapper=[(1,)]), "", "foreign_data"),
         (_pg(pg_extension=[(1,)]), "", "remote_link"),
-        (_pg(pg_operator=[(2,)]), "", "user_operator"),
-        (_pg(pg_rewrite=[(1,)]), "", "rule"),
-        (_pg(pg_depend=[(1,)]), "", "user_function_default"),
-        (_pg(pg_trigger=[("c", False, False, "public", "x")]), "", "trigger_not_local"),
-        (
-            _pg(pg_trigger=[("plpgsql", True, False, "public", "")]),
-            "",
-            "trigger_not_local",
-        ),
-        (
-            _pg(pg_trigger=[("plpgsql", False, True, "public", "")]),
-            "",
-            "trigger_not_local",
-        ),
-        (
-            _pg(pg_trigger=_plpgsql("BEGIN TRUNCATE notes; RETURN NULL; END")),
-            "",
-            "truncate",
-        ),
-        (
-            _pg(pg_trigger=_plpgsql("BEGIN EXECUTE 'x'; RETURN NULL; END")),
-            "",
-            "dynamic_sql",
-        ),
-        (_pg(pg_trigger=_plpgsql("BEGIN COPY t TO '/tmp/x'; END")), "", "copy"),
+        (_pg(pg_event_trigger=[(1,)]), "", "event_trigger"),
+        (_pg(pg_cast=[(1,)]), "", "user_cast_or_operator"),
         (
             _pg(
-                pg_trigger=_plpgsql("BEGIN INSERT INTO side.n VALUES (NEW.id); END"),
-                **{"nspname = ANY": [("side",)]},
+                pg_get_triggerdef=[
+                    ("t", "CREATE TRIGGER t ...", "CREATE FUNCTION f ...")
+                ]
             ),
             "",
-            "other_schema",
+            "trigger",
         ),
         (
-            _pg(
-                pg_trigger=_plpgsql("BEGIN NEW.b := stamp(NEW.b); RETURN NEW; END"),
-                **{"proname = ANY": [("stamp", "public")]},
-            ),
+            _pg(**{"a.classid::regclass::text": [("pg_rewrite", 20000, False)]}),
+            "",
+            "rule",
+        ),
+        (
+            _pg(**{"a.classid::regclass::text": [("pg_foo", 20000, None)]}),
+            "",
+            "user_object",
+        ),
+        (
+            _pg(**{"d.refclassid::regclass::text": [("pg_proc", 20001, None)]}),
             "",
             "user_function",
         ),
         (
+            _pg(**{"d.refclassid::regclass::text": [("pg_type", 20002, False)]}),
+            "",
+            "user_type",
+        ),
+        (
+            _pg(**{"d.refclassid::regclass::text": [("pg_class", 20003, False)]}),
+            "",
+            "other_relation",
+        ),
+        (_pg(**{"pg_attribute a JOIN": [(1,)]}), "", "user_type"),
+        (
             _pg(
-                pg_trigger=_plpgsql("BEGIN PERFORM lo_unlink(NEW.b); RETURN NEW; END"),
-                **{"proname = ANY": [("lo_unlink", "pg_catalog")]},
+                **{
+                    "pg_get_expr(adbin": [
+                        ("query_to_xml('SELECT f()'::text, true, false, ''::text)",)
+                    ],
+                    "proname = ANY": [("query_to_xml", 2925)],
+                }
             ),
             "",
             "system_function_with_effects",
         ),
-        (_pg(pg_trigger=_plpgsql("BEGIN x := 'open; END")), "", "body_unparsed"),
-        (
-            _pg(
-                pg_trigger=_plpgsql("BEGIN PERFORM 1 FROM helper(); RETURN NULL; END"),
-                **{"proname = ANY": [("helper", "public")]},
-            ),
-            "",
-            "user_function",
-        ),
-        (
-            _pg(
-                pg_trigger=[
-                    ("plpgsql", False, False, "public", "BEGIN END", "helper()")
-                ],
-                **{"proname = ANY": [("helper", "public")]},
-            ),
-            "",
-            "user_function",
-        ),
-        # The planned statement gets the same body test as a trigger.
         (_pg(), "TRUNCATE notes", "truncate"),
+        (_pg(), "DROP TABLE notes CASCADE", "planned_ddl"),
         (
-            _pg(**{"proname = ANY": [("wipe", "public")]}),
-            "UPDATE customers SET b = wipe(b)",
+            _pg(EXPLAIN=_explain("wipe()"), **{"proname = ANY": [("wipe", 16500)]}),
+            "UPDATE customers SET b = 1",
+            "user_function",
+        ),
+        (
+            _pg(EXPLAIN=_explain("x", schema="side")),
+            "UPDATE customers SET b = 1",
+            "other_schema",
+        ),
+        (
+            # The deparse quotes "v$a$": the call after it is still found.
+            _pg(
+                EXPLAIN=_explain('"v$a$"', "wipe()"),
+                **{"proname = ANY": [("wipe", 16500)]},
+            ),
+            "UPDATE customers SET v$a$ = 1 WHERE wipe()",
             "user_function",
         ),
         (
             _pg(current_schemas=RuntimeError("permission denied")),
             "",
+            "scope_unreadable",
+        ),
+        (
+            _pg(EXPLAIN=RuntimeError("syntax")),
+            "UPDATE customers SET b = 1",
             "scope_unreadable",
         ),
     ],
@@ -608,17 +696,30 @@ def test_postgres_scope_inventory_caps_each_open_item(
         assert "ROLLBACK TO SAVEPOINT oa_scope" in cur.sql
 
 
-def test_postgres_scope_inventory_is_empty_for_a_local_trigger() -> None:
-    body = (
-        "BEGIN NEW.at := now(); INSERT INTO audit (c) VALUES (NEW.id); RETURN NEW; END"
-    )
-    cur = _Cursor(
-        _pg(
-            pg_trigger=_plpgsql(body),
-            **{"proname = ANY": [("now", "pg_catalog")]},
+def test_postgres_scope_inventory_is_empty_for_a_reviewed_trigger() -> None:
+    import hashlib
+
+    row = ("t", "CREATE TRIGGER t ...", "CREATE FUNCTION f ...")
+    digest = hashlib.sha256(f"{row[1]}\n{row[2]}".encode()).hexdigest()
+    adapter = _adapter("postgresql")
+    adapter.system.reviewed_triggers = [digest]
+    cur = _Cursor(_pg(pg_get_triggerdef=[row]))
+    assert adapter._exec(cur, _UPDATE, None)["not_covered"] == []
+
+
+def test_a_postgres_entry_with_no_recorded_scope_is_capped_but_sqlite_is_not() -> None:
+    w = {"collection": "customers", "op": "update", "id": 1}
+    assert _adapter("postgresql").not_covered(w, {"id": "1"}) == ["scope_unrecorded"]
+    assert _adapter("mysql").not_covered(w, None) == ["scope_unrecorded"]
+    from openadapt_flow.txplan.adapters import SqlAdapter
+    from openadapt_flow.txplan.spec import SqlSystem
+
+    lite = SqlAdapter(
+        SqlSystem(
+            name="crm", kind="sql", dialect="sqlite", path="x.db", tables={"c": "id"}
         )
     )
-    assert _adapter("postgresql")._exec(cur, _UPDATE, None)["not_covered"] == []
+    assert lite.not_covered(w, {"id": "1"}) == []
 
 
 def _my(**over: Any) -> dict[str, Any]:
@@ -628,11 +729,16 @@ def _my(**over: Any) -> dict[str, Any]:
         "SHOW GRANTS": [
             ("GRANT SELECT, INSERT, UPDATE, DELETE, TRIGGER ON `crm`.* TO `app`@`%`",)
         ],
-        "table_type = 'BASE TABLE'": [("customers",)],
         "UPPER(engine)": [(0,)],
         "information_schema.triggers": [],
+        "information_schema.routines": [(0,)],
     }
     return {**base, **over}
+
+
+_MY_TRIGGER = [
+    ("t", "customers", "AFTER", "UPDATE", "INSERT INTO notes (c) VALUES (NEW.id)")
+]
 
 
 @pytest.mark.parametrize(
@@ -646,6 +752,19 @@ def _my(**over: Any) -> dict[str, Any]:
         ),
         (
             _my(**{"SHOW GRANTS": [("GRANT TRIGGER ON `other`.* TO `app`@`%`",)]}),
+            "",
+            "trigger_privilege_unproven",
+        ),
+        # Table-level grants don't prove the database's other tables visible:
+        # a hidden table's trigger can write another database.
+        (
+            _my(
+                **{
+                    "SHOW GRANTS": [
+                        ("GRANT SELECT, TRIGGER ON `crm`.`customers` TO `app`@`%`",)
+                    ]
+                }
+            ),
             "",
             "trigger_privilege_unproven",
         ),
@@ -672,39 +791,10 @@ def _my(**over: Any) -> dict[str, Any]:
             "",
             "trigger_privilege_unproven",
         ),
-        (
-            _my(
-                **{
-                    "SHOW GRANTS": [
-                        ("GRANT TRIGGER ON `crm`.`orders` TO `app`@`%`",),
-                    ]
-                }
-            ),
-            "",
-            "trigger_privilege_unproven",
-        ),
         (_my(**{"UPPER(engine)": [(1,)]}), "", "foreign_data"),
-        (
-            _my(**{"information_schema.triggers": [("CALL note_it(NEW.id)",)]}),
-            "",
-            "routine_call",
-        ),
-        (
-            _my(
-                **{
-                    "information_schema.triggers": [
-                        ("INSERT INTO ledger.notes (customer) VALUES (NEW.id)",)
-                    ]
-                }
-            ),
-            "",
-            "other_qualifier",
-        ),
-        (
-            _my(**{"information_schema.triggers": [("SET NEW.c = stamp(NEW.c)",)]}),
-            "",
-            "user_function",
-        ),
+        # Any trigger, however local its body reads, until it is reviewed.
+        (_my(**{"information_schema.triggers": _MY_TRIGGER}), "", "trigger"),
+        (_my(**{"information_schema.routines": [(1,)]}), "", "routine"),
         (_my(), "UPDATE customers SET c = stamp(c)", "user_function"),
         (_my(**{"SHOW GRANTS": RuntimeError("denied")}), "", "scope_unreadable"),
     ],
@@ -717,7 +807,7 @@ def test_mysql_scope_inventory_caps_each_open_item(
         if sql
         else _UPDATE
     )
-    answers.setdefault("SHOW DATABASES", [("crm",), ("ledger",)])
+    answers.setdefault("SHOW DATABASES", [("crm",)])
     result = _adapter("mysql")._exec(_Cursor(answers), write, None)
     assert gap in (result.get("not_covered") or []), (gap, result)
 
@@ -727,23 +817,32 @@ def test_mysql_scope_inventory_caps_each_open_item(
     [
         ["GRANT ALL PRIVILEGES ON *.* TO `root`@`localhost` WITH GRANT OPTION"],
         ["GRANT SELECT, UPDATE, TRIGGER ON `crm`.* TO `app`@`%`"],
-        ["GRANT TRIGGER, SELECT (a, b) ON `crm`.`customers` TO `app`@`%`"],
+        ["GRANT SELECT ON *.* TO `app`@`%`", "GRANT TRIGGER ON `crm`.* TO `app`@`%`"],
     ],
 )
-def test_mysql_scope_inventory_is_empty_when_every_trigger_is_visible_and_local(
+def test_mysql_scope_inventory_is_empty_with_visible_grants_and_reviewed_triggers(
     grants: list[str],
 ) -> None:
+    import hashlib
+
+    digest = hashlib.sha256("\n".join(_MY_TRIGGER[0][1:]).encode()).hexdigest()
+    adapter = _adapter("mysql")
+    adapter.system.reviewed_triggers = [digest]
     answers = _my(
         **{
             "SHOW GRANTS": [(g,) for g in grants],
-            "information_schema.triggers": [
-                ("INSERT INTO notes (customer, at) VALUES (NEW.id, NOW())",),
-                ("SET NEW.total = IFNULL(OLD.total, 0) + crm.NEW.x",),
-            ],
+            "information_schema.triggers": _MY_TRIGGER,
         }
     )
-    result = _adapter("mysql")._exec(_Cursor(answers), _UPDATE, None)
+    result = adapter._exec(_Cursor(answers), _UPDATE, None)
     assert result["not_covered"] == [], result
+
+
+def test_mysql_reads_a_backticked_insert_target_as_a_table() -> None:
+    from openadapt_flow.txplan.adapters import sql_tokens
+
+    calls = sql_tokens("INSERT INTO `notes` (`a`, b) VALUES (NOW())", "mysql")[1]
+    assert {c.lower() for c in calls} == {"now"}
 
 
 def test_mysql_still_refuses_a_planned_statement_naming_another_database() -> None:

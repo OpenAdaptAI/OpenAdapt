@@ -233,6 +233,14 @@ class SqlSystem(_Closed):
     #: Columns the frame doesn't compare, as ``table.column`` (``*.tms``).
     frame_ignore_columns: list[str] = Field(default_factory=list)
     max_frame_rows: int = Field(default=200_000, ge=1)
+    #: Triggers an operator has reviewed, by the sha256 the adapter reports
+    #: for each (``SqlAdapter.trigger_digests``): on PostgreSQL the trigger's
+    #: definition and its function's, on MySQL the trigger's table, timing,
+    #: event and body. Any other trigger on a frame table caps a write at
+    #: ``COMPLETED_UNVERIFIED``; a listed one counts only while its digest
+    #: still matches. The review covers the trigger and its function, not the
+    #: functions that one calls.
+    reviewed_triggers: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _check(self) -> "SqlSystem":
@@ -244,6 +252,9 @@ class SqlSystem(_Closed):
         for table, key in self.tables.items():
             if not (ident.match(table) and ident.match(key)):
                 raise ValueError(f"system {self.name}: bad table or key {table}.{key}")
+        for d in self.reviewed_triggers:
+            if not re.fullmatch(r"[0-9a-f]{64}", d):
+                raise ValueError(f"system {self.name}: a reviewed trigger is a sha256")
         return self
 
 

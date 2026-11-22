@@ -1527,3 +1527,20 @@ def test_a_resolved_retry_with_evidence_stays_verified(lab: Any) -> None:
     assert first["outcome"] == "VERIFIED", first
     again = _write(ctx, op="update", rid="1", fields={"qty": 5})
     assert again.get("replayed") is True and again["outcome"] == "VERIFIED"
+
+
+def test_a_stored_scoped_result_without_its_evidence_is_not_verified(lab: Any) -> None:
+    # A legacy stored VERIFIED (no precondition_enforced) on a route whose spec
+    # now records evidence: the evidence of that send is unknown.
+    store, url, state = lab
+    _seed(store)
+    ctx = _ctx(url, state)
+    first = _write(ctx, op="update", rid="1", fields={"qty": 5})
+    assert first["outcome"] == "VERIFIED", first
+    key = json.loads((Path(first["run_dir"]) / "report.json").read_text())["tx"]["key"]
+    legacy = {k: v for k, v in first.items() if k != "precondition_enforced"}
+    state.record(key, "resolved", result=legacy)
+    again = _write(ctx, op="update", rid="1", fields={"qty": 5})
+    assert again.get("replayed") is True and store.writes == 1
+    assert again["outcome"] == "COMPLETED_UNVERIFIED", again
+    assert "precondition_unproven" in again["codes"]

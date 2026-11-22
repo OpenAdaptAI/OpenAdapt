@@ -474,7 +474,12 @@ def _undo_sql(
     )
     if ok:
         state.record(
-            w["key"], "undone", plan=digest, payload=entry.payload, read_back=ok
+            w["key"],
+            "undone",
+            plan=digest,
+            payload=entry.payload,
+            read_back=ok,
+            not_covered=list(gaps),
         )
     else:
         # Unverified-success class: a refuted SQL undo keeps its replay key.
@@ -1424,6 +1429,7 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
         results: list[dict[str, Any]] = []
         per_write: dict[str, str] = {}
         uncovered: dict[str, list[str]] = {}
+        prior: dict[str, list[str]] = {}
         tx: dict[str, Any] = {"phase": "undo", "writes": len(writes)}
         for w, base in reversed(list(zip(writes, baselines))):
             key = w["key"]
@@ -1445,6 +1451,17 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
                 continue
             if entry.status == "undone":
                 per_write[key] = "already_undone"
+                # A repeat undo keeps what the first one could not rule out.
+                last = next(
+                    (e for e in reversed(entry.events) if e.get("event") == "undone"),
+                    {},
+                )
+                kept = last.get("not_covered")
+                prior[key] = (
+                    [str(g) for g in kept]
+                    if isinstance(kept, list)
+                    else ["undo_unrecorded"]
+                )
                 continue
             if entry.status != "applied":
                 per_write[key] = "unresolved"
@@ -1509,7 +1526,12 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
                 )
             if ok:
                 state.record(
-                    key, "undone", plan=digest, payload=entry.payload, read_back=ok
+                    key,
+                    "undone",
+                    plan=digest,
+                    payload=entry.payload,
+                    read_back=ok,
+                    not_covered=list(gaps),
                 )
             else:
                 # Unverified-success class: a compensation the read-back
@@ -1610,8 +1632,16 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
             k for k, v in per_write.items() if v in ("no_undo", "irreversible_released")
         ]
         ok = len(done) == len(counted) and not collateral and not not_undone
+        for k, gaps in prior.items():
+            if gaps:
+                _note_gaps(tx, gaps)
+        # Nothing undone in this run proves nothing: a repeat undo is never a
+        # verified rollback, and keeps the first undo's gaps.
+        rolled = (
+            bool(counted) and len(verified) == len(done) and not any(prior.values())
+        )
         outcome = (
-            ("ROLLED_BACK" if len(verified) == len(done) else "COMPLETED_UNVERIFIED")
+            ("ROLLED_BACK" if rolled else "COMPLETED_UNVERIFIED")
             if ok
             else "RECONCILIATION_REQUIRED"
         )

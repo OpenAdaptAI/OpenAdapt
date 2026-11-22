@@ -87,7 +87,9 @@ def write_gaps(coll: Collection, op: str, enforced: Optional[bool] = None) -> li
     pre = route.precondition
     if pre is None:
         return ["unconditional_write"]
-    if pre.recorded() or enforced is True:
+    # Only what the send itself recorded counts: a stored result without the
+    # field (older code, an adoption) never trusts today's spec.
+    if enforced is True:
         return []
     return ["precondition_unproven"]
 
@@ -328,14 +330,20 @@ def column_digests(
 # show the writes this backend made outside it, but not a TRUNCATE (it zeroes
 # them), a write a foreign table or dblink makes from another backend, or
 # anything a trigger the account can't see does. So a write is VERIFIED only
-# when the adapter can list everything that could write outside the frame,
-# and the list is empty. "Proven local" is an allowlist: anything it can't
-# read or doesn't recognise is a gap.
+# when the catalog shows nothing that could write outside the frame. Coverage
+# is decided from the catalog, never by reading a function body: a trigger,
+# rule, user function, user type or user cast reachable from the frame caps
+# the write, unless it is a trigger an operator reviewed (by digest).
 
-_PG_SAFE_LANGS = ("plpgsql", "sql")
-#: System functions with effects outside the rows the frame reads.
+#: PostgreSQL's FirstNormalObjectId: every object with a lower oid came with
+#: the server (initdb); anything at or above it was created afterwards, in
+#: whatever namespace (pg_catalog included).
+_PG_USER_OID = 16384
+#: Built-in functions that run SQL given as text or act outside the rows the
+#: frame reads. Sequences (nextval) are outside the frame by design.
 _PG_EFFECT_FUNCS = re.compile(
-    r"^(lo_.*|lowrite|loread|set_config|dblink.*|pg_.*|currval|nextval|setval)$"
+    r"^(lo_.*|lowrite|loread|set_config|dblink.*|pg_.*|"
+    r".*_to_xml.*|.*_to_xmlschema|ts_stat|xmlexists|xpath.*)$"
 )
 _MYSQL_BUILTINS = frozenset(
     """
@@ -378,11 +386,10 @@ _SQL_PAREN_WORDS = frozenset(
 _NAME_WORDS = {"postgresql": frozenset(), "mysql": frozenset({"into"})}
 _IDENT = r'(?:"(?:[^"]|"")+"|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)'
 _STRIP = {
-    "postgresql": re.compile(
-        r"--[^\n]*|/\*.*?\*/|[Ee]'(?:[^'\\]|\\.|'')*'|'(?:[^']|'')*'"
-        r"|\$\$.*?\$\$|\$([A-Za-z_][A-Za-z0-9_]*)\$.*?\$\1\$",
-        re.S,
-    ),
+    # PostgreSQL text here is always the server's own deparse (EXPLAIN,
+    # pg_get_expr): no comments or dollar quotes, and any identifier with a
+    # character outside [a-z0-9_] is double-quoted.
+    "postgresql": re.compile(r"[Ee]'(?:[^'\\]|\\.|'')*'|'(?:[^']|'')*'", re.S),
     "mysql": re.compile(r"--[ \t][^\n]*|#[^\n]*|/\*.*?\*/|'(?:[^'\\]|\\.|'')*'", re.S),
 }
 
@@ -402,7 +409,7 @@ def sql_tokens(text: str, dialect: str) -> tuple[set[str], set[str], set[str]]:
     makes the text unparseable: the keyword ``?unparsed`` is returned."""
     body = _STRIP[dialect].sub(" '' ", text)
     words: set[str] = set()
-    if body.count("'") % 2 or "$$" in body:
+    if body.count("'") % 2:
         words.add("?unparsed")
     quals = {
         _unquote(m.group(1))
@@ -421,12 +428,10 @@ def sql_tokens(text: str, dialect: str) -> tuple[set[str], set[str], set[str]]:
         if last != ".":
             before = last
         quoted = tok[:1] in ('"', "`")
-        if m.group(2) and (
-            quoted
-            or (
-                name.lower() not in _SQL_PAREN_WORDS
-                and before.lower() not in _NAME_WORDS[dialect]
-            )
+        if (
+            m.group(2)
+            and before.lower() not in _NAME_WORDS[dialect]
+            and (quoted or name.lower() not in _SQL_PAREN_WORDS)
         ):
             calls.add(name)
         if tok[:1] not in ('"', "`"):
@@ -435,62 +440,78 @@ def sql_tokens(text: str, dialect: str) -> tuple[set[str], set[str], set[str]]:
     return quals, calls, words
 
 
-def _pg_body_gaps(cur: Any, texts: Sequence[str], schema: str) -> list[str]:
-    """Gaps in statement or function bodies: TRUNCATE, dynamic SQL, COPY, a
-    schema other than the frame's, or a call to a function that is not a
-    side-effect-free system function."""
-    gaps: set[str] = set()
-    quals: set[str] = set()
+def _pg_named_gaps(cur: Any, texts: Sequence[str]) -> set[str]:
+    """Gaps from functions named in server-deparsed text, resolved through
+    ``pg_proc``: a user-defined function (any namespace), or a built-in that
+    runs SQL given as text or acts outside the frame's rows."""
     calls: set[str] = set()
+    gaps: set[str] = set()
     for text in texts:
-        q, c, w = sql_tokens(text, "postgresql")
-        quals |= q
+        _, c, w = sql_tokens(text, "postgresql")
         calls |= c
         if "?unparsed" in w:
             gaps.add("body_unparsed")
-        if "truncate" in w:
-            gaps.add("truncate")
-        if "execute" in w:
-            gaps.add("dynamic_sql")
-        if "copy" in w:
-            gaps.add("copy")
-    if quals:
-        cur.execute(
-            "SELECT nspname FROM pg_namespace WHERE nspname = ANY(%s)",
-            (sorted(quals),),
-        )
-        schemas = {str(r[0]) for r in cur.fetchall()}
-        if schemas - {schema, "pg_catalog", "information_schema"}:
-            gaps.add("other_schema")
     if calls:
         cur.execute(
-            "SELECT p.proname, n.nspname FROM pg_proc p "
-            "JOIN pg_namespace n ON n.oid = p.pronamespace "
-            "WHERE p.proname = ANY(%s)",
+            "SELECT p.proname, p.oid::bigint FROM pg_proc p WHERE p.proname = ANY(%s)",
             (sorted(calls),),
         )
-        for name, nsp in cur.fetchall():
-            if str(nsp) not in ("pg_catalog", "information_schema"):
+        for name, oid in cur.fetchall():
+            if int(oid) >= _PG_USER_OID:
                 gaps.add("user_function")
             elif _PG_EFFECT_FUNCS.match(str(name)):
                 gaps.add("system_function_with_effects")
-    return sorted(gaps)
+    return gaps
 
 
-#: The frame schema's relations (tables, views, matviews, foreign tables).
-_PG_FRAME_RELS = (
+def _plan_strings(node: Any, out: list[str], schemas: set[str]) -> None:
+    if isinstance(node, Mapping):
+        for k, v in node.items():
+            if k == "Schema" and isinstance(v, str):
+                schemas.add(v)
+            _plan_strings(v, out, schemas)
+    elif isinstance(node, list):
+        for v in node:
+            _plan_strings(v, out, schemas)
+    elif isinstance(node, str):
+        out.append(node)
+
+
+#: The frame: every relation in the current schema.
+_PG_FRAME = (
     "SELECT c.oid FROM pg_class c WHERE c.relnamespace = "
     "(SELECT oid FROM pg_namespace WHERE nspname = current_schema())"
 )
+#: What is attached to a frame relation (depends on it in pg_depend).
+_PG_ATTACHED = (
+    "SELECT d.classid, d.objid FROM pg_depend d "
+    f"WHERE d.refclassid = 'pg_class'::regclass AND d.refobjid IN ({_PG_FRAME})"
+)
 
 
-def _pg_scope_gaps(cur: Any, sql: str) -> list[str]:
+def pg_trigger_digests(cur: Any) -> dict[str, str]:
+    """``{trigger name: sha256}`` for every user trigger on a frame relation:
+    the digest a pack lists in ``reviewed_triggers``."""
+    cur.execute(
+        "SELECT t.tgname, pg_get_triggerdef(t.oid, true), "
+        "pg_get_functiondef(t.tgfoid) FROM pg_trigger t "
+        f"WHERE NOT t.tgisinternal AND t.tgrelid IN ({_PG_FRAME})"
+    )
+    return {
+        str(name): hashlib.sha256(f"{tdef}\n{fdef}".encode()).hexdigest()
+        for name, tdef, fdef in cur.fetchall()
+    }
+
+
+def _pg_scope_gaps(cur: Any, sql: str, reviewed: Sequence[str]) -> list[str]:
     gaps: set[str] = set()
     cur.execute("SELECT current_schema(), current_schemas(false)::text[]")
     schema, path = cur.fetchone()
     if not schema or list(path or []) != [schema]:
         # Unqualified names could resolve to another schema.
         gaps.add("search_path_open")
+    # Database-wide: anything here can write outside the frame however the
+    # frame's own objects look.
     cur.execute(
         "SELECT (SELECT count(*) FROM pg_foreign_data_wrapper)"
         " + (SELECT count(*) FROM pg_foreign_server)"
@@ -503,59 +524,110 @@ def _pg_scope_gaps(cur: Any, sql: str) -> list[str]:
     )
     if int(cur.fetchone()[0]):
         gaps.add("remote_link")
+    cur.execute("SELECT count(*) FROM pg_event_trigger WHERE evtenabled <> 'D'")
+    if int(cur.fetchone()[0]):
+        gaps.add("event_trigger")
     cur.execute(
-        "SELECT count(*) FROM pg_operator o JOIN pg_namespace n "
-        "ON n.oid = o.oprnamespace "
-        "WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')"
+        f"SELECT (SELECT count(*) FROM pg_cast WHERE oid >= {_PG_USER_OID})"
+        f" + (SELECT count(*) FROM pg_operator WHERE oid >= {_PG_USER_OID})"
     )
     if int(cur.fetchone()[0]):
-        gaps.add("user_operator")
+        gaps.add("user_cast_or_operator")
+    # Triggers on frame relations: covered only when reviewed, by digest.
+    digests = pg_trigger_digests(cur)
+    if set(digests.values()) - set(reviewed):
+        gaps.add("trigger")
+    # Everything else attached to a frame relation, and what it depends on.
     cur.execute(
-        "SELECT count(*) FROM pg_rewrite WHERE rulename <> '_RETURN' "
-        f"AND ev_class IN ({_PG_FRAME_RELS})"
+        "SELECT a.classid::regclass::text, a.objid::bigint, "
+        "CASE WHEN a.classid = 'pg_rewrite'::regclass THEN "
+        "(SELECT r.rulename = '_RETURN' FROM pg_rewrite r WHERE r.oid = a.objid) END "
+        f"FROM ({_PG_ATTACHED}) a"
+    )
+    for cls, _oid, is_view in cur.fetchall():
+        if cls == "pg_rewrite" and not is_view:
+            gaps.add("rule")  # a view's _RETURN rule only runs when read
+        elif cls not in (
+            "pg_trigger",
+            "pg_rewrite",
+            "pg_attrdef",
+            "pg_constraint",
+            "pg_class",
+            "pg_type",
+            "pg_policy",
+            "pg_statistic_ext",
+            "pg_publication_rel",
+        ):
+            gaps.add("user_object")
+    # The frame's relations and their attached objects (not triggers, which
+    # are covered above, nor views' rules) may depend only on the frame's own
+    # relations and types, collations and namespaces. pg_depend lists every
+    # object created after initdb; built-ins are pinned and not listed.
+    cur.execute(
+        "SELECT d.refclassid::regclass::text, d.refobjid::bigint, "
+        "CASE WHEN d.refclassid = 'pg_class'::regclass THEN "
+        "(SELECT c.relnamespace = (SELECT oid FROM pg_namespace "
+        "WHERE nspname = current_schema()) FROM pg_class c WHERE c.oid = d.refobjid) "
+        "WHEN d.refclassid = 'pg_type'::regclass THEN "
+        "(SELECT t.typtype = 'e' OR t.typrelid IN "
+        f"({_PG_FRAME}) FROM pg_type t WHERE t.oid = d.refobjid) END "
+        "FROM pg_depend d WHERE ("
+        f"(d.classid = 'pg_class'::regclass AND d.objid IN ({_PG_FRAME})) OR "
+        f"((d.classid, d.objid) IN (SELECT classid, objid FROM ({_PG_ATTACHED}) a "
+        "WHERE a.classid NOT IN ('pg_trigger'::regclass, 'pg_rewrite'::regclass))))"
+        f" AND d.refobjid >= {_PG_USER_OID} AND d.deptype <> 'p'"
+    )
+    for cls, _oid, local in cur.fetchall():
+        if cls in ("pg_class", "pg_type"):
+            if not local:
+                gaps.add("user_type" if cls == "pg_type" else "other_relation")
+        elif cls not in ("pg_collation", "pg_namespace", "pg_constraint", "pg_attrdef"):
+            gaps.add("user_function" if cls == "pg_proc" else "user_object")
+    # Column types made after initdb (domains, extension types), and their
+    # constraints and casts: any but an enum caps.
+    cur.execute(
+        "SELECT count(*) FROM pg_attribute a JOIN pg_type t ON t.oid = a.atttypid "
+        f"WHERE a.attrelid IN ({_PG_FRAME}) AND a.attnum > 0 AND NOT a.attisdropped "
+        f"AND t.oid >= {_PG_USER_OID} AND t.typtype <> 'e' "
+        f"AND NOT (t.typelem <> 0 AND (SELECT e.typtype FROM pg_type e "
+        "WHERE e.oid = t.typelem) = 'e')"
     )
     if int(cur.fetchone()[0]):
-        gaps.add("rule")
-    # Defaults, checks, row-level security policies and index expressions on
-    # frame relations that call a user function.
+        gaps.add("user_type")
+    # Built-ins don't appear in pg_depend: read the deparsed expressions of
+    # defaults, checks, indexes and policies for ones that run SQL as text.
     cur.execute(
-        "SELECT count(*) FROM pg_depend d JOIN pg_proc p ON p.oid = d.refobjid "
-        "JOIN pg_namespace n ON n.oid = p.pronamespace "
-        "WHERE d.refclassid = 'pg_proc'::regclass "
-        "AND n.nspname NOT IN ('pg_catalog', 'information_schema') AND ("
-        "(d.classid = 'pg_attrdef'::regclass AND d.objid IN "
-        f"(SELECT oid FROM pg_attrdef WHERE adrelid IN ({_PG_FRAME_RELS}))) OR "
-        "(d.classid = 'pg_constraint'::regclass AND d.objid IN "
-        f"(SELECT oid FROM pg_constraint WHERE conrelid IN ({_PG_FRAME_RELS}))) OR "
-        "(d.classid = 'pg_policy'::regclass AND d.objid IN "
-        f"(SELECT oid FROM pg_policy WHERE polrelid IN ({_PG_FRAME_RELS}))) OR "
-        "(d.classid = 'pg_class'::regclass AND d.objid IN "
-        f"(SELECT indexrelid FROM pg_index WHERE indrelid IN ({_PG_FRAME_RELS}))))"
+        f"SELECT pg_get_expr(adbin, adrelid) FROM pg_attrdef WHERE adrelid IN ({_PG_FRAME}) "
+        "UNION ALL SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+        f"WHERE conrelid IN ({_PG_FRAME}) "
+        "UNION ALL SELECT pg_get_indexdef(indexrelid) FROM pg_index "
+        f"WHERE indrelid IN ({_PG_FRAME}) "
+        "UNION ALL SELECT concat(pg_get_expr(polqual, polrelid), ' ', "
+        f"pg_get_expr(polwithcheck, polrelid)) FROM pg_policy WHERE polrelid IN ({_PG_FRAME})"
     )
-    if int(cur.fetchone()[0]):
-        gaps.add("user_function_default")
-    cur.execute(
-        "SELECT l.lanname, p.prosecdef, p.proconfig IS NOT NULL, n.nspname, p.prosrc, "
-        "pg_get_expr(t.tgqual, t.tgrelid) "
-        "FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid "
-        "JOIN pg_namespace n ON n.oid = p.pronamespace "
-        "JOIN pg_language l ON l.oid = p.prolang "
-        "WHERE NOT t.tgisinternal AND t.tgenabled <> 'D' "
-        f"AND t.tgrelid IN ({_PG_FRAME_RELS})"
-    )
-    bodies: list[str] = []
-    for lang, secdef, config, nsp, src, *when in cur.fetchall():
-        if when and when[0]:
-            bodies.append(str(when[0]))  # the trigger's WHEN condition
-        if str(nsp) == "pg_catalog":
-            continue  # a built-in trigger function writes only NEW
-        if str(lang) not in _PG_SAFE_LANGS or secdef or config:
-            gaps.add("trigger_not_local")
-            continue
-        bodies.append(str(src or ""))
-    texts = bodies + ([sql] if sql else [])
-    if texts:
-        gaps |= set(_pg_body_gaps(cur, texts, str(schema)))
+    exprs = [str(r[0] or "") for r in cur.fetchall()]
+    gaps |= _pg_named_gaps(cur, exprs)
+    if sql:
+        if re.match(
+            r"^\s*(create|alter|drop|truncate|comment|grant|revoke|rename)\b", sql, re.I
+        ):
+            # DDL can't be planned: DROP ... CASCADE, TRUNCATE ... CASCADE and
+            # event triggers reach past the frame.
+            gaps.add(
+                "truncate" if re.match(r"^\s*truncate\b", sql, re.I) else "planned_ddl"
+            )
+        else:
+            # The statement as the server resolves it: views expanded, every
+            # function and relation by its catalog name.
+            cur.execute("EXPLAIN (VERBOSE, FORMAT JSON) " + sql)
+            raw = cur.fetchone()[0]
+            plan = json.loads(raw) if isinstance(raw, str) else raw
+            texts: list[str] = []
+            schemas: set[str] = set()
+            _plan_strings(plan, texts, schemas)
+            if schemas - {str(schema), "pg_catalog"}:
+                gaps.add("other_schema")
+            gaps |= _pg_named_gaps(cur, texts)
     return sorted(gaps)
 
 
@@ -564,60 +636,62 @@ def _like_literal(pattern: str) -> str:
     return re.sub(r"\\(.)", r"\1", pattern)
 
 
-def mysql_trigger_visibility(
-    grants: Sequence[str], db: str, tables: Sequence[str]
-) -> bool:
-    """Whether ``SHOW GRANTS`` proves the TRIGGER privilege on every frame
-    table. ``information_schema.triggers`` lists only the triggers of tables
-    the account holds it on, so without it an empty list proves nothing.
+def mysql_grants_visible(grants: Sequence[str], db: str) -> bool:
+    """Whether ``SHOW GRANTS`` proves database-level (or global) SELECT and
+    TRIGGER, so ``information_schema`` lists every table and trigger in the
+    database. Table-level grants don't count: a table the account can't list
+    can hold a trigger it can't see.
 
-    Allowlist: a GRANT of TRIGGER or ALL on ``*.*``, on the database, or on
-    the table, read literally (a wildcard grant counts only for the name it
-    spells). A role, a partial revoke or a line it can't read proves nothing."""
+    Read literally: a wildcard grant counts only for the name it spells, and
+    a role grant or a partial revoke proves nothing."""
     if any(str(line).strip().upper().startswith("REVOKE") for line in grants):
         return False  # a partial revoke: a broader grant no longer says enough
-    covered_db = False
-    covered: set[str] = set()
+    held: set[str] = set()
     for line in grants:
-        text = str(line).strip()
         m = re.match(
-            r"^GRANT\s+(.+?)\s+ON\s+(?:TABLE\s+)?(\S+)\s+TO\s", text, re.I | re.S
+            r"^GRANT\s+(.+?)\s+ON\s+(?:TABLE\s+)?(\S+)\s+TO\s",
+            str(line).strip(),
+            re.I | re.S,
         )
         if not m:
             continue  # a role grant: its privileges are not shown here
+        tm = re.fullmatch(r"(\*|`(?:[^`]|``)+`|[A-Za-z0-9_$\\%]+)\.\*", m.group(2))
+        if not tm:
+            continue  # table- or routine-level
+        dbp = tm.group(1)
+        if dbp != "*" and _like_literal(dbp.strip("`").replace("``", "`")) != db:
+            continue
         privs = re.sub(r"\([^)]*\)", "", m.group(1)).upper()
         names = {p.strip() for p in privs.split(",")}
-        if not ({"TRIGGER", "ALL", "ALL PRIVILEGES"} & names):
-            continue
-        target = m.group(2)
-        tm = re.fullmatch(
-            r"(\*|`(?:[^`]|``)+`|[A-Za-z0-9_$\\%]+)\.(\*|`(?:[^`]|``)+`|[A-Za-z0-9_$]+)",
-            target,
-        )
-        if not tm:
-            continue
-        dbp, tbl = tm.group(1), tm.group(2)
-        if dbp == "*":
-            if tbl == "*":
-                return True
-            continue
-        dbname = _like_literal(dbp.strip("`").replace("``", "`"))
-        if dbname != db:
-            continue
-        if tbl == "*":
-            covered_db = True
-        else:
-            covered.add(tbl.strip("`").replace("``", "`"))
-    return covered_db or all(t in covered for t in tables)
+        if names & {"ALL", "ALL PRIVILEGES"}:
+            return True
+        held |= names
+    return {"SELECT", "TRIGGER"} <= held
 
 
-def _mysql_scope_gaps(cur: Any, sql: str, tables: Sequence[str]) -> list[str]:
+def mysql_trigger_digests(cur: Any) -> dict[str, str]:
+    """``{trigger name: sha256}`` of every trigger in the database (table,
+    timing, event and body): the digest a pack lists in ``reviewed_triggers``."""
+    cur.execute(
+        "SELECT trigger_name, event_object_table, action_timing, "
+        "event_manipulation, action_statement FROM information_schema.triggers "
+        "WHERE trigger_schema = DATABASE()"
+    )
+    return {
+        str(row[0]): hashlib.sha256(
+            "\n".join(str(x or "") for x in row[1:]).encode()
+        ).hexdigest()
+        for row in cur.fetchall()
+    }
+
+
+def _mysql_scope_gaps(cur: Any, sql: str, reviewed: Sequence[str]) -> list[str]:
     gaps: set[str] = set()
     cur.execute("SELECT DATABASE()")
     db = str(cur.fetchone()[0] or "")
     cur.execute("SHOW GRANTS")
     grants = [str(r[0]) for r in cur.fetchall()]
-    if not db or not mysql_trigger_visibility(grants, db, tables):
+    if not db or not mysql_grants_visible(grants, db):
         gaps.add("trigger_privilege_unproven")
     cur.execute(
         "SELECT count(*) FROM information_schema.tables "
@@ -626,23 +700,20 @@ def _mysql_scope_gaps(cur: Any, sql: str, tables: Sequence[str]) -> list[str]:
     )
     if int(cur.fetchone()[0]):
         gaps.add("foreign_data")
+    # Any trigger in the database (it runs with its definer's rights and can
+    # reach tables and databases this account can't see), unless reviewed.
+    if set(mysql_trigger_digests(cur).values()) - set(reviewed):
+        gaps.add("trigger")
     cur.execute(
-        "SELECT action_statement FROM information_schema.triggers "
-        "WHERE trigger_schema = DATABASE()"
+        "SELECT count(*) FROM information_schema.routines "
+        "WHERE routine_schema = DATABASE()"
     )
-    bodies = [str(r[0] or "") for r in cur.fetchall()]
-    for body in bodies:
-        quals, calls, words = sql_tokens(body, "mysql")
-        if "?unparsed" in words:
-            gaps.add("body_unparsed")
-        if "call" in words or "execute" in words or "prepare" in words:
-            gaps.add("routine_call")
-        if {q for q in quals if q.lower() not in ("new", "old") and q != db}:
-            gaps.add("other_qualifier")
-        if {c for c in calls if c.lower() not in _MYSQL_BUILTINS}:
-            gaps.add("user_function")
+    if int(cur.fetchone()[0]):
+        gaps.add("routine")
     if sql:
-        _, calls, words = sql_tokens(sql, "mysql")
+        # No catalog resolution on MySQL: any call that isn't a known
+        # built-in caps the statement.
+        _, calls, _ = sql_tokens(sql, "mysql")
         if {c for c in calls if c.lower() not in _MYSQL_BUILTINS}:
             gaps.add("user_function")
     return sorted(gaps)
@@ -1158,16 +1229,34 @@ class SqlAdapter:
             # refusing it.
             cur.execute("SAVEPOINT oa_scope")
             try:
-                gaps = _pg_scope_gaps(cur, sql)
+                gaps = _pg_scope_gaps(cur, sql, self.system.reviewed_triggers)
             except Exception:  # noqa: BLE001 - unreadable: capped, not refused
                 cur.execute("ROLLBACK TO SAVEPOINT oa_scope")
                 return ["scope_unreadable"]
             cur.execute("RELEASE SAVEPOINT oa_scope")
             return gaps
         try:
-            return _mysql_scope_gaps(cur, sql, self._tables(cur))
+            return _mysql_scope_gaps(cur, sql, self.system.reviewed_triggers)
         except Exception:  # noqa: BLE001 - unreadable: capped, not refused
             return ["scope_unreadable"]
+
+    def trigger_digests(self) -> dict[str, str]:
+        """The digest of each trigger the scope check would cap, by name, for
+        an operator to review and list in ``reviewed_triggers``."""
+        con = self.connect()
+        try:
+            cur = con.cursor()
+            self._begin(cur)
+            try:
+                if self.system.dialect == "postgresql":
+                    return pg_trigger_digests(cur)
+                if self.system.dialect == "mysql":
+                    return mysql_trigger_digests(cur)
+                return {}
+            finally:
+                con.rollback()
+        finally:
+            con.close()
 
     def not_covered(
         self, write: Mapping[str, Any], result: Optional[Mapping[str, Any]]
@@ -1177,7 +1266,9 @@ class SqlAdapter:
         VERIFIED: nothing says what could fire then."""
         gaps = (result or {}).get("not_covered")
         if not isinstance(gaps, list):
-            return ["scope_unrecorded"]
+            # SQLite has nothing to list (see scope_gaps), so an adoption or
+            # an older entry there loses nothing.
+            return [] if self.system.dialect == "sqlite" else ["scope_unrecorded"]
         return [str(g) for g in gaps]
 
     def _tables(self, cur: Any) -> list[str]:

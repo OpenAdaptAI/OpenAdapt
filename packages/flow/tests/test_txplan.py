@@ -1522,11 +1522,9 @@ def test_a_raw_statement_with_an_open_scope_is_capped(
     assert out["tx"]["not_covered"] == ["truncate"]
 
 
-def test_a_replay_of_a_ledger_entry_with_no_recorded_scope_is_not_verified(
-    tmp_path: Path,
-) -> None:
-    # An entry written before the scope check (or by an adoption) says nothing
-    # about what its transaction could reach.
+def test_a_sqlite_replay_with_no_recorded_scope_stays_verified(tmp_path: Path) -> None:
+    # SQLite has nothing to list, so an older ledger entry loses nothing there.
+    # (PostgreSQL and MySQL cap it: test_txplan_postgres_scope.py.)
     db = _db(tmp_path / "crm.sqlite")
     ctx = _ctx(_spec(tmp_path, db=db))
     plan = _go(ctx, "T-old", [_sql_update(3, balance=99.5)])
@@ -1543,8 +1541,7 @@ def test_a_replay_of_a_ledger_entry_with_no_recorded_scope_is_not_verified(
         ctx, _go(ctx, "T-old", [_sql_update(3, balance=99.5)])["digest"]
     )
     assert again["tx"]["replays"] == 1 and again["tx"]["sent"] == 0
-    assert again["outcome"] == "COMPLETED_UNVERIFIED", again
-    assert again["tx"]["not_covered"] == ["scope_unrecorded"]
+    assert again["outcome"] == "VERIFIED", again
 
 
 def test_a_replay_keeps_the_scope_gaps_of_its_send(
@@ -1579,3 +1576,74 @@ def test_a_database_undo_with_an_open_scope_is_not_a_verified_rollback(
     assert _rows(db) == before  # the undo ran
     assert undo["outcome"] == "COMPLETED_UNVERIFIED", undo
     assert undo["tx"]["not_covered"] == ["trigger_not_local"]
+
+
+def test_a_repeat_rest_undo_keeps_the_first_undos_cap(tmp_path: Path, rest) -> None:
+    # The first undo was sent with no version check; a second undo finds the
+    # write already undone and must not report a verified rollback.
+    store, url = rest
+    ctx = _ctx(_spec(tmp_path, rest_url=url, precondition=False))
+    create = {
+        "system": "tasks",
+        "collection": "item",
+        "op": "create",
+        "fields": {"title": "new", "amount": 1},
+    }
+    plan = _go(ctx, "T-ru", [create])
+    engine.apply_plan(ctx, plan["digest"])
+    assert engine.undo_plan(ctx, plan["digest"])["outcome"] == "COMPLETED_UNVERIFIED"
+    again = engine.undo_plan(ctx, plan["digest"])
+    assert again["outcome"] == "COMPLETED_UNVERIFIED", again
+    assert again["tx"]["not_covered"] == ["unconditional_undo"]
+
+
+def test_a_repeat_sql_undo_keeps_the_first_undos_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = _db(tmp_path / "crm.sqlite")
+    ctx = _ctx(_spec(tmp_path, db=db))
+    plan = _go(ctx, "T-rs", [_sql_update(3, balance=99.5)])
+    engine.apply_plan(ctx, plan["digest"])
+    _open_scope(monkeypatch, "trigger")
+    assert engine.undo_plan(ctx, plan["digest"])["outcome"] == "COMPLETED_UNVERIFIED"
+    _open_scope(monkeypatch)
+    again = engine.undo_plan(ctx, plan["digest"])
+    assert again["outcome"] == "COMPLETED_UNVERIFIED", again
+    assert again["tx"]["not_covered"] == ["trigger"]
+
+
+def test_a_repeat_undo_with_nothing_left_to_undo_is_not_a_verified_rollback(
+    tmp_path: Path,
+) -> None:
+    db = _db(tmp_path / "crm.sqlite")
+    ctx = _ctx(_spec(tmp_path, db=db))
+    plan = _go(ctx, "T-rn", [_sql_update(3, balance=99.5)])
+    engine.apply_plan(ctx, plan["digest"])
+    assert engine.undo_plan(ctx, plan["digest"])["outcome"] == "ROLLED_BACK"
+    again = engine.undo_plan(ctx, plan["digest"])
+    assert again["outcome"] != "ROLLED_BACK", again
+
+
+def test_a_stored_rest_result_without_its_evidence_is_not_verified(
+    tmp_path: Path, rest
+) -> None:
+    # A ledger entry from before the evidence rule holds no
+    # precondition_enforced: today's spec is not taken as what that send proved.
+    _, url = rest
+    ctx = _ctx(_spec(tmp_path, rest_url=url))
+    plan = _go(ctx, "T-legacy", [_update(3, amount=7)])
+    assert engine.apply_plan(ctx, plan["digest"])["outcome"] == "VERIFIED"
+    w = plan["writes"][0]
+    ctx.state.record(
+        w["key"],
+        "applied",
+        plan=plan["digest"],
+        payload=w["payload_sha256"],
+        result={"id": "3"},
+    )
+    again = engine.apply_plan(
+        ctx, _go(ctx, "T-legacy", [_update(3, amount=7)])["digest"]
+    )
+    assert again["tx"]["replays"] == 1
+    assert again["outcome"] == "COMPLETED_UNVERIFIED", again
+    assert again["tx"]["not_covered"] == ["precondition_unproven"]
