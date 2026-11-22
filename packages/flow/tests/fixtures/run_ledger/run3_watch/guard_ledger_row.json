@@ -1,0 +1,18 @@
+{
+  "approval_decided_at": null,
+  "approval_opened_at": null,
+  "approver_kind": "none",
+  "diff_path": "guard_diff.private.json",
+  "fields_checked": [
+    "note",
+    "type"
+  ],
+  "fields_differing": [],
+  "guard_verdict": "VERIFIED",
+  "hold_ms": 13.5,
+  "readback_tier": "independent_readback",
+  "schema": "openadapt.guard-ledger-row/v1",
+  "task_id": "triage-p1-0001",
+  "verdict": "VERIFIED",
+  "verdict_reason": "readback_verified"
+}

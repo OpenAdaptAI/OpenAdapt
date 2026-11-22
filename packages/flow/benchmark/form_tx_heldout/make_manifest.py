@@ -1,7 +1,7 @@
 """Write MANIFEST.json: the sha256 of every file in this directory.
 
 Covers the git-tracked files (``git add`` new files first). Run last, after
-answer_key.json and REFERENCE_RUNS.json are final:
+answers.json and REFERENCE_RUNS.json are final:
 ``python -m benchmark.form_tx_heldout.make_manifest``.
 """
 
@@ -26,7 +26,7 @@ def build() -> dict:
     files = {rel: hashlib.sha256((HERE / rel).read_bytes()).hexdigest() for rel in tracked_files()}
     manifest = {
         "description": "sha256 of every git-tracked file in benchmark/form_tx_heldout except this manifest",
-        "answer_key_sha256": files["answer_key.json"],
+        "answers_sha256": files["answers.json"],
         "files": files,
     }
     (HERE / "MANIFEST.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -35,4 +35,4 @@ def build() -> dict:
 
 if __name__ == "__main__":
     m = build()
-    print(m["answer_key_sha256"], len(m["files"]), "files")
+    print(m["answers_sha256"], len(m["files"]), "files")

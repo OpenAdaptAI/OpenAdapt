@@ -5,8 +5,43 @@ build-backend = "hatchling.build"
 [project]
 name = "openadapt-flow"
 version = "3.4.0"
-description = "Compile demonstrated GUI workflows into deterministic local replay with governed repair and refusal"
+description = "Verified local execution layer for computer-use agents: compile web/desktop tasks into deterministic programs with read-back checks, signed DSSE receipts, and MCP/A2A support"
 readme = "README.md"
+keywords = [
+    "computer-use",
+    "computer-use-agents",
+    "gui-automation",
+    "workflow-compiler",
+    "agent-verification",
+    "read-back",
+    "receipts",
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "codex",
+    "playwright",
+    "rpa",
+    "desktop",
+    "citrix",
+    "rdp",
+    "ehr",
+    "audit-trail",
+    "zero-egress",
+    "local-vlm",
+    "idempotency",
+    "undo",
+    "rollback",
+    "gui",
+    "automation",
+    "workflow",
+    "verification",
+    "a2a",
+    "agent2agent",
+    "agent-card",
+    "agent-handoff",
+    "in-toto",
+    "dsse",
+]
 license = { text = "MIT" }
 # rapidocr-onnxruntime is part of the validated identity/OCR path and does not
 # publish Python 3.13-compatible releases. Keep the package boundary aligned
@@ -17,8 +52,11 @@ authors = [{ name = "OpenAdapt.AI" }]
 # The Python classifiers feed the PyPI "python versions" badge; keep them in
 # step with requires-python above.
 classifiers = [
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
     "Intended Audience :: Healthcare Industry",
+    "Intended Audience :: Information Technology",
     "License :: OSI Approved :: MIT License",
     "Operating System :: MacOS",
     "Operating System :: Microsoft :: Windows",
@@ -29,6 +67,9 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Office/Business",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Security :: Cryptography",
+    "Topic :: Software Development :: Testing",
     "Typing :: Typed",
 ]
 dependencies = [
@@ -127,6 +168,9 @@ dev = [
     "scikit-image>=0.22",
     # WindowsBackend tests (mock WAA server).
     "requests>=2.31",
+    # The flight scrubber's OCR pass (tests/test_flight_*); CI installs the
+    # tesseract binary next to it.
+    "pytesseract>=0.3.10",
     # VLM service + operator console tests (TestClient over the FastAPI apps);
     # uvicorn for the console's boot smoke test.
     "fastapi>=0.110",
@@ -267,7 +311,7 @@ registry = ["sigstore>=4.5,<5; python_version >= '3.11'"]
 # deployment installs this and sets OPENADAPT_FLOW_SCRUB=on to fail closed.
 # After install: python -m spacy download en_core_web_sm
 privacy = [
-    "openadapt-privacy[presidio]>=1.0.0",
+    "openadapt-privacy[presidio]>=1.1.4",
     # spaCy imports Click directly from its CLI package but does not declare it;
     # Typer 0.27 stopped supplying Click transitively. Keep regulated-mode
     # compilation importable under fresh, unconstrained PyPI resolution.
@@ -310,6 +354,15 @@ agent = [
     "anyio>=4.0",
 ]
 
+# Agent-to-agent handoffs over the A2A (Agent2Agent) protocol:
+# `openadapt-agent serve --a2a`. a2a-sdk is Apache-2.0 (a2aproject/a2a-python);
+# http-server adds Starlette and sse-starlette (BSD-3-Clause).
+a2a = [
+    "openadapt-flow[agent]",
+    "a2a-sdk[http-server]>=1.3.1,<2",
+    "uvicorn>=0.29",
+]
+
 # Verified write tools for agent frameworks
 # (openadapt_flow.integrations.agents): one extra per framework, each only
 # the framework itself. Every write the wrapped tool makes is read back from
@@ -322,10 +375,12 @@ langgraph = ["langgraph>=1.2,<2", "langchain-core>=1.7,<2"]
 # adapter works with whatever crewai the user installs.
 
 [project.urls]
-Homepage = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow"
-Repository = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow"
+Homepage = "https://openadapt.ai"
+Documentation = "https://docs.openadapt.ai"
+Proof = "https://openadapt.ai/proof"
+Pilot = "https://openadapt.ai/pilot"
+Repository = "https://github.com/OpenAdaptAI/OpenAdapt"
 Issues = "https://github.com/OpenAdaptAI/OpenAdapt/issues"
-Documentation = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/README.md"
 Changelog = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/CHANGELOG.md"
 
 [project.scripts]
@@ -561,6 +616,16 @@ required-environments = [
     "python_version == '3.10' and sys_platform == 'linux'",
     "python_version == '3.10' and sys_platform == 'darwin'",
     "python_version == '3.10' and sys_platform == 'win32'",
+]
+
+# Lockfile-only floors for security fixes that require Python 3.11+ (Pillow
+# 13.0.0 is the first release fixing GHSA-332p-7hrc-92wf and the other 2026
+# Pillow advisories; filelock 4.2.1 and dnspython 2.9.2 likewise). Python 3.10
+# keeps the last compatible release until the 3.10 floor is dropped.
+constraint-dependencies = [
+    "pillow>=13.0.0; python_full_version >= '3.11'",
+    "filelock>=4.2.1; python_full_version >= '3.11'",
+    "dnspython>=2.9.2; python_full_version >= '3.11'",
 ]
 
 [tool.ruff]

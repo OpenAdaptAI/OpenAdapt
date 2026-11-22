@@ -400,7 +400,7 @@ class ParallelsVM:
         """Create a snapshot and return its id.
 
         Snapshots are the drift-reset and warm-boot mechanism: every run
-        reverts to a clean ``opendental-ready`` state in seconds.
+        reverts to a clean ``app-ready`` state in seconds.
         """
         args = ["snapshot", self.uuid, "-n", name]
         if description:

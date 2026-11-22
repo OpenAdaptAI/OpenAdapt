@@ -1,0 +1,2115 @@
+{
+  "app": "PostgreSQL 16 (synthetic schema)",
+  "rows": [
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "bulk_update",
+      "missed": 0,
+      "preview_s": 1.322,
+      "rows_touched": 17,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "expr_update",
+      "missed": 0,
+      "preview_s": 0.78,
+      "rows_touched": 20,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_values",
+      "missed": 0,
+      "preview_s": 0.829,
+      "rows_touched": 2,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_select",
+      "missed": 0,
+      "preview_s": 0.778,
+      "rows_touched": 5,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_where",
+      "missed": 0,
+      "preview_s": 0.534,
+      "rows_touched": 6,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_cascade",
+      "missed": 0,
+      "preview_s": 0.622,
+      "rows_touched": 4,
+      "tables": [
+        "orders",
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "update_join",
+      "missed": 0,
+      "preview_s": 0.585,
+      "rows_touched": 12,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "migration_like",
+      "missed": 0,
+      "preview_s": 1.004,
+      "rows_touched": 8,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "bulk_update",
+      "missed": 0,
+      "preview_s": 0.628,
+      "rows_touched": 16,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "expr_update",
+      "missed": 0,
+      "preview_s": 0.537,
+      "rows_touched": 18,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_values",
+      "missed": 0,
+      "preview_s": 1.21,
+      "rows_touched": 2,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_select",
+      "missed": 0,
+      "preview_s": 0.893,
+      "rows_touched": 5,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_where",
+      "missed": 0,
+      "preview_s": 1.054,
+      "rows_touched": 9,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_cascade",
+      "missed": 0,
+      "preview_s": 1.414,
+      "rows_touched": 3,
+      "tables": [
+        "orders",
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "update_join",
+      "missed": 0,
+      "preview_s": 1.122,
+      "rows_touched": 12,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "migration_like",
+      "missed": 0,
+      "preview_s": 1.017,
+      "rows_touched": 10,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "bulk_update",
+      "missed": 0,
+      "preview_s": 0.938,
+      "rows_touched": 15,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "expr_update",
+      "missed": 0,
+      "preview_s": 1.04,
+      "rows_touched": 28,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_values",
+      "missed": 0,
+      "preview_s": 0.904,
+      "rows_touched": 2,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_select",
+      "missed": 0,
+      "preview_s": 0.861,
+      "rows_touched": 5,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_where",
+      "missed": 0,
+      "preview_s": 1.406,
+      "rows_touched": 6,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_cascade",
+      "missed": 0,
+      "preview_s": 0.864,
+      "rows_touched": 3,
+      "tables": [
+        "orders",
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "update_join",
+      "missed": 0,
+      "preview_s": 2.277,
+      "rows_touched": 8,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "migration_like",
+      "missed": 0,
+      "preview_s": 0.793,
+      "rows_touched": 9,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "bulk_update",
+      "missed": 0,
+      "preview_s": 0.887,
+      "rows_touched": 61,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "expr_update",
+      "missed": 0,
+      "preview_s": 0.887,
+      "rows_touched": 40,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_values",
+      "missed": 0,
+      "preview_s": 3.01,
+      "rows_touched": 2,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_select",
+      "missed": 0,
+      "preview_s": 1.106,
+      "rows_touched": 5,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_where",
+      "missed": 0,
+      "preview_s": 1.169,
+      "rows_touched": 10,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_cascade",
+      "missed": 0,
+      "preview_s": 1.043,
+      "rows_touched": 3,
+      "tables": [
+        "orders",
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "update_join",
+      "missed": 0,
+      "preview_s": 0.79,
+      "rows_touched": 8,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "migration_like",
+      "missed": 0,
+      "preview_s": 0.966,
+      "rows_touched": 9,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "bulk_update",
+      "missed": 0,
+      "preview_s": 0.804,
+      "rows_touched": 7,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "expr_update",
+      "missed": 0,
+      "preview_s": 1.889,
+      "rows_touched": 27,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_values",
+      "missed": 0,
+      "preview_s": 0.868,
+      "rows_touched": 2,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_select",
+      "missed": 0,
+      "preview_s": 0.81,
+      "rows_touched": 5,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_where",
+      "missed": 0,
+      "preview_s": 1.015,
+      "rows_touched": 10,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_cascade",
+      "missed": 0,
+      "preview_s": 0.639,
+      "rows_touched": 3,
+      "tables": [
+        "orders",
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "update_join",
+      "missed": 0,
+      "preview_s": 0.651,
+      "rows_touched": 8,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "migration_like",
+      "missed": 0,
+      "preview_s": 0.97,
+      "rows_touched": 7,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 2,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "bulk_update",
+      "missed": 0,
+      "preview_s": 0.759,
+      "rows_touched": 57,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "expr_update",
+      "missed": 0,
+      "preview_s": 1.029,
+      "rows_touched": 18,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_values",
+      "missed": 0,
+      "preview_s": 0.689,
+      "rows_touched": 2,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_select",
+      "missed": 0,
+      "preview_s": 0.6,
+      "rows_touched": 5,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_where",
+      "missed": 0,
+      "preview_s": 0.577,
+      "rows_touched": 6,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_cascade",
+      "missed": 0,
+      "preview_s": 0.638,
+      "rows_touched": 4,
+      "tables": [
+        "orders",
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "update_join",
+      "missed": 0,
+      "preview_s": 0.63,
+      "rows_touched": 12,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "migration_like",
+      "missed": 0,
+      "preview_s": 0.613,
+      "rows_touched": 9,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "bulk_update",
+      "missed": 0,
+      "preview_s": 0.542,
+      "rows_touched": 6,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "expr_update",
+      "missed": 0,
+      "preview_s": 0.546,
+      "rows_touched": 20,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_values",
+      "missed": 0,
+      "preview_s": 0.64,
+      "rows_touched": 2,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_select",
+      "missed": 0,
+      "preview_s": 0.599,
+      "rows_touched": 5,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_where",
+      "missed": 0,
+      "preview_s": 0.633,
+      "rows_touched": 4,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_cascade",
+      "missed": 0,
+      "preview_s": 0.454,
+      "rows_touched": 3,
+      "tables": [
+        "orders",
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "update_join",
+      "missed": 0,
+      "preview_s": 0.605,
+      "rows_touched": 12,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "migration_like",
+      "missed": 0,
+      "preview_s": 0.687,
+      "rows_touched": 6,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "bulk_update",
+      "missed": 0,
+      "preview_s": 0.616,
+      "rows_touched": 39,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "expr_update",
+      "missed": 0,
+      "preview_s": 0.657,
+      "rows_touched": 15,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_values",
+      "missed": 0,
+      "preview_s": 0.5,
+      "rows_touched": 2,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_select",
+      "missed": 0,
+      "preview_s": 0.587,
+      "rows_touched": 5,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 0,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_where",
+      "missed": 0,
+      "preview_s": 0.626,
+      "rows_touched": 0,
+      "tables": [],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_cascade",
+      "missed": 0,
+      "preview_s": 0.849,
+      "rows_touched": 3,
+      "tables": [
+        "orders",
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "update_join",
+      "missed": 0,
+      "preview_s": 0.874,
+      "rows_touched": 12,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "migration_like",
+      "missed": 0,
+      "preview_s": 2.399,
+      "rows_touched": 8,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 2,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "bulk_update",
+      "missed": 0,
+      "preview_s": 0.852,
+      "rows_touched": 53,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "expr_update",
+      "missed": 0,
+      "preview_s": 1.595,
+      "rows_touched": 75,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_values",
+      "missed": 0,
+      "preview_s": 1.24,
+      "rows_touched": 2,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_select",
+      "missed": 0,
+      "preview_s": 0.961,
+      "rows_touched": 5,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_where",
+      "missed": 0,
+      "preview_s": 0.843,
+      "rows_touched": 18,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_cascade",
+      "missed": 0,
+      "preview_s": 1.57,
+      "rows_touched": 3,
+      "tables": [
+        "orders",
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "update_join",
+      "missed": 0,
+      "preview_s": 0.844,
+      "rows_touched": 12,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "migration_like",
+      "missed": 0,
+      "preview_s": 0.814,
+      "rows_touched": 7,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "bulk_update",
+      "missed": 0,
+      "preview_s": 0.714,
+      "rows_touched": 49,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "expr_update",
+      "missed": 0,
+      "preview_s": 0.555,
+      "rows_touched": 60,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_values",
+      "missed": 0,
+      "preview_s": 0.66,
+      "rows_touched": 2,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_select",
+      "missed": 0,
+      "preview_s": 0.87,
+      "rows_touched": 5,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_where",
+      "missed": 0,
+      "preview_s": 0.809,
+      "rows_touched": 6,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_cascade",
+      "missed": 0,
+      "preview_s": 0.813,
+      "rows_touched": 3,
+      "tables": [
+        "orders",
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "update_join",
+      "missed": 0,
+      "preview_s": 0.723,
+      "rows_touched": 8,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "migration_like",
+      "missed": 0,
+      "preview_s": 0.723,
+      "rows_touched": 9,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 2,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "bulk_update",
+      "missed": 0,
+      "preview_s": 0.901,
+      "rows_touched": 45,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "expr_update",
+      "missed": 0,
+      "preview_s": 0.823,
+      "rows_touched": 30,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_values",
+      "missed": 0,
+      "preview_s": 0.892,
+      "rows_touched": 2,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_select",
+      "missed": 0,
+      "preview_s": 0.692,
+      "rows_touched": 5,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 0,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_where",
+      "missed": 0,
+      "preview_s": 1.185,
+      "rows_touched": 0,
+      "tables": [],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_cascade",
+      "missed": 0,
+      "preview_s": 0.836,
+      "rows_touched": 4,
+      "tables": [
+        "orders",
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "update_join",
+      "missed": 0,
+      "preview_s": 0.548,
+      "rows_touched": 12,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "migration_like",
+      "missed": 0,
+      "preview_s": 0.71,
+      "rows_touched": 7,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "bulk_update",
+      "missed": 0,
+      "preview_s": 0.68,
+      "rows_touched": 25,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "expr_update",
+      "missed": 0,
+      "preview_s": 0.564,
+      "rows_touched": 25,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_values",
+      "missed": 0,
+      "preview_s": 0.78,
+      "rows_touched": 2,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_select",
+      "missed": 0,
+      "preview_s": 0.592,
+      "rows_touched": 5,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_where",
+      "missed": 0,
+      "preview_s": 0.631,
+      "rows_touched": 18,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_cascade",
+      "missed": 0,
+      "preview_s": 0.582,
+      "rows_touched": 4,
+      "tables": [
+        "orders",
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "update_join",
+      "missed": 0,
+      "preview_s": 0.612,
+      "rows_touched": 8,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "migration_like",
+      "missed": 0,
+      "preview_s": 0.567,
+      "rows_touched": 8,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "bulk_update",
+      "missed": 0,
+      "preview_s": 0.639,
+      "rows_touched": 40,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "expr_update",
+      "missed": 0,
+      "preview_s": 0.534,
+      "rows_touched": 15,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_values",
+      "missed": 0,
+      "preview_s": 0.544,
+      "rows_touched": 2,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_select",
+      "missed": 0,
+      "preview_s": 0.556,
+      "rows_touched": 5,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_where",
+      "missed": 0,
+      "preview_s": 0.604,
+      "rows_touched": 11,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_cascade",
+      "missed": 0,
+      "preview_s": 0.549,
+      "rows_touched": 4,
+      "tables": [
+        "orders",
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "update_join",
+      "missed": 0,
+      "preview_s": 0.575,
+      "rows_touched": 12,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "migration_like",
+      "missed": 0,
+      "preview_s": 0.676,
+      "rows_touched": 6,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 2,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "bulk_update",
+      "missed": 0,
+      "preview_s": 0.95,
+      "rows_touched": 57,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "expr_update",
+      "missed": 0,
+      "preview_s": 0.651,
+      "rows_touched": 24,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_values",
+      "missed": 0,
+      "preview_s": 0.64,
+      "rows_touched": 2,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_select",
+      "missed": 0,
+      "preview_s": 0.665,
+      "rows_touched": 5,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_where",
+      "missed": 0,
+      "preview_s": 0.59,
+      "rows_touched": 7,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_cascade",
+      "missed": 0,
+      "preview_s": 0.556,
+      "rows_touched": 3,
+      "tables": [
+        "orders",
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "update_join",
+      "missed": 0,
+      "preview_s": 0.594,
+      "rows_touched": 8,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "migration_like",
+      "missed": 0,
+      "preview_s": 0.485,
+      "rows_touched": 6,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "bulk_update",
+      "missed": 0,
+      "preview_s": 0.6,
+      "rows_touched": 14,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "expr_update",
+      "missed": 0,
+      "preview_s": 0.968,
+      "rows_touched": 27,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_values",
+      "missed": 0,
+      "preview_s": 0.611,
+      "rows_touched": 2,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "insert_select",
+      "missed": 0,
+      "preview_s": 0.812,
+      "rows_touched": 5,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_where",
+      "missed": 0,
+      "preview_s": 0.723,
+      "rows_touched": 12,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "delete_cascade",
+      "missed": 0,
+      "preview_s": 0.797,
+      "rows_touched": 4,
+      "tables": [
+        "orders",
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "update_join",
+      "missed": 0,
+      "preview_s": 1.163,
+      "rows_touched": 8,
+      "tables": [
+        "orders"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    },
+    {
+      "anomalies": 1,
+      "apply": "VERIFIED",
+      "db_back_to_start": true,
+      "false": 0,
+      "independent_agrees": true,
+      "kind": "migration_like",
+      "missed": 0,
+      "preview_s": 1.151,
+      "rows_touched": 7,
+      "tables": [
+        "users"
+      ],
+      "undo": "ROLLED_BACK",
+      "undo_supported": 1,
+      "undo_verified": 1
+    }
+  ],
+  "schema": "openadapt.ext-tx-proxy-lab/v1",
+  "started": "2026-11-21T07:05:41Z",
+  "summary": {
+    "acrfence": {
+      "control_duplicates": 20,
+      "double_effects_through": 0,
+      "held_not_applied": 20,
+      "trials": 20
+    },
+    "apply_verified": 120,
+    "by_kind": {
+      "bulk_update": 15,
+      "delete_cascade": 15,
+      "delete_where": 15,
+      "expr_update": 15,
+      "insert_select": 15,
+      "insert_values": 15,
+      "migration_like": 15,
+      "update_join": 15
+    },
+    "db_back_to_start": 120,
+    "false_diffs": 0,
+    "independent_disagreements": 0,
+    "mcp_sdk_session": {
+      "apply": "VERIFIED",
+      "tools": [
+        "sql_query",
+        "sql_preview",
+        "sql_apply",
+        "sql_undo"
+      ],
+      "undo": "ROLLED_BACK"
+    },
+    "missed_effects": 0,
+    "preview_s_median": 0.778,
+    "rows_touched": 1490,
+    "statements": 120,
+    "trigger_probe": {
+      "apply": "VERIFIED",
+      "collateral": 5,
+      "missed": 0,
+      "predicted_tables": {
+        "audit": {
+          "added": 5,
+          "changed": 0,
+          "removed": 0
+        },
+        "users": {
+          "added": 0,
+          "changed": 5,
+          "removed": 0
+        }
+      },
+      "undo": "RECONCILIATION_REQUIRED"
+    },
+    "undo_success_rate": 1.0,
+    "undo_supported": 120,
+    "undo_verified": 120
+  }
+}
