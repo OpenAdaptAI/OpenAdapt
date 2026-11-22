@@ -30,6 +30,8 @@ _PKG = {
     "heldout3": "benchmark.form_tx_heldout3",
     "heldout4": "benchmark.form_tx_heldout4",
     "heldout4b0": "benchmark.form_tx_heldout4",
+    "set4v2": "form_tx_set4v2",
+    "set4v2b0": "form_tx_set4v2",
 }[SUITE]
 _PACKS = {
     "heldout": "benchmark.form_tx_heldout_run.packs",
@@ -37,7 +39,18 @@ _PACKS = {
     "heldout3": "benchmark.form_tx_heldout_run.packs3",
     "heldout4": "benchmark.form_tx_heldout_run.packs4",
     "heldout4b0": "benchmark.form_tx_heldout_run.packs4b0",
+    "set4v2": "benchmark.form_tx_heldout_run.packs5",
+    "set4v2b0": "benchmark.form_tx_heldout_run.packs5b0",
 }[SUITE]
+if not _PKG.startswith("benchmark."):
+    import os
+
+    sys.path.insert(
+        0,
+        os.environ.get(
+            "FORM_TX_SET4V2_PRIVATE", str(Path.home() / "oa" / "private" / "form-tx-set4v2")
+        ),
+    )
 PORTALS = importlib.import_module(_PKG + ".portals").PORTALS
 load_answer_key = importlib.import_module(_PKG + ".scoring").load_answer_key
 

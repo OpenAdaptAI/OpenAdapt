@@ -1,0 +1,167 @@
+{
+ "case_id": "bfu-s05",
+ "screen_id": "bfu_property",
+ "url": "http://127.0.0.1:51459/flood/hub",
+ "bound": [
+  {
+   "binding_id": "bfu_insured_name",
+   "dossier_key": "insured_name",
+   "intake": "Ravi Castellanos",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_insured_phone",
+   "dossier_key": "insured_phone",
+   "intake": "727-555-0174",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_property_street",
+   "dossier_key": "property_street",
+   "intake": "1190 Heron Bend",
+   "observed": {
+    "label": "Property street address",
+    "group_label": "",
+    "value": "",
+    "checked": null,
+    "options": [],
+    "row_cells": [],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_community_name",
+   "dossier_key": "community_name",
+   "intake": "Dunmere",
+   "observed": {
+    "label": "NFIP community",
+    "group_label": "",
+    "value": "",
+    "checked": null,
+    "options": [],
+    "row_cells": [],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_flood_zone_certificate",
+   "dossier_key": "flood_zone_certificate",
+   "intake": "AE",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_building_type",
+   "dossier_key": "building_type",
+   "intake": "Two-to-four family dwelling",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_foundation",
+   "dossier_key": "foundation",
+   "intake": "Slab on grade",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_year_built",
+   "dossier_key": "year_built",
+   "intake": 1985,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_square_feet",
+   "dossier_key": "square_feet",
+   "intake": 2860,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_building_coverage",
+   "dossier_key": "building_coverage",
+   "intake": 250000,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_contents_coverage",
+   "dossier_key": "contents_coverage",
+   "intake": 80000,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_deductible",
+   "dossier_key": "deductible",
+   "intake": 2000,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_prior_claims",
+   "dossier_key": "prior_claims",
+   "intake": 0,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_effective_date",
+   "dossier_key": "effective_date",
+   "intake": "2027-02-15",
+   "observed": null,
+   "match_error": ""
+  }
+ ],
+ "unbound": [
+  {
+   "label": "Edit named insured",
+   "value": "",
+   "selector": "#card-insured > button",
+   "options": []
+  },
+  {
+   "label": "Edit property and map",
+   "value": "",
+   "selector": "#card-property > button",
+   "options": []
+  },
+  {
+   "label": "Edit building details",
+   "value": "",
+   "selector": "#card-building > button",
+   "options": []
+  },
+  {
+   "label": "Edit coverage and billing",
+   "value": "",
+   "selector": "#card-coverage > button",
+   "options": []
+  },
+  {
+   "label": "Change",
+   "value": "",
+   "selector": "#zone-change",
+   "options": []
+  },
+  {
+   "label": "Save section",
+   "value": "",
+   "selector": "#dlg-property > form > button:nth-of-type(1)",
+   "options": []
+  },
+  {
+   "label": "Cancel",
+   "value": "",
+   "selector": "#dlg-property > form > button:nth-of-type(2)",
+   "options": []
+  }
+ ],
+ "banners": [],
+ "page_text": "Brackwater Flood Underwriters\nAgency flood desk\nResidential flood quote\n\nComplete each section. Sections save to the agency file as you go.\n\nNamed insured\n\nComplete\n\nEdit named insured\nProperty and map\n\nNot started\n\nEdit property and map\nBuilding details\n\nNot started\n\nEdit building details\nCoverage and billing\n\nNot started\n\nEdit coverage and billing\n\nReview declarations\n\nProperty and map\nProperty street address\nNFIP community\nMap lookup result: Zone X Change\nSave section Cancel"
+}

@@ -1,0 +1,122 @@
+{
+ "case_id": "hbm-s08",
+ "screen_id": "hbm_summary",
+ "url": "http://127.0.0.1:51783/bop/summary",
+ "bound": [
+  {
+   "binding_id": "hbm_legal_name",
+   "dossier_key": "legal_name",
+   "intake": "Spokewright Cycles Inc.",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_dba_name",
+   "dossier_key": "dba_name",
+   "intake": "Spokewright",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_entity_type",
+   "dossier_key": "entity_type",
+   "intake": "Corporation",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_fein",
+   "dossier_key": "fein",
+   "intake": "36-5520914",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_year_established",
+   "dossier_key": "year_established",
+   "intake": 2004,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_location_street",
+   "dossier_key": "location_street",
+   "intake": "1409 Linden Avenue",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_employees",
+   "dossier_key": "employees",
+   "intake": 9,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_annual_revenue",
+   "dossier_key": "annual_revenue",
+   "intake": 1280000,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_building_owned",
+   "dossier_key": "building_owned",
+   "intake": true,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_building_limit",
+   "dossier_key": "building_limit",
+   "intake": 640000,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_bpp_limit",
+   "dossier_key": "bpp_limit",
+   "intake": 310000,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_liability_limit",
+   "dossier_key": "liability_limit",
+   "intake": "$1,000,000 / $2,000,000",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_deductible",
+   "dossier_key": "deductible",
+   "intake": 2500,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_effective_date",
+   "dossier_key": "effective_date",
+   "intake": "2027-02-01",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_hnoa",
+   "dossier_key": "hnoa_not_in_intake",
+   "intake": null,
+   "observed": null,
+   "match_error": ""
+  }
+ ],
+ "unbound": [
+  {
+   "label": "Submit application",
+   "value": "",
+   "selector": "body > div:nth-of-type(2) > form > button",
+   "options": []
+  }
+ ],
+ "banners": [],
+ "page_text": "HOLLOWFEN BUSINESS MUTUAL\nBOP Rating Worksheet v4.2\nRating summary\nLegal name\tSpokewright Cycles Inc.\nDoing business as (DBA)\tSpokewright\nEntity type\tCorporation\nFEIN\t36-5520914\nYear established\t2004\nLocation street address\t1409 Linden Avenue\nClass code\t12650 Bicycle shop - sales and repair\nNumber of employees\t9\nAnnual gross sales\t$1,280,000\nOwns building\tYes\nBuilding limit\t$640,000\nBusiness personal property limit\t$310,000\nLiability limits\t$1,000,000 / $2,000,000\nProperty deductible\t$2,500\nEffective date\t2027-02-01\nIndicated annual premium\t$2,175\n\nReturn to worksheet\n\nSubmit application"
+}

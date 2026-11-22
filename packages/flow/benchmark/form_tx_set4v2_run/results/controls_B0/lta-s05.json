@@ -1,0 +1,107 @@
+{
+ "case_id": "lta-s05",
+ "screen_id": null,
+ "url": "http://127.0.0.1:51621/trip",
+ "bound": [
+  {
+   "binding_id": "lta_purchaser_name",
+   "dossier_key": "purchaser_name",
+   "intake": "Henrietta Moss-Achebe",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_purchaser_email",
+   "dossier_key": "purchaser_email",
+   "intake": "h.mossachebe@example.test",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_purchaser_phone",
+   "dossier_key": "purchaser_phone",
+   "intake": "612-555-0158",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_residence_state",
+   "dossier_key": "residence_state",
+   "intake": "Minnesota",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_destination_shown",
+   "dossier_key": "destination_shown",
+   "intake": "Norway - Northern Europe",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_departure_date",
+   "dossier_key": "departure_date",
+   "intake": "2027-06-12",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_return_date",
+   "dossier_key": "return_date",
+   "intake": "2027-06-24",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_traveller_1_name",
+   "dossier_key": "traveller_1_name",
+   "intake": null,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_traveller_1_dob",
+   "dossier_key": "traveller_1_dob",
+   "intake": null,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_trip_cost",
+   "dossier_key": "trip_cost",
+   "intake": 11840,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_plan",
+   "dossier_key": "plan",
+   "intake": "Premier",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_cfar",
+   "dossier_key": "cfar",
+   "intake": true,
+   "observed": null,
+   "match_error": ""
+  }
+ ],
+ "unbound": [
+  {
+   "label": "Yes, these are correct",
+   "value": "",
+   "selector": "#profile-yes",
+   "options": []
+  },
+  {
+   "label": "Update my details",
+   "value": "",
+   "selector": "#profile-edit",
+   "options": []
+  }
+ ],
+ "banners": [],
+ "page_text": "Larkspan Travel Assurance\n\nFirst, about you\n\nWe have these details on file\n\nName\nHenrietta Moss-Achebe\nEmail\nh.mossachebe@example.test\nMobile phone\n612-555-0158\nState of residence\nMinnesota\nYes, these are correct Update my details"
+}

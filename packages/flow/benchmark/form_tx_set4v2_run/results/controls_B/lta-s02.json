@@ -1,0 +1,116 @@
+{
+ "case_id": "lta-s02",
+ "screen_id": "lta_destination",
+ "url": "http://127.0.0.1:52316/trip",
+ "bound": [
+  {
+   "binding_id": "lta_purchaser_name",
+   "dossier_key": "purchaser_name",
+   "intake": "Nadia Szymanska",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_purchaser_email",
+   "dossier_key": "purchaser_email",
+   "intake": "nadia.sz@example.test",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_purchaser_phone",
+   "dossier_key": "purchaser_phone",
+   "intake": "720-555-0103",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_residence_state",
+   "dossier_key": "residence_state",
+   "intake": "Colorado",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_destination_choice",
+   "dossier_key": "destination_choice",
+   "intake": "Georgia - Caucasus",
+   "observed": {
+    "label": "Destination",
+    "group_label": "",
+    "value": "",
+    "checked": null,
+    "options": [],
+    "row_cells": [],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_departure_date",
+   "dossier_key": "departure_date",
+   "intake": "2027-09-14",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_return_date",
+   "dossier_key": "return_date",
+   "intake": "2027-09-27",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_traveller_1_name",
+   "dossier_key": "traveller_1_name",
+   "intake": "Nadia Szymanska",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_traveller_1_dob",
+   "dossier_key": "traveller_1_dob",
+   "intake": "1990-04-17",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_trip_cost",
+   "dossier_key": "trip_cost",
+   "intake": 2980,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_plan",
+   "dossier_key": "plan",
+   "intake": "Plus",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_cfar",
+   "dossier_key": "cfar",
+   "intake": false,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_confirm_details",
+   "dossier_key": "confirm_details",
+   "intake": true,
+   "observed": null,
+   "match_error": ""
+  }
+ ],
+ "unbound": [
+  {
+   "label": "Continue",
+   "value": "",
+   "selector": "body > div:nth-of-type(2) > section:nth-of-type(2) > button",
+   "options": []
+  }
+ ],
+ "banners": [],
+ "page_text": "Larkspan Travel Assurance\n\nWhere are you going?\nDestination\nContinue"
+}

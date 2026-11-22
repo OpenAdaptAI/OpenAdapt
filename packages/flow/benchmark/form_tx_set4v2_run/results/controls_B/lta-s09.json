@@ -1,0 +1,182 @@
+{
+ "case_id": "lta-s09",
+ "screen_id": "lta_review",
+ "url": "http://127.0.0.1:52316/trip",
+ "bound": [
+  {
+   "binding_id": "lta_purchaser_name",
+   "dossier_key": "purchaser_name",
+   "intake": "Bartholomew Esquivel",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_purchaser_email",
+   "dossier_key": "purchaser_email",
+   "intake": "bart.esq@example.test",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_purchaser_phone",
+   "dossier_key": "purchaser_phone",
+   "intake": "916-555-0114",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_residence_state",
+   "dossier_key": "residence_state",
+   "intake": "California",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_destination_choice",
+   "dossier_key": "destination_choice",
+   "intake": "Portugal - Southern Europe",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_departure_date",
+   "dossier_key": "departure_date",
+   "intake": "2027-10-02",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_return_date",
+   "dossier_key": "return_date",
+   "intake": "2027-10-11",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_traveller_1_name",
+   "dossier_key": "traveller_1_name",
+   "intake": "Bartholomew Esquivel",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_traveller_1_dob",
+   "dossier_key": "traveller_1_dob",
+   "intake": "1997-09-09",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_trip_cost",
+   "dossier_key": "trip_cost",
+   "intake": 2240,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_plan",
+   "dossier_key": "plan",
+   "intake": "Essential",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_cfar",
+   "dossier_key": "cfar",
+   "intake": false,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_confirm_details",
+   "dossier_key": "confirm_details",
+   "intake": true,
+   "observed": {
+    "label": "I confirm the details above are correct",
+    "group_label": "",
+    "value": "false",
+    "checked": false,
+    "options": [],
+    "row_cells": [],
+    "error_text": ""
+   },
+   "match_error": ""
+  }
+ ],
+ "unbound": [
+  {
+   "label": "Edit Name",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(1) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Email",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(2) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Mobile phone",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(3) > button",
+   "options": []
+  },
+  {
+   "label": "Edit State of residence",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(4) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Destination",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(5) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Departure date",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(6) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Return date",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(7) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Travellers",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(8) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Trip cost",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(9) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Plan",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(10) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Cancel For Any Reason",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(11) > button",
+   "options": []
+  },
+  {
+   "label": "Get my quote",
+   "value": "",
+   "selector": "#buy",
+   "options": []
+  }
+ ],
+ "banners": [],
+ "page_text": "Larkspan Travel Assurance\n\nCheck everything\nName\nBartholomew Esquivel\nEdit\nEmail\nbart.esq@example.test\nEdit\nMobile phone\n916-555-0114\nEdit\nState of residence\nCalifornia\nEdit\nDestination\nPortugal - Southern Europe\nEdit\nDeparture date\n10/02/2027\nEdit\nReturn date\n10/11/2027\nEdit\nTravellers\nBartholomew Esquivel (09/09/1997)\nEdit\nTrip cost\n$2,240\nEdit\nPlan\nEssential\nEdit\nCancel For Any Reason\nNo\nEdit\nI confirm the details above are correct\nGet my quote"
+}

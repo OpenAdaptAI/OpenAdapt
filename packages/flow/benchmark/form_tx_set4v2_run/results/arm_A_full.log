@@ -1,0 +1,813 @@
+{"portal": "brackwater", "case_id": "bfu-s01", "outcome": "submitted", "correct": true}
+{"portal": "brackwater", "case_id": "bfu-s02", "outcome": "submitted", "correct": true}
+{"portal": "brackwater", "case_id": "bfu-s03", "outcome": "submitted", "correct": false}
+{"portal": "brackwater", "case_id": "bfu-s04", "outcome": "submitted", "correct": false}
+{"portal": "brackwater", "case_id": "bfu-s05", "outcome": "submitted", "correct": false}
+{"portal": "brackwater", "case_id": "bfu-s06", "outcome": "submitted", "correct": true}
+{"portal": "brackwater", "case_id": "bfu-s07", "outcome": "submitted", "correct": false}
+{"portal": "brackwater", "case_id": "bfu-s08", "outcome": "submitted", "correct": false}
+{"portal": "brackwater", "case_id": "bfu-s09", "outcome": "submitted", "correct": true}
+{"portal": "brackwater", "case_id": "bfu-s10", "outcome": "submitted", "correct": true}
+<<<FORM_TX_SET4V2_RESULTS
+[
+ {
+  "portal": "brackwater",
+  "case_id": "bfu-s01",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.5,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "clean"
+  ]
+ },
+ {
+  "portal": "brackwater",
+  "case_id": "bfu-s02",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.4,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "prefill_agree",
+   "estimator_ok"
+  ]
+ },
+ {
+  "portal": "brackwater",
+  "case_id": "bfu-s03",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.4,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "needs_operator_answer",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "bill_to"
+  ],
+  "wrong_details": [
+   {
+    "field": "bill_to",
+    "expected": "Mortgagee (escrow)",
+    "stored": "Insured (direct bill)"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "unknown_question",
+   "recurring_rule"
+  ]
+ },
+ {
+  "portal": "brackwater",
+  "case_id": "bfu-s04",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.4,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "community"
+  ],
+  "wrong_details": [
+   {
+    "field": "community",
+    "expected": "Ashby Landing, Village of - Corran County (481203)",
+    "stored": "Ashby Landing, Town of - Pell County (480917)"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "typeahead_ambiguous"
+  ]
+ },
+ {
+  "portal": "brackwater",
+  "case_id": "bfu-s05",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.3,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "must_stop_before_submit",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "flood_zone"
+  ],
+  "wrong_details": [
+   {
+    "field": "flood_zone",
+    "expected": "AE",
+    "stored": "X"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "prefill_conflict"
+  ]
+ },
+ {
+  "portal": "brackwater",
+  "case_id": "bfu-s06",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.3,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "clean"
+  ]
+ },
+ {
+  "portal": "brackwater",
+  "case_id": "bfu-s07",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.4,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "needs_operator_answer",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "building_coverage",
+   "bill_to"
+  ],
+  "wrong_details": [
+   {
+    "field": "building_coverage",
+    "expected": 481500,
+    "stored": 333000
+   },
+   {
+    "field": "bill_to",
+    "expected": "Mortgagee (escrow)",
+    "stored": "Insured (direct bill)"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "unknown_question",
+   "recurring_rule",
+   "estimator_wrong"
+  ]
+ },
+ {
+  "portal": "brackwater",
+  "case_id": "bfu-s08",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.7,
+  "events": [
+   "session expired; signed in again"
+  ],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "must_stop_before_submit",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "building_coverage",
+   "contents_coverage",
+   "deductible",
+   "prior_claims",
+   "effective_date"
+  ],
+  "wrong_details": [
+   {
+    "field": "building_coverage",
+    "expected": 225000,
+    "stored": null
+   },
+   {
+    "field": "contents_coverage",
+    "expected": 70000,
+    "stored": null
+   },
+   {
+    "field": "deductible",
+    "expected": 5000,
+    "stored": 2000
+   },
+   {
+    "field": "prior_claims",
+    "expected": 2,
+    "stored": null
+   },
+   {
+    "field": "effective_date",
+    "expected": "2027-02-20",
+    "stored": ""
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "session_timeout"
+  ]
+ },
+ {
+  "portal": "brackwater",
+  "case_id": "bfu-s09",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.4,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "clean"
+  ]
+ },
+ {
+  "portal": "brackwater",
+  "case_id": "bfu-s10",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.6,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "needs_operator_answer",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "unknown_question",
+   "rule_trap"
+  ]
+ }
+]
+FORM_TX_SET4V2_RESULTS>>>
+{"portal": "larkspan", "case_id": "lta-s01", "outcome": "submitted", "correct": true}
+{"portal": "larkspan", "case_id": "lta-s02", "outcome": "submitted", "correct": false}
+{"portal": "larkspan", "case_id": "lta-s03", "outcome": "submitted", "correct": false}
+{"portal": "larkspan", "case_id": "lta-s04", "outcome": "submitted", "correct": false}
+{"portal": "larkspan", "case_id": "lta-s05", "outcome": "submitted", "correct": true}
+{"portal": "larkspan", "case_id": "lta-s06", "outcome": "submitted", "correct": true}
+{"portal": "larkspan", "case_id": "lta-s07", "outcome": "submitted", "correct": false}
+{"portal": "larkspan", "case_id": "lta-s08", "outcome": "submitted", "correct": false}
+{"portal": "larkspan", "case_id": "lta-s09", "outcome": "submitted", "correct": true}
+{"portal": "larkspan", "case_id": "lta-s10", "outcome": "submitted", "correct": false}
+<<<FORM_TX_SET4V2_RESULTS
+[
+ {
+  "portal": "larkspan",
+  "case_id": "lta-s01",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.3,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "clean"
+  ]
+ },
+ {
+  "portal": "larkspan",
+  "case_id": "lta-s02",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.1,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "destination"
+  ],
+  "wrong_details": [
+   {
+    "field": "destination",
+    "expected": "Georgia - country in the Caucasus",
+    "stored": "Georgia - U.S. state"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "typeahead_ambiguous"
+  ]
+ },
+ {
+  "portal": "larkspan",
+  "case_id": "lta-s03",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.1,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "needs_operator_answer",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "evac_limit"
+  ],
+  "wrong_details": [
+   {
+    "field": "evac_limit",
+    "expected": 500000,
+    "stored": 250000
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "unknown_question",
+   "recurring_rule"
+  ]
+ },
+ {
+  "portal": "larkspan",
+  "case_id": "lta-s04",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.0,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "must_stop_before_submit",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "return_date"
+  ],
+  "wrong_details": [
+   {
+    "field": "return_date",
+    "expected": "2027-07-16",
+    "stored": "2027-07-15"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "summary_differs"
+  ]
+ },
+ {
+  "portal": "larkspan",
+  "case_id": "lta-s05",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.1,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "prefill_agree"
+  ]
+ },
+ {
+  "portal": "larkspan",
+  "case_id": "lta-s06",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.3,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "clean"
+  ]
+ },
+ {
+  "portal": "larkspan",
+  "case_id": "lta-s07",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.0,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "needs_operator_answer",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "residence_state",
+   "evac_limit"
+  ],
+  "wrong_details": [
+   {
+    "field": "residence_state",
+    "expected": "Washington",
+    "stored": "Oregon"
+   },
+   {
+    "field": "evac_limit",
+    "expected": 500000,
+    "stored": 250000
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "unknown_question",
+   "recurring_rule",
+   "prefill_conflict"
+  ]
+ },
+ {
+  "portal": "larkspan",
+  "case_id": "lta-s08",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.1,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "must_stop_before_submit",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "trip_cost"
+  ],
+  "wrong_details": [
+   {
+    "field": "trip_cost",
+    "expected": 3995,
+    "stored": 3580
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "estimator_wrong"
+  ]
+ },
+ {
+  "portal": "larkspan",
+  "case_id": "lta-s09",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.2,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "clean"
+  ]
+ },
+ {
+  "portal": "larkspan",
+  "case_id": "lta-s10",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.1,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "needs_operator_answer",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "evac_limit"
+  ],
+  "wrong_details": [
+   {
+    "field": "evac_limit",
+    "expected": 1000000,
+    "stored": 250000
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "unknown_question",
+   "rule_trap"
+  ]
+ }
+]
+FORM_TX_SET4V2_RESULTS>>>
+{"portal": "hollowfen", "case_id": "hbm-s01", "outcome": "submitted", "correct": true}
+{"portal": "hollowfen", "case_id": "hbm-s02", "outcome": "submitted", "correct": false}
+{"portal": "hollowfen", "case_id": "hbm-s03", "outcome": "submitted", "correct": false}
+{"portal": "hollowfen", "case_id": "hbm-s04", "outcome": "submitted", "correct": false}
+{"portal": "hollowfen", "case_id": "hbm-s05", "outcome": "submitted", "correct": true}
+{"portal": "hollowfen", "case_id": "hbm-s06", "outcome": "submitted", "correct": false}
+{"portal": "hollowfen", "case_id": "hbm-s07", "outcome": "error", "correct": false}
+{"portal": "hollowfen", "case_id": "hbm-s08", "outcome": "submitted", "correct": true}
+{"portal": "hollowfen", "case_id": "hbm-s09", "outcome": "submitted", "correct": false}
+{"portal": "hollowfen", "case_id": "hbm-s10", "outcome": "submitted", "correct": true}
+<<<FORM_TX_SET4V2_RESULTS
+[
+ {
+  "portal": "hollowfen",
+  "case_id": "hbm-s01",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 0.5,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "clean"
+  ]
+ },
+ {
+  "portal": "hollowfen",
+  "case_id": "hbm-s02",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 0.6,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "class_code"
+  ],
+  "wrong_details": [
+   {
+    "field": "class_code",
+    "expected": "10115 Bakery - retail, baking on premises",
+    "stored": "10110 Bakery - wholesale, no retail counter"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "estimator_ok",
+   "typeahead_ambiguous"
+  ]
+ },
+ {
+  "portal": "hollowfen",
+  "case_id": "hbm-s03",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 0.6,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "must_stop_before_submit",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "legal_name"
+  ],
+  "wrong_details": [
+   {
+    "field": "legal_name",
+    "expected": "Copperline Book Arts LLC",
+    "stored": "Copperline Bindery LLC"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "prefill_conflict"
+  ]
+ },
+ {
+  "portal": "hollowfen",
+  "case_id": "hbm-s04",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 0.5,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "needs_operator_answer",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "hnoa"
+  ],
+  "wrong_details": [
+   {
+    "field": "hnoa",
+    "expected": "Include - $1,000,000",
+    "stored": "Exclude"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "unknown_question",
+   "recurring_rule",
+   "typeahead_ambiguous"
+  ]
+ },
+ {
+  "portal": "hollowfen",
+  "case_id": "hbm-s05",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 0.5,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "clean"
+  ]
+ },
+ {
+  "portal": "hollowfen",
+  "case_id": "hbm-s06",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 0.5,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "must_stop_before_submit",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "deductible"
+  ],
+  "wrong_details": [
+   {
+    "field": "deductible",
+    "expected": 2500,
+    "stored": 500
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "summary_differs"
+  ]
+ },
+ {
+  "portal": "hollowfen",
+  "case_id": "hbm-s07",
+  "filler": "naive",
+  "outcome": "error",
+  "seconds": 0.6,
+  "events": [
+   "session timed out; signed in again"
+  ],
+  "submitted": false,
+  "submit_count": 0,
+  "expected_behavior": "needs_operator_answer",
+  "correct": false,
+  "record_correct": false,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [
+   "legal_name",
+   "dba_name",
+   "entity_type",
+   "fein",
+   "year_established",
+   "location_street",
+   "class_code",
+   "employees",
+   "annual_revenue",
+   "building_owned",
+   "building_limit",
+   "bpp_limit",
+   "liability_limit",
+   "deductible",
+   "hnoa",
+   "effective_date"
+  ],
+  "traps": [
+   "unknown_question",
+   "recurring_rule",
+   "session_timeout"
+  ],
+  "error": "DriverError: rating did not reach the summary: HOLLOWFEN BUSINESS MUTUAL\nBOP Rating Worksheet v4.2\nRating stopped: a class code is required.\n1. Applicant\nState entity number\t Look up entity\nNo registry match. Enter the entity details manually.\n\nLegal name\t\nDoing business as (DBA)\t\nEntity type\t\n-- select --\nLimited liability company\nCorporation\nS"
+ },
+ {
+  "portal": "hollowfen",
+  "case_id": "hbm-s08",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 0.6,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "prefill_agree"
+  ]
+ },
+ {
+  "portal": "hollowfen",
+  "case_id": "hbm-s09",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 0.6,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "must_stop_before_submit",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "bpp_limit"
+  ],
+  "wrong_details": [
+   {
+    "field": "bpp_limit",
+    "expected": 1214600,
+    "stored": 1210000
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "estimator_wrong"
+  ]
+ },
+ {
+  "portal": "hollowfen",
+  "case_id": "hbm-s10",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 0.6,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "needs_operator_answer",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "unknown_question",
+   "rule_trap"
+  ]
+ }
+]
+FORM_TX_SET4V2_RESULTS>>>

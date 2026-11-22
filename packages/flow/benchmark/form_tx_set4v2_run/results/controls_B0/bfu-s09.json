@@ -1,0 +1,198 @@
+{
+ "case_id": "bfu-s09",
+ "screen_id": "bfu_property",
+ "url": "http://127.0.0.1:51459/flood/hub",
+ "bound": [
+  {
+   "binding_id": "bfu_insured_name",
+   "dossier_key": "insured_name",
+   "intake": "Wendell Ashgrove",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_insured_phone",
+   "dossier_key": "insured_phone",
+   "intake": "302-555-0140",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_property_street",
+   "dossier_key": "property_street",
+   "intake": "77 Saltbox Row",
+   "observed": {
+    "label": "Property street address",
+    "group_label": "",
+    "value": "",
+    "checked": null,
+    "options": [],
+    "row_cells": [],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_community_name",
+   "dossier_key": "community_name",
+   "intake": "Eskerton",
+   "observed": {
+    "label": "NFIP community",
+    "group_label": "",
+    "value": "",
+    "checked": null,
+    "options": [],
+    "row_cells": [],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_flood_zone_certificate",
+   "dossier_key": "flood_zone_certificate",
+   "intake": "D",
+   "observed": {
+    "label": "Flood zone",
+    "group_label": "",
+    "value": "Select zone",
+    "checked": null,
+    "options": [
+     {
+      "value": "",
+      "label": "Select zone"
+     },
+     {
+      "value": "A",
+      "label": "Zone A"
+     },
+     {
+      "value": "AE",
+      "label": "Zone AE"
+     },
+     {
+      "value": "AO",
+      "label": "Zone AO"
+     },
+     {
+      "value": "VE",
+      "label": "Zone VE"
+     },
+     {
+      "value": "X",
+      "label": "Zone X"
+     },
+     {
+      "value": "D",
+      "label": "Zone D"
+     }
+    ],
+    "row_cells": [],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_building_type",
+   "dossier_key": "building_type",
+   "intake": "Two-to-four family dwelling",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_foundation",
+   "dossier_key": "foundation",
+   "intake": "Basement",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_year_built",
+   "dossier_key": "year_built",
+   "intake": 1931,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_square_feet",
+   "dossier_key": "square_feet",
+   "intake": 3020,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_building_coverage",
+   "dossier_key": "building_coverage",
+   "intake": 250000,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_contents_coverage",
+   "dossier_key": "contents_coverage",
+   "intake": 0,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_deductible",
+   "dossier_key": "deductible",
+   "intake": 10000,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_prior_claims",
+   "dossier_key": "prior_claims",
+   "intake": 0,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "bfu_effective_date",
+   "dossier_key": "effective_date",
+   "intake": "2027-03-15",
+   "observed": null,
+   "match_error": ""
+  }
+ ],
+ "unbound": [
+  {
+   "label": "Edit named insured",
+   "value": "",
+   "selector": "#card-insured > button",
+   "options": []
+  },
+  {
+   "label": "Edit property and map",
+   "value": "",
+   "selector": "#card-property > button",
+   "options": []
+  },
+  {
+   "label": "Edit building details",
+   "value": "",
+   "selector": "#card-building > button",
+   "options": []
+  },
+  {
+   "label": "Edit coverage and billing",
+   "value": "",
+   "selector": "#card-coverage > button",
+   "options": []
+  },
+  {
+   "label": "Save section",
+   "value": "",
+   "selector": "#dlg-property > form > button:nth-of-type(1)",
+   "options": []
+  },
+  {
+   "label": "Cancel",
+   "value": "",
+   "selector": "#dlg-property > form > button:nth-of-type(2)",
+   "options": []
+  }
+ ],
+ "banners": [],
+ "page_text": "Brackwater Flood Underwriters\nAgency flood desk\nResidential flood quote\n\nComplete each section. Sections save to the agency file as you go.\n\nNamed insured\n\nComplete\n\nEdit named insured\nProperty and map\n\nNot started\n\nEdit property and map\nBuilding details\n\nNot started\n\nEdit building details\nCoverage and billing\n\nNot started\n\nEdit coverage and billing\n\nReview declarations\n\nProperty and map\nProperty street address\nNFIP community\nFlood zone\nSelect zone\nZone A\nZone AE\nZone AO\nZone VE\nZone X\nZone D\nSave section Cancel"
+}

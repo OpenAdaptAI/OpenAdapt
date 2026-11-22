@@ -1,0 +1,122 @@
+{
+ "case_id": "hbm-s09",
+ "screen_id": "hbm_summary",
+ "url": "http://127.0.0.1:51783/bop/summary",
+ "bound": [
+  {
+   "binding_id": "hbm_legal_name",
+   "dossier_key": "legal_name",
+   "intake": "Brightwater Garment Care Inc.",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_dba_name",
+   "dossier_key": "dba_name",
+   "intake": "Brightwater Cleaners",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_entity_type",
+   "dossier_key": "entity_type",
+   "intake": "Corporation",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_fein",
+   "dossier_key": "fein",
+   "intake": "31-4408827",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_year_established",
+   "dossier_key": "year_established",
+   "intake": 2001,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_location_street",
+   "dossier_key": "location_street",
+   "intake": "2250 Harbor Boulevard",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_employees",
+   "dossier_key": "employees",
+   "intake": 4,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_annual_revenue",
+   "dossier_key": "annual_revenue",
+   "intake": 610000,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_building_owned",
+   "dossier_key": "building_owned",
+   "intake": true,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_building_limit",
+   "dossier_key": "building_limit",
+   "intake": 450000,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_bpp_limit",
+   "dossier_key": "bpp_limit",
+   "intake": 1214600,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_liability_limit",
+   "dossier_key": "liability_limit",
+   "intake": "$300,000 / $600,000",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_deductible",
+   "dossier_key": "deductible",
+   "intake": 5000,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_effective_date",
+   "dossier_key": "effective_date",
+   "intake": "2027-03-10",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_hnoa",
+   "dossier_key": "hnoa_not_in_intake",
+   "intake": null,
+   "observed": null,
+   "match_error": ""
+  }
+ ],
+ "unbound": [
+  {
+   "label": "Submit application",
+   "value": "",
+   "selector": "body > div:nth-of-type(2) > form > button",
+   "options": []
+  }
+ ],
+ "banners": [],
+ "page_text": "HOLLOWFEN BUSINESS MUTUAL\nBOP Rating Worksheet v4.2\nRating summary\nLegal name\tBrightwater Garment Care Inc.\nDoing business as (DBA)\tBrightwater Cleaners\nEntity type\tCorporation\nFEIN\t31-4408827\nYear established\t2001\nLocation street address\t2250 Harbor Boulevard\nClass code\t18810 Dry cleaner - drop-off only\nNumber of employees\t4\nAnnual gross sales\t$610,000\nOwns building\tYes\nBuilding limit\t$450,000\nBusiness personal property limit\t$1,214,600\nLiability limits\t$300,000 / $600,000\nProperty deductible\t$5,000\nEffective date\t2027-03-10\nIndicated annual premium\t$3,789\n\nReturn to worksheet\n\nSubmit application"
+}

@@ -1,0 +1,188 @@
+{
+ "case_id": "lta-s03",
+ "screen_id": "lta_review",
+ "url": "http://127.0.0.1:52316/trip",
+ "bound": [
+  {
+   "binding_id": "lta_purchaser_name",
+   "dossier_key": "purchaser_name",
+   "intake": "Cornelius Adeyemi",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_purchaser_email",
+   "dossier_key": "purchaser_email",
+   "intake": "c.adeyemi@example.test",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_purchaser_phone",
+   "dossier_key": "purchaser_phone",
+   "intake": "512-555-0149",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_residence_state",
+   "dossier_key": "residence_state",
+   "intake": "Texas",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_destination_choice",
+   "dossier_key": "destination_choice",
+   "intake": "Morocco - North Africa",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_departure_date",
+   "dossier_key": "departure_date",
+   "intake": "2027-03-08",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_return_date",
+   "dossier_key": "return_date",
+   "intake": "2027-03-20",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_traveller_1_name",
+   "dossier_key": "traveller_1_name",
+   "intake": "Cornelius Adeyemi",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_traveller_1_dob",
+   "dossier_key": "traveller_1_dob",
+   "intake": "1972-11-05",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_trip_cost",
+   "dossier_key": "trip_cost",
+   "intake": 4410,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_plan",
+   "dossier_key": "plan",
+   "intake": "Plus",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_cfar",
+   "dossier_key": "cfar",
+   "intake": false,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_confirm_details",
+   "dossier_key": "confirm_details",
+   "intake": true,
+   "observed": {
+    "label": "I confirm the details above are correct",
+    "group_label": "",
+    "value": "false",
+    "checked": false,
+    "options": [],
+    "row_cells": [],
+    "error_text": ""
+   },
+   "match_error": ""
+  }
+ ],
+ "unbound": [
+  {
+   "label": "Edit Name",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(1) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Email",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(2) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Mobile phone",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(3) > button",
+   "options": []
+  },
+  {
+   "label": "Edit State of residence",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(4) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Destination",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(5) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Departure date",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(6) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Return date",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(7) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Travellers",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(8) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Trip cost",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(9) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Plan",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(10) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Cancel For Any Reason",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(11) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Emergency medical evacuation limit",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(12) > button",
+   "options": []
+  },
+  {
+   "label": "Get my quote",
+   "value": "",
+   "selector": "#buy",
+   "options": []
+  }
+ ],
+ "banners": [],
+ "page_text": "Larkspan Travel Assurance\n\nCheck everything\nName\nCornelius Adeyemi\nEdit\nEmail\nc.adeyemi@example.test\nEdit\nMobile phone\n512-555-0149\nEdit\nState of residence\nTexas\nEdit\nDestination\nMorocco - North Africa\nEdit\nDeparture date\n03/08/2027\nEdit\nReturn date\n03/20/2027\nEdit\nTravellers\nCornelius Adeyemi (11/05/1972)\nEdit\nTrip cost\n$4,410\nEdit\nPlan\nPlus\nEdit\nCancel For Any Reason\nNo\nEdit\nEmergency medical evacuation limit\nEdit\nI confirm the details above are correct\nGet my quote"
+}

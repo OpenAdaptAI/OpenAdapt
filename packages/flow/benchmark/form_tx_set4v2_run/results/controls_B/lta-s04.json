@@ -1,0 +1,130 @@
+{
+ "case_id": "lta-s04",
+ "screen_id": "lta_travellers",
+ "url": "http://127.0.0.1:52316/trip",
+ "bound": [
+  {
+   "binding_id": "lta_purchaser_name",
+   "dossier_key": "purchaser_name",
+   "intake": "Leocadia Furness",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_purchaser_email",
+   "dossier_key": "purchaser_email",
+   "intake": "leo.furness@example.test",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_purchaser_phone",
+   "dossier_key": "purchaser_phone",
+   "intake": "802-555-0177",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_residence_state",
+   "dossier_key": "residence_state",
+   "intake": "Vermont",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_destination_choice",
+   "dossier_key": "destination_choice",
+   "intake": "Peru - South America",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_departure_date",
+   "dossier_key": "departure_date",
+   "intake": "2027-07-01",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_return_date",
+   "dossier_key": "return_date",
+   "intake": "2027-07-16",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_traveller_1_name",
+   "dossier_key": "traveller_1_name",
+   "intake": "Leocadia Furness",
+   "observed": {
+    "label": "Full name",
+    "group_label": "",
+    "value": "",
+    "checked": null,
+    "options": [],
+    "row_cells": [],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_traveller_1_dob",
+   "dossier_key": "traveller_1_dob",
+   "intake": "1993-06-08",
+   "observed": {
+    "label": "Date of birth",
+    "group_label": "",
+    "value": "",
+    "checked": null,
+    "options": [],
+    "row_cells": [],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_trip_cost",
+   "dossier_key": "trip_cost",
+   "intake": 6380,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_plan",
+   "dossier_key": "plan",
+   "intake": "Plus",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_cfar",
+   "dossier_key": "cfar",
+   "intake": true,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_confirm_details",
+   "dossier_key": "confirm_details",
+   "intake": true,
+   "observed": null,
+   "match_error": ""
+  }
+ ],
+ "unbound": [
+  {
+   "label": "Add another traveller",
+   "value": "",
+   "selector": "#trav-add",
+   "options": []
+  },
+  {
+   "label": "Continue",
+   "value": "",
+   "selector": "body > div:nth-of-type(2) > section:nth-of-type(4) > button:nth-of-type(2)",
+   "options": []
+  }
+ ],
+ "banners": [],
+ "page_text": "Larkspan Travel Assurance\n\nWho's travelling?\nTraveller 1\nFull name\nDate of birth\nAdd another traveller\nContinue"
+}

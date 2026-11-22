@@ -1,0 +1,122 @@
+{
+ "case_id": "hbm-s05",
+ "screen_id": "hbm_summary",
+ "url": "http://127.0.0.1:51783/bop/summary",
+ "bound": [
+  {
+   "binding_id": "hbm_legal_name",
+   "dossier_key": "legal_name",
+   "intake": "Ravel & Weft Partners",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_dba_name",
+   "dossier_key": "dba_name",
+   "intake": "Ravel & Weft",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_entity_type",
+   "dossier_key": "entity_type",
+   "intake": "General partnership",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_fein",
+   "dossier_key": "fein",
+   "intake": "46-9083721",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_year_established",
+   "dossier_key": "year_established",
+   "intake": 2015,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_location_street",
+   "dossier_key": "location_street",
+   "intake": "77 Spindle Court",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_employees",
+   "dossier_key": "employees",
+   "intake": 5,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_annual_revenue",
+   "dossier_key": "annual_revenue",
+   "intake": 455000,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_building_owned",
+   "dossier_key": "building_owned",
+   "intake": false,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_building_limit",
+   "dossier_key": "building_limit",
+   "intake": 0,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_bpp_limit",
+   "dossier_key": "bpp_limit",
+   "intake": 180000,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_liability_limit",
+   "dossier_key": "liability_limit",
+   "intake": "$1,000,000 / $2,000,000",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_deductible",
+   "dossier_key": "deductible",
+   "intake": 500,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_effective_date",
+   "dossier_key": "effective_date",
+   "intake": "2027-01-20",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_hnoa",
+   "dossier_key": "hnoa_not_in_intake",
+   "intake": null,
+   "observed": null,
+   "match_error": ""
+  }
+ ],
+ "unbound": [
+  {
+   "label": "Submit application",
+   "value": "",
+   "selector": "body > div:nth-of-type(2) > form > button",
+   "options": []
+  }
+ ],
+ "banners": [],
+ "page_text": "HOLLOWFEN BUSINESS MUTUAL\nBOP Rating Worksheet v4.2\nRating summary\nLegal name\tRavel & Weft Partners\nDoing business as (DBA)\tRavel & Weft\nEntity type\tGeneral partnership\nFEIN\t46-9083721\nYear established\t2015\nLocation street address\t77 Spindle Court\nClass code\t15540 Yarn and fabric store\nNumber of employees\t5\nAnnual gross sales\t$455,000\nOwns building\tNo\nBuilding limit\t$0\nBusiness personal property limit\t$180,000\nLiability limits\t$1,000,000 / $2,000,000\nProperty deductible\t$500\nEffective date\t2027-01-20\nIndicated annual premium\t$830\n\nReturn to worksheet\n\nSubmit application"
+}
