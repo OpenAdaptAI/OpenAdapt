@@ -116,30 +116,76 @@ digits becomes `"<ID>"`.
 Each string goes through these steps:
 
 1. URLs are cut to their origin (`https://emr.example/<path removed>`).
-2. Deterministic patterns replace dates, phone numbers, e-mail addresses,
-   street addresses, numbers of five or more digits, and the value after a
-   label such as `Name:`, `DOB:` or `MRN:`.
-3. The openadapt-privacy text scrubber (Presidio with spaCy
-   `en_core_web_sm`) runs on the whole string, then again on each line,
-   sentence and quoted string: Presidio can miss a name in a long prompt
-   that it finds in the same sentence alone. Then the patterns run again.
+2. Personal values are found: values already seen in this run, deterministic
+   patterns (dates, phone numbers, e-mail addresses, street addresses,
+   numbers of five or more digits, the value after a label such as `Name:`,
+   `DOB:` or `MRN:`), and the openadapt-privacy text scrubber (Presidio with
+   spaCy `en_core_web_sm`) on the whole string and again on each line,
+   sentence and quoted string. Presidio can miss a name in a long prompt
+   that it finds in the same sentence alone.
+3. Each value is replaced with a run token: `[PERSON_1]`, `[ID_1]`,
+   `[DATE_1]`, `[PHONE_1]`...
 
-Each image is redacted with openadapt-privacy's image redaction, then OCR'd
-with tesseract. Every word the patterns or the text scrubber remove from its
-OCR line is painted over too.
+Presidio's ORGANIZATION and NRP hits are not among HIPAA's 18 identifiers
+and are left alone; they mostly hit app names, headers and words like
+"DONE". When Presidio, asked about the same words alone, names a person or
+another identifier, they are redacted (it reads some names in a sentence as
+organisations). A date with no digit ("today") is left alone too.
 
-Recall measured on 50 synthetic records (five fields each;
-[benchmark](../benchmark/flight/scrub_recall/README.md)): 98.4% of fields
-in text sent as a tool result, 98.0% as plain message text, 97.6% as
-message text after a long agent preamble, and 98.4% of readable fields in
+Each image is OCR'd with tesseract. Each OCR line, split into table cells at
+wide gaps, goes through the same detection, and each value is painted over
+with its token written in the box.
+
+### Run tokens
+
+The same value, ignoring case and spacing, gets the same token in text and
+in screenshots, in every request of the run. The model can match
+`[PERSON_1]` in its task to the row that shows `[PERSON_1]` on screen.
+
+On the way back, `flight` replaces each token with its real value inside
+tool-call inputs only: a computer `type` action's text, `function_call`
+arguments, any other tool input. Your agent types the real value into the
+app. Text the model writes for itself keeps the tokens. When your agent
+sends that tool call back in its history, the real value becomes the same
+token again before anything leaves the machine: every value already in the
+map is matched, whether or not the detectors would find it again.
+
+Streams are rewritten too. Anthropic tool-use input and OpenAI Responses
+argument and input deltas are held until their block or item is complete,
+then passed on as one delta. A stream event that can't be parsed ends the
+stream with an error event. A streamed Chat Completions request is refused
+once the run has a token, because its tool-call deltas can't be rewritten
+safely; send `stream=false`.
+
+The map is in memory and in `pseudonyms.json` in the run directory, mode
+0600. It holds the real values in plaintext and is never forwarded. Don't
+share the run directory as is.
+
+### Measured
+
+Recall on 50 synthetic records (five fields each;
+[benchmark](../benchmark/flight/scrub_recall/README.md)): 98.0% of fields
+in text sent as a tool result, 97.6% as plain message text, 97.6% as
+message text after a long agent preamble, and 97.2% of readable fields in
 rendered form screenshots. Every miss was a name. Presidio alone, as the
-proxy used it before, caught 77 to 78% in text and 67.5% in images. The
-corpus is synthetic and clean, and it was written by the same author as the
-patterns; real screens will do worse.
+proxy used it first, caught 77 to 78% in text and 67.5% in images.
 
-The scrubber hides personal data from your agent too. The model can't read a
-patient name it is asked to check, or see what it typed into a field. Task
-success with scrubbing on has not been measured.
+Over-redaction, on 20 synthetic work-list screenshots and task
+instructions: 93.1% of the non-personal words tesseract reads on the
+original screen (app name, navigation, headers, referral reasons) are still
+readable after scrubbing, against 30.9% with Presidio's image redaction.
+The app name ("MockMed") is lost on every screen: Presidio reads it as a
+person. In the instructions 94.4% of non-personal words are kept, against
+89.1%. On those screens 38 of 40 names and record numbers were hidden; in
+the instructions, 37 of 40.
+
+The corpus is synthetic and clean, and it was written by the same author as
+the patterns; real screens will do worse.
+
+The scrubber still hides personal data from your agent. With run tokens the
+model can match a name in its task to the same name on screen and ask to
+type it, but it can't read the name itself, so it can't notice a misspelled
+or wrong one. Task success with scrubbing on has not been measured.
 
 ## Failing closed
 

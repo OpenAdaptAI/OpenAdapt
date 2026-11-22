@@ -36,6 +36,7 @@ fail-closed gate, the egress block). It has not been repeated since.
 
 ## Scrub recall
 
-See [scrub_recall/README.md](scrub_recall/README.md): 97.6 to 98.4% of
-fields in text and 98.4% in rendered screenshots on 50 synthetic records,
-every miss a name.
+See [scrub_recall/README.md](scrub_recall/README.md): 97.6 to 98.0% of
+fields in text and 97.2% in rendered screenshots on 50 synthetic records,
+every miss a name; 93.1% of non-personal words on a work-list screen stay
+readable.
