@@ -241,7 +241,11 @@ def test_the_window_signs_and_writes_the_runs_answer(queue, enclave):  # noqa: F
     assert result["ok"] is True and result["changed"] == 1
     assert len(enclave.prompts) == 1
     path = _answer_file(raw)
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    # Windows does not store POSIX 0o600 in st_mode (often 0o666 / 438).
+    # The writer still opens the file with 0o600; the bit check is POSIX-only,
+    # matching _read's `os.name == "posix"` permission-bit gate.
+    if os.name == "posix":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
     answer = json.loads(path.read_text())
     assert answer["answer"] == "done_by_person"
     assert answer["approver_kind"] == "person" and answer["route"] == "desktop"
@@ -388,6 +392,10 @@ def test_no_registry_folder_is_an_empty_list(tmp_path):
     assert os.environ["OPENADAPT_HOME"]
 
 
+@pytest.mark.skipif(
+    os.name != "posix",
+    reason="group/other permission bits are a POSIX check (see _read)",
+)
 def test_a_card_other_users_can_read_is_not_shown(queue):  # noqa: F811
     disp, _db, _keychain = queue
     raw = _write_card()

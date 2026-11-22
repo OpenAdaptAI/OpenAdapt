@@ -73,6 +73,13 @@ def registry_root() -> Path:
 
 
 def _read(path: Path) -> bytes | None:
+    try:
+        if stat.S_ISLNK(os.lstat(path).st_mode):
+            return None
+    except OSError:
+        return None
+    # O_NOFOLLOW is the atomic check on POSIX. On Windows it may be missing
+    # or a no-op, so the lstat above is what refuses a link.
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
     try:
         fd = os.open(path, flags)
