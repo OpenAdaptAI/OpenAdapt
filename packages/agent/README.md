@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/openadapt-agent)](https://pypi.org/project/openadapt-agent/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/LICENSE)
 
-Your AI agent decides what to enter. OpenAdapt enters it in the app and checks that it saved.
+Verified local desktop & browser automation with read-back checks and signed receipts. Zero egress.
 
 Use it if your agent works out what belongs in a record, but a person still types the result into a web, desktop or remote-desktop app with no usable API. An electronic medical record (EMR) and a payer portal are examples of highly regulated settings where it fits. This package is the tool your agent calls to do that typing.
 
