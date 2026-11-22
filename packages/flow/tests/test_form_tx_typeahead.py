@@ -175,6 +175,7 @@ def portal(chromium_browser: Any) -> Any:
 
 def _pack(*bindings: FieldBindingSpec) -> FormPack:
     return FormPack(
+        commit_url_patterns=("/api/submit",),
         pack_id="typeahead_pack",
         domain_schema="test.quote/v1",
         ui_profile_id="typeahead_test",

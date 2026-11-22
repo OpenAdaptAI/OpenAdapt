@@ -249,6 +249,7 @@ def _pack(*, bind_pool: bool = True) -> FormPack:
         ),
     ]
     return FormPack(
+        commit_url_patterns=("/submit",),
         pack_id="test-expiry-radios",
         domain_schema="test.quote/v1",
         ui_profile_id=_PROFILE.profile_id,

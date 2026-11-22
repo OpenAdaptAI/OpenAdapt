@@ -75,6 +75,7 @@ from openadapt_flow.form_tx.types import (
     UnboundControlSpec,
     WizardScreenSpec,
     canonical_sha256,
+    read_subjects,
 )
 
 __all__ = [
@@ -3221,7 +3222,14 @@ class FormReconciler:
             dossier=session.dossier,
             signing_key=session.signing_key,
             outcome=FormTxOutcome.VERIFIED_DONE,
-            fields_filled_auto=session.fields_filled_auto,
+            # The receipt names each auto-filled control once, as the signer
+            # counts them from the write ledger; a control filled again (after
+            # a sign-in or a re-render) is still one field.
+            fields_filled_auto=len(
+                read_subjects(
+                    [w for w in session.writes if w.source == "auto_fill"], ()
+                )
+            ),
             human_resolutions=session.human_resolutions,
             commit_mutations_observed=delta_mutations,
             summary_verdict=verdict,

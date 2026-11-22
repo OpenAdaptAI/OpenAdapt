@@ -834,6 +834,17 @@ class SummaryJudge:
                 continue
             if oc is not None:
                 observations.setdefault(rb.dossier_key, set()).add(oc.dom_selector)
+                continue
+            # A value shown as page text, not in a control, is an observation
+            # too; two read-backs that land on the same shown pair are one.
+            try:
+                pair = match_text_pair_in_snapshot(rb.anchor, snapshot)
+            except AmbiguousAnchorError:
+                continue
+            if pair is not None:
+                observations.setdefault(rb.dossier_key, set()).add(
+                    f"text|{pair.source}|{pair.section_text}|{pair.label}"
+                )
         evaluated_subjects = read_subjects(writes, active_resolutions)
         verdicts.extend(
             uncovered_subject_verdicts(
