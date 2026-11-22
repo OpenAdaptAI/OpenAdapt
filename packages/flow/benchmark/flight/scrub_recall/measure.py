@@ -34,7 +34,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from corpus import build, render_form  # noqa: E402
+from corpus import LONG_PREAMBLE, build, render_form  # noqa: E402
 
 FIELDS = ("name", "dob", "mrn", "phone", "address")
 
@@ -70,6 +70,14 @@ def _through_proxy(text: str, scrub: Any) -> str:
     return scrub_request(body, scrub)["messages"][0]["content"][0]["content"]
 
 
+def _as_message(text: str, scrub: Any) -> str:
+    """``text`` as the proxy sends a plain user message text block."""
+    from openadapt_flow.flight.scrub import scrub_request
+
+    body = {"messages": [{"role": "user", "content": [{"type": "text", "text": text}]}]}
+    return scrub_request(body, scrub)["messages"][0]["content"][0]["text"]
+
+
 def _ocr(png: bytes) -> str:
     import pytesseract
     from PIL import Image
@@ -83,13 +91,29 @@ def run(seed: int, count: int) -> dict[str, Any]:
 
     scrubber = require_scrubber()
     flight = Scrub(scrubber)
+
+    def presidio_text(t: str) -> str:
+        return scrub_outbound_text(t, scrubber) or ""
+
+    # Text paths: "text" is the corpus text sent as a tool result (the
+    # 2026-11-21 measurement); "text_message" the same text as plain message
+    # text (a JSON text is then one string); "text_long" that message after
+    # a long agent preamble (LONG_PREAMBLE), as a computer-use loop sends it.
     configs = {
         "presidio": (
-            lambda t: scrub_outbound_text(t, scrubber) or "",
+            {
+                "text": presidio_text,
+                "text_message": presidio_text,
+                "text_long": lambda t: presidio_text(LONG_PREAMBLE + t),
+            },
             lambda png: scrub_outbound_image(png, scrubber),
         ),
         "flight": (
-            lambda t: _through_proxy(t, flight),
+            {
+                "text": lambda t: _through_proxy(t, flight),
+                "text_message": lambda t: _as_message(t, flight),
+                "text_long": lambda t: _as_message(LONG_PREAMBLE + t, flight),
+            },
             lambda png: flight.image(png)[0],
         ),
     }
@@ -100,22 +124,25 @@ def run(seed: int, count: int) -> dict[str, Any]:
     for item in corpus:
         png = render_form_from(item)
         originals[item["index"]] = (png, _ocr(png))
-    for name, (text_fn, image_fn) in configs.items():
+    for name, (text_fns, image_fn) in configs.items():
         stats: dict[str, Any] = {
-            "text": {f: {"total": 0, "leaked": 0} for f in FIELDS},
-            "image": {f: {"readable": 0, "unreadable": 0, "leaked": 0} for f in FIELDS},
-            "misses": [],
+            path: {f: {"total": 0, "leaked": 0} for f in FIELDS} for path in text_fns
         }
+        stats["image"] = {
+            f: {"readable": 0, "unreadable": 0, "leaked": 0} for f in FIELDS
+        }
+        stats["misses"] = []
         for item in corpus:
             record = item["record"]
-            out = text_fn(item["text"])
-            for field in FIELDS:
-                stats["text"][field]["total"] += 1
-                if leaked(field, record[field], out):
-                    stats["text"][field]["leaked"] += 1
-                    stats["misses"].append(
-                        {"index": item["index"], "where": "text", "field": field}
-                    )
+            for path, text_fn in text_fns.items():
+                out = text_fn(item["text"])
+                for field in FIELDS:
+                    stats[path][field]["total"] += 1
+                    if leaked(field, record[field], out):
+                        stats[path][field]["leaked"] += 1
+                        stats["misses"].append(
+                            {"index": item["index"], "where": path, "field": field}
+                        )
             png, before = originals[item["index"]]
             after = _ocr(image_fn(png))
             for field in FIELDS:
@@ -128,7 +155,8 @@ def run(seed: int, count: int) -> dict[str, Any]:
                     stats["misses"].append(
                         {"index": item["index"], "where": "image", "field": field}
                     )
-        for where, key in (("text", "total"), ("image", "readable")):
+        wheres = [(path, "total") for path in text_fns] + [("image", "readable")]
+        for where, key in wheres:
             total = sum(v[key] for v in stats[where].values())
             missed = sum(v["leaked"] for v in stats[where].values())
             stats[where + "_recall"] = {
@@ -167,7 +195,7 @@ def main() -> None:
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     for name, stats in data["configs"].items():
-        print(name, "text", stats["text_recall"], "image", stats["image_recall"])
+        print(name, {k: v for k, v in stats.items() if k.endswith("_recall")})
 
 
 if __name__ == "__main__":

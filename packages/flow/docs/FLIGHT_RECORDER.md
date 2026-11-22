@@ -120,19 +120,22 @@ Each string goes through these steps:
    street addresses, numbers of five or more digits, and the value after a
    label such as `Name:`, `DOB:` or `MRN:`.
 3. The openadapt-privacy text scrubber (Presidio with spaCy
-   `en_core_web_sm`) runs, then the patterns again.
+   `en_core_web_sm`) runs on the whole string, then again on each line,
+   sentence and quoted string: Presidio can miss a name in a long prompt
+   that it finds in the same sentence alone. Then the patterns run again.
 
 Each image is redacted with openadapt-privacy's image redaction, then OCR'd
 with tesseract. Every word the patterns or the text scrubber remove from its
 OCR line is painted over too.
 
-Recall measured on 50 synthetic records (five fields each, written as text
-sent in a tool result, and as rendered form screenshots;
-[benchmark](../benchmark/flight/scrub_recall/README.md)): 246 of 250 fields
-in text (98.4%) and 245 of 249 readable fields in images (98.4%). Every miss
-was a name. Presidio alone, as the proxy used it before, caught 78.4% in
-text and 67.5% in images. The corpus is synthetic and clean, and it was
-written by the same author as the patterns; real screens will do worse.
+Recall measured on 50 synthetic records (five fields each;
+[benchmark](../benchmark/flight/scrub_recall/README.md)): 98.4% of fields
+in text sent as a tool result, 98.0% as plain message text, 97.6% as
+message text after a long agent preamble, and 98.4% of readable fields in
+rendered form screenshots. Every miss was a name. Presidio alone, as the
+proxy used it before, caught 77 to 78% in text and 67.5% in images. The
+corpus is synthetic and clean, and it was written by the same author as the
+patterns; real screens will do worse.
 
 The scrubber hides personal data from your agent too. The model can't read a
 patient name it is asked to check, or see what it typed into a field. Task

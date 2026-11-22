@@ -10,13 +10,57 @@
     "address"
   ],
   "leak_rule": "normalised value is a substring of the normalised output; a name also leaks when either part appears as a word",
-  "seconds": 62.4,
+  "seconds": 55.1,
   "configs": {
     "presidio": {
       "text": {
         "name": {
           "total": 50,
           "leaked": 25
+        },
+        "dob": {
+          "total": 50,
+          "leaked": 3
+        },
+        "mrn": {
+          "total": 50,
+          "leaked": 13
+        },
+        "phone": {
+          "total": 50,
+          "leaked": 2
+        },
+        "address": {
+          "total": 50,
+          "leaked": 11
+        }
+      },
+      "text_message": {
+        "name": {
+          "total": 50,
+          "leaked": 25
+        },
+        "dob": {
+          "total": 50,
+          "leaked": 3
+        },
+        "mrn": {
+          "total": 50,
+          "leaked": 13
+        },
+        "phone": {
+          "total": 50,
+          "leaked": 2
+        },
+        "address": {
+          "total": 50,
+          "leaked": 11
+        }
+      },
+      "text_long": {
+        "name": {
+          "total": 50,
+          "leaked": 28
         },
         "dob": {
           "total": 50,
@@ -70,6 +114,16 @@
         },
         {
           "index": 0,
+          "where": "text_message",
+          "field": "mrn"
+        },
+        {
+          "index": 0,
+          "where": "text_long",
+          "field": "mrn"
+        },
+        {
+          "index": 0,
           "where": "image",
           "field": "name"
         },
@@ -110,6 +164,36 @@
         },
         {
           "index": 2,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 2,
+          "where": "text_message",
+          "field": "mrn"
+        },
+        {
+          "index": 2,
+          "where": "text_message",
+          "field": "address"
+        },
+        {
+          "index": 2,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
+          "index": 2,
+          "where": "text_long",
+          "field": "mrn"
+        },
+        {
+          "index": 2,
+          "where": "text_long",
+          "field": "address"
+        },
+        {
+          "index": 2,
           "where": "image",
           "field": "mrn"
         },
@@ -130,6 +214,26 @@
         },
         {
           "index": 3,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 3,
+          "where": "text_message",
+          "field": "phone"
+        },
+        {
+          "index": 3,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
+          "index": 3,
+          "where": "text_long",
+          "field": "phone"
+        },
+        {
+          "index": 3,
           "where": "image",
           "field": "phone"
         },
@@ -140,6 +244,16 @@
         },
         {
           "index": 4,
+          "where": "text_message",
+          "field": "address"
+        },
+        {
+          "index": 4,
+          "where": "text_long",
+          "field": "address"
+        },
+        {
+          "index": 4,
           "where": "image",
           "field": "address"
         },
@@ -166,6 +280,36 @@
         {
           "index": 6,
           "where": "text",
+          "field": "address"
+        },
+        {
+          "index": 6,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 6,
+          "where": "text_message",
+          "field": "mrn"
+        },
+        {
+          "index": 6,
+          "where": "text_message",
+          "field": "address"
+        },
+        {
+          "index": 6,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
+          "index": 6,
+          "where": "text_long",
+          "field": "mrn"
+        },
+        {
+          "index": 6,
+          "where": "text_long",
           "field": "address"
         },
         {
@@ -185,6 +329,16 @@
         },
         {
           "index": 7,
+          "where": "text_message",
+          "field": "dob"
+        },
+        {
+          "index": 7,
+          "where": "text_long",
+          "field": "dob"
+        },
+        {
+          "index": 7,
           "where": "image",
           "field": "name"
         },
@@ -196,6 +350,26 @@
         {
           "index": 8,
           "where": "text",
+          "field": "mrn"
+        },
+        {
+          "index": 8,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 8,
+          "where": "text_message",
+          "field": "mrn"
+        },
+        {
+          "index": 8,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
+          "index": 8,
+          "where": "text_long",
           "field": "mrn"
         },
         {
@@ -221,6 +395,21 @@
         {
           "index": 9,
           "where": "text",
+          "field": "address"
+        },
+        {
+          "index": 9,
+          "where": "text_message",
+          "field": "address"
+        },
+        {
+          "index": 9,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
+          "index": 9,
+          "where": "text_long",
           "field": "address"
         },
         {
@@ -241,6 +430,16 @@
         {
           "index": 11,
           "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 11,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 11,
+          "where": "text_long",
           "field": "name"
         },
         {
@@ -275,6 +474,36 @@
         },
         {
           "index": 13,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 13,
+          "where": "text_message",
+          "field": "mrn"
+        },
+        {
+          "index": 13,
+          "where": "text_message",
+          "field": "address"
+        },
+        {
+          "index": 13,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
+          "index": 13,
+          "where": "text_long",
+          "field": "mrn"
+        },
+        {
+          "index": 13,
+          "where": "text_long",
+          "field": "address"
+        },
+        {
+          "index": 13,
           "where": "image",
           "field": "name"
         },
@@ -295,12 +524,32 @@
         },
         {
           "index": 14,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 14,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
+          "index": 14,
           "where": "image",
           "field": "name"
         },
         {
           "index": 15,
           "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 15,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 15,
+          "where": "text_long",
           "field": "name"
         },
         {
@@ -316,6 +565,26 @@
         {
           "index": 16,
           "where": "text",
+          "field": "address"
+        },
+        {
+          "index": 16,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 16,
+          "where": "text_message",
+          "field": "address"
+        },
+        {
+          "index": 16,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
+          "index": 16,
+          "where": "text_long",
           "field": "address"
         },
         {
@@ -341,6 +610,26 @@
         {
           "index": 17,
           "where": "text",
+          "field": "mrn"
+        },
+        {
+          "index": 17,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 17,
+          "where": "text_message",
+          "field": "mrn"
+        },
+        {
+          "index": 17,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
+          "index": 17,
+          "where": "text_long",
           "field": "mrn"
         },
         {
@@ -361,6 +650,16 @@
         {
           "index": 18,
           "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 18,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 18,
+          "where": "text_long",
           "field": "name"
         },
         {
@@ -374,8 +673,28 @@
           "field": "name"
         },
         {
+          "index": 19,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 19,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
           "index": 21,
           "where": "text",
+          "field": "dob"
+        },
+        {
+          "index": 21,
+          "where": "text_message",
+          "field": "dob"
+        },
+        {
+          "index": 21,
+          "where": "text_long",
           "field": "dob"
         },
         {
@@ -405,6 +724,26 @@
         },
         {
           "index": 22,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 22,
+          "where": "text_message",
+          "field": "address"
+        },
+        {
+          "index": 22,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
+          "index": 22,
+          "where": "text_long",
+          "field": "address"
+        },
+        {
+          "index": 22,
           "where": "image",
           "field": "name"
         },
@@ -425,6 +764,26 @@
         },
         {
           "index": 23,
+          "where": "text_message",
+          "field": "phone"
+        },
+        {
+          "index": 23,
+          "where": "text_message",
+          "field": "address"
+        },
+        {
+          "index": 23,
+          "where": "text_long",
+          "field": "phone"
+        },
+        {
+          "index": 23,
+          "where": "text_long",
+          "field": "address"
+        },
+        {
+          "index": 23,
           "where": "image",
           "field": "phone"
         },
@@ -445,6 +804,26 @@
         },
         {
           "index": 25,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 25,
+          "where": "text_message",
+          "field": "mrn"
+        },
+        {
+          "index": 25,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
+          "index": 25,
+          "where": "text_long",
+          "field": "mrn"
+        },
+        {
+          "index": 25,
           "where": "image",
           "field": "name"
         },
@@ -465,6 +844,26 @@
         },
         {
           "index": 27,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 27,
+          "where": "text_message",
+          "field": "address"
+        },
+        {
+          "index": 27,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
+          "index": 27,
+          "where": "text_long",
+          "field": "address"
+        },
+        {
+          "index": 27,
           "where": "image",
           "field": "address"
         },
@@ -475,12 +874,32 @@
         },
         {
           "index": 28,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 28,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
+          "index": 28,
           "where": "image",
           "field": "name"
         },
         {
           "index": 29,
           "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 29,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 29,
+          "where": "text_long",
           "field": "name"
         },
         {
@@ -497,6 +916,11 @@
           "index": 30,
           "where": "image",
           "field": "address"
+        },
+        {
+          "index": 31,
+          "where": "text_long",
+          "field": "name"
         },
         {
           "index": 31,
@@ -516,6 +940,26 @@
         {
           "index": 32,
           "where": "text",
+          "field": "address"
+        },
+        {
+          "index": 32,
+          "where": "text_message",
+          "field": "mrn"
+        },
+        {
+          "index": 32,
+          "where": "text_message",
+          "field": "address"
+        },
+        {
+          "index": 32,
+          "where": "text_long",
+          "field": "mrn"
+        },
+        {
+          "index": 32,
+          "where": "text_long",
           "field": "address"
         },
         {
@@ -541,6 +985,16 @@
         {
           "index": 34,
           "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 34,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 34,
+          "where": "text_long",
           "field": "name"
         },
         {
@@ -571,6 +1025,16 @@
         {
           "index": 36,
           "where": "text",
+          "field": "mrn"
+        },
+        {
+          "index": 36,
+          "where": "text_message",
+          "field": "mrn"
+        },
+        {
+          "index": 36,
+          "where": "text_long",
           "field": "mrn"
         },
         {
@@ -591,6 +1055,16 @@
         {
           "index": 37,
           "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 37,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 37,
+          "where": "text_long",
           "field": "name"
         },
         {
@@ -616,6 +1090,16 @@
         {
           "index": 39,
           "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 39,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 39,
+          "where": "text_long",
           "field": "name"
         },
         {
@@ -629,6 +1113,16 @@
           "field": "name"
         },
         {
+          "index": 40,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 40,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
           "index": 41,
           "where": "text",
           "field": "name"
@@ -641,6 +1135,36 @@
         {
           "index": 41,
           "where": "text",
+          "field": "address"
+        },
+        {
+          "index": 41,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 41,
+          "where": "text_message",
+          "field": "mrn"
+        },
+        {
+          "index": 41,
+          "where": "text_message",
+          "field": "address"
+        },
+        {
+          "index": 41,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
+          "index": 41,
+          "where": "text_long",
+          "field": "mrn"
+        },
+        {
+          "index": 41,
+          "where": "text_long",
           "field": "address"
         },
         {
@@ -660,12 +1184,32 @@
         },
         {
           "index": 42,
+          "where": "text_message",
+          "field": "dob"
+        },
+        {
+          "index": 42,
+          "where": "text_long",
+          "field": "dob"
+        },
+        {
+          "index": 42,
           "where": "image",
           "field": "mrn"
         },
         {
           "index": 43,
           "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 43,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 43,
+          "where": "text_long",
           "field": "name"
         },
         {
@@ -686,6 +1230,26 @@
         {
           "index": 44,
           "where": "text",
+          "field": "mrn"
+        },
+        {
+          "index": 44,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 44,
+          "where": "text_message",
+          "field": "mrn"
+        },
+        {
+          "index": 44,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
+          "index": 44,
+          "where": "text_long",
           "field": "mrn"
         },
         {
@@ -701,6 +1265,21 @@
         {
           "index": 45,
           "where": "text",
+          "field": "mrn"
+        },
+        {
+          "index": 45,
+          "where": "text_message",
+          "field": "mrn"
+        },
+        {
+          "index": 45,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
+          "index": 45,
+          "where": "text_long",
           "field": "mrn"
         },
         {
@@ -724,8 +1303,28 @@
           "field": "name"
         },
         {
+          "index": 48,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 48,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
           "index": 49,
           "where": "text",
+          "field": "mrn"
+        },
+        {
+          "index": 49,
+          "where": "text_message",
+          "field": "mrn"
+        },
+        {
+          "index": 49,
+          "where": "text_long",
           "field": "mrn"
         },
         {
@@ -744,6 +1343,16 @@
         "caught": 196,
         "recall": 0.784
       },
+      "text_message_recall": {
+        "fields": 250,
+        "caught": 196,
+        "recall": 0.784
+      },
+      "text_long_recall": {
+        "fields": 250,
+        "caught": 193,
+        "recall": 0.772
+      },
       "image_recall": {
         "fields": 249,
         "caught": 168,
@@ -755,6 +1364,50 @@
         "name": {
           "total": 50,
           "leaked": 4
+        },
+        "dob": {
+          "total": 50,
+          "leaked": 0
+        },
+        "mrn": {
+          "total": 50,
+          "leaked": 0
+        },
+        "phone": {
+          "total": 50,
+          "leaked": 0
+        },
+        "address": {
+          "total": 50,
+          "leaked": 0
+        }
+      },
+      "text_message": {
+        "name": {
+          "total": 50,
+          "leaked": 5
+        },
+        "dob": {
+          "total": 50,
+          "leaked": 0
+        },
+        "mrn": {
+          "total": 50,
+          "leaked": 0
+        },
+        "phone": {
+          "total": 50,
+          "leaked": 0
+        },
+        "address": {
+          "total": 50,
+          "leaked": 0
+        }
+      },
+      "text_long": {
+        "name": {
+          "total": 50,
+          "leaked": 6
         },
         "dob": {
           "total": 50,
@@ -812,8 +1465,28 @@
           "field": "name"
         },
         {
+          "index": 18,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 18,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
           "index": 19,
           "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 19,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 19,
+          "where": "text_long",
           "field": "name"
         },
         {
@@ -822,8 +1495,28 @@
           "field": "name"
         },
         {
+          "index": 25,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 25,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
           "index": 27,
           "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 27,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 27,
+          "where": "text_long",
           "field": "name"
         },
         {
@@ -837,6 +1530,21 @@
           "field": "name"
         },
         {
+          "index": 43,
+          "where": "text_message",
+          "field": "name"
+        },
+        {
+          "index": 43,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
+          "index": 45,
+          "where": "text_long",
+          "field": "name"
+        },
+        {
           "index": 45,
           "where": "image",
           "field": "name"
@@ -846,6 +1554,16 @@
         "fields": 250,
         "caught": 246,
         "recall": 0.984
+      },
+      "text_message_recall": {
+        "fields": 250,
+        "caught": 245,
+        "recall": 0.98
+      },
+      "text_long_recall": {
+        "fields": 250,
+        "caught": 244,
+        "recall": 0.976
       },
       "image_recall": {
         "fields": 249,

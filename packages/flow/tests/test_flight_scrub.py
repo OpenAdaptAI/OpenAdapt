@@ -271,3 +271,26 @@ def test_payload_values_have_no_exemptions():
     args = json.loads(out["input"][1]["arguments"])
     assert args["mrn"] == "<ID>"
     assert args["doc"]["type"] == "document"  # the word is not personal data
+
+
+class ShortOnlyScrubber(FakeScrubber):
+    """Finds the name only in a short string, as Presidio did with a long
+    computer-use prompt."""
+
+    def scrub_text(self, text: str, is_separated: bool = False) -> str:
+        return text if len(text) > 120 else text.replace(NAME, "<PERSON>")
+
+
+def test_a_name_in_a_long_prompt_is_scrubbed_piece_by_piece():
+    prompt = (
+        "You are a staff member using your organisation's web application. "
+        "Use only this app, and change nothing the task doesn't ask for.\n\n"
+        f"The task:\nFor {NAME}: open the patient and save.\n\nInputs:\n"
+        + json.dumps({"note": f"seen with {NAME}", "type": "Triage"}, indent=2)
+        + f'\nInline JSON: {{"patient": "{NAME}", "x": 1}} and more text '
+        + "padding " * 30
+    )
+    out = Scrub(ShortOnlyScrubber(), ocr_words=lambda image: []).text(prompt)
+    assert NAME not in out
+    assert out.count("<PERSON>") == 3
+    assert "The task:" in out and '"type": "Triage"' in out
