@@ -25,6 +25,11 @@ from openadapt_flow.tx.network_bridge import (
     load_network_capture_as_har,
     network_capture_entries_to_har,
 )
+from openadapt_flow.tx.read_probe import (
+    ReadRouteProbe,
+    ReadRouteReport,
+    probe_read_routes,
+)
 from openadapt_flow.tx.receipt import (
     TxReceiptPayload,
     audit_legacy_tx_receipt,
@@ -61,6 +66,7 @@ from openadapt_flow.tx.types import (
     salted_sha256,
 )
 from openadapt_flow.tx.wire_tap import (
+    ReadRoute,
     SessionWireTap,
     WirePolicy,
     dump_har,
@@ -117,6 +123,10 @@ __all__ = [
     "load_or_create_signing_key",
     "network_capture_entries_to_har",
     "probe_put_semantics",
+    "probe_read_routes",
+    "ReadRoute",
+    "ReadRouteProbe",
+    "ReadRouteReport",
     "salted_sha256",
     "strict_equal",
     "strip_readonly_volatile",

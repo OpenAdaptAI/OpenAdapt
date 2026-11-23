@@ -129,7 +129,8 @@ class LearnedExcuse(BaseModel):
 
 
 class LearnedFrame(BaseModel):
-    """``frame.learned``: the excuses a person approved from a proposal."""
+    """``frame.learned``: the excuses a person approved from a proposal, or
+    that a read-only probe observed (``source: read_only_probe``)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -138,6 +139,11 @@ class LearnedFrame(BaseModel):
     proposal_sha256: str
     approved_by: str = Field(min_length=1)
     approved_at: str = Field(min_length=1)
+    #: ``approval``: a person approved the learner's proposal from checked
+    #: writes. ``read_only_probe``: rows the app moved while the agent sent
+    #: only read-only requests (``learn_probe``); the same relation rules
+    #: apply at check time.
+    source: Literal["approval", "read_only_probe"] = "approval"
 
     @field_validator("proposal_sha256")
     @classmethod

@@ -8,6 +8,12 @@
 // choice the stop doesn't offer, changes nothing, and this page shows the
 // refusal as it came.
 //
+// An exception card is any agent's run asking a person (a one-time code
+// prompt, a dialog in the way, a sign-in partway through, a stall, a
+// possible duplicate, an ambiguous record, a task it can't finish). It shows
+// the run's scrubbed summary and its closed choices, and is answered on its
+// own. A one-time code is typed in the live browser, never here.
+//
 // Answers are signed on the computer with the decision portal's approver
 // key. Two kinds of stop are view-only here: a waiting save is answered on
 // the Decisions page (the portal's own save approval), and turning "only ask
@@ -19,7 +25,7 @@
 
 const POLL_MS = 10000;
 const MAX_BATCH = 25;
-const PHONE_KINDS = new Set(["same_record", "confirm_save", "halted"]);
+const PHONE_KINDS = new Set(["same_record", "confirm_save", "halted", "exception"]);
 
 const store = window.sessionStorage;
 const state = {
@@ -437,7 +443,7 @@ function render() {
             className: "stops-warn",
             text: "Answers from this phone need the decision portal's approver key. Set it up on the computer. Until then, nothing here changes.",
           }),
-      evidence(card),
+      card.kind === "exception" ? null : evidence(card),
       choices(card),
       batchBlock(card),
     ]),

@@ -1,0 +1,21 @@
+{
+  "calls": [
+    {
+      "actions": [
+        {
+          "name": "left_click"
+        }
+      ],
+      "input_tokens": 4,
+      "output_tokens": 122,
+      "turn": 1
+    }
+  ],
+  "cost_usd": 0.1032,
+  "final_text": "Synthetic final text that must never be copied",
+  "finished": true,
+  "finished_at": 1792344093.0,
+  "model": "synthetic-model",
+  "model_calls": 7,
+  "started_at": 1792344051.0
+}

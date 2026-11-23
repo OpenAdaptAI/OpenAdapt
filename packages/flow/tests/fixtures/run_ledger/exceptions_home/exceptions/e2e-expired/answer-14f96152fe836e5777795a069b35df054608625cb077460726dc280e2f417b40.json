@@ -1,0 +1,13 @@
+{
+  "answer": "decline",
+  "approver_kind": "expiry",
+  "card_id": "sha256:14f96152fe836e5777795a069b35df054608625cb077460726dc280e2f417b40",
+  "decided_at": null,
+  "kind": "second_factor",
+  "opened_at": "2026-11-22T02:41:59.700707Z",
+  "public_key": null,
+  "reason": "expired",
+  "route": "registry",
+  "schema": "openadapt.exception-answer/v1",
+  "signature": null
+}

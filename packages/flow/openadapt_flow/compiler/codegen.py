@@ -117,6 +117,8 @@ def _step_call(step: Step) -> str:
         )
     if step.action is ActionKind.SWITCH_SURFACE:
         return f"    flow.switch_surface({step.surface!r})"
+    if step.action is ActionKind.SECOND_FACTOR:
+        return f"    flow.second_factor({step.one_time!r})  # from a person"
     raise ValueError(f"unknown action {step.action!r}")
 
 

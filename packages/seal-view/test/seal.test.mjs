@@ -102,3 +102,10 @@ describe('the page props', () => {
         expect(page.tamper.map((t) => t.id)).toEqual(['report-outcome', 'report-model-calls', 'seal-outcome'])
     })
 })
+
+it('a run awaiting its counterparty is never shown as saved and checked', async () => {
+    const { cardFor } = await import('../src/lib/sealSummary.mjs')
+    const card = cardFor('COMPLETED_UNVERIFIED', 'SAVED_AWAITING_CHECK')
+    expect(card.label).toBe('Awaiting counterparty confirmation')
+    expect(card.tone).not.toBe('ok')
+})

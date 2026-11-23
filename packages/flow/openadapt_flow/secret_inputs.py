@@ -79,6 +79,28 @@ def secret_env_vars(params: Sequence[str]) -> dict[str, str]:
     return keys
 
 
+def step_secret_text(step: Any, overrides: Mapping[str, str]) -> tuple[str, str | None]:
+    """A secret step's value from the environment: ``(text, None)`` or a refusal.
+
+    The value is never in the bundle or params. A missing value fails fast with
+    an actionable message instead of typing an empty string.
+    """
+    env_var = overrides.get(step.param or "") or secret_env_var(step.param or "")
+    text = os.environ.get(env_var, "")
+    if not step.param:
+        return "", (
+            f"Step '{step.id}' ({step.intent}) is marked secret but names no parameter"
+        )
+    if not text:
+        return "", (
+            f"Step '{step.id}' ({step.intent}) requires secret "
+            f"parameter '{step.param}', but the environment "
+            f"variable {env_var} is not set — export it with the "
+            "secret value and re-run"
+        )
+    return text, None
+
+
 def require_secret_sources(
     params: Mapping[str, Any], secret_params: Sequence[str]
 ) -> None:

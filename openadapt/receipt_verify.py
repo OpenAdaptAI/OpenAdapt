@@ -56,6 +56,8 @@ def _describe(result: Any, say: Say, indent: str = "  ") -> None:
     statement = result.statement or {}
     predicate = statement.get("predicate", {})
     reason = predicate.get("reason_code")
+    if reason == "awaiting_counterparty":
+        say(f"{indent}Awaiting counterparty confirmation: sent, not yet confirmed.")
     say(
         f"{indent}Outcome: {result.outcome}"
         + (f" ({reason})" if reason else "")

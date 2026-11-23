@@ -7297,7 +7297,8 @@
        "wait",
        "scroll",
        "read",
-       "switch_surface"
+       "switch_surface",
+       "second_factor"
       ],
       "title": "ActionKind",
       "type": "string"
@@ -9372,7 +9373,8 @@
        "wait",
        "scroll",
        "read",
-       "switch_surface"
+       "switch_surface",
+       "second_factor"
       ],
       "title": "ActionKind",
       "type": "string"
@@ -11883,6 +11885,22 @@
         "default": null,
         "description": "TYPE/SELECT_OPTION steps only: the receiving field's best available label, captured PASSIVELY at record time (DOM <label>/aria-label/placeholder/name for web; accessibility label for native where the seam exists; nearby-OCR text as a compile-time fallback). Pure evidence for the compile-time parameter-proposal pass and the operator confirm review -- NEVER read at replay, and never a source of silent parameterization: a label-derived parameter proposal is always gated behind operator confirmation (see compiler.annotate.FieldLabelAnnotator).",
         "title": "Field Label"
+       },
+       "one_time": {
+        "anyOf": [
+         {
+          "enum": [
+           "code",
+           "approval"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "One Time"
        },
        "native_selection": {
         "anyOf": [
@@ -19934,7 +19952,8 @@
        "wait",
        "scroll",
        "read",
-       "switch_surface"
+       "switch_surface",
+       "second_factor"
       ],
       "title": "ActionKind",
       "type": "string"
@@ -20029,7 +20048,8 @@
        "wait",
        "scroll",
        "read",
-       "switch_surface"
+       "switch_surface",
+       "second_factor"
       ],
       "title": "ActionKind",
       "type": "string"
@@ -21447,7 +21467,8 @@
        "wait",
        "scroll",
        "read",
-       "switch_surface"
+       "switch_surface",
+       "second_factor"
       ],
       "title": "ActionKind",
       "type": "string"
@@ -24208,6 +24229,22 @@
         "default": null,
         "description": "TYPE/SELECT_OPTION steps only: the receiving field's best available label, captured PASSIVELY at record time (DOM <label>/aria-label/placeholder/name for web; accessibility label for native where the seam exists; nearby-OCR text as a compile-time fallback). Pure evidence for the compile-time parameter-proposal pass and the operator confirm review -- NEVER read at replay, and never a source of silent parameterization: a label-derived parameter proposal is always gated behind operator confirmation (see compiler.annotate.FieldLabelAnnotator).",
         "title": "Field Label"
+       },
+       "one_time": {
+        "anyOf": [
+         {
+          "enum": [
+           "code",
+           "approval"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "One Time"
        },
        "native_selection": {
         "anyOf": [
@@ -28338,7 +28375,8 @@
        "wait",
        "scroll",
        "read",
-       "switch_surface"
+       "switch_surface",
+       "second_factor"
       ],
       "title": "ActionKind",
       "type": "string"
@@ -36669,7 +36707,8 @@
        "wait",
        "scroll",
        "read",
-       "switch_surface"
+       "switch_surface",
+       "second_factor"
       ],
       "title": "ActionKind",
       "type": "string"
@@ -39327,6 +39366,22 @@
         "description": "TYPE/SELECT_OPTION steps only: the receiving field's best available label, captured PASSIVELY at record time (DOM <label>/aria-label/placeholder/name for web; accessibility label for native where the seam exists; nearby-OCR text as a compile-time fallback). Pure evidence for the compile-time parameter-proposal pass and the operator confirm review -- NEVER read at replay, and never a source of silent parameterization: a label-derived parameter proposal is always gated behind operator confirmation (see compiler.annotate.FieldLabelAnnotator).",
         "title": "Field Label"
        },
+       "one_time": {
+        "anyOf": [
+         {
+          "enum": [
+           "code",
+           "approval"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "One Time"
+       },
        "native_selection": {
         "anyOf": [
          {
@@ -40696,7 +40751,8 @@
        "wait",
        "scroll",
        "read",
-       "switch_surface"
+       "switch_surface",
+       "second_factor"
       ],
       "title": "ActionKind",
       "type": "string"
@@ -43997,6 +44053,22 @@
       "default": null,
       "description": "TYPE/SELECT_OPTION steps only: the receiving field's best available label, captured PASSIVELY at record time (DOM <label>/aria-label/placeholder/name for web; accessibility label for native where the seam exists; nearby-OCR text as a compile-time fallback). Pure evidence for the compile-time parameter-proposal pass and the operator confirm review -- NEVER read at replay, and never a source of silent parameterization: a label-derived parameter proposal is always gated behind operator confirmation (see compiler.annotate.FieldLabelAnnotator).",
       "title": "Field Label"
+     },
+     "one_time": {
+      "anyOf": [
+       {
+        "enum": [
+         "code",
+         "approval"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "One Time"
      },
      "native_selection": {
       "anyOf": [
@@ -50195,7 +50267,8 @@
        "wait",
        "scroll",
        "read",
-       "switch_surface"
+       "switch_surface",
+       "second_factor"
       ],
       "title": "ActionKind",
       "type": "string"
@@ -52667,6 +52740,22 @@
         "default": null,
         "description": "TYPE/SELECT_OPTION steps only: the receiving field's best available label, captured PASSIVELY at record time (DOM <label>/aria-label/placeholder/name for web; accessibility label for native where the seam exists; nearby-OCR text as a compile-time fallback). Pure evidence for the compile-time parameter-proposal pass and the operator confirm review -- NEVER read at replay, and never a source of silent parameterization: a label-derived parameter proposal is always gated behind operator confirmation (see compiler.annotate.FieldLabelAnnotator).",
         "title": "Field Label"
+       },
+       "one_time": {
+        "anyOf": [
+         {
+          "enum": [
+           "code",
+           "approval"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "One Time"
        },
        "native_selection": {
         "anyOf": [
@@ -55266,7 +55355,8 @@
        "wait",
        "scroll",
        "read",
-       "switch_surface"
+       "switch_surface",
+       "second_factor"
       ],
       "title": "ActionKind",
       "type": "string"
@@ -60832,6 +60922,22 @@
         "default": null,
         "description": "TYPE/SELECT_OPTION steps only: the receiving field's best available label, captured PASSIVELY at record time (DOM <label>/aria-label/placeholder/name for web; accessibility label for native where the seam exists; nearby-OCR text as a compile-time fallback). Pure evidence for the compile-time parameter-proposal pass and the operator confirm review -- NEVER read at replay, and never a source of silent parameterization: a label-derived parameter proposal is always gated behind operator confirmation (see compiler.annotate.FieldLabelAnnotator).",
         "title": "Field Label"
+       },
+       "one_time": {
+        "anyOf": [
+         {
+          "enum": [
+           "code",
+           "approval"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "One Time"
        },
        "native_selection": {
         "anyOf": [
