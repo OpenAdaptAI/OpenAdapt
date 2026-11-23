@@ -1034,7 +1034,11 @@ def write_and_verify(
         # verification step fails, so a failed result never remains consumable.
         _read_regular(Path(artifact.raw_271_file))
         _read_regular(Path(artifact.normalized_file))
-        verifier = DocumentHashVerifier(root, glob=f"{TRANSACTIONS_DIR}/tx_*/*")
+        # This process wrote the transaction files, so the hash check is the
+        # acting session's own read, not a system-of-record read.
+        verifier = DocumentHashVerifier(
+            root, glob=f"{TRANSACTIONS_DIR}/tx_*/*", producer="acting_session"
+        )
         before = verifier.capture_pre_state()
         verdicts = [verifier.verify(effect, before) for effect in artifact.effects]
         if not all_confirmed(verdicts):
