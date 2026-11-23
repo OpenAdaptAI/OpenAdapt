@@ -159,6 +159,8 @@ class EgressRecorder:
 
         if component is None:
             return None
+        if isinstance(component, _Wrapped) and component._recorder is self:
+            return component  # already wrapped here: never ledger a send twice
         if isinstance(component, FallbackGrounder):
             return FallbackGrounder([self.wrap(kind, g) for g in component._grounders])
         off_box = component_may_egress(component)

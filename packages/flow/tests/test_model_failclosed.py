@@ -643,17 +643,70 @@ def test_ledger_names_the_openai_compatible_host(tmp_path, monkeypatch):
     assert line["destination"] == "vlm.example.test"
 
 
+def test_component_assigned_after_first_access_is_ledgered_and_counted(
+    tmp_path, monkeypatch
+):
+    # Assigning a model component after construction (and after the recorder
+    # is in use) wraps it exactly as __init__ does, so its send is counted.
+    monkeypatch.delenv("OPENADAPT_FLOW_EGRESS_LEDGER", raising=False)
+    rp = Replayer(FakeBackend(), allow_model_grounding=True)
+    rp._egress.bind_run(tmp_path / "runs" / "r1")
+    rp._egress.step_id = "s1"
+    assert rp._screenshots_may_leave_box is False
+    inner = _OffBoxGrounder()
+    rp.grounder = inner
+    rp.grounder = rp.grounder  # re-assigning a wrapped component never double-wraps
+    assert rp.grounder is not inner
+    assert rp._screenshots_may_leave_box is True
+    assert rp.grounder.locate(_png(), "open the chart") is None
+    assert inner.calls == 1
+    (line,) = _ledger_lines(tmp_path / "runs" / "egress-ledger.jsonl")
+    assert line["component"] == "grounder" and line["destination"] == "vlm.internal"
+    result = StepResult(step_id="s1", intent="open the chart", ok=False)
+    rp._egress.drain(result)
+    assert result.grounder_calls == 1
+
+    vlm = _OffBoxIdentityVLM("same")
+    rp.identity_vlm = vlm
+    verifier = _Verifier("yes")
+    rp.state_verifier = verifier
+    crop = _crop_png()
+    rp.identity_vlm.same_or_different(crop, crop)
+    rp.state_verifier.holds(crop, "x")
+    assert (vlm.calls, verifier.calls) == (1, 1)
+    assert len(_ledger_lines(tmp_path / "runs" / "egress-ledger.jsonl")) == 3
+
+
+def test_off_box_component_assigned_without_opt_in_is_refused(monkeypatch):
+    monkeypatch.delenv("OPENADAPT_FLOW_EGRESS_LEDGER", raising=False)
+    rp = Replayer(FakeBackend())
+    with pytest.raises(EgressNotPermitted):
+        rp.grounder = _OffBoxGrounder()
+    with pytest.raises(EgressNotPermitted):
+        rp.identity_vlm = _OffBoxIdentityVLM("same")
+    with pytest.raises(EgressNotPermitted):
+        rp.state_verifier = _Verifier("yes")
+    assert rp.grounder is None and rp._screenshots_may_leave_box is False
+
+    # A replayer built without __init__ has no opt-in either.
+    bare = Replayer.__new__(Replayer)
+    with pytest.raises(EgressNotPermitted):
+        bare.grounder = _OffBoxGrounder()
+
+
 def test_replayer_built_without_init_still_ledgers_off_box_calls(monkeypatch):
-    # A Replayer made with __new__ gets its recorder on first use, and the
-    # components already set are wrapped, so nothing is sent unrecorded.
+    # A Replayer made with __new__ gets its recorder on first use, and an
+    # opted-in component assigned to it is wrapped, so nothing is sent
+    # unrecorded (here: no ledger is bound, so the send is refused).
     from openadapt_flow.runtime.model_egress import LEDGER_ENV
 
     monkeypatch.delenv(LEDGER_ENV, raising=False)
     rp = Replayer.__new__(Replayer)
-    inner = _OffBoxGrounder()
-    rp.grounder = inner
     recorder = rp._egress
     assert rp._egress is recorder
+    rp.allow_model_grounding = True
+    inner = _OffBoxGrounder()
+    rp.grounder = inner
     assert rp.grounder is not inner
-    assert rp.grounder.locate(b"frame", "click Save") is None  # no ledger bound
+    assert rp.grounder.locate(b"frame", "click Save") is None
     assert inner.calls == 0

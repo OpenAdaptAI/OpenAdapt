@@ -478,23 +478,79 @@ class Replayer(
     def _egress(self) -> EgressRecorder:
         """The egress recorder, created on first use when ``__init__`` didn't run.
 
-        A replayer built without ``__init__`` (``Replayer.__new__``, a stubbed
-        constructor) never wrapped its model components. The components set
-        at the first access are wrapped then, before the recorder is returned;
-        one assigned after that is not. An off-box call made outside ``run`` is
-        refused (an unbound recorder admits nothing unless
-        ``OPENADAPT_FLOW_EGRESS_LEDGER`` names a ledger).
+        Every assignment to ``grounder``, ``identity_vlm`` or
+        ``state_verifier`` goes through :meth:`_set_model_component`, which
+        wraps the component with this recorder. A replayer built without
+        ``__init__`` (``Replayer.__new__``, a stubbed constructor) therefore
+        gets its recorder here, at the first assignment or call. An unbound
+        recorder admits nothing unless ``OPENADAPT_FLOW_EGRESS_LEDGER`` names
+        a ledger, so an off-box call made outside ``run`` is refused.
         """
 
         recorder = self.__dict__.get("_egress_recorder")
         if recorder is None:
             recorder = EgressRecorder()
             self.__dict__["_egress_recorder"] = recorder
-            for kind in ("grounder", "identity_vlm", "state_verifier"):
-                component = self.__dict__.get(kind)
-                if component is not None:
-                    self.__dict__[kind] = recorder.wrap(kind, component)
         return recorder
+
+    def _get_model_component(self, kind: str) -> Any:
+        try:
+            return self.__dict__["_model_" + kind]
+        except KeyError:
+            raise AttributeError(kind) from None
+
+    def _set_model_component(self, kind: str, component: Any) -> None:
+        """Wrap ``component`` for recording and store it, at any time.
+
+        Assigning a component after construction gets the same treatment as
+        passing it to ``__init__``: one that may send a frame off the box
+        needs ``allow_model_grounding`` (else :class:`EgressNotPermitted`),
+        marks the run as one whose screenshots may leave the box, and is
+        ledgered and counted on every call.
+        """
+
+        from openadapt_flow.runtime.grounder import component_may_egress
+
+        if component_may_egress(component):
+            if not self.__dict__.get("allow_model_grounding", False):
+                raise EgressNotPermitted(
+                    f"refusing to wire an egress-capable {kind} that could "
+                    "send a screenshot off the box: pass "
+                    "allow_model_grounding=True (CLI: --allow-model-grounding) "
+                    "to opt in explicitly."
+                )
+            self.__dict__["_screenshots_may_leave_box"] = True
+        self.__dict__["_model_" + kind] = self._egress.wrap(kind, component)
+
+    @property
+    def grounder(self) -> Any:
+        """The grounder, wrapped for egress recording on every assignment."""
+
+        return self._get_model_component("grounder")
+
+    @grounder.setter
+    def grounder(self, component: Any) -> None:
+        self._set_model_component("grounder", component)
+
+    @property
+    def identity_vlm(self) -> Any:
+        """The identity VLM, wrapped for egress recording on every assignment."""
+
+        return self._get_model_component("identity_vlm")
+
+    @identity_vlm.setter
+    def identity_vlm(self, component: Any) -> None:
+        self._set_model_component("identity_vlm", component)
+
+    @property
+    def state_verifier(self) -> Any:
+        """The state verifier, wrapped for egress recording on every assignment."""
+
+        return self._get_model_component("state_verifier")
+
+    @state_verifier.setter
+    def state_verifier(self, component: Any) -> None:
+        self._set_model_component("state_verifier", component)
 
     # Display-scale state (see __init__); class defaults keep partially
     # constructed replayers, as some tests build them, on recorded geometry.
@@ -642,7 +698,7 @@ class Replayer(
         self.vision: Any = vision
         # Frames sent off the box are ledgered and counted by placement.
         self.__dict__["_egress_recorder"] = EgressRecorder()
-        self.grounder = self._egress.wrap("grounder", grounder)
+        self.grounder = grounder
         # Whether the deterministic structural ACTION rung (top of the ladder)
         # may run. True (default) = product behavior: on a structure-bearing
         # backend, resolve the recorded target as a DOM/UIA element. Set False
@@ -835,7 +891,7 @@ class Replayer(
         # OFF by default like the grounder: an IdentityVLM verifier or None.
         # When None the ladder runs structured-text + pixel-compare + OCR +
         # halt with no model dependency.
-        self.identity_vlm = self._egress.wrap("identity_vlm", identity_vlm)
+        self.identity_vlm = identity_vlm
         # Optional complete known-ID list (runtime.known_ids): lifts a
         # look-alike identifier abstain only when no listed twin exists.
         self.known_ids = known_ids
@@ -850,7 +906,7 @@ class Replayer(
         # it is asked about a render-drift-sensitive postcondition that failed
         # deterministically. Its "yes" is a hint for the person who reviews
         # the halt; the postcondition stays failed.
-        self.state_verifier = self._egress.wrap("state_verifier", state_verifier)
+        self.state_verifier = state_verifier
         self.poll_interval_s = poll_interval_s
         if not math.isfinite(settle_readiness_timeout_s) or (
             settle_readiness_timeout_s <= 0
