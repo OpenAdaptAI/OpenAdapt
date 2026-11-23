@@ -113,9 +113,10 @@
   "openadapt-flow known-ids": "usage: openadapt-flow known-ids [-h] {confirm,status} ...\n\npositional arguments:\n  {confirm,status}\n    confirm         Confirm the export's source and completeness (recorded)\n    status          Would replay accept this list now?\n\noptions:\n  -h, --help        show this help message and exit\n\nAlso available as: openadapt-flow verify known-ids\n",
   "openadapt-flow known-ids confirm": "usage: openadapt-flow known-ids confirm [-h] [--column COLUMN] [--confirmation CONFIRMATION]\n                                        --source SOURCE [--by BY] [--exported-at EXPORTED_AT]\n                                        [--yes]\n                                        export\n\npositional arguments:\n  export                Export file (CSV/TSV, JSON, or one ID per line)\n\noptions:\n  -h, --help            show this help message and exit\n  --column COLUMN       Identifier column (CSV/TSV)\n  --confirmation CONFIRMATION\n                        Confirmation record (default: EXPORT.confirmation.json)\n  --source SOURCE       Which system and export this is\n  --by BY               Who confirms (default: your user name)\n  --exported-at EXPORTED_AT\n                        When the export was taken (default: file time)\n  --yes                 Skip the interactive prompt\n\nAlso available as: openadapt-flow verify known-ids confirm\n",
   "openadapt-flow known-ids status": "usage: openadapt-flow known-ids status [-h] [--column COLUMN] [--confirmation CONFIRMATION]\n                                       [--max-age-hours MAX_AGE_HOURS]\n                                       export\n\npositional arguments:\n  export                Export file (CSV/TSV, JSON, or one ID per line)\n\noptions:\n  -h, --help            show this help message and exit\n  --column COLUMN       Identifier column (CSV/TSV)\n  --confirmation CONFIRMATION\n                        Confirmation record (default: EXPORT.confirmation.json)\n  --max-age-hours MAX_AGE_HOURS\n\nAlso available as: openadapt-flow verify known-ids status\n",
-  "openadapt-flow learn": "usage: openadapt-flow learn [-h] {collect,propose,approve} ...\n\npositional arguments:\n  {collect,propose,approve}\n    collect             run a shadow and record each check\n    propose             write a proposal a person can read\n    approve             write the approved excuses into contracts\n\noptions:\n  -h, --help            show this help message and exit\n\nAlso available as: openadapt-flow teach --learn\n",
+  "openadapt-flow learn": "usage: openadapt-flow learn [-h] {collect,propose,approve,probe} ...\n\npositional arguments:\n  {collect,propose,approve,probe}\n    collect             run a shadow and record each check\n    propose             write a proposal a person can read\n    approve             write the approved excuses into contracts\n    probe               learn per-request bookkeeping from read-only requests (no approval)\n\noptions:\n  -h, --help            show this help message and exit\n\nAlso available as: openadapt-flow teach --learn\n",
   "openadapt-flow learn approve": "usage: openadapt-flow learn approve [-h] --by BY [--config CONFIG] [--manifest MANIFEST]\n                                    [--contract KIND=PATH] [--kind KIND] [--reject ID]\n                                    proposal\n\npositional arguments:\n  proposal\n\noptions:\n  -h, --help            show this help message and exit\n  --by BY               who approves (recorded)\n  --config CONFIG       the shadow config's routes\n  --manifest MANIFEST   a generator manifest.yaml\n  --contract KIND=PATH  a contract file for a kind (repeatable)\n  --kind KIND           approve only these\n  --reject ID           leave out E<n>\n\nAlso available as: openadapt-flow teach --learn approve\n",
   "openadapt-flow learn collect": "usage: openadapt-flow learn collect [-h] --config CONFIG [--out OUT] [--actor ACTOR]\n                                    [--listen LISTEN] [--until-idle SECONDS]\n\noptions:\n  -h, --help            show this help message and exit\n  --config CONFIG       openadapt.shadow/v1 YAML (sql)\n  --out OUT             folder for episodes.jsonl\n  --actor ACTOR         the agent's user id in the app\n  --listen LISTEN\n  --until-idle SECONDS\n\nAlso available as: openadapt-flow teach --learn collect\n",
+  "openadapt-flow learn probe": "usage: openadapt-flow learn probe [-h] --manifest MANIFEST --kind KIND --values VALUES\n                                  [--extra EXTRA] --actor ACTOR --base-url BASE_URL\n                                  [--headers-env HEADERS_ENV] [--get PATH] [--head PATH]\n                                  [--rounds ROUNDS] [--users USERS] [--user-column TABLE.COLUMN]\n                                  [--schema SCHEMA] [--read READ] [--out OUT] [--apply]\n\noptions:\n  -h, --help            show this help message and exit\n  --manifest MANIFEST   the generator's manifest.yaml\n  --kind KIND           the kind whose contract frames the probe\n  --values VALUES       YAML: one task's values for that kind\n  --extra EXTRA         YAML: extra parameters (actor ids)\n  --actor ACTOR         the agent's user id in the app\n  --base-url BASE_URL\n  --headers-env HEADERS_ENV\n                        environment variable holding the agent's request headers as JSON\n  --get PATH\n  --head PATH\n  --rounds ROUNDS\n  --users USERS         TABLE or TABLE.KEY (default: derived)\n  --user-column TABLE.COLUMN\n  --schema SCHEMA\n  --read READ\n  --out OUT\n  --apply               write the excuses into every contract the manifest lists\n\nAlso available as: openadapt-flow teach --learn probe\n",
   "openadapt-flow learn propose": "usage: openadapt-flow learn propose [-h] --episodes EPISODES [--users USERS]\n                                    [--user-column TABLE.COLUMN] [--schema SCHEMA] [--read READ]\n                                    [--k K] [--n N] [--out OUT]\n\noptions:\n  -h, --help            show this help message and exit\n  --episodes EPISODES   episodes.jsonl\n  --users USERS         the users table, as TABLE or TABLE.KEY (without it only the write's own\n                        rows can be excused)\n  --user-column TABLE.COLUMN\n                        a column holding a user id, confirmed by you (repeatable)\n  --schema SCHEMA       schema.json from `generate schema`\n  --read READ           read.yaml: read the schema's foreign keys live\n  --k K\n  --n N\n  --out OUT\n\nAlso available as: openadapt-flow teach --learn propose\n",
   "openadapt-flow ledger": "usage: openadapt-flow ledger [-h] [--home HOME] {add,list,show,summary,export,push} ...\n\npositional arguments:\n  {add,list,show,summary,export,push}\n    add                 Read a run's files and append its row\n    list                List rows\n    show                Show one row\n    summary             Counts per outcome, minutes, cost, duration\n    export              Write value-free rows as JSONL\n    push                Send value-free run summaries to OpenAdapt Cloud (OPENADAPT_API_KEY)\n\noptions:\n  -h, --help            show this help message and exit\n  --home HOME           OpenAdapt home (default: $OPENADAPT_HOME, else ~/.openadapt)\n\nAlso available as: openadapt-flow inspect ledger\n",
   "openadapt-flow ledger add": "usage: openadapt-flow ledger add [-h] [--task-type TASK_TYPE] [--task-id TASK_ID]\n                                 [--run-ref RUN_REF] [--approvals APPROVALS] [--config CONFIG]\n                                 run\n\npositional arguments:\n  run                   Run directory (or one run record file)\n\noptions:\n  -h, --help            show this help message and exit\n  --task-type TASK_TYPE\n                        Operator label, e.g. intake\n  --task-id TASK_ID     Override the task id\n  --run-ref RUN_REF     The run's exception-queue reference (exceptions serve --run-ref); its\n                        cards and answers are read from $OPENADAPT_HOME/exceptions/REF\n  --approvals APPROVALS\n                        A P7 fallback's item-approval folder root (wrap-dispatch --fallback-\n                        approvals); each gate's request and answer times are read from\n                        DIR/<fallback request id>/item-approval\n  --config CONFIG       The run's guard task JSON or verify.yaml, when not in RUN_DIR; its field\n                        names may leave in export and push (repeatable)\n\nAlso available as: openadapt-flow inspect ledger add\n",
@@ -208,7 +209,7 @@
   "openadapt-flow receipt keys export": "usage: openadapt-flow receipt keys export [-h] dir\n\npositional arguments:\n  dir\n\noptions:\n  -h, --help  show this help message and exit\n\nAlso available as: openadapt-flow verify receipt keys export\n",
   "openadapt-flow receipt verify": "usage: openadapt-flow receipt verify [-h] --issuer-key ISSUER_KEY [--log-key LOG_KEY] [--no-log]\n                                     [--evidence EVIDENCE] [--require-anchor] [--json]\n                                     file\n\npositional arguments:\n  file                  a .receipt.cbor file\n\noptions:\n  -h, --help            show this help message and exit\n  --issuer-key ISSUER_KEY\n                        the issuer's public key (PEM or key entry)\n  --log-key LOG_KEY     the transparency log's public key (PEM)\n  --no-log              skip the log inclusion check (the output says so)\n  --evidence EVIDENCE   the private evidence file, to check the commitment opens\n  --require-anchor      also require a Rekor anchor (FILE.anchor.json), checked offline\n  --json                print the result as JSON\n\nAlso available as: openadapt-flow verify receipt verify\n",
   "openadapt-flow reconcile": "usage: openadapt-flow reconcile [-h] --spec SPEC [--param NAME=VALUE] [--worklist WORKLIST]\n                                [--now NOW] [--out OUT]\n\noptions:\n  -h, --help           show this help message and exit\n  --spec SPEC          an openadapt.reconcile/v1 YAML\n  --param NAME=VALUE   the unit's identity (repeatable)\n  --worklist WORKLIST  JSON Lines: one unit's parameters per line\n  --now NOW            judge due times at this ISO 8601 time\n  --out OUT            write the JSON reply here too\n\nAlso available as: openadapt-flow verify reconcile\n",
-  "openadapt-flow record": "usage: openadapt-flow record [-h] [--url URL] [--browser-cdp-endpoint URL]\n                             [--browser-page-url URL] --out OUT [--secret FIELD] [--param FIELD]\n                             [--identifier FIELD|X,Y,W,H] [--task TASK] [--until-cmd CMD]\n                             [--window OWNER] [--window-title SUBSTRING] [--headless]\n                             [--profile {demo,standard,regulated}] [--no-encrypt]\n                             [--capture-network] [--with-check] [--verify [VERIFY_YAML]]\n                             [--surface NAME=KIND:WINDOW] [--yes]\n                             [--backend {web,windows,macos,linux,rdp,citrix}] [--agent-url URL]\n                             [--macos-app APP] [--macos-window-title TITLE] [--linux-app APP]\n                             [--linux-window-title TITLE] [--linux-allow-physical-input]\n                             [--rdp-host HOST] [--rdp-window OWNER] [--rdp-window-title TITLE]\n                             [--rdp-readiness-text TEXT] [--allow-surface-override]\n\noptions:\n  -h, --help            show this help message and exit\n  --url URL             URL of the app to record against (required for --backend web)\n  --browser-cdp-endpoint URL\n                        Attach the web recorder to an already-running local Chromium browser\n                        through its loopback DevTools endpoint (for example,\n                        http://127.0.0.1:9222). The recorder selects a tab on the --url origin and\n                        does not launch, navigate, or close the browser.\n  --browser-page-url URL\n                        Exact current URL of the existing tab to record. Use this with --browser-\n                        cdp-endpoint when more than one open tab has the --url origin.\n  --out OUT             Recording output directory\n  --secret FIELD        Mark a typed field (by name or id) as a SECRET; its value is never\n                        persisted and is injected at replay from OPENADAPT_FLOW_SECRET_<FIELD>.\n                        input[type=password] is always treated as secret. Repeatable.\n  --param FIELD         Record a typed value as a PARAMETER; its demonstrated value becomes the\n                        default, overridable at replay with --param. For --backend web, FIELD is\n                        the field name/id. For --backend windows/macos/linux/rdp/citrix (capture\n                        has no field identity), use NAME=VALUE \u2014 the typed value equal to VALUE is\n                        marked as parameter NAME. Repeatable.\n  --identifier FIELD|X,Y,W,H\n                        Mark the RECORD-IDENTIFYING region (patient banner / MRN field) so the\n                        compiler crops its pixels (anchor.identifier_crop) and the pixel-compare\n                        identity tier arms on remote-display/pixel replays (Citrix/RDP). For\n                        --backend web, FIELD is the field name/id (repeatable; the first marked\n                        field present at each click contributes its rect). For --backend\n                        windows/macos/linux/rdp/citrix (a pixel capture has no field identity),\n                        give the region once as X,Y,W,H in recording pixels. Unmarked recordings\n                        still get automatic crops on identity-armed pixel steps (from the OCR\n                        identity band).\n  --task TASK           Task description for a desktop (--backend windows/macos/linux/rdp/citrix)\n                        capture session (stored in the recording metadata).\n  --until-cmd CMD       Run CMD on an interval while recording. Exit 0 stops the record. The\n                        command is not captured as clicks. Ctrl-C still stops. A non-zero exit\n                        keeps recording (probe failure is not done).\n  --window OWNER        Scope a desktop capture (--backend windows/macos/linux/rdp/citrix) to ONE\n                        window, recorded in that window's OWN pixel space (owner-app substring,\n                        e.g. --window Parallels / --window 'Citrix Workspace'). Closes the\n                        coordinate-space gap with the pixel (rdp) replay surface. Combine with\n                        --window-title to disambiguate. Supported on macOS and Windows hosts;\n                        refused elsewhere. Ignored (rejected) for --backend web.\n  --window-title SUBSTRING\n                        Title substring to disambiguate the --window target when the owner app has\n                        multiple windows (case-insensitive; may be used with or without --window).\n                        The resolved title is stored in the LOCAL recording metadata only.\n  --headless            Run the browser headless (scripted/CI recording)\n  --profile {demo,standard,regulated}\n                        Recording posture (Section 5). standard/regulated REQUIRE an explicit\n                        --backend (no implicit browser default in production). demo may omit\n                        --backend: it defaults to capture on this OS (macos/windows/linux), or to\n                        the browser when --url is given, and prints a visible notice. Omitted: the\n                        same permissive pre-profile default.\n  --no-encrypt          Write a web recording in plaintext (recorded in ~/.openadapt/plaintext-at-\n                        rest.jsonl). Web recordings are encrypted by default, under the configured\n                        key or a local one; refused under OPENADAPT_FLOW_AT_REST=strict\n  --capture-network     Web only: also keep the page's requests (network.jsonl; cookies, passwords\n                        and session tokens withheld). compile then proposes an API step for a save\n                        it can repeat as one request; a person admits it with 'api admit'\n  --with-check          After the save, also show how you'd check it saved (reload or search\n                        again, open the record). Flow then asks which fields show the values you\n                        typed and writes check.json\n  --verify [VERIFY_YAML]\n                        Read the system of record through the verifier: section of this file\n                        (rest, sql, fhir, graphql or file) before and after the recording, and\n                        propose the checks for what changed in verify.proposed.yaml. Both reads go\n                        to sor_snapshots.json (mode 0600). With no file, look the record up after\n                        you save: that look-up becomes the proposed check\n  --surface NAME=KIND:WINDOW\n                        With no --backend or --url, record follows you across windows on its own.\n                        Use --surface to name the windows yourself instead, or --surface auto with\n                        --url to add automatic windows to a browser recording. Declare each\n                        desktop or remote window the person works in (repeatable). KIND is\n                        windows, macos, linux, rdp or citrix; WINDOW is part of that window's\n                        title (on macOS, the app name). Repeat a NAME to add another window to it,\n                        such as its dialog. With --url the browser leads; otherwise the first\n                        --surface does. Each change of window becomes a checked switch step. An\n                        action in a window you did not declare stops the recording. See\n                        docs/MULTI_SURFACE.md.\n  --yes                 Keep a cross-window recording's surfaces without asking. Without a\n                        terminal and without --yes, the recording is kept unconfirmed and compile\n                        refuses it until confirm-surfaces is run.\n  --backend {web,windows,macos,linux,rdp,citrix}\n                        Backend to drive: 'web' (Playwright/Chromium), 'windows' (native Windows\n                        via the WAA HTTP agent at replay), 'macos' (one native Mac app window),\n                        'linux' (one exact AT-SPI app window at replay), 'rdp' (pixel-only network\n                        or local remote desktop), or 'citrix' (the local Citrix Workspace window;\n                        its owner defaults by host OS and a configured rdp_window may override\n                        it). Overrides backend.kind from --config. Omit on record to capture on\n                        this OS, or pass --url to record the browser.\n  --agent-url URL       Base URL of the in-guest Windows (WAA) agent for --backend windows (e.g.\n                        http://localhost:5001). Replay/run only: desktop record refuses this flag\n                        because local Capture cannot bind to a WAA endpoint. Overrides\n                        backend.agent_url.\n  --macos-app APP       Owner application for --backend macos (e.g. MyApp). During record this\n                        scopes Capture to that local app window; during replay/run it overrides\n                        backend.macos_app.\n  --macos-window-title TITLE\n                        Window-title substring for --backend macos. Ambiguous matches are refused.\n                        During record this scopes Capture; during replay/run it overrides\n                        backend.macos_window_title.\n  --linux-app APP       Exact AT-SPI application name for --backend linux (e.g. gedit). Replay/run\n                        only: the current Capture path records the local Linux desktop and refuses\n                        this flag. Overrides backend.linux_app.\n  --linux-window-title TITLE\n                        Exact top-level window title for --backend linux. Zero or multiple matches\n                        are refused. Replay/run only: the current Capture path records the local\n                        Linux desktop and refuses this flag. Overrides backend.linux_window_title.\n  --linux-allow-physical-input\n                        Explicitly allow window-bound X11 pointer/keyboard fallback for --backend\n                        linux replay/run when native AT-SPI actuation is unavailable. Record\n                        refuses this replay-only flag.\n  --rdp-host HOST       RDP host/IP for --backend rdp (network RDP via FreeRDP). Overrides\n                        backend.rdp_host. Replay/run only: record cannot connect local Capture to\n                        this endpoint. Record inside the remote session, or capture a local client\n                        with --window/--rdp-window.\n  --rdp-window OWNER    Exact local remote-display window owner/process for --backend rdp or\n                        citrix. On Windows this is the process basename (for example wfica32); on\n                        macOS it is the app owner (for example 'Citrix Viewer'). During record it\n                        also scopes local Capture to that window; during replay/run it overrides\n                        backend.rdp_window.\n  --rdp-window-title TITLE\n                        Exact local remote-display window title used to disambiguate multiple\n                        matching RDP/Citrix client windows. During record it also scopes local\n                        Capture; during replay/run it overrides backend.rdp_window_title.\n  --rdp-readiness-text TEXT\n                        Stable text that must be visible in the current remote frame before input.\n                        Required for governed Citrix `run`; overrides backend.rdp_readiness_text.\n  --allow-surface-override\n                        Explicitly permit executing a workflow on a DIFFERENT surface than the one\n                        it was recorded/qualified on (Workflow.surface). Off by default: a cross-\n                        surface run is refused. The override is recorded in the run report\n                        (surface_override) as compatibility evidence; it is never silent.\n\nRelated operations (immediately after the task name): confirm-surfaces, narration, sections\n",
+  "openadapt-flow record": "usage: openadapt-flow record [-h] [--url URL] [--browser-cdp-endpoint URL]\n                             [--browser-page-url URL] --out OUT [--secret FIELD] [--param FIELD]\n                             [--identifier FIELD|X,Y,W,H] [--task TASK] [--until-cmd CMD]\n                             [--window OWNER] [--window-title SUBSTRING] [--headless]\n                             [--profile {demo,standard,regulated}] [--no-encrypt]\n                             [--capture-network] [--capture-network-bodies {minimized,raw}]\n                             [--with-check] [--verify [VERIFY_YAML]] [--surface NAME=KIND:WINDOW]\n                             [--yes] [--backend {web,windows,macos,linux,rdp,citrix}]\n                             [--agent-url URL] [--macos-app APP] [--macos-window-title TITLE]\n                             [--linux-app APP] [--linux-window-title TITLE]\n                             [--linux-allow-physical-input] [--rdp-host HOST] [--rdp-window OWNER]\n                             [--rdp-window-title TITLE] [--rdp-readiness-text TEXT]\n                             [--allow-surface-override]\n\noptions:\n  -h, --help            show this help message and exit\n  --url URL             URL of the app to record against (required for --backend web)\n  --browser-cdp-endpoint URL\n                        Attach the web recorder to an already-running local Chromium browser\n                        through its loopback DevTools endpoint (for example,\n                        http://127.0.0.1:9222). The recorder selects a tab on the --url origin and\n                        does not launch, navigate, or close the browser.\n  --browser-page-url URL\n                        Exact current URL of the existing tab to record. Use this with --browser-\n                        cdp-endpoint when more than one open tab has the --url origin.\n  --out OUT             Recording output directory\n  --secret FIELD        Mark a typed field (by name or id) as a SECRET; its value is never\n                        persisted and is injected at replay from OPENADAPT_FLOW_SECRET_<FIELD>.\n                        input[type=password] is always treated as secret. Repeatable.\n  --param FIELD         Record a typed value as a PARAMETER; its demonstrated value becomes the\n                        default, overridable at replay with --param. For --backend web, FIELD is\n                        the field name/id. For --backend windows/macos/linux/rdp/citrix (capture\n                        has no field identity), use NAME=VALUE \u2014 the typed value equal to VALUE is\n                        marked as parameter NAME. Repeatable.\n  --identifier FIELD|X,Y,W,H\n                        Mark the RECORD-IDENTIFYING region (patient banner / MRN field) so the\n                        compiler crops its pixels (anchor.identifier_crop) and the pixel-compare\n                        identity tier arms on remote-display/pixel replays (Citrix/RDP). For\n                        --backend web, FIELD is the field name/id (repeatable; the first marked\n                        field present at each click contributes its rect). For --backend\n                        windows/macos/linux/rdp/citrix (a pixel capture has no field identity),\n                        give the region once as X,Y,W,H in recording pixels. Unmarked recordings\n                        still get automatic crops on identity-armed pixel steps (from the OCR\n                        identity band).\n  --task TASK           Task description for a desktop (--backend windows/macos/linux/rdp/citrix)\n                        capture session (stored in the recording metadata).\n  --until-cmd CMD       Run CMD on an interval while recording. Exit 0 stops the record. The\n                        command is not captured as clicks. Ctrl-C still stops. A non-zero exit\n                        keeps recording (probe failure is not done).\n  --window OWNER        Scope a desktop capture (--backend windows/macos/linux/rdp/citrix) to ONE\n                        window, recorded in that window's OWN pixel space (owner-app substring,\n                        e.g. --window Parallels / --window 'Citrix Workspace'). Closes the\n                        coordinate-space gap with the pixel (rdp) replay surface. Combine with\n                        --window-title to disambiguate. Supported on macOS and Windows hosts;\n                        refused elsewhere. Ignored (rejected) for --backend web.\n  --window-title SUBSTRING\n                        Title substring to disambiguate the --window target when the owner app has\n                        multiple windows (case-insensitive; may be used with or without --window).\n                        The resolved title is stored in the LOCAL recording metadata only.\n  --headless            Run the browser headless (scripted/CI recording)\n  --profile {demo,standard,regulated}\n                        Recording posture (Section 5). standard/regulated REQUIRE an explicit\n                        --backend (no implicit browser default in production). demo may omit\n                        --backend: it defaults to capture on this OS (macos/windows/linux), or to\n                        the browser when --url is given, and prints a visible notice. Omitted: the\n                        same permissive pre-profile default.\n  --no-encrypt          Write a web recording in plaintext (recorded in ~/.openadapt/plaintext-at-\n                        rest.jsonl). Web recordings are encrypted by default, under the configured\n                        key or a local one; refused under OPENADAPT_FLOW_AT_REST=strict\n  --capture-network     Web only: also keep the page's requests (network.jsonl; cookies, passwords\n                        and session tokens withheld; bodies minimized, see --capture-network-\n                        bodies). With raw bodies, compile proposes an API step for a save it can\n                        repeat as one request; a person admits it with 'api admit'\n  --capture-network-bodies {minimized,raw}\n                        With --capture-network: 'minimized' (default) keeps only the --param and\n                        --identifier values of each body and a keyed hash of the rest; 'raw' keeps\n                        the redacted bodies, which API step proposals and debugging need, and\n                        requires an encrypted recording\n  --with-check          After the save, also show how you'd check it saved (reload or search\n                        again, open the record). Flow then asks which fields show the values you\n                        typed and writes check.json\n  --verify [VERIFY_YAML]\n                        Read the system of record through the verifier: section of this file\n                        (rest, sql, fhir, graphql or file) before and after the recording, and\n                        propose the checks for what changed in verify.proposed.yaml. Both reads go\n                        to sor_snapshots.json (mode 0600). With no file, look the record up after\n                        you save: that look-up becomes the proposed check\n  --surface NAME=KIND:WINDOW\n                        With no --backend or --url, record follows you across windows on its own.\n                        Use --surface to name the windows yourself instead, or --surface auto with\n                        --url to add automatic windows to a browser recording. Declare each\n                        desktop or remote window the person works in (repeatable). KIND is\n                        windows, macos, linux, rdp or citrix; WINDOW is part of that window's\n                        title (on macOS, the app name). Repeat a NAME to add another window to it,\n                        such as its dialog. With --url the browser leads; otherwise the first\n                        --surface does. Each change of window becomes a checked switch step. An\n                        action in a window you did not declare stops the recording. See\n                        docs/MULTI_SURFACE.md.\n  --yes                 Keep a cross-window recording's surfaces without asking. Without a\n                        terminal and without --yes, the recording is kept unconfirmed and compile\n                        refuses it until confirm-surfaces is run.\n  --backend {web,windows,macos,linux,rdp,citrix}\n                        Backend to drive: 'web' (Playwright/Chromium), 'windows' (native Windows\n                        via the WAA HTTP agent at replay), 'macos' (one native Mac app window),\n                        'linux' (one exact AT-SPI app window at replay), 'rdp' (pixel-only network\n                        or local remote desktop), or 'citrix' (the local Citrix Workspace window;\n                        its owner defaults by host OS and a configured rdp_window may override\n                        it). Overrides backend.kind from --config. Omit on record to capture on\n                        this OS, or pass --url to record the browser.\n  --agent-url URL       Base URL of the in-guest Windows (WAA) agent for --backend windows (e.g.\n                        http://localhost:5001). Replay/run only: desktop record refuses this flag\n                        because local Capture cannot bind to a WAA endpoint. Overrides\n                        backend.agent_url.\n  --macos-app APP       Owner application for --backend macos (e.g. MyApp). During record this\n                        scopes Capture to that local app window; during replay/run it overrides\n                        backend.macos_app.\n  --macos-window-title TITLE\n                        Window-title substring for --backend macos. Ambiguous matches are refused.\n                        During record this scopes Capture; during replay/run it overrides\n                        backend.macos_window_title.\n  --linux-app APP       Exact AT-SPI application name for --backend linux (e.g. gedit). Replay/run\n                        only: the current Capture path records the local Linux desktop and refuses\n                        this flag. Overrides backend.linux_app.\n  --linux-window-title TITLE\n                        Exact top-level window title for --backend linux. Zero or multiple matches\n                        are refused. Replay/run only: the current Capture path records the local\n                        Linux desktop and refuses this flag. Overrides backend.linux_window_title.\n  --linux-allow-physical-input\n                        Explicitly allow window-bound X11 pointer/keyboard fallback for --backend\n                        linux replay/run when native AT-SPI actuation is unavailable. Record\n                        refuses this replay-only flag.\n  --rdp-host HOST       RDP host/IP for --backend rdp (network RDP via FreeRDP). Overrides\n                        backend.rdp_host. Replay/run only: record cannot connect local Capture to\n                        this endpoint. Record inside the remote session, or capture a local client\n                        with --window/--rdp-window.\n  --rdp-window OWNER    Exact local remote-display window owner/process for --backend rdp or\n                        citrix. On Windows this is the process basename (for example wfica32); on\n                        macOS it is the app owner (for example 'Citrix Viewer'). During record it\n                        also scopes local Capture to that window; during replay/run it overrides\n                        backend.rdp_window.\n  --rdp-window-title TITLE\n                        Exact local remote-display window title used to disambiguate multiple\n                        matching RDP/Citrix client windows. During record it also scopes local\n                        Capture; during replay/run it overrides backend.rdp_window_title.\n  --rdp-readiness-text TEXT\n                        Stable text that must be visible in the current remote frame before input.\n                        Required for governed Citrix `run`; overrides backend.rdp_readiness_text.\n  --allow-surface-override\n                        Explicitly permit executing a workflow on a DIFFERENT surface than the one\n                        it was recorded/qualified on (Workflow.surface). Off by default: a cross-\n                        surface run is refused. The override is recorded in the run report\n                        (surface_override) as compatibility evidence; it is never silent.\n\nRelated operations (immediately after the task name): confirm-surfaces, narration, sections\n",
   "openadapt-flow redact-report": "usage: openadapt-flow redact-report [-h] [--policy POLICY] [--json] run_dir\n\npositional arguments:\n  run_dir          Run directory holding report.json\n\noptions:\n  -h, --help       show this help message and exit\n  --policy POLICY  Redaction policy JSON (default OPENADAPT_FLOW_REPORT_REDACTION, else\n                   $OPENADAPT_HOME/report-redaction.json, else the built-in list)\n  --json           Print the result as JSON\n\nAlso available as: openadapt-flow inspect redact-report\n",
   "openadapt-flow repair": "usage: openadapt-flow repair [-h]\n                             {register,list,show,review,campaign,approve,stage,canary,canary-record,rollback,status,revert,standard-changes,clear-hold}\n                             ...\n\npositional arguments:\n  {register,list,show,review,campaign,approve,stage,canary,canary-record,rollback,status,revert,standard-changes,clear-hold}\n    register            Register a (prior, proposed) bundle pair as a repair candidate; refuses\n                        (fail closed) any contract weakening without a new qualification revision\n    list                List candidates and their lifecycle states\n    show                Show a candidate's reviewable diff, campaigns, and state\n    review              Record a human review of the candidate's diff\n    campaign            Run a campaign against the candidate's evidence frames: 'replay' (healthy\n                        drift battery must all pass) or 'fault' (ambiguity / wrong-entity / stale-\n                        target / dialog / verifier-failure frames must all be REFUSED)\n    approve             HUMAN approval gating promotion; refuses unless the diff was reviewed and\n                        BOTH campaigns passed. Binds the exact bundle hashes\n    stage               Copy BOTH bundles into the store by content hash and re-verify them byte-\n                        exact (prior too, so rollback is always local)\n    canary              Atomically activate the staged bundle in CANARY mode: a bounded first-N-\n                        runs window with per-run verification before full active\n    canary-record       Record one canary run from its run directory; any silent-incorrect or\n                        verification regression auto-reverts to the prior bundle\n    rollback            One-command rollback: restore the prior bundle hash as the active pointer\n    status              Show the atomic active-bundle pointer and its lineage\n    revert              Undo a repair that applied without a person: the prior bundle is active\n                        again, and repairs of that step go to a person\n    standard-changes    List the repairs that applied without a person (the daily digest)\n    clear-hold          Let repairs of a step apply without a person again after a revert\n\noptions:\n  -h, --help            show this help message and exit\n",
   "openadapt-flow repair approve": "usage: openadapt-flow repair approve [-h] [--approved-by APPROVED_BY] [--non-interactive]\n                                     [--store STORE]\n                                     candidate_id\n\npositional arguments:\n  candidate_id\n\noptions:\n  -h, --help            show this help message and exit\n  --approved-by APPROVED_BY\n                        Approver identity recorded on the approval (default: the invoking OS user;\n                        REQUIRED with --non-interactive)\n  --non-interactive     Skip the confirmation prompt (automation). Requires an explicit\n                        --approved-by human identity\n  --store STORE         Repair store directory (candidates, staged bundles by hash, and the atomic\n                        ACTIVE.json pointer). Default: repair-store/\n",
@@ -10482,6 +10483,7 @@
    "commands": {
     "approve": [],
     "collect": [],
+    "probe": [],
     "propose": []
    },
    "exclusive": []
@@ -10689,6 +10691,251 @@
      ],
      "required": false,
      "type": "float"
+    }
+   ],
+   "commands": {},
+   "exclusive": []
+  },
+  "openadapt-flow learn probe": {
+   "arguments": [
+    {
+     "action": "_HelpAction",
+     "choices": null,
+     "default": "==SUPPRESS==",
+     "dest": "help",
+     "help": "show this help message and exit",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "-h",
+      "--help"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "manifest",
+     "help": "the generator's manifest.yaml",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--manifest"
+     ],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "kind",
+     "help": "the kind whose contract frames the probe",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--kind"
+     ],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "values",
+     "help": "YAML: one task's values for that kind",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--values"
+     ],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "extra",
+     "help": "YAML: extra parameters (actor ids)",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--extra"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "actor",
+     "help": "the agent's user id in the app",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--actor"
+     ],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "base_url",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--base-url"
+     ],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "headers_env",
+     "help": "environment variable holding the agent's request headers as JSON",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--headers-env"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_AppendAction",
+     "choices": null,
+     "default": [],
+     "dest": "get",
+     "help": null,
+     "metavar": "PATH",
+     "nargs": null,
+     "options": [
+      "--get"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_AppendAction",
+     "choices": null,
+     "default": [],
+     "dest": "head",
+     "help": null,
+     "metavar": "PATH",
+     "nargs": null,
+     "options": [
+      "--head"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": 3,
+     "dest": "rounds",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--rounds"
+     ],
+     "required": false,
+     "type": "int"
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "users",
+     "help": "TABLE or TABLE.KEY (default: derived)",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--users"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_AppendAction",
+     "choices": null,
+     "default": [],
+     "dest": "user_column",
+     "help": null,
+     "metavar": "TABLE.COLUMN",
+     "nargs": null,
+     "options": [
+      "--user-column"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "schema",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--schema"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "read",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--read"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": "learn",
+     "dest": "out",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--out"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreTrueAction",
+     "choices": null,
+     "default": false,
+     "dest": "apply",
+     "help": "write the excuses into every contract the manifest lists",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "--apply"
+     ],
+     "required": false,
+     "type": null
     }
    ],
    "commands": {},
@@ -18711,11 +18958,28 @@
      "choices": null,
      "default": false,
      "dest": "capture_network",
-     "help": "Web only: also keep the page's requests (network.jsonl; cookies, passwords and session tokens withheld). compile then proposes an API step for a save it can repeat as one request; a person admits it with 'api admit'",
+     "help": "Web only: also keep the page's requests (network.jsonl; cookies, passwords and session tokens withheld; bodies minimized, see --capture-network-bodies). With raw bodies, compile proposes an API step for a save it can repeat as one request; a person admits it with 'api admit'",
      "metavar": null,
      "nargs": 0,
      "options": [
       "--capture-network"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": [
+      "minimized",
+      "raw"
+     ],
+     "default": "minimized",
+     "dest": "capture_network_bodies",
+     "help": "With --capture-network: 'minimized' (default) keeps only the --param and --identifier values of each body and a keyed hash of the rest; 'raw' keeps the redacted bodies, which API step proposals and debugging need, and requires an encrypted recording",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--capture-network-bodies"
      ],
      "required": false,
      "type": null
