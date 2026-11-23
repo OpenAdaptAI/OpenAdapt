@@ -963,7 +963,7 @@ def build_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
 
     from openadapt_flow import learn_entities
 
-    learn_entities.add_parser(steps)
+    learn_entities.register(steps)
     return p
 
 

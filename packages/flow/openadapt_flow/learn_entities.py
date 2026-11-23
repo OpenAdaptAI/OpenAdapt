@@ -213,7 +213,7 @@ def apply(proposal: Mapping[str, Any], faults: Path, by: str) -> Any:
 # -- CLI -----------------------------------------------------------------------------
 
 
-def add_parser(steps: argparse._SubParsersAction) -> None:
+def register(steps: argparse._SubParsersAction) -> None:
     e = steps.add_parser(
         "entities",
         help="scope the whole-database frame to the setup's business entities",
@@ -277,7 +277,7 @@ def cmd_entities(args: argparse.Namespace) -> int:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:  # pragma: no cover
-    ap = argparse.ArgumentParser(prog="learn-entities")
-    add_parser(ap.add_subparsers(dest="step", required=True))
+    ap = argparse.ArgumentParser(prog="learn-entities", allow_abbrev=False)
+    register(ap.add_subparsers(dest="step", required=True))
     args = ap.parse_args(argv)
     return int(args.func(args))
