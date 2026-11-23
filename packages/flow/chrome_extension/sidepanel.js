@@ -80,6 +80,9 @@
       return { text: 'Sign-In Paused', status: 'auth_paused' };
     }
     if (!state) {
+      if (isRecording) {
+        return { text: 'Recording', status: 'running' };
+      }
       return { text: 'Idle', status: 'idle' };
     }
     if (state.outcome === 'verified_done') {
@@ -651,6 +654,7 @@
       state: state || null,
       authPause,
       popupState,
+      isRecording,
     });
     if (serialized === lastRenderedStateKey) {
       return;
@@ -783,6 +787,7 @@
     void syncState({ forceScroll: true });
     setInterval(() => {
       if (document.visibilityState === 'visible') {
+        void syncRecordingState();
         void syncState({ forceScroll: false });
       }
     }, 1500);

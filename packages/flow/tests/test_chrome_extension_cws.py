@@ -936,7 +936,9 @@ def test_sidepanel_wires_auth_pause_and_popup_return_controls() -> None:
     assert "Return to Parent Tab" in js
 
 
-def test_secret_redaction_covers_api_keys_tokens_cards_ssn_cvv_across_all_three_layers() -> None:
+def test_secret_redaction_covers_api_keys_tokens_cards_ssn_cvv_across_all_three_layers() -> (
+    None
+):
     from openadapt_flow.extension_evidence import is_secret_field
 
     content_path = str(EXT_DIR / "content.js")
@@ -1010,13 +1012,17 @@ console.log(JSON.stringify({{ contentMatches, autoMatches, redactedBody: redacte
     out = _run_node(script)
     for name in sensitive_names:
         assert out["contentMatches"][name] is True, f"content.js missed {name}"
-        assert out["redactedBody"][name] == "<secret>", f"network_redact.js missed {name}"
+        assert out["redactedBody"][name] == "<secret>", (
+            f"network_redact.js missed {name}"
+        )
     for ac in ("cc-number", "cc-csc", "cc-exp"):
         assert out["autoMatches"][ac] is True, f"content.js autocomplete missed {ac}"
     assert out["redactedBody"]["applicant"] == "Jane Doe"
 
 
-def test_auth_pause_works_in_recording_mode_and_persists_across_password_to_mfa_navigation() -> None:
+def test_auth_pause_works_in_recording_mode_and_persists_across_password_to_mfa_navigation() -> (
+    None
+):
     bg_path = str(EXT_DIR / "background.js")
     script = f"""
 const fs = require('fs');
@@ -1107,3 +1113,211 @@ function send(msg, sender) {{
     assert out["afterNav"]["authPause"]["paused"] is True
     assert out["resumed"]["resumed"] is True
     assert out["afterResume"]["authPause"] is None
+
+
+def test_e2e_content_to_background_recording_only_and_sso_popup_auth_pause() -> None:
+    """Drive real content.js -> background.js messaging in both recording-only and SSO popup modes."""
+    from openadapt_flow.extension_evidence import is_secret_field
+
+    for secret_name in ("code", "sms_code", "Card Number", "API Key"):
+        assert is_secret_field(name=secret_name) is True, (
+            f"Python ingest must redact {secret_name!r}"
+        )
+
+    bg_path = str(EXT_DIR / "background.js")
+    content_path = str(EXT_DIR / "content.js")
+    sidepanel_path = str(EXT_DIR / "sidepanel.js")
+    script = f"""
+const fs = require('fs');
+const vm = require('vm');
+
+const bgListeners = [];
+const tabCreatedListeners = [];
+const contentListenersByTab = new Map();
+const tabMessages = [];
+
+const chromeBg = {{
+  runtime: {{
+    lastError: null,
+    getURL: (p) => 'chrome-extension://testext/' + p,
+    onMessage: {{ addListener: (fn) => bgListeners.push(fn) }},
+    onInstalled: {{ addListener: () => {{}} }},
+    connectNative: () => {{ throw new Error('offline'); }},
+  }},
+  action: {{
+    onClicked: {{ addListener: () => {{}} }},
+    setBadgeText: () => {{}},
+    setBadgeBackgroundColor: () => {{}},
+    setTitle: () => {{}},
+  }},
+  sidePanel: {{ setPanelBehavior: () => Promise.resolve() }},
+  storage: {{
+    session: {{
+      get: (_k, cb) => cb && cb({{}}),
+      set: (_o, cb) => cb && cb(),
+      remove: (_k, cb) => cb && cb(),
+    }},
+  }},
+  tabs: {{
+    onCreated: {{ addListener: (fn) => tabCreatedListeners.push(fn) }},
+    onUpdated: {{ addListener: () => {{}} }},
+    onRemoved: {{ addListener: () => {{}} }},
+    query: (_q, cb) => cb([{{ id: 10, windowId: 1 }}, {{ id: 99, windowId: 2 }}]),
+    get: async (id) => ({{ id, windowId: id === 10 ? 1 : 2 }}),
+    sendMessage: (tabId, msg, cb) => {{
+      tabMessages.push({{ tabId, msg }});
+      const fn = contentListenersByTab.get(tabId);
+      if (fn) fn(msg, {{}}, cb || (() => {{}}));
+      else if (cb) cb();
+    }},
+  }},
+  windows: {{
+    onRemoved: {{ addListener: () => {{}} }},
+    onFocusChanged: {{ addListener: () => {{}} }},
+  }},
+  webRequest: {{
+    onBeforeRequest: {{ addListener: () => {{}} }},
+    onBeforeSendHeaders: {{ addListener: () => {{}} }},
+    onCompleted: {{ addListener: () => {{}} }},
+    onErrorOccurred: {{ addListener: () => {{}} }},
+  }},
+}};
+
+const bgCtx = vm.createContext({{
+  chrome: chromeBg,
+  globalThis: {{}},
+  importScripts: () => {{}},
+  URL, Date, Map, Set, Promise, setTimeout, clearTimeout,
+}});
+bgCtx.globalThis = bgCtx;
+vm.runInContext(fs.readFileSync({json.dumps(bg_path)}, 'utf8'), bgCtx);
+
+function sendToBg(msg, sender) {{
+  return new Promise((resolve) => bgListeners[0](msg, sender, resolve));
+}}
+
+function mountContentTab(tabId, inputs) {{
+  let observerStarted = 0;
+  let observerStopped = 0;
+  class FakeMutationObserver {{
+    constructor(cb) {{ this._cb = cb; }}
+    observe() {{ observerStarted += 1; }}
+    disconnect() {{ observerStopped += 1; }}
+  }}
+  const contentCtx = vm.createContext({{
+    chrome: {{
+      runtime: {{
+        onMessage: {{ addListener: (fn) => contentListenersByTab.set(tabId, fn) }},
+        sendMessage: (msg, cb) => {{
+          sendToBg(msg, {{ tab: {{ id: tabId }}, frameId: 0, origin: 'https://sso.example.com' }})
+            .then((resp) => {{ if (cb) cb(resp); }});
+        }},
+      }},
+    }},
+    window: {{
+      addEventListener: () => {{}},
+      removeEventListener: () => {{}},
+      top: null,
+      location: {{ href: 'https://sso.example.com/login', origin: 'https://sso.example.com' }},
+    }},
+    document: {{
+      addEventListener: () => {{}},
+      removeEventListener: () => {{}},
+      readyState: 'complete',
+      documentElement: {{}},
+      querySelectorAll: (sel) => (sel === 'input' ? inputs : []),
+    }},
+    location: {{ href: 'https://sso.example.com/login', origin: 'https://sso.example.com' }},
+    MutationObserver: FakeMutationObserver,
+    URL, Date, Map, Set, setTimeout, clearTimeout,
+  }});
+  contentCtx.window.top = contentCtx.window;
+  contentCtx.globalThis = contentCtx;
+  vm.runInContext(fs.readFileSync({json.dumps(content_path)}, 'utf8'), contentCtx);
+  return {{
+    ctx: contentCtx,
+    get observerStarted() {{ return observerStarted; }},
+    get observerStopped() {{ return observerStopped; }},
+  }};
+}}
+
+function mkInput(attrs) {{
+  return {{
+    nodeType: 1,
+    tagName: 'INPUT',
+    type: attrs.type || 'text',
+    getAttribute: (k) => (k in attrs ? attrs[k] : null),
+  }};
+}}
+
+(async () => {{
+  const sp = {{ url: 'chrome-extension://testext/sidepanel.html' }};
+
+  // Scenario 1: Recording-only mode (no Co-Pilot run) on tab 10 with password input
+  const tab10 = mountContentTab(10, [mkInput({{ type: 'password', name: 'pass' }})]);
+  await new Promise((r) => setTimeout(r, 20));
+  const c10 = tab10.ctx.__openadaptExtensionContent;
+  const secretChecks = {{
+    code: c10.isSecretField(mkInput({{ name: 'code' }})),
+    smsCode: c10.isSecretField(mkInput({{ name: 'sms_code' }})),
+    cardNumberSpace: c10.isSecretField(mkInput({{ 'aria-label': 'Card Number' }})),
+    apiKeySpace: c10.isSecretField(mkInput({{ 'aria-label': 'API Key' }})),
+  }};
+
+  // User clicks Start Recording in side panel -> background broadcasts SET_RECORDING(true)
+  await sendToBg({{ type: 'SET_RECORDING', active: true }}, sp);
+  await new Promise((r) => setTimeout(r, 30));
+  const recOnlyAuth = await sendToBg({{ type: 'COPILOT_GET_AUTH_STATE', tabId: 10 }}, sp);
+  const tab10Paused = c10.authPaused;
+  const tab10ObserverStarted = tab10.observerStarted;
+
+  // Scenario 2: Tracked SSO popup tab 99 opened from active run tab 10 (even with recording OFF!)
+  await sendToBg({{ type: 'SET_RECORDING', active: false }}, sp);
+  await sendToBg({{ type: 'COPILOT_AUTH_RESUME', tabId: 10 }}, sp);
+  bgCtx.__openadaptExtensionBackground.setActiveRunTab(10);
+  await bgCtx.__openadaptExtensionBackground.trackOpenedChildTab({{
+    id: 99,
+    openerTabId: 10,
+    windowId: 2,
+    url: 'https://idp.example.com/oauth',
+    active: true,
+  }});
+  // Mount content.js in tab 99 AFTER trackOpenedChildTab -> CONTENT_READY gets runActive:true
+  const tab99 = mountContentTab(99, [mkInput({{ type: 'text', name: 'mfa_code', autocomplete: 'one-time-code' }})]);
+  await new Promise((r) => setTimeout(r, 30));
+  const popupAuth = await sendToBg({{ type: 'COPILOT_GET_AUTH_STATE', tabId: 99 }}, sp);
+  const tab99Paused = tab99.ctx.__openadaptExtensionContent.authPaused;
+  const tab99ObserverStarted = tab99.observerStarted;
+
+  // Scenario 3: Verify sidepanel.js keeps Recording badge and polls syncRecordingState
+  const sidepanelSrc = fs.readFileSync({json.dumps(sidepanel_path)}, 'utf8');
+  const sidepanelKeepsRecording =
+    sidepanelSrc.includes("text: 'Recording'") &&
+    sidepanelSrc.includes('void syncRecordingState();');
+
+  console.log(JSON.stringify({{
+    secretChecks,
+    recOnlyPaused: Boolean(recOnlyAuth.authPause && recOnlyAuth.authPause.paused),
+    tab10Paused,
+    tab10ObserverStarted,
+    popupPaused: Boolean(popupAuth.authPause && popupAuth.authPause.paused && popupAuth.authPause.tabId === 99),
+    tab99Paused,
+    tab99ObserverStarted,
+    sidepanelKeepsRecording,
+  }}));
+}})();
+"""
+    out = _run_node(script)
+    assert out["secretChecks"] == {
+        "code": True,
+        "smsCode": True,
+        "cardNumberSpace": True,
+        "apiKeySpace": True,
+    }
+    assert out["recOnlyPaused"] is True
+    assert out["tab10Paused"] is True
+    assert out["tab10ObserverStarted"] >= 1
+    assert out["popupPaused"] is True
+    assert out["tab99Paused"] is True
+    assert out["tab99ObserverStarted"] >= 1
+    assert out["sidepanelKeepsRecording"] is True

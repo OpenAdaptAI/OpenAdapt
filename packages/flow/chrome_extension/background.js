@@ -205,10 +205,12 @@ async function focusParentTab(entry) {
 }
 
 async function trackOpenedChildTab(tab) {
-  // Never track popups or steal focus outside an active OpenAdapt run tab.
-  if (!hasActiveRun() || !Number.isInteger(activeRunTabId)) return null;
+  // Never track popups or steal focus outside an active OpenAdapt run or recording.
+  if (!hasActiveRun()) return null;
   if (!tab || !Number.isInteger(tab.id) || !Number.isInteger(tab.openerTabId)) return null;
-  if (tab.openerTabId !== activeRunTabId) {
+  const openerMatchesActiveRun =
+    Number.isInteger(activeRunTabId) && tab.openerTabId === activeRunTabId;
+  if (!openerMatchesActiveRun && !recording) {
     return null;
   }
   let parentWindowId = tab.windowId;
@@ -241,6 +243,15 @@ async function trackOpenedChildTab(tab) {
   };
   trackedPopups.set(tab.id, entry);
   persistSession(SESSION_POPUPS_KEY, serializePopups());
+  try {
+    chrome.tabs.sendMessage(
+      tab.id,
+      { type: 'SET_RUN_ACTIVE', active: true },
+      () => {
+        void (chrome.runtime && chrome.runtime.lastError);
+      }
+    );
+  } catch (e) {}
   return entry;
 }
 
@@ -768,8 +779,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       } catch (e) {}
     }
     const senderTabId = sender && sender.tab && Number.isInteger(sender.tab.id) ? sender.tab.id : null;
+    const isTrackedPopup = Number.isInteger(senderTabId) && trackedPopups.has(senderTabId);
     const runActiveForTab =
-      hasActiveRun() && Number.isInteger(activeRunTabId) && senderTabId === activeRunTabId;
+      (hasActiveRun() && Number.isInteger(activeRunTabId) && senderTabId === activeRunTabId) ||
+      isTrackedPopup;
     sendResponse({
       active: recording,
       runActive: runActiveForTab,
