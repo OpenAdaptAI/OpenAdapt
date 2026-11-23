@@ -239,30 +239,89 @@ def screen_from_dom(raw: dict[str, Any]) -> Screen:
 _READ_ONLY_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
+def _origin_of(url: str) -> str:
+    """Return normalized ``scheme://netloc`` for an HTTP(S) URL, or empty string."""
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        return ""
+    return f"{parts.scheme.lower()}://{parts.netloc.lower()}"
+
+
 class PageActuator:
     """An :class:`~openadapt_flow.gui.model.Actuator` over a Playwright page.
 
     ``write_get_paths`` are regular expressions, from the pack, for GET
     requests that change state on this app (a commit drawn as a plain link).
+    ``allowed_origins`` are extra origins (from the pack) whose write responses
+    count in addition to the page's own origin; third-party beacons to other
+    origins are ignored.
     """
 
-    def __init__(self, page: Any, *, write_get_paths: Sequence[str] = ()) -> None:
+    def __init__(
+        self,
+        page: Any,
+        *,
+        write_get_paths: Sequence[str] = (),
+        allowed_origins: Sequence[str] = (),
+    ) -> None:
         self.page = page
         self._writes = 0
+        self._write_errors: list[str] = []
         self._get_writes = tuple(re.compile(p) for p in write_get_paths)
-        page.on("request", self._on_request)
+        self._allowed_origins = frozenset(
+            o for o in (_origin_of(raw) for raw in allowed_origins) if o
+        )
+        page.on("response", self._on_response)
+        page.on("requestfailed", self._on_request_failed)
 
-    def _on_request(self, request: Any) -> None:
+    def _is_counted_write_request(self, request: Any) -> bool:
+        req_url = str(request.url)
+        req_origin = _origin_of(req_url)
+        page_origin = _origin_of(str(getattr(self.page, "url", "") or ""))
+        if not req_origin:
+            return False
+        if req_origin != page_origin and req_origin not in self._allowed_origins:
+            return False
         method = str(request.method).upper()
         if method not in _READ_ONLY_METHODS:
-            self._writes += 1
-            return
+            return True
         if self._get_writes:
             from urllib.parse import urlsplit
 
-            path = urlsplit(str(request.url)).path
+            path = urlsplit(req_url).path
             if any(p.search(path) for p in self._get_writes):
-                self._writes += 1
+                return True
+        return False
+
+    def _on_response(self, response: Any) -> None:
+        request = response.request
+        if not self._is_counted_write_request(request):
+            return
+        status = int(response.status)
+        if 200 <= status < 400:
+            self._writes += 1
+        elif status >= 400:
+            from urllib.parse import urlsplit
+
+            method = str(request.method).upper()
+            path = urlsplit(str(request.url)).path or "/"
+            self._write_errors.append(f"{method} {path} returned HTTP {status}")
+
+    def _on_request_failed(self, request: Any) -> None:
+        if not self._is_counted_write_request(request):
+            return
+        from urllib.parse import urlsplit
+
+        method = str(request.method).upper()
+        path = urlsplit(str(request.url)).path or "/"
+        failure = getattr(request, "failure", None) or "request failed"
+        self._write_errors.append(f"{method} {path} failed: {failure}")
+
+    def write_errors(self) -> tuple[str, ...]:
+        """Refuting HTTP 4xx/5xx or failed write-request errors observed so far."""
+        return tuple(self._write_errors)
 
     def _settle(self) -> None:
         self.page.wait_for_load_state("load")

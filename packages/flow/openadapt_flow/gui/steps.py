@@ -301,9 +301,12 @@ def take_step(
             False,
             ctrl,
         )
+    err_fn = getattr(actuator, "write_errors", None)
+    err0 = len(err_fn()) if callable(err_fn) else 0
     actuator.click(ctrl.handle)
-    w1 = actuator.write_count()
     after = actuator.observe()
+    w1 = actuator.write_count()
+    write_errors = tuple(err_fn()[err0:]) if callable(err_fn) else ()
     ev = StepEvidence(
         step_id=spec.step_id,
         role=spec.role,
@@ -313,7 +316,8 @@ def take_step(
         moved=screen_signature(after) != screen_signature(before_screen),
         after_complete=after.complete,
         after_errors=tuple(after.errors)
-        + tuple(c.error for c in after.controls if c.error),
+        + tuple(c.error for c in after.controls if c.error)
+        + write_errors,
         run_id=run_id,
     )
     return StepOutcome(judge_step(ev), True, ctrl, after)

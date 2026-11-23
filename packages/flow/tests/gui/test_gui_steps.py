@@ -330,3 +330,101 @@ def test_form_snapshot_links_become_link_controls() -> None:
     ]
     spec = ControlSpec("activatable", "Continue")
     assert match_one(spec, screen).handle == "#a1"
+
+
+def test_commit_server_500_without_alert_is_refuted(page) -> None:
+    """A 500 response on a commit POST must refute even with no role=alert."""
+    with _apps.serve(page, _apps.registration_app()) as app:
+        steps = [s.spec for s in learn_steps(_record_registration(page, app))]
+    app2 = _apps.registration_app()
+    with _apps.serve(page, app2):
+        act = PageActuator(page)
+        page.goto(f"{app2.origin}/contact")
+        s = act.observe()
+        act.set_text(_handle(s, "textbox", "Full name"), "Bo Sample")
+        act.set_text(_handle(s, "textbox", "Email"), "bo@example.test")
+        assert take_step(act, steps[0], run_id="r500").held
+        page.select_option(_handle(act.observe(), "combobox", "Ticket type"), "vip")
+        page.route(
+            f"{app2.origin}/register",
+            lambda route: route.fulfill(
+                status=500,
+                content_type="text/html",
+                body="<html><body><h1>Internal Server Error</h1></body></html>",
+            ),
+        )
+        try:
+            out = take_step(act, steps[1], run_id="r500")
+        finally:
+            page.unroute(f"{app2.origin}/register")
+    assert out.clicked and out.result.status is Status.REFUTED
+    assert "HTTP 500" in out.result.reason
+    assert act.write_count() == 0
+    assert not app2.state.get("records")
+
+
+def test_commit_third_party_beacon_does_not_count_as_write_or_commit(page) -> None:
+    """A third-party beacon POST must neither satisfy a commit nor teach one."""
+    with _apps.serve(page, _apps.registration_app()) as app:
+        steps = [s.spec for s in learn_steps(_record_registration(page, app))]
+
+    beacon_hits: list[str] = []
+    page.route(
+        "http://analytics.test/collect",
+        lambda route: (
+            beacon_hits.append(route.request.method),
+            route.fulfill(
+                status=200,
+                headers={"Access-Control-Allow-Origin": "*"},
+                body="ok",
+            ),
+        ),
+    )
+    try:
+        app2 = _apps.registration_app()
+        with _apps.serve(page, app2):
+            act = PageActuator(page)
+            page.goto(f"{app2.origin}/contact")
+            s = act.observe()
+            act.set_text(_handle(s, "textbox", "Full name"), "Bo Sample")
+            act.set_text(_handle(s, "textbox", "Email"), "bo@example.test")
+            assert take_step(act, steps[0], run_id="rbeacon").held
+            page.select_option(_handle(act.observe(), "combobox", "Ticket type"), "vip")
+            # Replace submit with a third-party beacon that prevents the real POST.
+            page.evaluate(
+                """() => {
+                    const form = document.querySelector('form');
+                    form.addEventListener('submit', (ev) => {
+                        ev.preventDefault();
+                        fetch('http://analytics.test/collect', {method: 'POST', body: 'ping'});
+                    });
+                }"""
+            )
+            out = take_step(act, steps[1], run_id="rbeacon")
+        assert beacon_hits == ["POST"]
+        assert out.clicked and out.result.status is Status.REFUTED
+        assert act.write_count() == 0
+        assert not app2.state.get("records")
+
+        # Also verify learn_steps does not learn a third-party-only beacon as COMMIT.
+        app3 = _apps.registration_app()
+        with _apps.serve(page, app3):
+            act3 = PageActuator(page)
+            page.goto(f"{app3.origin}/ticket")
+            page.evaluate(
+                """() => {
+                    const form = document.querySelector('form');
+                    form.addEventListener('submit', (ev) => {
+                        ev.preventDefault();
+                        fetch('http://analytics.test/collect', {method: 'POST', body: 'demo'});
+                    });
+                }"""
+            )
+            rec = Recorder(act3)
+            rec.click(_handle(act3.observe(), "button", "Register"))
+            learned = learn_steps(rec.steps)
+        assert len(learned) == 1
+        assert learned[0].role is not StepRole.COMMIT
+        assert act3.write_count() == 0
+    finally:
+        page.unroute("http://analytics.test/collect")
