@@ -605,8 +605,12 @@ class AnthropicGrounder:
         # resend the frame behind one egress-ledger line and one counted call.
         if client is None:
             client = anthropic.Anthropic(max_retries=0)
-        elif callable(getattr(client, "with_options", None)):
-            client = client.with_options(max_retries=0)
+        else:
+            with_options = getattr(client, "with_options", None)
+            if callable(with_options) and isinstance(
+                getattr(client, "max_retries", None), int
+            ):
+                client = with_options(max_retries=0)
         self._client = client
         self._outbound = _OutboundScreen(None)
 

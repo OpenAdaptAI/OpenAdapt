@@ -479,11 +479,11 @@ class Replayer(
         """The egress recorder, created on first use when ``__init__`` didn't run.
 
         A replayer built without ``__init__`` (``Replayer.__new__``, a stubbed
-        constructor) never wrapped its model components. Here they are wrapped
-        before the recorder is returned, so a frame still can't leave the box
-        unledgered, and an off-box call made outside ``run`` is refused (an
-        unbound recorder admits nothing unless ``OPENADAPT_FLOW_EGRESS_LEDGER``
-        names a ledger).
+        constructor) never wrapped its model components. The components set
+        at the first access are wrapped then, before the recorder is returned;
+        one assigned after that is not. An off-box call made outside ``run`` is
+        refused (an unbound recorder admits nothing unless
+        ``OPENADAPT_FLOW_EGRESS_LEDGER`` names a ledger).
         """
 
         recorder = self.__dict__.get("_egress_recorder")
@@ -495,7 +495,6 @@ class Replayer(
                 if component is not None:
                     self.__dict__[kind] = recorder.wrap(kind, component)
         return recorder
-
 
     # Display-scale state (see __init__); class defaults keep partially
     # constructed replayers, as some tests build them, on recorded geometry.
