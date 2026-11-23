@@ -21,6 +21,7 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
+
 def _key_default() -> Path:
     """Current-home default approver key path. Must not be baked at import time."""
     return Path.home() / ".openadapt" / "approver" / "desktop-approver.pem"
