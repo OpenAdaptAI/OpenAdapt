@@ -297,13 +297,8 @@ def test_a_sign_in_becomes_secret_parameters_and_never_persists(
     assert not (staged.staged / "teach-authorization").exists()
 
     # A cached run: no model, the values only in memory, read back VERIFIED.
-    # mcp 1.x runs the emitted server's sync tool on its event loop, where
-    # Playwright's sync API refuses to start (a limit of every cached web
-    # task, not of sign-in); mcp 2 runs it in a worker thread.
-    from importlib.metadata import version
-
-    if int(version("mcp").split(".")[0]) < 2:
-        pytest.skip("the cached web run needs mcp 2 (sync tools run in a thread)")
+    # The emitted tool runs the program off the MCP server's event loop, so
+    # Playwright's sync API starts under mcp 1 as well as mcp 2.
     second = task.call(
         "second-run",
         {"username": USERNAME, "password": PASSWORD, "note": "second sign-in note"},
