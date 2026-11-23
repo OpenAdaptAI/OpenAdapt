@@ -80,7 +80,9 @@ def validate_extension_dir(ext_dir: Path) -> list[str]:
 
     version = manifest.get("version", "")
     if not isinstance(version, str) or not re.fullmatch(r"\d+(?:\.\d+){0,3}", version):
-        errors.append(f"manifest.version must be 1-4 dot-separated integers: {version!r}")
+        errors.append(
+            f"manifest.version must be 1-4 dot-separated integers: {version!r}"
+        )
 
     # Verify background service worker exists
     bg = manifest.get("background") or {}
@@ -128,11 +130,15 @@ def validate_extension_dir(ext_dir: Path) -> list[str]:
             if INLINE_SCRIPT_RE.search(text):
                 errors.append(f"Inline <script> not allowed in MV3 HTML: {rel_path}")
             if INLINE_HANDLER_RE.search(text):
-                errors.append(f"Inline event handler not allowed in MV3 HTML: {rel_path}")
+                errors.append(
+                    f"Inline event handler not allowed in MV3 HTML: {rel_path}"
+                )
         elif rel_path.suffix.lower() == ".js":
             text = full_path.read_text(encoding="utf-8")
             if EVAL_RE.search(text):
-                errors.append(f"eval()/new Function() not allowed in MV3 JS: {rel_path}")
+                errors.append(
+                    f"eval()/new Function() not allowed in MV3 JS: {rel_path}"
+                )
 
     return errors
 
@@ -164,7 +170,9 @@ def build_cws_zip(ext_dir: Path, out_zip: Path) -> list[str]:
     """
     errors = validate_extension_dir(ext_dir)
     if errors:
-        raise ValueError("Chrome extension validation failed:\n- " + "\n- ".join(errors))
+        raise ValueError(
+            "Chrome extension validation failed:\n- " + "\n- ".join(errors)
+        )
 
     rel_files = collect_package_files(ext_dir)
     out_zip.parent.mkdir(parents=True, exist_ok=True)
