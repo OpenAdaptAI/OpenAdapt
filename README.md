@@ -13,8 +13,10 @@ The open-source, verified execution layer for computer-use agents.
 </div>
 
 A computer-use agent looks at the screen and chooses every click again, on
-every run. OpenAdapt lets your agent, or a person, do a task once in a web,
-Windows, macOS, Linux or remote-desktop app. It compiles that run into a program,
+every run. OpenAdapt lets a person, or a cloud AI agent on test data,
+demonstrate a task in a web, Windows, macOS, Linux or remote-desktop app —
+once for a simple path, or a few times to cover variations. It compiles those
+demonstrations into a program,
 and your agent calls the program as one tool. The program runs with no model
 calls and sends no screenshots anywhere. It confirms the right record before
 each save, checks the save after it, and returns a plain outcome that says
@@ -62,7 +64,7 @@ all 30 bad saves, and the read-back caught all 30
 
 | Mode | What happens | Model calls |
 |---|---|---|
-| **Explore** | Your agent, or a person, does the task once while OpenAdapt records every action. The save is read back before anything compiles. | Your agent's, on your own key |
+| **Explore** | A person, or a cloud AI agent on test data, demonstrates the task (once for a simple path, or a few times for variations) while OpenAdapt records every action. The save is read back before anything compiles. | Your agent's, on your own key |
 | **Run** | The compiled program repeats the task with new inputs. It checks the record before each save and reads it back after. | None |
 | **Repair** | When the app changes, the run stops before saving. An agent shows the fix, the program tries it up to the save without saving, and a person approves it. | Only when something changed, on your own key |
 
@@ -148,7 +150,8 @@ The [quickstart tutorial](https://docs.openadapt.ai/tutorials/quickstart/) walks
 ### Compile your agent's run
 
 Your agent (Claude or OpenAI computer use, or your own loop, on your own model
-key) does the task once while OpenAdapt records it. A person reviews and admits
+key) demonstrates the task on test data — once for a simple path, or across a
+few examples for variations — while OpenAdapt records it. A person reviews and admits
 the draft program, or a registered agent admits it under a policy a person
 signed. After that, the program runs instead of the agent.
 
@@ -259,7 +262,8 @@ adapter, for example `python -m pip install "openadapt[capture,windows]"`, or
 use [OpenAdapt Desktop](https://openadapt.ai/download).
 
 `openadapt --help` lists the task commands. `openadapt wrap --help` shows the
-options for running an agent task once and reusing its checked compiled tool.
+options for demonstrating an agent task (once, or across examples) and reusing
+its checked compiled tool.
 The [CLI reference](docs/cli.md) lists task paths and their original aliases.
 
 ### Judge or train any agent
@@ -318,7 +322,7 @@ have the details.
 
 ```mermaid
 flowchart LR
-    S["Record, or let an agent do it once"] --> C["Compile"] --> Q["Certify and qualify"] --> A["Admit"] --> R["Run with checks"]
+    S["Demonstrate (human or AI agent)"] --> C["Compile"] --> Q["Certify and qualify"] --> A["Admit"] --> R["Run with checks"]
     R -.->|"stopped: approve a fix"| C
 ```
 
