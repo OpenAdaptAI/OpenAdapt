@@ -53,7 +53,14 @@ class InboxResolutionLabel(str, Enum):
 
 
 class AdapterSpec(BaseModel):
-    """Declarative specification for one hot-swappable LoRA veto adapter."""
+    """Declarative specification for one hot-swappable LoRA veto adapter.
+
+    Note: ``sha256`` is currently validated for format only (metadata-only /
+    unenforced in this control-plane module). Any weight loader wired to this
+    registry MUST verify ``sha256`` against the adapter bytes before load,
+    accept only ``.safetensors`` (never ``torch.load``/pickle), and restrict
+    ``adapter_uri`` to an allowlisted root.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -96,8 +103,31 @@ class AdapterSpec(BaseModel):
         return self
 
 
+def _validate_sha256_map(values: dict[str, str]) -> dict[str, str]:
+    cleaned: dict[str, str] = {}
+    for key, digest in values.items():
+        if not key or not key.strip():
+            raise ValueError("Field hash key must be non-empty.")
+        normalized = digest.strip().lower()
+        if not _SHA256_RE.match(normalized):
+            raise ValueError(
+                f"expected_field_hashes[{key!r}] must be 64 lowercase hex characters "
+                "(raw form values are forbidden)."
+            )
+        cleaned[key.strip()] = normalized
+    return cleaned
+
+
 class VetoInferenceRequest(BaseModel):
-    """Single pre/post-submit visual veto request routed to an app adapter."""
+    """Value-free pre/post-submit visual veto request routed to an app adapter.
+
+    Design: this control-plane request carries only SHA-256 image references
+    and value-free field digests/booleans (zero raw form values or screenshots
+    on the wire). A real :class:`LoraBackend` dereferences
+    ``pre_submit_image_sha256`` / ``post_submit_image_sha256`` from a local or
+    customer-VPC encrypted artifact store and MUST return ``abstain=True`` if
+    either image cannot be loaded or verified against its SHA-256 digest.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -108,8 +138,14 @@ class VetoInferenceRequest(BaseModel):
     tenant_id: str | None = None
     pre_submit_image_sha256: str = Field(min_length=1)
     post_submit_image_sha256: str = Field(min_length=1)
-    expected_fields: dict[str, str] = Field(default_factory=dict)
+    expected_field_hashes: dict[str, str] = Field(default_factory=dict)
+    expected_field_matches: dict[str, bool] = Field(default_factory=dict)
     dom_claims_success: bool = False
+
+    @field_validator("expected_field_hashes")
+    @classmethod
+    def _check_expected_field_hashes(cls, value: dict[str, str]) -> dict[str, str]:
+        return _validate_sha256_map(value)
 
 
 class RawVetoScore(BaseModel):
@@ -156,7 +192,7 @@ def vllm_request_payload(
     spec: AdapterSpec,
     request: VetoInferenceRequest,
 ) -> dict[str, Any]:
-    """Build a vLLM multi-LoRA inference request payload targeting ``spec.adapter_id``."""
+    """Build a value-free vLLM multi-LoRA inference request payload targeting ``spec.adapter_id``."""
     return {
         "model": spec.adapter_id,
         "metadata": {
@@ -167,7 +203,8 @@ def vllm_request_payload(
             "pre_submit_image_sha256": request.pre_submit_image_sha256,
             "post_submit_image_sha256": request.post_submit_image_sha256,
         },
-        "expected_fields": dict(request.expected_fields),
+        "expected_field_hashes": dict(request.expected_field_hashes),
+        "expected_field_matches": dict(request.expected_field_matches),
     }
 
 
@@ -231,20 +268,45 @@ class AppAdapterRegistry:
         tenant_id: str | None = None,
         requested_adapter_id: str | None = None,
     ) -> AdapterSpec:
-        """Resolve the highest-priority accessible adapter with strict BYOC isolation.
+        """Resolve the authoritative adapter from server-side bindings with strict BYOC isolation.
 
         Fallback chain:
-        1. Explicit ``requested_adapter_id`` (raises ``PermissionError`` on cross-tenant BYOC)
-        2. Exact BYOC ``(tenant_id, app_id, workflow_id)``
-        3. Exact BYOC ``(tenant_id, app_id)`` (no workflow binding)
-        4. Public ``(app_id, workflow_id)``
-        5. Public ``(app_id)`` (no workflow binding)
-        6. Matching ``domain_pattern`` (BYOC for ``tenant_id`` first, then public)
-        7. Cold-start ``default_base_adapter``
-        """
-        if requested_adapter_id is not None:
-            return self.get(requested_adapter_id, tenant_id=tenant_id)
+        1. Exact BYOC ``(tenant_id, app_id, workflow_id)``
+        2. Exact BYOC ``(tenant_id, app_id)`` (no workflow binding)
+        3. Public ``(app_id, workflow_id)``
+        4. Public ``(app_id)`` (no workflow binding)
+        5. Matching ``domain_pattern`` (BYOC for ``tenant_id`` first, then public)
+        6. Cold-start ``default_base_adapter``
 
+        If ``requested_adapter_id`` is supplied by the caller, it is accepted
+        ONLY when it matches the server-resolved adapter; otherwise
+        ``PermissionError`` is raised so a caller can never steer scoring to a
+        more lenient adapter.
+        """
+        resolved = self._resolve_authoritative(
+            app_id=app_id,
+            workflow_id=workflow_id,
+            domain=domain,
+            tenant_id=tenant_id,
+        )
+        if (
+            requested_adapter_id is not None
+            and requested_adapter_id != resolved.adapter_id
+        ):
+            raise PermissionError(
+                f"Caller-requested adapter {requested_adapter_id!r} does not match "
+                f"server-resolved adapter {resolved.adapter_id!r} for app_id={app_id!r}."
+            )
+        return resolved
+
+    def _resolve_authoritative(
+        self,
+        *,
+        app_id: str,
+        workflow_id: str | None = None,
+        domain: str | None = None,
+        tenant_id: str | None = None,
+    ) -> AdapterSpec:
         accessible = [s for s in self._adapters if self._is_accessible(s, tenant_id)]
 
         if tenant_id is not None and workflow_id is not None:
@@ -386,6 +448,16 @@ class MultiLoraVetoRouter:
                 f"Adapter {spec.adapter_id!r} targets base_model={spec.base_model!r}, "
                 f"expected {self._base_model!r}."
             )
+        if spec.app_id is not None and spec.app_id != request.app_id:
+            raise PermissionError(
+                f"Adapter {spec.adapter_id!r} is bound to app_id={spec.app_id!r}, "
+                f"not {request.app_id!r}."
+            )
+        if spec.workflow_id is not None and spec.workflow_id != request.workflow_id:
+            raise PermissionError(
+                f"Adapter {spec.adapter_id!r} is bound to workflow_id={spec.workflow_id!r}, "
+                f"not {request.workflow_id!r}."
+            )
 
         swapped = self._backend.ensure_adapter(spec)
         if swapped:
@@ -449,7 +521,7 @@ class MultiLoraVetoRouter:
 
 
 class InboxResolutionItem(BaseModel):
-    """Human-resolved Exception Inbox item eligible for QLoRA active learning."""
+    """Value-free Exception Inbox resolution item eligible for QLoRA active learning."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -460,9 +532,13 @@ class InboxResolutionItem(BaseModel):
     label: InboxResolutionLabel
     pre_submit_image_ref: str = Field(min_length=1)
     post_submit_image_ref: str = Field(min_length=1)
-    expected_fields: dict[str, str] = Field(default_factory=dict)
-    reviewer_note: str = ""
+    expected_field_hashes: dict[str, str] = Field(default_factory=dict)
     resolved_at: str = Field(min_length=1)
+
+    @field_validator("expected_field_hashes")
+    @classmethod
+    def _check_expected_field_hashes(cls, value: dict[str, str]) -> dict[str, str]:
+        return _validate_sha256_map(value)
 
 
 def _dedup_fingerprint(item: InboxResolutionItem) -> str:
@@ -474,7 +550,7 @@ def _dedup_fingerprint(item: InboxResolutionItem) -> str:
             "pre_submit_image_ref": item.pre_submit_image_ref,
             "post_submit_image_ref": item.post_submit_image_ref,
             "label": item.label.value,
-            "expected_fields": item.expected_fields,
+            "expected_field_hashes": item.expected_field_hashes,
         },
         sort_keys=True,
     )
@@ -488,8 +564,9 @@ def export_inbox_training_jsonl(
     tenant_id: str | None = None,
     app_id: str | None = None,
 ) -> int:
-    """Export resolved Exception Inbox items into deduplicated QLoRA JSONL pairs.
+    """Export resolved Exception Inbox items into deduplicated, value-free QLoRA JSONL pairs.
 
+    Never writes raw form values or free-text reviewer notes into training files.
     When ``tenant_id`` is provided, enforces strict single-tenant VPC isolation
     by exporting only records belonging to that tenant.
     """
@@ -516,7 +593,7 @@ def export_inbox_training_jsonl(
                         "role": "system",
                         "content": (
                             "Compare the pre-submit and post-submit screens against expected "
-                            "fields. Output FAULT if any write failed or drifted, or CLEAN if "
+                            "field digests. Output FAULT if any write failed or drifted, or CLEAN if "
                             "all fields persisted."
                         ),
                     },
@@ -528,7 +605,7 @@ def export_inbox_training_jsonl(
                                 "workflow_id": item.workflow_id,
                                 "pre_submit_image_ref": item.pre_submit_image_ref,
                                 "post_submit_image_ref": item.post_submit_image_ref,
-                                "expected_fields": item.expected_fields,
+                                "expected_field_hashes": item.expected_field_hashes,
                             },
                             sort_keys=True,
                         ),
@@ -539,7 +616,6 @@ def export_inbox_training_jsonl(
                             {
                                 "verdict": target_verdict,
                                 "label": item.label.value,
-                                "reviewer_note": item.reviewer_note,
                             },
                             sort_keys=True,
                         ),

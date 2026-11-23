@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import ssl
 import threading
 import urllib.error
 import urllib.request
@@ -28,20 +29,26 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from openadapt_flow.multi_lora_veto import (
     MultiLoraVetoRouter,
     VetoDecision,
     VetoInferenceRequest,
     VetoOutcome,
+    _validate_sha256_map,
 )
 
 DEFAULT_MAX_BODY_BYTES = 256 * 1024
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
 class ByocVerifyPayload(BaseModel):
-    """HTTP request schema for ``POST /v1/verify``."""
+    """Value-free HTTP request schema for ``POST /v1/verify``.
+
+    Carries only SHA-256 image references (dereferenced from the customer-VPC
+    artifact store by the backend) and value-free field digests/booleans.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -53,8 +60,14 @@ class ByocVerifyPayload(BaseModel):
     requested_adapter_id: str | None = None
     pre_submit_image_sha256: str = Field(min_length=1)
     post_submit_image_sha256: str = Field(min_length=1)
-    expected_fields: dict[str, str] = Field(default_factory=dict)
+    expected_field_hashes: dict[str, str] = Field(default_factory=dict)
+    expected_field_matches: dict[str, bool] = Field(default_factory=dict)
     dom_claims_success: bool = False
+
+    @field_validator("expected_field_hashes")
+    @classmethod
+    def _check_expected_field_hashes(cls, value: dict[str, str]) -> dict[str, str]:
+        return _validate_sha256_map(value)
 
 
 class _ByocThreadingHTTPServer(ThreadingHTTPServer):
@@ -67,10 +80,14 @@ class _ByocThreadingHTTPServer(ThreadingHTTPServer):
         *,
         router: MultiLoraVetoRouter,
         tenant_api_keys: dict[str, str],
+        tenant_allowed_apps: dict[str, frozenset[str]] | None,
         max_body_bytes: int,
     ) -> None:
         self.router = router
         self.tenant_api_keys = dict(tenant_api_keys)
+        self.tenant_allowed_apps = (
+            dict(tenant_allowed_apps) if tenant_allowed_apps is not None else None
+        )
         self.max_body_bytes = max_body_bytes
         self.eval_lock = threading.Lock()
         super().__init__(server_address, _ByocVetoRequestHandler)
@@ -129,15 +146,8 @@ class _ByocVetoRequestHandler(BaseHTTPRequestHandler):
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found."})
             return
 
-        with self.server.eval_lock:
-            payload = {
-                "status": "ok",
-                "base_model": self.server.router.base_model,
-                "active_adapter_id": self.server.router.active_adapter_id,
-                "request_count": self.server.router.request_count,
-                "swap_count": self.server.router.swap_count,
-            }
-        self._send_json(HTTPStatus.OK, payload)
+        # Unauthenticated liveness probe: never leak tenant adapter IDs or counters.
+        self._send_json(HTTPStatus.OK, {"status": "ok"})
 
     def do_POST(self) -> None:  # noqa: N802
         if self.path.split("?", 1)[0] != "/v1/verify":
@@ -195,12 +205,21 @@ class _ByocVetoRequestHandler(BaseHTTPRequestHandler):
         try:
             payload = ByocVerifyPayload.model_validate(parsed)
         except ValidationError as exc:
+            # Strip raw `input` and `ctx` so bad requests never echo client values back.
+            sanitized_errors = [
+                {
+                    "loc": list(err.get("loc", ())),
+                    "msg": str(err.get("msg", "validation error")),
+                    "type": str(err.get("type", "value_error")),
+                }
+                for err in exc.errors()
+            ]
             self._send_json(
                 HTTPStatus.UNPROCESSABLE_ENTITY,
                 {
                     "decision": VetoDecision.HALT_ESCALATE.value,
                     "error": "Request schema validation failed.",
-                    "details": exc.errors(),
+                    "details": sanitized_errors,
                 },
             )
             return
@@ -215,6 +234,18 @@ class _ByocVetoRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if self.server.tenant_allowed_apps is not None:
+            allowed_apps = self.server.tenant_allowed_apps.get(tenant_id, frozenset())
+            if payload.app_id not in allowed_apps:
+                self._send_json(
+                    HTTPStatus.FORBIDDEN,
+                    {
+                        "decision": VetoDecision.HALT_ESCALATE.value,
+                        "error": f"Tenant {tenant_id!r} is not authorized for app_id {payload.app_id!r}.",
+                    },
+                )
+                return
+
         inference_req = VetoInferenceRequest(
             request_id=payload.request_id,
             app_id=payload.app_id,
@@ -223,7 +254,8 @@ class _ByocVetoRequestHandler(BaseHTTPRequestHandler):
             tenant_id=tenant_id,
             pre_submit_image_sha256=payload.pre_submit_image_sha256,
             post_submit_image_sha256=payload.post_submit_image_sha256,
-            expected_fields=payload.expected_fields,
+            expected_field_hashes=payload.expected_field_hashes,
+            expected_field_matches=payload.expected_field_matches,
             dom_claims_success=payload.dom_claims_success,
         )
 
@@ -281,12 +313,18 @@ class ByocVetoServer:
         *,
         router: MultiLoraVetoRouter,
         tenant_api_keys: Mapping[str, str],
+        tenant_allowed_apps: Mapping[str, frozenset[str] | set[str]] | None = None,
         host: str = "127.0.0.1",
         port: int = 0,
         max_body_bytes: int = DEFAULT_MAX_BODY_BYTES,
+        ssl_context: ssl.SSLContext | None = None,
     ) -> None:
         if not tenant_api_keys:
             raise ValueError("tenant_api_keys must contain at least one tenant key.")
+        if host.strip().lower() not in _LOOPBACK_HOSTS and ssl_context is None:
+            raise ValueError(
+                f"Binding BYOC veto server to non-loopback host {host!r} requires ssl_context (TLS)."
+            )
         cleaned_keys: dict[str, str] = {}
         seen_secrets: set[str] = set()
         for tid, secret in tenant_api_keys.items():
@@ -299,12 +337,25 @@ class ByocVetoServer:
             seen_secrets.add(secret)
             cleaned_keys[tid.strip()] = secret.strip()
 
+        cleaned_allowed: dict[str, frozenset[str]] | None = None
+        if tenant_allowed_apps is not None:
+            cleaned_allowed = {
+                tid.strip(): frozenset(apps)
+                for tid, apps in tenant_allowed_apps.items()
+            }
+
+        self._use_tls = ssl_context is not None
         self._httpd = _ByocThreadingHTTPServer(
             (host, port),
             router=router,
             tenant_api_keys=cleaned_keys,
+            tenant_allowed_apps=cleaned_allowed,
             max_body_bytes=max_body_bytes,
         )
+        if ssl_context is not None:
+            self._httpd.socket = ssl_context.wrap_socket(
+                self._httpd.socket, server_side=True
+            )
         self._thread: threading.Thread | None = None
 
     @property
@@ -315,7 +366,8 @@ class ByocVetoServer:
     @property
     def base_url(self) -> str:
         host, port = self.server_address
-        return f"http://{host}:{port}"
+        scheme = "https" if self._use_tls else "http"
+        return f"{scheme}://{host}:{port}"
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -347,17 +399,40 @@ def create_byoc_veto_server(
     *,
     router: MultiLoraVetoRouter,
     tenant_api_keys: Mapping[str, str],
+    tenant_allowed_apps: Mapping[str, frozenset[str] | set[str]] | None = None,
     host: str = "127.0.0.1",
     port: int = 0,
     max_body_bytes: int = DEFAULT_MAX_BODY_BYTES,
+    ssl_context: ssl.SSLContext | None = None,
 ) -> ByocVetoServer:
     """Create a configured :class:`ByocVetoServer` ready to start."""
     return ByocVetoServer(
         router=router,
         tenant_api_keys=tenant_api_keys,
+        tenant_allowed_apps=tenant_allowed_apps,
         host=host,
         port=port,
         max_body_bytes=max_body_bytes,
+        ssl_context=ssl_context,
+    )
+
+
+def _fail_closed_outcome(
+    payload: Mapping[str, Any],
+    *,
+    reason: str,
+) -> VetoOutcome:
+    return VetoOutcome(
+        request_id=str(payload.get("request_id") or "unknown"),
+        adapter_id="unavailable",
+        base_model="unavailable",
+        decision=VetoDecision.HALT_ESCALATE,
+        calibrated_fault_prob=1.0,
+        calibrated_threshold=0.5,
+        temperature=1.0,
+        abstained=True,
+        dom_override_blocked=bool(payload.get("dom_claims_success", False)),
+        reason=reason,
     )
 
 
@@ -369,7 +444,7 @@ def post_verify_request(
     tenant_id: str | None = None,
     timeout_s: float = 10.0,
 ) -> VetoOutcome:
-    """Send a ``POST /v1/verify`` request from a zero-GPU laptop client."""
+    """Send a ``POST /v1/verify`` request and fail closed to ``HALT_ESCALATE`` on any error."""
     url = base_url.rstrip("/") + "/v1/verify"
     headers = {
         "Content-Type": "application/json",
@@ -377,15 +452,28 @@ def post_verify_request(
     }
     if tenant_id is not None:
         headers["X-OpenAdapt-Tenant-Id"] = tenant_id
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(dict(payload)).encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310
-        body = json.loads(resp.read().decode("utf-8"))
-    return VetoOutcome.model_validate(body)
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(dict(payload)).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310
+            body = json.loads(resp.read().decode("utf-8"))
+        return VetoOutcome.model_validate(body)
+    except urllib.error.HTTPError as exc:
+        return _fail_closed_outcome(
+            payload, reason=f"Fail-closed client HTTP error: {exc.code}"
+        )
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        return _fail_closed_outcome(
+            payload, reason=f"Fail-closed client transport error: {type(exc).__name__}"
+        )
+    except (ValueError, ValidationError) as exc:
+        return _fail_closed_outcome(
+            payload, reason=f"Fail-closed client response error: {type(exc).__name__}"
+        )
 
 
 __all__ = [

@@ -21,6 +21,19 @@ _HASH_B = "b" * 64
 
 
 def test_record_operator_override_writes_zero_phi_tenant_jsonl(tmp_path: Path) -> None:
+    # Defaults strictly off without explicit consent_enabled=True
+    with pytest.raises(PermissionError, match="consent_enabled=True"):
+        record_operator_override(
+            tenant_id="clinic-north",
+            app_id="ehr-portal",
+            workflow_id="patient-intake",
+            step_id="step-submit-01",
+            screenshot_hash=_HASH_A,
+            predicted_verdict=VetoDecision.VETO,
+            operator_verdict=VetoDecision.ALLOW,
+            queue_root=tmp_path,
+        )
+
     rec = record_operator_override(
         tenant_id="clinic-north",
         app_id="ehr-portal",
@@ -30,6 +43,7 @@ def test_record_operator_override_writes_zero_phi_tenant_jsonl(tmp_path: Path) -
         predicted_verdict=VetoDecision.VETO,
         operator_verdict=VetoDecision.ALLOW,
         queue_root=tmp_path,
+        consent_enabled=True,
         bound_tenant_id="clinic-north",
         pre_submit_screenshot_hash=_HASH_B,
         adapter_id="veto-ehr-v1",
@@ -61,7 +75,32 @@ def test_record_operator_override_writes_zero_phi_tenant_jsonl(tmp_path: Path) -
 def test_zero_phi_rejects_disallowed_metadata_keys_and_pii_values(
     tmp_path: Path,
 ) -> None:
-    collector = CalibrationCollector(tmp_path, bound_tenant_id="clinic-north")
+    collector = CalibrationCollector(
+        tmp_path, bound_tenant_id="clinic-north", consent_enabled=True
+    )
+
+    # Disallow slash/colon record-id-like strings in step_id and adapter_id
+    with pytest.raises(ValueError, match="step_id"):
+        collector.record_operator_override(
+            tenant_id="clinic-north",
+            app_id="ehr-portal",
+            workflow_id="intake",
+            step_id="patient/12345",
+            screenshot_hash=_HASH_A,
+            predicted_verdict="VETO",
+            operator_verdict="ALLOW",
+        )
+    with pytest.raises(ValueError, match="adapter_id"):
+        collector.record_operator_override(
+            tenant_id="clinic-north",
+            app_id="ehr-portal",
+            workflow_id="intake",
+            step_id="step-1",
+            screenshot_hash=_HASH_A,
+            predicted_verdict="VETO",
+            operator_verdict="ALLOW",
+            adapter_id="bad/adapter:id",
+        )
 
     for bad_key in (
         "expected_fields",
@@ -108,7 +147,9 @@ def test_zero_phi_rejects_disallowed_metadata_keys_and_pii_values(
 
 
 def test_fail_closed_tenant_isolation_on_write_and_read(tmp_path: Path) -> None:
-    collector = CalibrationCollector(tmp_path, bound_tenant_id="clinic-north")
+    collector = CalibrationCollector(
+        tmp_path, bound_tenant_id="clinic-north", consent_enabled=True
+    )
 
     # Missing or path-traversal tenant IDs are rejected.
     for bad_tenant in ("", "   ", "../clinic-south", "clinic-north/sub"):
@@ -142,7 +183,7 @@ def test_fail_closed_tenant_isolation_on_write_and_read(tmp_path: Path) -> None:
     # Tampered JSONL containing another tenant's record fails closed on read.
     tampered_dir = tmp_path / "clinic-north"
     tampered_dir.mkdir(parents=True, exist_ok=True)
-    other_collector = CalibrationCollector(tmp_path)
+    other_collector = CalibrationCollector(tmp_path, consent_enabled=True)
     other_rec = other_collector.record_operator_override(
         tenant_id="clinic-south",
         app_id="ehr-portal",
@@ -161,7 +202,9 @@ def test_fail_closed_tenant_isolation_on_write_and_read(tmp_path: Path) -> None:
 
 
 def test_deduplication_and_calibration_readiness_flywheel(tmp_path: Path) -> None:
-    collector = CalibrationCollector(tmp_path, bound_tenant_id="clinic-north")
+    collector = CalibrationCollector(
+        tmp_path, bound_tenant_id="clinic-north", consent_enabled=True
+    )
 
     # Record 10 unique overrides (8 false pauses, 1 true fault, 1 missed fault) + 1 duplicate.
     for idx in range(8):

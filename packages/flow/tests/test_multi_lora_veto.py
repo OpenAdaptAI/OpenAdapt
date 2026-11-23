@@ -174,7 +174,7 @@ def test_strict_byoc_tenant_isolation_raises_permission_error() -> None:
     assert own.adapter_id == "veto-tenant1-alpha"
 
     # Another tenant requesting tenant-1's BYOC adapter raises PermissionError
-    with pytest.raises(PermissionError, match="Cross-tenant access denied"):
+    with pytest.raises(PermissionError, match="does not match server-resolved adapter"):
         reg.resolve(
             app_id="app-alpha",
             tenant_id="tenant-2",
@@ -182,12 +182,23 @@ def test_strict_byoc_tenant_isolation_raises_permission_error() -> None:
         )
 
     # Anonymous caller requesting BYOC adapter raises PermissionError
-    with pytest.raises(PermissionError, match="Cross-tenant access denied"):
+    with pytest.raises(PermissionError, match="does not match server-resolved adapter"):
         reg.resolve(
             app_id="app-alpha",
             tenant_id=None,
             requested_adapter_id="veto-tenant1-alpha-intake",
         )
+
+    # Caller cannot steer app-alpha to a more lenient public adapter
+    lenient_reg = AppAdapterRegistry(
+        default_base_adapter=_make_spec("veto-base", threshold=0.5),
+        adapters=[
+            _make_spec("strict-a", app_id="app-a", threshold=0.5),
+            _make_spec("lenient-b", app_id="app-b", threshold=0.99),
+        ],
+    )
+    with pytest.raises(PermissionError, match="does not match server-resolved adapter"):
+        lenient_reg.resolve(app_id="app-a", requested_adapter_id="lenient-b")
 
 
 def test_registry_loads_from_json_and_yaml(tmp_path: Path) -> None:
@@ -323,8 +334,7 @@ def test_export_inbox_training_jsonl_dedup_and_tenant_isolation(tmp_path: Path) 
             label=InboxResolutionLabel.TRUE_FAULT,
             pre_submit_image_ref="file://pre-1.png",
             post_submit_image_ref="file://post-1.png",
-            expected_fields={"email": "a@example.com"},
-            reviewer_note="Email blanked on save",
+            expected_field_hashes={"email": SHA_A},
             resolved_at="2026-11-22T18:00:00Z",
         ),
         # Duplicate content fingerprint (different item_id) -> must deduplicate
@@ -336,8 +346,7 @@ def test_export_inbox_training_jsonl_dedup_and_tenant_isolation(tmp_path: Path) 
             label=InboxResolutionLabel.TRUE_FAULT,
             pre_submit_image_ref="file://pre-1.png",
             post_submit_image_ref="file://post-1.png",
-            expected_fields={"email": "a@example.com"},
-            reviewer_note="Duplicate entry",
+            expected_field_hashes={"email": SHA_A},
             resolved_at="2026-11-22T18:05:00Z",
         ),
         InboxResolutionItem(
@@ -348,8 +357,7 @@ def test_export_inbox_training_jsonl_dedup_and_tenant_isolation(tmp_path: Path) 
             label=InboxResolutionLabel.FALSE_ALARM,
             pre_submit_image_ref="file://pre-2.png",
             post_submit_image_ref="file://post-2.png",
-            expected_fields={"email": "b@example.com"},
-            reviewer_note="Toast covered corner but value saved",
+            expected_field_hashes={"email": SHA_B},
             resolved_at="2026-11-22T18:10:00Z",
         ),
         # Different tenant -> excluded when exporting tenant-1 VPC dataset
@@ -361,11 +369,23 @@ def test_export_inbox_training_jsonl_dedup_and_tenant_isolation(tmp_path: Path) 
             label=InboxResolutionLabel.TRUE_FAULT,
             pre_submit_image_ref="file://pre-3.png",
             post_submit_image_ref="file://post-3.png",
-            expected_fields={"email": "c@example.com"},
-            reviewer_note="Other tenant data",
+            expected_field_hashes={"email": SHA_C},
             resolved_at="2026-11-22T18:15:00Z",
         ),
     ]
+
+    # Raw form values are rejected by value-free schema
+    with pytest.raises(ValidationError):
+        InboxResolutionItem(
+            item_id="inbox-raw",
+            app_id="app-alpha",
+            tenant_id="tenant-1",
+            label=InboxResolutionLabel.TRUE_FAULT,
+            pre_submit_image_ref="file://pre-1.png",
+            post_submit_image_ref="file://post-1.png",
+            expected_field_hashes={"email": "patient@example.com"},
+            resolved_at="2026-11-22T18:00:00Z",
+        )
 
     out_path = tmp_path / "byoc" / "tenant-1-train.jsonl"
     count = export_inbox_training_jsonl(
@@ -379,5 +399,6 @@ def test_export_inbox_training_jsonl_dedup_and_tenant_isolation(tmp_path: Path) 
     assert len(lines) == 2
     assert all(rec["metadata"]["tenant_id"] == "tenant-1" for rec in lines)
     assert all(rec["metadata"]["app_id"] == "app-alpha" for rec in lines)
+    assert all("reviewer_note" not in rec["messages"][2]["content"] for rec in lines)
     verdicts = [json.loads(rec["messages"][2]["content"])["verdict"] for rec in lines]
     assert verdicts == ["FAULT", "CLEAN"]

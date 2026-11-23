@@ -156,12 +156,14 @@ def test_live_http_roundtrip_hotswap_and_abstain_halts() -> None:
         }
     )
     keys = {"clinic-a": "key-clinic-a-secret", "clinic-b": "key-clinic-b-secret"}
-    with create_byoc_veto_server(router=router, tenant_api_keys=keys) as srv:
+    with create_byoc_veto_server(
+        router=router,
+        tenant_api_keys=keys,
+        tenant_allowed_apps={"clinic-a": {"ehr-portal"}, "clinic-b": {"ehr-portal"}},
+    ) as srv:
         status, health = _raw_http(f"{srv.base_url}/healthz")
         assert status == 200
-        assert health["status"] == "ok"
-        assert health["base_model"] == _BASE_MODEL
-        assert health["swap_count"] == 0
+        assert health == {"status": "ok"}
 
         # 1. Clinic A routes to its BYOC adapter -> ALLOW
         out_a = post_verify_request(
@@ -214,16 +216,82 @@ def test_live_http_roundtrip_hotswap_and_abstain_halts() -> None:
         assert out_abstain.abstained is True
         assert out_abstain.dom_override_blocked is True
 
-        # 4. Healthz reflects 3 requests and 3 adapter activations/swaps
+        # 4. Healthz stays minimal (never leaks tenant adapter IDs or counters)
         status, health2 = _raw_http(f"{srv.base_url}/healthz")
         assert status == 200
-        assert health2["request_count"] == 3
-        assert health2["swap_count"] == 3
+        assert health2 == {"status": "ok"}
+        assert router.request_count == 3
+        assert router.swap_count == 3
         assert backend.loaded_sequence == [
             "veto-clinic-a-ehr",
             "veto-clinic-b-ehr",
             "veto-clinic-a-ehr",
         ]
+
+
+def test_non_loopback_requires_tls_and_client_fails_closed_when_server_stopped() -> (
+    None
+):
+    router, _ = _build_router()
+    keys = {"clinic-a": "key-clinic-a-secret"}
+
+    # Non-loopback bind without ssl_context is refused
+    with pytest.raises(ValueError, match="requires ssl_context"):
+        ByocVetoServer(router=router, tenant_api_keys=keys, host="0.0.0.0")
+
+    # 422 response never echoes raw client input values
+    with create_byoc_veto_server(
+        router=router,
+        tenant_api_keys=keys,
+        tenant_allowed_apps={"clinic-a": {"ehr-portal"}},
+    ) as srv:
+        code, body = _raw_http(
+            f"{srv.base_url}/v1/verify",
+            method="POST",
+            headers={"Authorization": f"Bearer {keys['clinic-a']}"},
+            payload={
+                "request_id": "req-bad",
+                "app_id": "ehr-portal",
+                "pre_submit_image_sha256": _IMG_PRE,
+                "post_submit_image_sha256": _IMG_POST,
+                "expected_field_hashes": {"ssn": "123-45-6789"},
+            },
+        )
+        assert code == 422
+        assert "123-45-6789" not in json.dumps(body)
+
+        # Unauthorized app_id for tenant -> 403
+        code, body = _raw_http(
+            f"{srv.base_url}/v1/verify",
+            method="POST",
+            headers={"Authorization": f"Bearer {keys['clinic-a']}"},
+            payload={
+                "request_id": "req-unauth-app",
+                "app_id": "other-app",
+                "pre_submit_image_sha256": _IMG_PRE,
+                "post_submit_image_sha256": _IMG_POST,
+            },
+        )
+        assert code == 403
+        assert body["decision"] == "HALT_ESCALATE"
+        stopped_url = srv.base_url
+
+    # Server is now stopped -> post_verify_request fails closed to HALT_ESCALATE
+    offline = post_verify_request(
+        stopped_url,
+        api_key=keys["clinic-a"],
+        payload={
+            "request_id": "req-offline",
+            "app_id": "ehr-portal",
+            "pre_submit_image_sha256": _IMG_PRE,
+            "post_submit_image_sha256": _IMG_POST,
+            "dom_claims_success": True,
+        },
+        timeout_s=1.0,
+    )
+    assert offline.decision is VetoDecision.HALT_ESCALATE
+    assert offline.abstained is True
+    assert offline.dom_override_blocked is True
 
 
 def test_http_tenant_auth_cross_tenant_rejection_and_fail_closed_503() -> None:

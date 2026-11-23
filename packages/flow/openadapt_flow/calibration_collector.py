@@ -1,13 +1,15 @@
-"""Online False-Pause Calibration Collector (zero-PHI / value-free).
+"""Online False-Pause Calibration Collector (value-free, opt-in local queue).
 
 Records operator override events from Exception Inbox or live-run pauses into
-strictly tenant-scoped, value-free JSONL queues for overnight per-app LoRA
-calibration (driving unseen false-veto rates down after 10-25 real runs).
+strictly tenant-scoped, value-free local JSONL queues for per-app LoRA
+calibration.
 
 Security & privacy invariants:
-- **Zero-PHI / value-free:** Stores only SHA-256 screenshot hashes, structural
-  metadata from an explicit allowlist, and verdict labels. Never accepts or
-  persists raw PII, form values, screenshots, DOM text, or free-text notes.
+- **Opt-in by default (off):** Refuses to write unless ``consent_enabled=True``
+  is explicitly set by the operator/deployment.
+- **Value-free:** Stores only SHA-256 screenshot hashes, structural metadata
+  from an explicit allowlist, and verdict labels. Never accepts or persists
+  raw form values, screenshots, DOM text, or free-text notes.
 - **Fail-closed tenant isolation:** Refuses missing/invalid ``tenant_id`` and
   rejects cross-tenant writes or reads when bound to a tenant.
 """
@@ -32,8 +34,8 @@ CALIBRATION_RECORD_SCHEMA: Literal["openadapt.veto-calibration/v1"] = (
 )
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-_SAFE_SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
-_SAFE_STEP_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
+_SAFE_SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_SAFE_STEP_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 # Simple PII pattern guards for structural metadata string values.
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
@@ -197,9 +199,14 @@ class CalibrationOverrideRecord(BaseModel):
     @field_validator("step_id")
     @classmethod
     def _check_step_id(cls, value: str) -> str:
-        if not value.strip() or not _SAFE_STEP_RE.match(value.strip()):
-            raise ValueError(f"Invalid step_id: {value!r}")
-        return value.strip()
+        return _validate_slug(value, "step_id")
+
+    @field_validator("adapter_id")
+    @classmethod
+    def _check_adapter_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _validate_slug(value, "adapter_id")
 
     @field_validator("screenshot_hash")
     @classmethod
@@ -282,6 +289,7 @@ class CalibrationCollector:
         queue_root: Path,
         *,
         bound_tenant_id: str | None = None,
+        consent_enabled: bool = False,
     ) -> None:
         self._queue_root = Path(queue_root).resolve()
         self._bound_tenant_id = (
@@ -289,7 +297,12 @@ class CalibrationCollector:
             if bound_tenant_id is not None
             else None
         )
+        self._consent_enabled = bool(consent_enabled)
         self._lock = threading.Lock()
+
+    @property
+    def consent_enabled(self) -> bool:
+        return self._consent_enabled
 
     @property
     def queue_root(self) -> Path:
@@ -337,7 +350,11 @@ class CalibrationCollector:
         structural_metadata: dict[str, Any] | None = None,
         recorded_at: str | None = None,
     ) -> CalibrationOverrideRecord:
-        """Append one zero-PHI calibration override record to the tenant queue."""
+        """Append one value-free calibration override record to the tenant queue."""
+        if not self._consent_enabled:
+            raise PermissionError(
+                "Calibration collection is disabled by default; set consent_enabled=True to record."
+            )
         safe_tenant = self._enforce_tenant_access(tenant_id)
         safe_app = _validate_slug(app_id, "app_id")
         safe_workflow = _validate_slug(workflow_id, "workflow_id")
@@ -460,6 +477,7 @@ def record_operator_override(
     operator_verdict: CalibrationVerdict | VetoDecision | str,
     *,
     queue_root: Path,
+    consent_enabled: bool = False,
     bound_tenant_id: str | None = None,
     pre_submit_screenshot_hash: str | None = None,
     adapter_id: str | None = None,
@@ -467,8 +485,12 @@ def record_operator_override(
     structural_metadata: dict[str, Any] | None = None,
     recorded_at: str | None = None,
 ) -> CalibrationOverrideRecord:
-    """Convenience entry point for recording one zero-PHI operator override."""
-    collector = CalibrationCollector(queue_root, bound_tenant_id=bound_tenant_id)
+    """Convenience entry point for recording one value-free operator override."""
+    collector = CalibrationCollector(
+        queue_root,
+        bound_tenant_id=bound_tenant_id,
+        consent_enabled=consent_enabled,
+    )
     return collector.record_operator_override(
         tenant_id=tenant_id,
         app_id=app_id,
