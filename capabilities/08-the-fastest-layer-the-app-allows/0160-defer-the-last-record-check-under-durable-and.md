@@ -1,0 +1,1 @@
+| Defer the last record check under durable and governed runs: the durable pause holds the check, so a crash re-runs only the check and never resends the save | On main | Synthetic | [THROUGHPUT.md](packages/flow/docs/THROUGHPUT.md#under-durable-and-governed-runs) |

@@ -1,0 +1,1 @@
+| A faster speed profile that keeps every check (one insert per plain text field, shorter page-quiet wait) | Released ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic | `runtime.speed: fast`, [THROUGHPUT.md](packages/flow/docs/THROUGHPUT.md) |

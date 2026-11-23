@@ -1,0 +1,1 @@
+| Run an admitted API step under a managed (Cloud) dispatch whose authorization names it: the API step rows are inside the dispatch digest Cloud signs, and each send still needs Cloud's delivery permit | On main | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#under-governance) |

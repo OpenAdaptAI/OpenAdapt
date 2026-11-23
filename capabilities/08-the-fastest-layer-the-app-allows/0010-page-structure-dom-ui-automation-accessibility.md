@@ -1,0 +1,1 @@
+| Page structure (DOM, UI Automation, Accessibility) first, then template, OCR and geometry | Released | Real apps on the web; synthetic on Windows and macOS | [RESOLUTION_LADDER.md](packages/flow/docs/RESOLUTION_LADDER.md) |

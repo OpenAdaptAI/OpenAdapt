@@ -468,3 +468,49 @@ def test_existing_configured_parent_keeps_its_permissions(
     store.write_fresh_manifest(manifest)
 
     assert stat.S_IMODE(parent.stat().st_mode) == 0o750
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows symlink creation needs privilege")
+def test_default_authority_canonicalizes_symlinked_home_parent_but_rejects_symlinked_db(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OS-level parent symlinks (e.g. macOS /tmp -> /private/tmp) work, while
+    user-planted symlinks inside HOME remain refused."""
+
+    monkeypatch.delenv(AUTHORITY_DB_ENV, raising=False)
+    real_root = tmp_path / "private-tmp"
+    real_home = real_root / "stranger-home"
+    real_home.mkdir(parents=True)
+    symlink_root = tmp_path / "tmp-link"
+    symlink_root.symlink_to(real_root, target_is_directory=True)
+
+    # Simulate macOS HOME=/tmp/... where the parent directory is a symlink.
+    monkeypatch.setenv("HOME", str(symlink_root / "stranger-home"))
+    run_dir, store, manifest = _manifest(symlink_root / "qs-out")
+
+    authority = DurableAuthority(run_dir, store)
+    authority.claim(manifest)
+    expected_db = (
+        real_home.resolve() / ".openadapt" / "durable-authority" / "authority.sqlite3"
+    )
+    assert authority.db_path == expected_db
+    assert expected_db.exists()
+
+    # A symlinked DB file planted inside the resolved HOME must still be refused.
+    decoy_db = tmp_path / "decoy.sqlite3"
+    decoy_db.touch()
+    expected_db.unlink()
+    expected_db.symlink_to(decoy_db)
+    with pytest.raises(DurableAuthorityBusy, match="must not be a symlink"):
+        DurableAuthority(run_dir, store).claim(manifest)
+
+    # A symlinked authority subdirectory inside HOME must also still be refused.
+    expected_db.unlink()
+    authority_subdir = expected_db.parent
+    redirected_dir = tmp_path / "redirected-authority"
+    redirected_dir.mkdir()
+    shutil.rmtree(authority_subdir)
+    authority_subdir.symlink_to(redirected_dir, target_is_directory=True)
+    with pytest.raises(DurableAuthorityBusy, match="must not traverse a link"):
+        DurableAuthority(run_dir, store)

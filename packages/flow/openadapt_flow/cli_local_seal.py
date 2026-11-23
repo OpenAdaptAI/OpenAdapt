@@ -80,6 +80,30 @@ def _looks_like_web_page(raw: bytes) -> bool:
     )
 
 
+def _input_report(path: Path) -> Any:
+    """A run's ``report.json``: read in memory through its encrypted run
+    directory when there is one (runs are encrypted by default), else from
+    disk like any input."""
+    from openadapt_flow import sealed_set
+
+    if not sealed_set.is_sealed_path(path):
+        return _input_json(path)
+    from openadapt_flow.offline_seal import loads_strict
+
+    try:
+        if not sealed_set.is_file(path):
+            raise InputError(f"{path}: no such file")
+        raw = sealed_set.read_bytes(path)
+    except sealed_set.SealedSetError as exc:
+        raise InputError(f"{path} can't be read: {exc}") from exc
+    if not raw.strip():
+        raise InputError(f"{path} is empty")
+    try:
+        return loads_strict(raw)
+    except ValueError as exc:
+        raise InputError(f"{path} is not valid JSON: {exc}") from exc
+
+
 def _input_json(path: Path) -> Any:
     """Parse an input file as JSON (repeated keys refused), or explain in one line."""
     from openadapt_flow.offline_seal import loads_strict
@@ -354,7 +378,7 @@ def _check_verify_inputs(args: argparse.Namespace, target: Path) -> None:
 
     seal: Optional[Path]
     if target.is_dir():
-        _input_json(target / "report.json")
+        _input_report(target / "report.json")
         seal = target / "seal.json"
     else:
         _input_bytes(target)
