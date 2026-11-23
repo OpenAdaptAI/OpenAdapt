@@ -32,7 +32,8 @@ def test_default_handler_receives_one_literal_url(platform, monkeypatch):
     monkeypatch.setattr(sys, "platform", platform)
     monkeypatch.setenv("BROWSER", "sh -c unsafe-command %s")
     monkeypatch.setattr(os, "access", lambda *_: True)
-    monkeypatch.setattr(system_browser.shutil, "which", lambda _: "/usr/bin/xdg-open")
+    xdg_open = "/usr/bin/xdg-open"
+    monkeypatch.setattr(system_browser.shutil, "which", lambda _: xdg_open)
     calls = []
     monkeypatch.setattr(os, "startfile", lambda *args: calls.append(args), raising=False)
     monkeypatch.setattr(
@@ -44,7 +45,10 @@ def test_default_handler_receives_one_literal_url(platform, monkeypatch):
     if platform == "win32":
         assert calls == [(url,)]
     else:
-        command = ["/usr/bin/open", "--"] if platform == "darwin" else ["/usr/bin/xdg-open"]
+        # linux uses os.path.abspath(shutil.which("xdg-open")); abspath of a
+        # POSIX path is host-dependent (on Windows, /usr/bin/xdg-open becomes
+        # D:\usr\bin\xdg-open). Match that, rather than a hardcoded POSIX path.
+        command = ["/usr/bin/open", "--"] if platform == "darwin" else [os.path.abspath(xdg_open)]
         assert calls == [
             (
                 ([*command, url],),

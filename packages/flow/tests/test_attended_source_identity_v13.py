@@ -337,7 +337,11 @@ def test_pre_v3_capability_only_supports_non_identity_required_resume(
         }
     )
     legacy.signature = action_store._sign(legacy, create_key=False)
-    action_store.capability_path.write_text(legacy.model_dump_json(indent=2))
+    # Through the store's own writer: plaintext beside an encrypted capability
+    # would be refused before the identity check this test is about.
+    action_store._state_write(
+        action_store.capability_path, legacy.model_dump_json(indent=2).encode()
+    )
     manifest = store.read_manifest()
     assert manifest is not None
     checkpoint = RunCheckpoint(
