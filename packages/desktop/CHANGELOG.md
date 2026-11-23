@@ -3,6 +3,10 @@
 
 ## Unreleased
 
+
+
+## v0.32.2 (2026-11-24)
+
 ### Bug Fixes
 
 - **desktop**: launch authoring Chromium keychain-safe and close what it owns
