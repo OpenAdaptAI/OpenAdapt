@@ -12,21 +12,41 @@ from __future__ import annotations
 import hashlib
 import threading
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any, Optional  # noqa: F401
+from typing import TYPE_CHECKING, Any, Literal, Mapping, Optional  # noqa: F401
 
 from openadapt_flow.assurance import effect_read_wording as _effect_read_wording
-from openadapt_flow.ir import EffectVerificationEvidence, HaltObservation, StepResult
-from openadapt_flow.qualification_faults import effect_verifier_input_sha256
-from openadapt_flow.runtime.authorization import runtime_param_text
+from openadapt_flow.ir import (
+    EffectVerificationEvidence,
+    HaltObservation,
+    Region,
+    RunReport,
+    Step,
+    StepResult,
+    Workflow,
+)
+from openadapt_flow.qualification_faults import (
+    QualificationFaultGate,
+    effect_verifier_input_sha256,
+)
+from openadapt_flow.runtime.authorization import RuntimeParamScalar, runtime_param_text
 from openadapt_flow.runtime.durable.first_local_runtime import (
     placeholder_effect_refusal,
 )
-from openadapt_flow.runtime.effects import EffectState, reconcile_or_escalate
+from openadapt_flow.runtime.effects import (
+    Effect,
+    EffectState,
+    EffectVerifier,
+    reconcile_or_escalate,
+)
 from openadapt_flow.runtime.effects.adapter import _probe_adapter_connection
 from openadapt_flow.runtime.effects.adapter import (
     verifier_identity as effect_verifier_identity,
 )
 from openadapt_flow.runtime.effects.pipeline_safety import _pipeline_safe_verifier
+from openadapt_flow.runtime.readback_pipeline import (
+    PipelinedReadback,
+    ReadbackPipeline,
+)
 from openadapt_flow.runtime.replay._shared import (
     _MAX_SERVER_RESPONSES,
     effect_endpoint_scope,
@@ -40,23 +60,9 @@ from openadapt_flow.verification import (
 )
 
 if TYPE_CHECKING:
-    from typing import Literal, Mapping
-
     from openadapt_flow.backend import Backend
-    from openadapt_flow.ir import Region, RunReport, Step, Workflow
-    from openadapt_flow.qualification_faults import (
-        FaultMutationReceipt,
-        QualificationFaultGate,
-    )
-    from openadapt_flow.runtime.authorization import (
-        GovernedRunAuthorization,
-        RuntimeParamScalar,
-    )
-    from openadapt_flow.runtime.effects import Effect, EffectVerifier
-    from openadapt_flow.runtime.readback_pipeline import (
-        PipelinedReadback,
-        ReadbackPipeline,
-    )
+    from openadapt_flow.qualification_faults import FaultMutationReceipt
+    from openadapt_flow.runtime.authorization import GovernedRunAuthorization
 
 
 class _EffectChecksHost:
