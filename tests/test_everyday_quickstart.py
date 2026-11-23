@@ -9,8 +9,6 @@ from pathlib import Path
 import pytest
 import yaml
 from click.testing import CliRunner
-from openadapt_flow.runtime.effects.local_state import LocalStateVerifier
-from openadapt_flow.verify_run import VerifyConfig
 
 from openadapt.cli import main
 from openadapt.quickstart.everyday import (
@@ -18,6 +16,18 @@ from openadapt.quickstart.everyday import (
     build_calendar_block_contracts,
     build_night_shift_contracts,
     run_everyday_task,
+)
+
+try:
+    from openadapt_flow.runtime.effects.local_state import LocalStateVerifier
+    from openadapt_flow.verify_run import VerifyConfig
+except ImportError:  # launcher CI installs released openadapt-flow without local_state
+    LocalStateVerifier = None  # type: ignore[assignment]
+    VerifyConfig = None  # type: ignore[assignment]
+
+_REQUIRES_LOCAL_STATE = pytest.mark.skipif(
+    LocalStateVerifier is None,
+    reason="openadapt_flow.runtime.effects.local_state not in installed openadapt-flow",
 )
 
 
@@ -31,8 +41,9 @@ def test_build_night_shift_contracts_macos_and_windows_with_revert() -> None:
     assert rev_mac["effects"][0]["value"] == "false"
     assert params_mac["target_enabled"] == "true"
     assert params_mac["restore_enabled"] == "false"
-    VerifyConfig.model_validate(fwd_mac)
-    VerifyConfig.model_validate(rev_mac)
+    if LocalStateVerifier is not None and VerifyConfig is not None:
+        VerifyConfig.model_validate(fwd_mac)
+        VerifyConfig.model_validate(rev_mac)
 
     fwd_win, rev_win, params_win = build_night_shift_contracts(
         platform="win32", baseline_enabled=True, revert=False
@@ -41,7 +52,8 @@ def test_build_night_shift_contracts_macos_and_windows_with_revert() -> None:
     assert fwd_win["effects"][0]["value"] == "false"
     assert rev_win is None
     assert params_win["revert"] is False
-    VerifyConfig.model_validate(fwd_win)
+    if LocalStateVerifier is not None and VerifyConfig is not None:
+        VerifyConfig.model_validate(fwd_win)
 
     # Unreadable baseline (None) must NOT invent a revert baseline
     _fwd_unk, rev_unk, params_unk = build_night_shift_contracts(
@@ -76,8 +88,9 @@ def test_build_calendar_block_contracts_parameterized_and_revert() -> None:
     assert params["end_iso"] == "2026-11-24T14:45:00"
     assert params["duration_minutes"] == 45
     assert params["recurrence"] == "weekly"
-    VerifyConfig.model_validate(fwd)
-    VerifyConfig.model_validate(rev)
+    if LocalStateVerifier is not None and VerifyConfig is not None:
+        VerifyConfig.model_validate(fwd)
+        VerifyConfig.model_validate(rev)
 
     with pytest.raises(EverydayTaskError, match="duration"):
         build_calendar_block_contracts(duration_minutes=0, platform="darwin")
@@ -87,6 +100,7 @@ def test_build_calendar_block_contracts_parameterized_and_revert() -> None:
         build_calendar_block_contracts(platform="linux")
 
 
+@_REQUIRES_LOCAL_STATE
 def test_run_everyday_task_night_shift_writes_contracts_and_probes_baseline(
     tmp_path: Path,
 ) -> None:
@@ -114,6 +128,7 @@ def test_run_everyday_task_night_shift_writes_contracts_and_probes_baseline(
     assert any("Baseline probe (read-only)" in line for line in lines)
 
 
+@_REQUIRES_LOCAL_STATE
 def test_run_everyday_task_calendar_block_opt_in_probe_and_refuses_preexisting(
     tmp_path: Path,
 ) -> None:

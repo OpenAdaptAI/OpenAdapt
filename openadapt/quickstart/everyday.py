@@ -228,8 +228,14 @@ def _probe_baseline(
     verifier_factory: Optional[Callable[..., Any]] = None,
 ) -> tuple[Optional[dict[str, Any]], Optional[str]]:
     """Run the read-only ``local-state`` probe once without mutating OS state."""
-    from openadapt_flow.runtime.effects.local_state import LocalStateVerifier
-    from openadapt_flow.verify_run import VerifyConfig
+    try:
+        from openadapt_flow.runtime.effects.local_state import LocalStateVerifier
+        from openadapt_flow.verify_run import VerifyConfig
+    except ImportError as exc:
+        return (
+            None,
+            f"local_state verifier unavailable in installed openadapt-flow: {exc}",
+        )
 
     cfg = VerifyConfig.model_validate(verify_doc)
     sources = list(cfg.verifier.local_state or [])
