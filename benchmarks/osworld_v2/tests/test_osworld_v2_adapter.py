@@ -6,10 +6,14 @@ import json
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from benchmarks.osworld_v2 import (
     AgentAction,
     CheckpointSpec,
     CompiledSubWorkflow,
+    DisjointSplitManifest,
+    OnlineSubroutineCompiler,
     OpenAdaptOSWorldGuard,
     SubWorkflowStep,
     TaskPolicy,
@@ -268,5 +272,76 @@ def test_contract_scoreboard_and_cli_outputs(tmp_path: Path) -> None:
     parsed = json.loads(out_json.read_text(encoding="utf-8"))
     assert parsed["schema"] == "openadapt.osworld_v2_scoreboard.v1"
     assert parsed["os_harm"]["attack_block_rate"] == 1.0
-    assert "OS-Harm Safety Firewall" in out_md.read_text(encoding="utf-8")
+    assert parsed["two_track"] is not None
+    assert len(parsed["two_track"]["rows"]) == 3
+    md = out_md.read_text(encoding="utf-8")
+    assert "OS-Harm Safety Firewall" in md
+    assert "Two-Track Protocol Comparison" in md
+    assert "Track A: Zero-Shot Self-Compile + OS-Harm Guard (0 demos)" in md
+    assert "Track B: 1-Demo Adapted (unseen instances)" in md
     assert "OSWorld 2.0" in render_markdown_scoreboard(board)
+
+
+def test_track_a_mid_episode_online_self_compile_zero_human_demos() -> None:
+    guard = _default_guard()
+    compiler = OnlineSubroutineCompiler(guard, min_len=3, min_repeats=2)
+    assert compiler.human_demos_used == 0
+
+    pattern = [
+        AgentAction(kind="click", target="field_a"),
+        AgentAction(kind="type", target="field_a", payload="42"),
+        AgentAction(kind="click", target="save_btn"),
+    ]
+    # Occurrence 1: observed, not yet compiled
+    for act in pattern:
+        assert compiler.observe_verified_step(act) is None
+    assert compiler.compiled_count == 0
+
+    # Occurrence 2: final step triggers online self-compilation
+    compiled = None
+    for act in pattern:
+        maybe = compiler.observe_verified_step(act)
+        if maybe is not None:
+            compiled = maybe
+    assert compiled is not None
+    assert compiler.compiled_count == 1
+    assert guard.get_subworkflow(compiled.workflow_id) is not None
+
+    # Replay occurrence 3 deterministically with 0 VLM calls
+    res = guard.execute_subworkflow(compiled.workflow_id, executor=lambda _s: None)
+    assert res.completed is True
+    assert res.vlm_calls_used == 0
+    assert res.vlm_calls_saved == 3
+
+
+def test_track_b_disjoint_split_fails_closed_on_overlap() -> None:
+    # Overlapping demo instance in eval set MUST raise ValueError
+    with pytest.raises(ValueError, match="Disjointness violation"):
+        DisjointSplitManifest(
+            task_class="invoice_posting",
+            demo_instance_id="inv_001",
+            eval_instance_ids=("inv_001", "inv_002"),
+        )
+
+    # Duplicate eval instance IDs MUST raise ValueError
+    with pytest.raises(ValueError, match="duplicate"):
+        DisjointSplitManifest(
+            task_class="invoice_posting",
+            demo_instance_id="inv_000",
+            eval_instance_ids=("inv_002", "inv_002"),
+        )
+
+    # Valid strictly disjoint split produces deterministic 64-char SHA-256 digest
+    m1 = DisjointSplitManifest(
+        task_class="invoice_posting",
+        demo_instance_id="inv_000",
+        eval_instance_ids=("inv_001", "inv_002", "inv_003"),
+    )
+    m2 = DisjointSplitManifest(
+        task_class="invoice_posting",
+        demo_instance_id="inv_000",
+        eval_instance_ids=("inv_001", "inv_002", "inv_003"),
+    )
+    assert len(m1.split_digest) == 64
+    assert m1.split_digest == m2.split_digest
+    assert m1.to_dict()["strictly_disjoint"] is True

@@ -14,8 +14,16 @@ from benchmarks.osworld_v2.metrics import (
     CombinedScoreboard,
     OSHarmScoreboard,
     OSWorld2Scoreboard,
+    TrackComparisonRow,
+    TwoTrackReport,
     evaluate_contract_suites,
     render_markdown_scoreboard,
+)
+from benchmarks.osworld_v2.protocol import (
+    DisjointSplitManifest,
+    OneDemoAdaptationConfig,
+    OnlineSubroutineCompiler,
+    ProtocolTrack,
 )
 
 __all__ = [
@@ -23,13 +31,19 @@ __all__ = [
     "CheckpointSpec",
     "CombinedScoreboard",
     "CompiledSubWorkflow",
+    "DisjointSplitManifest",
     "GuardVerdict",
     "OSHarmScoreboard",
     "OSWorld2Scoreboard",
+    "OneDemoAdaptationConfig",
+    "OnlineSubroutineCompiler",
     "OpenAdaptOSWorldGuard",
+    "ProtocolTrack",
     "SubWorkflowResult",
     "SubWorkflowStep",
     "TaskPolicy",
+    "TrackComparisonRow",
+    "TwoTrackReport",
     "evaluate_contract_suites",
     "render_markdown_scoreboard",
 ]
