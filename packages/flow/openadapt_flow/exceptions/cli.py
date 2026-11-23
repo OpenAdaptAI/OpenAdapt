@@ -131,7 +131,9 @@ def register(sub: argparse._SubParsersAction) -> None:
         metavar="CHOICE",
         choices=["continue", "skip", "decline", "done_by_person", "abort"],
     )
-    a.add_argument("--key", help=f"the encrypted approver key (default: {_key_default()})")
+    a.add_argument(
+        "--key", help=f"the encrypted approver key (default: {_key_default()})"
+    )
     a.add_argument("--json", action="store_true", help="print JSON")
     _roster(a)
     _common(a)
