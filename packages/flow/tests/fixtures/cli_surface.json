@@ -113,9 +113,10 @@
   "openadapt-flow known-ids": "usage: openadapt-flow known-ids [-h] {confirm,status} ...\n\npositional arguments:\n  {confirm,status}\n    confirm         Confirm the export's source and completeness (recorded)\n    status          Would replay accept this list now?\n\noptions:\n  -h, --help        show this help message and exit\n\nAlso available as: openadapt-flow verify known-ids\n",
   "openadapt-flow known-ids confirm": "usage: openadapt-flow known-ids confirm [-h] [--column COLUMN] [--confirmation CONFIRMATION]\n                                        --source SOURCE [--by BY] [--exported-at EXPORTED_AT]\n                                        [--yes]\n                                        export\n\npositional arguments:\n  export                Export file (CSV/TSV, JSON, or one ID per line)\n\noptions:\n  -h, --help            show this help message and exit\n  --column COLUMN       Identifier column (CSV/TSV)\n  --confirmation CONFIRMATION\n                        Confirmation record (default: EXPORT.confirmation.json)\n  --source SOURCE       Which system and export this is\n  --by BY               Who confirms (default: your user name)\n  --exported-at EXPORTED_AT\n                        When the export was taken (default: file time)\n  --yes                 Skip the interactive prompt\n\nAlso available as: openadapt-flow verify known-ids confirm\n",
   "openadapt-flow known-ids status": "usage: openadapt-flow known-ids status [-h] [--column COLUMN] [--confirmation CONFIRMATION]\n                                       [--max-age-hours MAX_AGE_HOURS]\n                                       export\n\npositional arguments:\n  export                Export file (CSV/TSV, JSON, or one ID per line)\n\noptions:\n  -h, --help            show this help message and exit\n  --column COLUMN       Identifier column (CSV/TSV)\n  --confirmation CONFIRMATION\n                        Confirmation record (default: EXPORT.confirmation.json)\n  --max-age-hours MAX_AGE_HOURS\n\nAlso available as: openadapt-flow verify known-ids status\n",
-  "openadapt-flow learn": "usage: openadapt-flow learn [-h] {collect,propose,approve} ...\n\npositional arguments:\n  {collect,propose,approve}\n    collect             run a shadow and record each check\n    propose             write a proposal a person can read\n    approve             write the approved excuses into contracts\n\noptions:\n  -h, --help            show this help message and exit\n\nAlso available as: openadapt-flow teach --learn\n",
+  "openadapt-flow learn": "usage: openadapt-flow learn [-h] {collect,propose,approve,probe} ...\n\npositional arguments:\n  {collect,propose,approve,probe}\n    collect             run a shadow and record each check\n    propose             write a proposal a person can read\n    approve             write the approved excuses into contracts\n    probe               learn per-request bookkeeping from read-only requests (no approval)\n\noptions:\n  -h, --help            show this help message and exit\n\nAlso available as: openadapt-flow teach --learn\n",
   "openadapt-flow learn approve": "usage: openadapt-flow learn approve [-h] --by BY [--config CONFIG] [--manifest MANIFEST]\n                                    [--contract KIND=PATH] [--kind KIND] [--reject ID]\n                                    proposal\n\npositional arguments:\n  proposal\n\noptions:\n  -h, --help            show this help message and exit\n  --by BY               who approves (recorded)\n  --config CONFIG       the shadow config's routes\n  --manifest MANIFEST   a generator manifest.yaml\n  --contract KIND=PATH  a contract file for a kind (repeatable)\n  --kind KIND           approve only these\n  --reject ID           leave out E<n>\n\nAlso available as: openadapt-flow teach --learn approve\n",
   "openadapt-flow learn collect": "usage: openadapt-flow learn collect [-h] --config CONFIG [--out OUT] [--actor ACTOR]\n                                    [--listen LISTEN] [--until-idle SECONDS]\n\noptions:\n  -h, --help            show this help message and exit\n  --config CONFIG       openadapt.shadow/v1 YAML (sql)\n  --out OUT             folder for episodes.jsonl\n  --actor ACTOR         the agent's user id in the app\n  --listen LISTEN\n  --until-idle SECONDS\n\nAlso available as: openadapt-flow teach --learn collect\n",
+  "openadapt-flow learn probe": "usage: openadapt-flow learn probe [-h] --manifest MANIFEST --kind KIND --values VALUES\n                                  [--extra EXTRA] --actor ACTOR --base-url BASE_URL\n                                  [--headers-env HEADERS_ENV] [--get PATH] [--head PATH]\n                                  [--rounds ROUNDS] [--users USERS] [--user-column TABLE.COLUMN]\n                                  [--schema SCHEMA] [--read READ] [--out OUT] [--apply]\n\noptions:\n  -h, --help            show this help message and exit\n  --manifest MANIFEST   the generator's manifest.yaml\n  --kind KIND           the kind whose contract frames the probe\n  --values VALUES       YAML: one task's values for that kind\n  --extra EXTRA         YAML: extra parameters (actor ids)\n  --actor ACTOR         the agent's user id in the app\n  --base-url BASE_URL\n  --headers-env HEADERS_ENV\n                        environment variable holding the agent's request headers as JSON\n  --get PATH\n  --head PATH\n  --rounds ROUNDS\n  --users USERS         TABLE or TABLE.KEY (default: derived)\n  --user-column TABLE.COLUMN\n  --schema SCHEMA\n  --read READ\n  --out OUT\n  --apply               write the excuses into every contract the manifest lists\n\nAlso available as: openadapt-flow teach --learn probe\n",
   "openadapt-flow learn propose": "usage: openadapt-flow learn propose [-h] --episodes EPISODES [--users USERS]\n                                    [--user-column TABLE.COLUMN] [--schema SCHEMA] [--read READ]\n                                    [--k K] [--n N] [--out OUT]\n\noptions:\n  -h, --help            show this help message and exit\n  --episodes EPISODES   episodes.jsonl\n  --users USERS         the users table, as TABLE or TABLE.KEY (without it only the write's own\n                        rows can be excused)\n  --user-column TABLE.COLUMN\n                        a column holding a user id, confirmed by you (repeatable)\n  --schema SCHEMA       schema.json from `generate schema`\n  --read READ           read.yaml: read the schema's foreign keys live\n  --k K\n  --n N\n  --out OUT\n\nAlso available as: openadapt-flow teach --learn propose\n",
   "openadapt-flow ledger": "usage: openadapt-flow ledger [-h] [--home HOME] {add,list,show,summary,export,push} ...\n\npositional arguments:\n  {add,list,show,summary,export,push}\n    add                 Read a run's files and append its row\n    list                List rows\n    show                Show one row\n    summary             Counts per outcome, minutes, cost, duration\n    export              Write value-free rows as JSONL\n    push                Send value-free run summaries to OpenAdapt Cloud (OPENADAPT_API_KEY)\n\noptions:\n  -h, --help            show this help message and exit\n  --home HOME           OpenAdapt home (default: $OPENADAPT_HOME, else ~/.openadapt)\n\nAlso available as: openadapt-flow inspect ledger\n",
   "openadapt-flow ledger add": "usage: openadapt-flow ledger add [-h] [--task-type TASK_TYPE] [--task-id TASK_ID]\n                                 [--run-ref RUN_REF] [--approvals APPROVALS] [--config CONFIG]\n                                 run\n\npositional arguments:\n  run                   Run directory (or one run record file)\n\noptions:\n  -h, --help            show this help message and exit\n  --task-type TASK_TYPE\n                        Operator label, e.g. intake\n  --task-id TASK_ID     Override the task id\n  --run-ref RUN_REF     The run's exception-queue reference (exceptions serve --run-ref); its\n                        cards and answers are read from $OPENADAPT_HOME/exceptions/REF\n  --approvals APPROVALS\n                        A P7 fallback's item-approval folder root (wrap-dispatch --fallback-\n                        approvals); each gate's request and answer times are read from\n                        DIR/<fallback request id>/item-approval\n  --config CONFIG       The run's guard task JSON or verify.yaml, when not in RUN_DIR; its field\n                        names may leave in export and push (repeatable)\n\nAlso available as: openadapt-flow inspect ledger add\n",
@@ -10482,6 +10483,7 @@
    "commands": {
     "approve": [],
     "collect": [],
+    "probe": [],
     "propose": []
    },
    "exclusive": []
@@ -10689,6 +10691,251 @@
      ],
      "required": false,
      "type": "float"
+    }
+   ],
+   "commands": {},
+   "exclusive": []
+  },
+  "openadapt-flow learn probe": {
+   "arguments": [
+    {
+     "action": "_HelpAction",
+     "choices": null,
+     "default": "==SUPPRESS==",
+     "dest": "help",
+     "help": "show this help message and exit",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "-h",
+      "--help"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "manifest",
+     "help": "the generator's manifest.yaml",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--manifest"
+     ],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "kind",
+     "help": "the kind whose contract frames the probe",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--kind"
+     ],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "values",
+     "help": "YAML: one task's values for that kind",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--values"
+     ],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "extra",
+     "help": "YAML: extra parameters (actor ids)",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--extra"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "actor",
+     "help": "the agent's user id in the app",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--actor"
+     ],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "base_url",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--base-url"
+     ],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "headers_env",
+     "help": "environment variable holding the agent's request headers as JSON",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--headers-env"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_AppendAction",
+     "choices": null,
+     "default": [],
+     "dest": "get",
+     "help": null,
+     "metavar": "PATH",
+     "nargs": null,
+     "options": [
+      "--get"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_AppendAction",
+     "choices": null,
+     "default": [],
+     "dest": "head",
+     "help": null,
+     "metavar": "PATH",
+     "nargs": null,
+     "options": [
+      "--head"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": 3,
+     "dest": "rounds",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--rounds"
+     ],
+     "required": false,
+     "type": "int"
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "users",
+     "help": "TABLE or TABLE.KEY (default: derived)",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--users"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_AppendAction",
+     "choices": null,
+     "default": [],
+     "dest": "user_column",
+     "help": null,
+     "metavar": "TABLE.COLUMN",
+     "nargs": null,
+     "options": [
+      "--user-column"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "schema",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--schema"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "read",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--read"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": "learn",
+     "dest": "out",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--out"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreTrueAction",
+     "choices": null,
+     "default": false,
+     "dest": "apply",
+     "help": "write the excuses into every contract the manifest lists",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "--apply"
+     ],
+     "required": false,
+     "type": null
     }
    ],
    "commands": {},
