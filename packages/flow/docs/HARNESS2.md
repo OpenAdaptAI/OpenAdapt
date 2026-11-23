@@ -43,7 +43,7 @@ they are, and turns the outcome into one number for ranking:
 | `wrong_effect`: reported saved, but no record landed | -0.5 |
 | A record landed on another patient | -1.0 |
 | The patient got more than one record | -1.0 |
-| `escalated_after_effect`: the record landed as declared, then the agent stopped and asked | the receipt's scalar, the contract's `escalated_after_effect_reward` (default 0.5) |
+| `escalated_after_effect`: the record landed as declared, then the agent stopped and asked | the receipt's scalar, the contract's `escalated_after_effect_reward` (0.5 in the synthetic bundle; 0 when a contract doesn't declare it) |
 | `reconciliation_required` or `failed_platform` | none (a person settles it) |
 
 The penalties are the caller's choice (`Penalties`). A write on another

@@ -343,12 +343,15 @@ def _pixels_from_mapping(raw: Mapping[str, Any]) -> _NodePixels:
 
 
 def _load_events(recording_dir: Path) -> list[dict[str, Any]]:
+    from openadapt_flow import sealed_set
+
+    # The recording is encrypted by default: read it through its sealed set.
     path = recording_dir / "events.jsonl"
-    if not path.is_file():
+    if not sealed_set.is_file(path):
         return []
     return [
         json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
+        for line in sealed_set.read_text(path).splitlines()
         if line.strip()
     ]
 
@@ -1250,9 +1253,10 @@ class AuthoringSession:
             record["digest"] = self._draft_digest
         dest = self._draft_bundle if self._draft_bundle is not None else self._out_dir
         dest.mkdir(parents=True, exist_ok=True)
-        (dest / "admit.json").write_text(
-            json.dumps(record, indent=2) + "\n", encoding="utf-8"
-        )
+        from openadapt_flow import sealed_set
+
+        # Inside an encrypted draft bundle (the default) it is sealed too.
+        sealed_set.write_text(dest / "admit.json", json.dumps(record, indent=2) + "\n")
         public: AdmitResult = {"status": "accepted", "workflow_id": workflow_id}
         if self._draft_digest:
             public["digest"] = self._draft_digest
@@ -1394,6 +1398,8 @@ class AuthoringSession:
         the ``surface`` the demonstration ran on, and how the input reached it.
         """
 
+        from openadapt_flow import sealed_set
+
         events_path = rec_dir / "events.jsonl"
         events = _load_events(rec_dir)
         for event in events:
@@ -1402,8 +1408,8 @@ class AuthoringSession:
                 self._actors.get(index, "agent") if isinstance(index, int) else "agent"
             )
         if events:
-            events_path.write_text(
-                "".join(json.dumps(event) + "\n" for event in events), encoding="utf-8"
+            sealed_set.write_text(
+                events_path, "".join(json.dumps(event) + "\n" for event in events)
             )
         actors = {event["actor"] for event in events}
         if actors == {"person"}:
@@ -1413,7 +1419,7 @@ class AuthoringSession:
         else:
             demonstrated_by = "agent"
         meta_path = rec_dir / "meta.json"
-        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        meta = json.loads(sealed_set.read_text(meta_path))
         meta["demonstrated_by"] = demonstrated_by
         meta["surface"] = self._kind
         meta["authoring"] = {
@@ -1426,7 +1432,7 @@ class AuthoringSession:
             # A remote session's frames are the client window's own pixels,
             # the same space Capture's window-scoped recordings declare.
             meta["coordinate_space"] = "window_pixels"
-        meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+        sealed_set.write_text(meta_path, json.dumps(meta, indent=2))
 
     def _refuse_missing_secret_type(self, recording_dir: Path) -> None:
         events = _load_events(recording_dir)

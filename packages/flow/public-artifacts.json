@@ -1463,6 +1463,7 @@
     "benchmark/appliance_validation/results.json",
     "benchmark/appliance_validation/results_identity_full.json",
     "benchmark/appliance_validation/results_supplement.json",
+    "benchmark/at_rest/quickstart_default_2026-11-21.json",
     "benchmark/at_rest/results.json",
     "benchmark/canvas_ladder/results.json",
     "benchmark/choice_widgets/openemr/compose.yml",
