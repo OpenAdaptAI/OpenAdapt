@@ -655,9 +655,11 @@ class SummaryJudge:
         # shows it.
         status_by_key: dict[str, ReadbackStatus] = {}
         for v in verdicts:
-            status_by_key.setdefault(v.dossier_key, v.status)
-            if v.status != ReadbackStatus.PASSED:
-                status_by_key[v.dossier_key] = v.status
+            # A verdict with no status was not checked: say so explicitly.
+            status = v.status if v.status is not None else ReadbackStatus.NOT_CHECKED
+            status_by_key.setdefault(v.dossier_key, status)
+            if status != ReadbackStatus.PASSED:
+                status_by_key[v.dossier_key] = status
         for write in writes:
             sub_id = write.from_popup_subroutine
             if write.source != "popup_return" or not sub_id or not write.dossier_key:
