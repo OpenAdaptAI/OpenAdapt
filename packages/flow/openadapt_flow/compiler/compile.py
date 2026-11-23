@@ -2345,7 +2345,7 @@ def _hover_evidence(
         return None  # nothing answered the pointer: no evidence to keep
     crop_rel = f"{HOVER_CROP_DIR}/{step_id}.png"
     (bundle / HOVER_CROP_DIR).mkdir(parents=True, exist_ok=True)
-    (bundle / crop_rel).write_bytes(response.crop)
+    _sealed.write_bytes(bundle / crop_rel, response.crop)
     return HoverEvidence(
         response=True,
         region=hover_mod.relative(response.region, click),

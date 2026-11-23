@@ -71,6 +71,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional, Protocol, Sequence
 
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.approval_mode.gate import ApprovalGate, GateVerdict, SaveContext
 from openadapt_flow.approval_mode.model import ItemDecisionKind
 from openadapt_flow.approval_mode.post import ItemDecision
@@ -1162,7 +1163,11 @@ class SelfRepair:
         from openadapt_flow.compiler.compile import _postconditions
         from openadapt_flow.repair.registration import build_candidate
         from openadapt_flow.run_gate import is_consequential
-        from openadapt_flow.runtime.heal import persist_heal
+        from openadapt_flow.runtime.heal import (
+            persist_heal,
+            read_heal_frame,
+            write_heal_frame,
+        )
 
         assert step.anchor is not None
         natives = proposal.bridge()
@@ -1287,9 +1292,7 @@ class SelfRepair:
                 if admission.basis == BASIS_RECORD_IDENTITY
                 else f"clicks {label!r} (checked by the record check)"
             )
-            frame_dir = evidence_dir / "heals" / new_id
-            frame_dir.mkdir(parents=True, exist_ok=True)
-            (frame_dir / "screen.png").write_bytes(screen)
+            write_heal_frame(evidence_dir, new_id, screen)
             touched[0] = True
             session.backend.click(
                 int(point[0]), int(point[1]), double=op.kind == "double_click"
@@ -1366,12 +1369,13 @@ class SelfRepair:
         )
 
         changes = {}
+        # Staged through the sealed set (an encrypted run holds them sealed).
         staged = evidence_dir / "expect" / "templates"
-        staged_paths = (
-            {f"templates/{path.name}": path for path in staged.iterdir()}
-            if staged.is_dir()
-            else {}
-        )
+        staged_paths = {
+            f"templates/{path.name}": path
+            for path in _sealed.list_files(staged)
+            if path.parent.name == "templates"
+        }
         for step_id, crop in crops.items():
             target = next(s for s in steps if s.id == step_id)
             assert target.anchor is not None
@@ -1383,7 +1387,7 @@ class SelfRepair:
             patched,
             bundle_out,
             {
-                **{rel: path.read_bytes() for rel, path in staged_paths.items()},
+                **{rel: _sealed.read_bytes(path) for rel, path in staged_paths.items()},
                 **changes,
             },
             output="encrypted" if workflow.encrypted else "plain",
@@ -1400,8 +1404,10 @@ class SelfRepair:
         run_dir = attempt_dir.parent.parent
         halted_report = run_dir / "report.json"
         evidence_dir.mkdir(parents=True, exist_ok=True)
-        if halted_report.is_file():
-            shutil.copy2(halted_report, evidence_dir / "report.json")
+        if _sealed.is_file(halted_report):
+            _sealed.write_bytes(
+                evidence_dir / "report.json", _sealed.read_bytes(halted_report)
+            )
         candidate = build_candidate(
             bundle_dir,
             bundle_out,
@@ -1416,9 +1422,7 @@ class SelfRepair:
         candidate.taught_steps = [
             TaughtStep(
                 step_id=s.id,
-                frame_sha256=sha256_hex(
-                    (evidence_dir / "heals" / s.id / "screen.png").read_bytes()
-                ),
+                frame_sha256=sha256_hex(read_heal_frame(evidence_dir, s.id)),
             )
             for s in new_steps
             if s.anchor is not None
@@ -2489,8 +2493,8 @@ class SelfRepair:
             pass
         if status != "not_needed":
             work.mkdir(parents=True, exist_ok=True)
-            (work / "self-repair.json").write_text(
-                evidence.model_dump_json(indent=2), encoding="utf-8"
+            _sealed.write_text(
+                work / "self-repair.json", evidence.model_dump_json(indent=2)
             )
         return SelfRepairResult(
             status=status,
@@ -3241,7 +3245,8 @@ def _before_frame(run_dir: Path, result: Any) -> Optional[bytes]:
         return None
     path = run_dir / rel
     try:
-        return path.read_bytes()
+        # A missing frame is no frame; a tampered sealed one still refuses.
+        return _sealed.read_bytes(path)
     except OSError:
         return None
 
