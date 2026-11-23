@@ -32,6 +32,8 @@ def pytest_collection_modifyitems(
 
 
 _SESSION_ENV: dict[str, str | None] = {}
+#: The at-rest home of an OPENADAPT_TEST_DEFAULT_AT_REST=1 session.
+_SESSION_AT_REST_HOME: str | None = None
 
 
 def _configure_at_rest() -> None:
@@ -40,7 +42,13 @@ def _configure_at_rest() -> None:
     output under a key a later per-test home can't open, and nothing may reach
     the person's OS keychain. The per-test isolation sets these again."""
 
+    global _SESSION_AT_REST_HOME
     wanted = {"OPENADAPT_FLOW_KEY_STORE": "file"}
+    if os.environ.get("OPENADAPT_TEST_DEFAULT_AT_REST") == "1":
+        import tempfile
+
+        _SESSION_AT_REST_HOME = tempfile.mkdtemp(prefix="openadapt-at-rest-home-")
+        wanted["OPENADAPT_FLOW_AT_REST_HOME"] = _SESSION_AT_REST_HOME
     if os.environ.get("OPENADAPT_TEST_DEFAULT_AT_REST") != "1":
         wanted["OPENADAPT_FLOW_PLAINTEXT_AT_REST"] = os.environ.get(
             "OPENADAPT_FLOW_PLAINTEXT_AT_REST", "test suite: synthetic data"
@@ -105,7 +113,12 @@ def _isolation_env(root: Path) -> dict[str, str | None]:
         "OPENADAPT_FLOW_PLAINTEXT_AT_REST": None
         if os.environ.get("OPENADAPT_TEST_DEFAULT_AT_REST") == "1"
         else "test suite: synthetic data",
-        "OPENADAPT_FLOW_AT_REST_HOME": str(root / ".at-rest-home"),
+        # Under the default mode, one device key per test session (per xdist
+        # worker), outside every test's own directories: a module fixture
+        # sealed in one test must open in the next, and the key files must
+        # never land inside a recording or run directory a test seals.
+        "OPENADAPT_FLOW_AT_REST_HOME": _SESSION_AT_REST_HOME
+        or str(root / ".at-rest-home"),
         "OPENADAPT_FLOW_AT_REST": None,
         # The device key goes to a file in the isolated home, never to the
         # OS keychain (no dialog, no write to the person's login keychain).

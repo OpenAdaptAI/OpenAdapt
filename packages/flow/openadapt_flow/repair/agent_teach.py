@@ -77,8 +77,10 @@ def _evidence_frame(recording: Path, template: str) -> Path:
         raise AgentTeachRefused(
             "a taught step has no recorded template, so there is no frame to test it on"
         )
+    from openadapt_flow import sealed_set
+
     frame = recording / "frames" / f"{int(match.group(1)):04d}_before.png"
-    if not frame.is_file():
+    if not sealed_set.is_file(frame):
         raise AgentTeachRefused(f"the recording has no frame for {template}")
     return frame
 
@@ -102,17 +104,26 @@ def _finish_candidate(
         raise AgentTeachRefused(
             "the demonstration added no step with an on-screen target"
         )
+    from openadapt_flow import at_rest, sealed_set
+
+    if sealed_set.is_sealed_path(run_dir) or sealed_set.is_sealed_path(recording):
+        # The candidate's evidence (the run report and the taught frames) is
+        # a plaintext folder the repair review reads; it can't be encrypted
+        # yet. Logged by default, refused in strict mode, before it's written.
+        at_rest.unsealed_write("agent-teach repair evidence", evidence)
     if evidence.exists():
         shutil.rmtree(evidence)
     (evidence / "heals").mkdir(parents=True)
-    shutil.copy2(run_dir / "report.json", evidence / "report.json")
+    (evidence / "report.json").write_bytes(
+        sealed_set.read_bytes(run_dir / "report.json")
+    )
     taught: list[TaughtStep] = []
     for step_id, step in sorted(new_steps.items()):
         assert step.anchor is not None  # filtered above
         frame = _evidence_frame(recording, step.anchor.template)
         target = evidence / "heals" / step_id / "screen.png"
         target.parent.mkdir(parents=True)
-        shutil.copy2(frame, target)
+        target.write_bytes(sealed_set.read_bytes(frame))
         taught.append(
             TaughtStep(step_id=step_id, frame_sha256=sha256_hex(target.read_bytes()))
         )
