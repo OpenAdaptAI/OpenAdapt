@@ -1,0 +1,1 @@
+| One program that switches surfaces, tabs and popups mid-run | Released ([#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197)) | Real Chromium; Windows switch on a mock | [#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197) |

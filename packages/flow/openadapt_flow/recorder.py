@@ -62,6 +62,7 @@ from typing import Any, Callable, Optional
 from PIL import Image, ImageDraw
 
 from openadapt_flow import sealed_set as _sealed
+from openadapt_flow.at_rest import POLICY
 from openadapt_flow.backend import (
     Backend,
     PageCloseExpectationBackend,
@@ -75,6 +76,7 @@ from openadapt_flow.ir import (
     StructuralLocator,
 )
 from openadapt_flow.native_selection_capture import demonstrated_native_choice
+from openadapt_flow.second_factor import ONE_TIME_CODE_MARKER, ONE_TIME_CODE_PARAM
 
 #: Bound on waiting for a newly opened page's first navigation.
 _NEW_PAGE_LOAD_TIMEOUT_S = 10.0
@@ -227,7 +229,7 @@ class Recorder:
         surface_id: str = PRIMARY_SURFACE_ID,
         surface_kind: Optional[str] = None,
         page_backend_factory: Optional[Callable[[Any], Backend]] = None,
-        encryption_key: Optional[str] = None,
+        encryption_key: Optional[str] | object = POLICY,
         finalize_on_finish: bool = True,
         capture_hover: bool = False,
         event_clock: Optional[list[float]] = None,
@@ -272,6 +274,11 @@ class Recorder:
         # sealed set that is finalized (indexed) when the recording finishes.
         self._sealed_writer: Optional[_sealed.SealedSetWriter] = None
         self._finalize_on_finish = finalize_on_finish
+        # Encrypted by default (the at-rest policy decides); an explicit
+        # ``None`` is plaintext that strict mode refuses and the ledger records.
+        encryption_key = _sealed.new_artifact_key(
+            encryption_key, "a recording", self._dir
+        )
         if encryption_key:
             self._sealed_writer = _sealed.SealedSetWriter(
                 self._dir, "recording", encryption_key
@@ -407,6 +414,14 @@ class Recorder:
         field_label = self._focused_field_label()
         if field_label:
             event["field_label"] = field_label
+        if credential is not None and credential[0] == "one-time-code":
+            self._type_one_time_code(event, text, credential[1])
+            return
+        if text == ONE_TIME_CODE_MARKER:
+            raise CredentialFieldError(
+                "the one-time code marker was typed into a field that does not "
+                "ask for a one-time code; nothing was typed"
+            )
         if credential is not None and credential[0] == "unknown":
             if text in (self._credential_inputs or {}):
                 raise CredentialFieldError(
@@ -451,6 +466,49 @@ class Recorder:
         #: what they typed must not log it).
         self.last_type_withheld = credential is not None
         self._record(event, lambda: self._backend.type_text(text))
+
+    def _type_one_time_code(
+        self, event: dict[str, Any], text: str, region: tuple[int, int, int, int]
+    ) -> None:
+        """Type a code a person supplies into the focused one-time-code field.
+
+        The agent's text is discarded (it never has the code), unless it is a
+        declared input, which is refused: a code field takes only a code. The
+        handoff (:mod:`openadapt_flow.runtime.second_factor_step`) binds the
+        field, masks it on screen, asks, re-checks and types once. The event
+        names :data:`ONE_TIME_CODE_PARAM` and holds no value.
+        """
+        from openadapt_flow import second_factor
+        from openadapt_flow.backends.one_time_field import one_time_field_for
+        from openadapt_flow.runtime.second_factor_step import DeliveryLedger, Handoff
+
+        if text in (self._credential_inputs or {}):
+            raise CredentialFieldError(
+                "a one-time code field takes only a code from a person, not a "
+                "declared input; nothing was typed"
+            )
+        event.pop("text", None)
+        event.update(
+            param=ONE_TIME_CODE_PARAM,
+            secret=True,
+            one_time="code",
+            credential="one-time-code",
+            redacted_region=list(region),
+        )
+        self._credential_fields.append((self._active_surface, "one-time-code", region))
+        self.last_type_withheld = True
+        ledger = self.__dict__.setdefault("_second_factor_ledger", DeliveryLedger())
+        handoff = Handoff(one_time_field_for(self._backend), ledger)
+
+        def deliver() -> None:
+            try:
+                handoff.deliver_code("recording", key=f"recording:{self._i}")
+            except second_factor.SecondFactorRefused as refused:
+                raise CredentialFieldError(
+                    f"a one-time code field needs a code from a person ({refused})"
+                ) from None
+
+        self._record(event, deliver)
 
     def press(self, key: str) -> None:
         """Press a key or chord (e.g. ``'Enter'``), recording the event."""
@@ -1405,6 +1463,7 @@ class Recorder:
             "password",
             "new-password",
             "username",
+            "one-time-code",
         ):
             # A seam that answered but could not say: fail closed.
             return "unknown", _WHOLE_FRAME

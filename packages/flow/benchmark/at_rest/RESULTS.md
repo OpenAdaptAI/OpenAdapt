@@ -34,3 +34,7 @@ Reproduce:
 ```bash
 python benchmark/at_rest/run.py --actions 150 --out benchmark/at_rest/results.json
 ```
+
+## Quickstart with everything encrypted by default (2026-11-21)
+
+Headless `openadapt quickstart` on MockMed, before (origin/main `4d9dc90c6`: recording, bundle and run folders plaintext) and after (sealed-set v3 for all of them), interleaved on one loaded laptop. Medians of three warm runs each: 90.6 s before, 94.5 s after. The gap is within run-to-run noise at this load (25 to 37). One after run that hit a 180 s system-Chrome launch timeout is excluded. Data: [quickstart_default_2026-11-21.json](quickstart_default_2026-11-21.json).

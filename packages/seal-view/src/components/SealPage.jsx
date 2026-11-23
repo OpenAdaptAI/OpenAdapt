@@ -53,6 +53,7 @@
 // No <head>: the host sets the title (sealPageMeta).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { checkReceipt } from '../lib/receiptCheck.mjs'
+import { verifyReceipt } from '../lib/receiptRecord.mjs'
 import { sha256Hex } from '../lib/localSeal.mjs'
 import { sealSha256 } from '../lib/sealAnchor.mjs'
 import { loadSealFiles } from '../lib/sealFiles.mjs'
@@ -396,6 +397,31 @@ export default function SealPage({ seal: page, host = {} }) {
             setCommands(canonicalCommands.split(canonicalOrigin).join(origin))
     }, [canonicalCommands, canonicalOrigin])
 
+    // The receipt (record/run/v1) is checked first; seal.json is the older
+    // format. The receipt must name the exact report bytes on the page.
+    const withRecord = async (legacyResult, copy, required) => {
+        // Dropped-requirement class: the receipt never overrides a required
+        // check that failed (authorization, anchor), and can't stand in for
+        // one the older seal would have carried.
+        if (legacyResult.sealOk && !legacyResult.ok) return { ...legacyResult, record: null }
+        if (!legacyResult.sealOk && (required.anchor || required.authorization))
+            return { ...legacyResult, ok: false, reason: required.authorization ? 'auth_missing' : 'anchor_missing', record: null }
+        // A receipt is here but no registry names its signer's role: it is
+        // never verified by the older seal beside it.
+        if (!copy.receiptKeys) return { ...legacyResult, ok: false, reason: 'unknown_key', record: null }
+        let doc
+        try {
+            doc = JSON.parse(copy.receiptText)
+        } catch {
+            return { ...legacyResult, ok: false, reason: 'malformed', record: null }
+        }
+        const record = await verifyReceipt(doc, copy.receiptKeys)
+        if (!record.ok) return { ...legacyResult, ok: false, reason: record.reason, record }
+        const named = record.statement.subject.find((x) => x.name === 'report.json')
+        if (!named || named.digest.sha256 !== (await sha256Hex(copy.report))) return { ...legacyResult, ok: false, reason: 'subject_mismatch', record }
+        return { ...legacyResult, ok: true, reason: null, record }
+    }
+
     const verify = useCallback(
         async (option) => {
             const id = ++runId.current
@@ -412,10 +438,12 @@ export default function SealPage({ seal: page, host = {} }) {
             try {
                 filesRef.current = filesRef.current || (await (loadFiles ? loadFiles() : loadSealFiles(files, authorization)))
                 const copy = option ? applyTamper(filesRef.current, option) : filesRef.current
+                const required = { anchor: Boolean(files.anchor), authorization: Boolean(authorization) }
                 next = await checkReceipt(copy, keys, {
-                    requireAnchor: Boolean(files.anchor),
-                    requireAuthorization: Boolean(authorization),
+                    requireAnchor: required.anchor,
+                    requireAuthorization: required.authorization,
                 })
+                if (copy.receiptText) next = await withRecord(next, copy, required)
                 seen = hasWitness ? await checkWitnesses(copy, keys) : null
                 try {
                     const sealDigest = await sealSha256(JSON.parse(copy.sealText))
@@ -732,8 +760,16 @@ export default function SealPage({ seal: page, host = {} }) {
 
     // The signer line, always shown: who signed this receipt, or why it isn't verified.
     const demo = signerRole === 'demo' || seal?.issuer === 'demo'
-    const signer =
-        verdict === null
+    const record = result?.record ?? null
+    const signer = record
+        ? verdict === null
+            ? { state: 'pending', text: 'Checking who signed it' }
+            : record.ok && verdict === 'valid'
+              ? { state: record.demo ? 'demo' : 'signed', text: record.signerLines.join(' · ') }
+              : record.reason === 'unknown_signer'
+                ? { state: 'unknown', text: 'Not verified: unknown signer' }
+                : { state: 'fails', text: record.signerLines?.[0] || 'Not verified' }
+        : verdict === null
             ? { state: 'pending', text: 'Checking who signed it' }
             : verdict === 'valid'
               ? demo
@@ -746,7 +782,8 @@ export default function SealPage({ seal: page, host = {} }) {
                 : verdict === 'fails'
                   ? { state: 'fails', text: 'Not verified: the signature check failed' }
                   : { state: 'unchecked', text: 'Not verified here' }
-    const legacy = typeof seal?.schema === 'string' && /^openadapt\.(local-seal|public-seal)\//.test(seal.schema)
+    const hasRecord = Boolean(files?.receiptText || result?.record)
+    const legacy = !hasRecord && typeof seal?.schema === 'string' && /^openadapt\.(local-seal|public-seal)\//.test(seal.schema)
 
     const verdictText =
         verdict === null ? (
@@ -1139,6 +1176,10 @@ export default function SealPage({ seal: page, host = {} }) {
                             {legacy ? (
                                 <p className={s.older} data-format="">
                                     Format: {seal.schema.replace(/^openadapt\./, '')}, still verifies
+                                </p>
+                            ) : hasRecord ? (
+                                <p className={s.older} data-format="">
+                                    Format: record/run/v1
                                 </p>
                             ) : null}
                             <RecordTable seal={seal} files={files} links={links} witnesses={witnesses} witness={witness} live={change ? null : live} authorization={authorization} authorizedLine={authorizedLine} />

@@ -1,0 +1,27 @@
+{
+  "case_id": "hl-s07",
+  "facts": {
+    "applicant.date_of_birth": "1982-12-11",
+    "applicant.email": "bastian.oyelaran@example.test",
+    "applicant.first_name": "Bastian",
+    "applicant.last_name": "Oyelaran",
+    "applicant.phone": "512-555-0173",
+    "coverage.deductible": 1000,
+    "coverage.effective_date": "2026-12-15",
+    "coverage.liability_limit": 500000,
+    "history.prior_claims_5yr": 0,
+    "history.prior_policy_number": "HM-097731",
+    "property.address_line1": "640 Pecan Grove Blvd",
+    "property.city": "Round Rock",
+    "property.construction_quality": "Standard",
+    "property.exterior_wall": "brick veneer",
+    "property.has_pool": false,
+    "property.roof_material": "Architectural Shingle",
+    "property.roof_year": 2021,
+    "property.square_feet": 2400,
+    "property.state": "TX",
+    "property.stories": "2",
+    "property.year_built": 2006,
+    "property.zip": "78664"
+  }
+}

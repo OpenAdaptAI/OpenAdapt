@@ -10,7 +10,7 @@ tools, Desktop, Cloud and the Seal receipt all have to agree on:
 * :class:`ApprovalModeV1` says when a step waits for a decision, and
   :class:`ApproverPolicyV1` says which kinds of approver may decide for each
   class of step. The default policy lets only a person decide, and a
-  ``clinical_write`` step accepts a non-person approver only after an explicit
+  ``high_risk_write`` step accepts a non-person approver only after an explicit
   opt-in.
 * :class:`ReadBackTier` and :class:`ReadBackOutcome` are the coarse,
   customer-facing verification ladder. Only an independent system read-back
@@ -126,7 +126,7 @@ _AUTH_BY_KIND: Mapping[ApproverKind, frozenset[ApproverAuth]] = {
 
 
 class ApproverIdentityV1(_Strict):
-    """Who or what approved or declined one step. PHI-free by construction.
+    """Who or what approved or declined one step. Sensitive-data-free by construction.
 
     ``id`` is an opaque identifier (a Cloud user id, a rule id, an agent id,
     a system id), never a name or free text.
@@ -281,8 +281,19 @@ class StepClass(str, Enum):
     REVERSIBLE = "reversible"
     CONSEQUENTIAL = "consequential"
     IRREVERSIBLE = "irreversible"
-    #: An irreversible write to a clinical record.
+    #: An irreversible, high-risk write to a system of record. Declared
+    #: first so the member keeps its 0.24.0 name (``.name``, ``str()``,
+    #: ``repr()``); the wire value stays ``clinical_write`` in v1 for
+    #: signed-grant and receipt compatibility.
     CLINICAL_WRITE = "clinical_write"
+    #: Domain-neutral alias for ``CLINICAL_WRITE``.
+    HIGH_RISK_WRITE = "clinical_write"
+
+    @classmethod
+    def _missing_(cls, value: object) -> Optional["StepClass"]:
+        if value == "high_risk_write":
+            return cls.HIGH_RISK_WRITE
+        return None
 
 
 _PERSON_ONLY: tuple[ApproverKind, ...] = (ApproverKind.PERSON,)
@@ -296,16 +307,27 @@ class ApproverPolicyRefusal(str, Enum):
     """Closed reasons a policy refuses an approver."""
 
     KIND_NOT_ALLOWED = "approver_kind_not_allowed"
+    #: Declared first so the member keeps its 0.24.0 name; the wire value
+    #: stays ``clinical_write_needs_opt_in`` in v1 for Flow compatibility.
     CLINICAL_WRITE_NEEDS_OPT_IN = "clinical_write_needs_opt_in"
+    #: Domain-neutral alias for ``CLINICAL_WRITE_NEEDS_OPT_IN``.
+    HIGH_RISK_WRITE_NEEDS_OPT_IN = "clinical_write_needs_opt_in"
+
+    @classmethod
+    def _missing_(cls, value: object) -> Optional["ApproverPolicyRefusal"]:
+        if value == "high_risk_write_needs_opt_in":
+            return cls.HIGH_RISK_WRITE_NEEDS_OPT_IN
+        return None
 
 
 class ApproverPolicyV1(_Strict):
     """Which kinds of approver may decide each class of step.
 
     The default allows only a person for every class. A deployment may
-    widen a class to rules, agents or systems. ``clinical_write`` accepts a
-    non-person approver only when ``clinical_write_opt_in_sha256`` pins the
-    customer's signed opt-in.
+    widen a class to rules, agents or systems. ``HIGH_RISK_WRITE`` (v1 wire
+    key ``clinical_write``) accepts a non-person approver only when
+    ``high_risk_write_opt_in_sha256`` (v1 wire field
+    ``clinical_write_opt_in_sha256``) pins the customer's signed opt-in.
     """
 
     schema_version: Literal["openadapt.approver-policy/v1"] = APPROVER_POLICY_SCHEMA
@@ -316,6 +338,46 @@ class ApproverPolicyV1(_Strict):
         default=None, pattern=_SHA256
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_domain_neutral_fields(cls, data: object) -> object:
+        # Accept domain-neutral input keys and normalize onto the v1 wire fields so
+        # signed v1 grants and Flow's v1 reader keep exact canonical bytes.
+        if not isinstance(data, Mapping):
+            return data
+        normalized = dict(data)
+        if "high_risk_write_opt_in_sha256" in normalized:
+            new_opt_in = normalized.pop("high_risk_write_opt_in_sha256")
+            if (
+                "clinical_write_opt_in_sha256" in normalized
+                and normalized["clinical_write_opt_in_sha256"] != new_opt_in
+            ):
+                raise ValueError(
+                    "conflicting high_risk_write_opt_in_sha256 and "
+                    "clinical_write_opt_in_sha256 values"
+                )
+            normalized.setdefault("clinical_write_opt_in_sha256", new_opt_in)
+        allowed = normalized.get("allowed")
+        if isinstance(allowed, Mapping) and "high_risk_write" in allowed:
+            allowed_copy = dict(allowed)
+            high_risk_kinds = allowed_copy.pop("high_risk_write")
+            if (
+                "clinical_write" in allowed_copy
+                or StepClass.HIGH_RISK_WRITE in allowed_copy
+            ):
+                raise ValueError(
+                    "policy cannot specify both high_risk_write and clinical_write"
+                )
+            allowed_copy["clinical_write"] = high_risk_kinds
+            normalized["allowed"] = allowed_copy
+        return normalized
+
+    @property
+    def high_risk_write_opt_in_sha256(self) -> Optional[StrictStr]:
+        """Domain-neutral alias for the v1 ``clinical_write_opt_in_sha256`` field."""
+
+        return self.clinical_write_opt_in_sha256
+
     @model_validator(mode="after")
     def _complete(self) -> "ApproverPolicyV1":
         missing = [c.value for c in StepClass if c not in self.allowed]
@@ -324,9 +386,9 @@ class ApproverPolicyV1(_Strict):
         for step_class, kinds in self.allowed.items():
             if not kinds or len(set(kinds)) != len(kinds):
                 raise ValueError(f"{step_class.value} needs distinct approver kinds")
-        clinical = self.allowed[StepClass.CLINICAL_WRITE]
-        if clinical != _PERSON_ONLY and self.clinical_write_opt_in_sha256 is None:
-            raise ValueError("clinical_write allows a non-person only with an opt-in")
+        high_risk = self.allowed[StepClass.HIGH_RISK_WRITE]
+        if high_risk != _PERSON_ONLY and self.clinical_write_opt_in_sha256 is None:
+            raise ValueError("high_risk_write allows a non-person only with an opt-in")
         return self
 
     def refusal(
@@ -336,10 +398,10 @@ class ApproverPolicyV1(_Strict):
 
         if approver.kind not in self.allowed[step_class]:
             if (
-                step_class is StepClass.CLINICAL_WRITE
+                step_class is StepClass.HIGH_RISK_WRITE
                 and self.clinical_write_opt_in_sha256 is None
             ):
-                return ApproverPolicyRefusal.CLINICAL_WRITE_NEEDS_OPT_IN
+                return ApproverPolicyRefusal.HIGH_RISK_WRITE_NEEDS_OPT_IN
             return ApproverPolicyRefusal.KIND_NOT_ALLOWED
         return None
 
@@ -360,8 +422,8 @@ class ReadBackTier(IntEnum):
     save has several checks, the weakest wins.
 
     * ``INDEPENDENT_READBACK``: a read of the system of record that doesn't
-      go through the UI: REST, SQL, FHIR, GraphQL or a file export (Flow
-      tier 1).
+      go through the UI: REST, SQL, GraphQL, or a structured API/file export
+      (Flow tier 1).
     * ``SCREEN_READBACK``: any read through the UI, in a separate session
       (Flow tier 2), the acting session (tier 3) or the acting screen
       (tier 4).
@@ -588,13 +650,23 @@ ApprovalRoute = Literal[
 class ApprovalRecordV1(_Strict):
     """One approval decision, as it goes into the audit trail and receipt.
 
-    PHI-free: digests, codes and opaque ids only.
+    Sensitive-data-free: digests, codes and opaque ids only.
     """
 
     schema_version: Literal["openadapt.approval-record/v1"] = APPROVAL_RECORD_SCHEMA
     workflow_id: StrictStr = Field(pattern=_OPAQUE_ID)
     step_id: StrictStr = Field(min_length=1, max_length=256)
     step_class: StepClass
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_domain_neutral_step_class(cls, data: object) -> object:
+        # Normalize domain-neutral input onto the v1 wire value for receipt compatibility.
+        if isinstance(data, Mapping) and data.get("step_class") == "high_risk_write":
+            normalized = dict(data)
+            normalized["step_class"] = StepClass.HIGH_RISK_WRITE.value
+            return normalized
+        return data
     mode: ApprovalModeV1
     decision: Literal["approved", "declined"]
     decline_reason: Optional[StrictStr] = Field(default=None, pattern=_CODE)
