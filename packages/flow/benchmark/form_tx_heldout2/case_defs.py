@@ -1,7 +1,7 @@
 """Source of truth for every case: intake, portal setup, and answer key.
 
 ``build_cases.py`` writes ``cases/<portal>/<case_id>.intake.json`` and
-``answer_key.json`` from this module. Portals read only ``portal_config``.
+``answers.json`` from this module. Portals read only ``portal_config``.
 
 Behavior labels (one per case):
 

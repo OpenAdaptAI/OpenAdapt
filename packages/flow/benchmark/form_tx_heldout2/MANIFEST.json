@@ -1,13 +1,13 @@
 {
   "description": "sha256 of every git-tracked file in benchmark/form_tx_heldout2 except this manifest",
-  "answer_key_sha256": "46df94bf3da9005278d14bb59ee8c9a5b7784ce47d11178532de11fc42c70f90",
+  "answers_sha256": "46df94bf3da9005278d14bb59ee8c9a5b7784ce47d11178532de11fc42c70f90",
   "files": {
-    "README.md": "cdd3f9034c5859b89038a49ff30d8ec53013bddb1e00974d1c068d48e85b7323",
+    "README.md": "4c12be896fe25bab1a134971e5642900dc9c36dc0d729fbb882b0750c2865a75",
     "REFERENCE_RUNS.json": "dab74bb54ef7ced563437bed17dcfa5830fc7239889bfc563292d6b992ee460e",
     "__init__.py": "38fc5040ad5ba9d305cc642746b3cbb5b0bbe5fbd3478ed7ec9daa65ee99bcf7",
-    "answer_key.json": "46df94bf3da9005278d14bb59ee8c9a5b7784ce47d11178532de11fc42c70f90",
-    "build_cases.py": "29162aa30daecbb7017fcb66fecccbab1edc1f9ef195406cb02e0bbe62c0b83f",
-    "case_defs.py": "d8f93e9aec588e4801bbd859f427e01c8f790d281671ea5615b07887fe13d45e",
+    "answers.json": "46df94bf3da9005278d14bb59ee8c9a5b7784ce47d11178532de11fc42c70f90",
+    "build_cases.py": "4217e23513826d5cf52eb8dc8c888301ce7afe252849a634f431492e6177bd12",
+    "case_defs.py": "46ad4852899cdb0714df53e4e86be27e66b3f800a070a1c807e6d291feacdb9e",
     "cases/ferncastle/fc-dev.intake.json": "bbce58e45f83e219e46c88c75252b05d4acdfd1f1c231962cffe8188164a2b0d",
     "cases/ferncastle/fc-s01.intake.json": "497254529ab036a80345e8d4e76e9b73df26b8d0f459d26a5a01dfe53271fac0",
     "cases/ferncastle/fc-s02.intake.json": "f11e6c1a8548c80758a9bfc34730a681b4eaa6391918e474dabaace773507285",
@@ -57,13 +57,13 @@
     "fixtures/portal_logins.json": "ef94bf54dfd73663b6d4dd58eb0dd7d5b242ffbeefd845f5161b94cc73ce742c",
     "glasswing.py": "6d17215b51af635371de24dc71387a1c4b942a554307b98ceeb57d70f7fbc90a",
     "intake_vocabulary.json": "3b95f02c94ad7f9dcd0c1379809b7eb72a068279856b9d8738aefcd1c6c5b97b",
-    "make_manifest.py": "82817c440a24dc69a64630aa1af90820487ac7be4d9d4ff7117977c8cef7b5be",
+    "make_manifest.py": "d6d61abf6f7fae57de85f47f6f407e75775875340910fbef69f8f9156fdf1664",
     "naive_filler.py": "0dd593325867c6370689a778768f754939884745744ef85a12e641be064fe967",
     "okelund.py": "8301d7f422b636d6ce04d60e91c038581e2b6377e0dd57024f40b0ba4c38122b",
     "portals.py": "2aeceab3bdd416b75321e70e4ca508181f1a82906416c335fbacead8a2132d7d",
     "reference_human.py": "854822d9bb490b480de4da90d34eec531270178ac6fb864a4696be9bfaa99971",
     "runner.py": "d155c511f361cb176cb9f3c34a31576e352e520ddaee71551284ef0084229381",
-    "scoring.py": "79c1c366c58e80e15b1df7f8d502cd2cacf31303611e535a345944c8fc42621d",
+    "scoring.py": "0563710efd99703e3c8895c9ddd856beb2f599e20ff8caf95e2c976c91c8e29f",
     "velloway.py": "1316aa68598d823f9c3bea24cb56518b5972518a7a247a6e471def30fd4af3b0"
   }
 }

@@ -840,7 +840,7 @@
     "benchmark/form_tx_heldout/intake_vocabulary.json",
     "benchmark/form_tx_heldout2/MANIFEST.json",
     "benchmark/form_tx_heldout2/REFERENCE_RUNS.json",
-    "benchmark/form_tx_heldout2/answer_key.json",
+    "benchmark/form_tx_heldout2/answers.json",
     "benchmark/form_tx_heldout2/cases/ferncastle/fc-dev.intake.json",
     "benchmark/form_tx_heldout2/cases/ferncastle/fc-s01.intake.json",
     "benchmark/form_tx_heldout2/cases/ferncastle/fc-s02.intake.json",

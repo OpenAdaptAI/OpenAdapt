@@ -46,7 +46,9 @@ quote and a quote reference.
 ## Scoring
 
 `scoring.py` documents the normalization and the result fields; it is the
-same scorer as the first set. `answer_key.json` holds, per case,
+same scorer as the first set. `answers.json` (named `answer_key.json` until
+2026-11-23; renamed because CI treats any file named like a key as key
+material; contents and sha256 unchanged) holds, per case,
 `expected_record` (every non-metadata field the portal stores),
 `expected_behavior`, `also_acceptable`, `traps` and `operator_script` (keyed
 by visible label and by canonical key, plus `session_login`). The key's

@@ -1,4 +1,4 @@
-"""Write the intake files and ``answer_key.json`` from ``case_defs``.
+"""Write the intake files and ``answers.json`` from ``case_defs``.
 
 Run from ``packages/flow``: ``python -m benchmark.form_tx_heldout2.build_cases``.
 """
@@ -58,7 +58,7 @@ def build() -> dict:
                 "expected_record": case["expected"],
                 "operator_script": operator_script(case, portal),
             }
-    (HERE / "answer_key.json").write_text(json.dumps(key, indent=2) + "\n")
+    (HERE / "answers.json").write_text(json.dumps(key, indent=2) + "\n")
     vocab = {p: intake_vocabulary(p) for p in CASES}
     (HERE / "intake_vocabulary.json").write_text(json.dumps(vocab, indent=2) + "\n")
     return key

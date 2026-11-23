@@ -23,7 +23,7 @@ from benchmark.form_tx_heldout2.case_defs import CASES, PORTAL_META
 from benchmark.form_tx_heldout2.portals import PORTALS
 
 HERE = Path(scoring.__file__).resolve().parent
-AK = json.loads((HERE / "answer_key.json").read_text())
+AK = json.loads((HERE / "answers.json").read_text())
 ALL = [(cid, c) for cid, c in AK["cases"].items()]
 
 
@@ -62,10 +62,20 @@ def test_expected_record_covers_every_stored_field(
     assert "session_login" in case["operator_script"]
 
 
-_ITEM_SAMPLE = {"str": "Zed", "enum": "Other", "int": 7, "money": 7, "date": "2000-01-01", "bool": True, "phone": "5550100"}
+_ITEM_SAMPLE = {
+    "str": "Zed",
+    "enum": "Other",
+    "int": 7,
+    "money": 7,
+    "date": "2000-01-01",
+    "bool": True,
+    "phone": "5550100",
+}
 
 
-def _perturb(value: Any, ftype: str, item_types: dict[str, str] | None = None) -> list[Any]:
+def _perturb(
+    value: Any, ftype: str, item_types: dict[str, str] | None = None
+) -> list[Any]:
     if ftype in ("str", "enum"):
         return [f"{value}x", str(value)[:-1] if str(value) else "x"]
     if ftype == "phone":
@@ -132,8 +142,19 @@ def test_intakes_stay_inside_the_published_vocabulary(portal: str) -> None:
 
 
 def test_trap_mix_covers_the_vocabulary() -> None:
-    labels = {"prefill_conflict", "prefill_agree", "unknown_question", "recurring_rule", "rule_trap",
-              "summary_differs", "estimator_wrong", "estimator_ok", "session_timeout", "typeahead_ambiguous", "clean"}
+    labels = {
+        "prefill_conflict",
+        "prefill_agree",
+        "unknown_question",
+        "recurring_rule",
+        "rule_trap",
+        "summary_differs",
+        "estimator_wrong",
+        "estimator_ok",
+        "session_timeout",
+        "typeahead_ambiguous",
+        "clean",
+    }
     scored = [c for c in AK["cases"].values() if c["split"] == "scored"]
     seen = {t for c in scored for t in c["traps"]}
     assert seen == labels
@@ -142,7 +163,11 @@ def test_trap_mix_covers_the_vocabulary() -> None:
         if c["expected_behavior"] == "needs_operator_answer":
             assert "unknown_question" in c["traps"]
     for rule in AK["rule_learning"]:
-        portal = next(p for p, v in AK["portals"].items() if rule["occurrences_in_order"][0] in v["case_order"])
+        portal = next(
+            p
+            for p, v in AK["portals"].items()
+            if rule["occurrences_in_order"][0] in v["case_order"]
+        )
         order = AK["portals"][portal]["case_order"]
         idx = [order.index(c) for c in rule["occurrences_in_order"]]
         assert idx == sorted(idx)
@@ -165,7 +190,7 @@ def test_manifest_hashes_match_files() -> None:
     manifest = json.loads((HERE / "MANIFEST.json").read_text())
     for rel, digest in manifest["files"].items():
         assert hashlib.sha256((HERE / rel).read_bytes()).hexdigest() == digest, rel
-    assert manifest["answer_key_sha256"] == manifest["files"]["answer_key.json"]
+    assert manifest["answers_sha256"] == manifest["files"]["answers.json"]
 
 
 def test_reference_human_solves_every_scored_case() -> None:
