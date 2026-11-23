@@ -41,6 +41,12 @@ def _registry(keys: Optional[Path]) -> list[Any]:
 def _describe(result: Any, say: Say, indent: str = "  ") -> None:
     for line in result.signer_lines:
         say(f"{indent}{line}")
+    if result.ok:
+        # Separate lines: they never merge with or upgrade the signer line.
+        for line in getattr(result, "confirmation_lines", ()):
+            say(f"{indent}{line}")
+        if getattr(result, "approval_line", ""):
+            say(f"{indent}{result.approval_line}")
     if not result.ok:
         if result.detail:
             say(f"{indent}({result.detail})")
@@ -50,6 +56,8 @@ def _describe(result: Any, say: Say, indent: str = "  ") -> None:
     statement = result.statement or {}
     predicate = statement.get("predicate", {})
     reason = predicate.get("reason_code")
+    if reason == "awaiting_counterparty":
+        say(f"{indent}Awaiting counterparty confirmation: sent, not yet confirmed.")
     say(
         f"{indent}Outcome: {result.outcome}"
         + (f" ({reason})" if reason else "")

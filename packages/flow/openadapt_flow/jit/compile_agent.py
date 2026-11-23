@@ -364,7 +364,7 @@ class SurfaceApp:
         """``<kind>://<target>``, from
         :func:`~openadapt_flow.surface_selection.surface_target_origin`. A
         canary admits the program on this origin only. An admission policy
-        names it in ``allowed_hosts`` the same way (``macos://textedit``); a
+        names it in ``allowed_hosts`` the same way (``macos://example-app``); a
         bare host there names a web app only."""
 
         from openadapt_flow.surface_selection import surface_target_origin

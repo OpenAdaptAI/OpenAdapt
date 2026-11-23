@@ -1,0 +1,11 @@
+{
+  "actions_count": 0,
+  "ended_at": "2026-11-20T11:01:00Z",
+  "executor_label": "x",
+  "gate_events": [],
+  "model": {},
+  "schema": "openadapt.flight-run/v9",
+  "started_at": "2026-11-20T11:00:00Z",
+  "task_id": "flight-task-0009",
+  "timeline_path": "t"
+}

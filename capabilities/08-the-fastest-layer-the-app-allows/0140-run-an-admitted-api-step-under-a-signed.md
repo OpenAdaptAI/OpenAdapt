@@ -1,0 +1,1 @@
+| Run an admitted API step under a signed production qualification admission when its qualified effect contract names the API path, and let a qualification case run the path its contract names | On main | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#under-governance) |
