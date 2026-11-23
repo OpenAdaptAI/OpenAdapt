@@ -434,7 +434,11 @@ def action_evidence_error(
                     return f"drag endpoint: {error}"
         elif result.drag_end_resolution is not None:
             return "non-drag action contains a drag endpoint resolution"
-        if step.action in {ActionKind.TYPE, ActionKind.SELECT_OPTION}:
+        if step.action in {
+            ActionKind.TYPE,
+            ActionKind.SELECT_OPTION,
+            ActionKind.SECOND_FACTOR,
+        }:
             if strict_production and result.input_verified is not True:
                 return "GUI input action lacks exact readback verification"
             if result.input_verified not in {None, True}:
@@ -446,7 +450,8 @@ def action_evidence_error(
             if receipt_error is not None:
                 return receipt_error
     elif (
-        step.action in (ActionKind.WAIT, ActionKind.SWITCH_SURFACE)
+        step.action
+        in (ActionKind.WAIT, ActionKind.SWITCH_SURFACE, ActionKind.SECOND_FACTOR)
         and actuation is None
     ):
         if result.delivery_attempted not in {None, False}:

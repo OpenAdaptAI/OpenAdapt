@@ -1,0 +1,93 @@
+[23:33:23] vikunja: 40 tasks; project 2
+[23:33:23] dolibarr: seeded 60 thirdparties
+[23:33:24] rest 0: apply VERIFIED missed [] false [] undo ROLLED_BACK {'undone': 10} []
+[23:33:25] rest 1: apply VERIFIED missed [] false [] undo ROLLED_BACK {'undone': 10} []
+[23:33:26] rest 2: apply VERIFIED missed [] false [] undo ROLLED_BACK {'undone': 10} []
+[23:33:27] rest 3: apply VERIFIED missed [] false [] undo ROLLED_BACK {'undone': 10} []
+[23:33:28] rest 4: apply VERIFIED missed [] false [] undo ROLLED_BACK {'undone': 10} []
+[23:33:29] rest 5: apply VERIFIED missed [] false [] undo ROLLED_BACK {'undone': 10} []
+[23:33:29] rest 6: apply VERIFIED missed [] false [] undo ROLLED_BACK {'undone': 10} []
+[23:33:30] rest 7: apply VERIFIED missed [] false [] undo ROLLED_BACK {'undone': 10} []
+[23:33:31] rest 8: apply VERIFIED missed [] false [] undo ROLLED_BACK {'undone': 10} []
+[23:33:32] rest 9: apply VERIFIED missed [] false [] undo ROLLED_BACK {'undone': 10} []
+[23:33:41] sql 0: apply VERIFIED missed [] false [] undo ROLLED_BACK {'undone': 10} []
+[23:33:50] sql 1: apply VERIFIED missed [] false [] undo ROLLED_BACK {'undone': 10} []
+[23:33:59] sql 2: apply VERIFIED missed [] false [] undo ROLLED_BACK {'undone': 10} []
+[23:34:09] sql 3: apply VERIFIED missed [] false [] undo ROLLED_BACK {'undone': 10} []
+[23:34:21] sql 4: apply VERIFIED missed [] false [] undo ROLLED_BACK {'undone': 10} []
+[23:34:29] sql 5: apply VERIFIED missed [] false [] undo ROLLED_BACK {'undone': 10} []
+[23:34:37] sql 6: apply VERIFIED missed [] false [] undo ROLLED_BACK {'undone': 10} []
+[23:34:46] sql 7: apply VERIFIED missed [] false [] undo ROLLED_BACK {'undone': 10} []
+[23:34:55] sql 8: apply VERIFIED missed [] false [] undo ROLLED_BACK {'undone': 10} []
+[23:35:05] sql 9: apply VERIFIED missed [] false [] undo ROLLED_BACK {'undone': 10} []
+[23:35:07] mail 0: apply COMPLETED_UNVERIFIED release {'phase': 'release', 'released': 5, 'waiting': 0, 'adopted': 0, 'double': 0} undo {'cancelled': 5, 'irreversible_released': 5}
+[23:35:07] mail 1: apply COMPLETED_UNVERIFIED release {'phase': 'release', 'released': 5, 'waiting': 0, 'adopted': 0, 'double': 0} undo {'cancelled': 5, 'irreversible_released': 5}
+[23:35:10] mail 2: apply COMPLETED_UNVERIFIED release {'phase': 'release', 'released': 5, 'waiting': 0, 'adopted': 0, 'double': 0} undo {'cancelled': 5, 'irreversible_released': 5}
+[23:35:12] mail 3: apply COMPLETED_UNVERIFIED release {'phase': 'release', 'released': 5, 'waiting': 0, 'adopted': 0, 'double': 0} undo {'cancelled': 5, 'irreversible_released': 5}
+[23:35:14] mail 4: apply COMPLETED_UNVERIFIED release {'phase': 'release', 'released': 5, 'waiting': 0, 'adopted': 0, 'double': 0} undo {'cancelled': 5, 'irreversible_released': 5}
+[23:35:16] mail 5: apply COMPLETED_UNVERIFIED release {'phase': 'release', 'released': 5, 'waiting': 0, 'adopted': 0, 'double': 0} undo {'cancelled': 5, 'irreversible_released': 5}
+[23:35:19] mail 6: apply COMPLETED_UNVERIFIED release {'phase': 'release', 'released': 5, 'waiting': 0, 'adopted': 0, 'double': 0} undo {'cancelled': 5, 'irreversible_released': 5}
+[23:35:21] mail 7: apply COMPLETED_UNVERIFIED release {'phase': 'release', 'released': 5, 'waiting': 0, 'adopted': 0, 'double': 0} undo {'cancelled': 5, 'irreversible_released': 5}
+[23:35:24] mail 8: apply COMPLETED_UNVERIFIED release {'phase': 'release', 'released': 5, 'waiting': 0, 'adopted': 0, 'double': 0} undo {'cancelled': 5, 'irreversible_released': 5}
+[23:35:26] mail 9: apply COMPLETED_UNVERIFIED release {'phase': 'release', 'released': 5, 'waiting': 0, 'adopted': 0, 'double': 0} undo {'cancelled': 5, 'irreversible_released': 5}
+[23:42:04] acrfence {'rest': {'trials': 20, 'control_duplicates': 20, 'blocked': 20, 'identical_replays_not_sent': 20, 'double_effects_through': 0}, 'sql': {'trials': 20, 'control_duplicates': 20, 'blocked': 20, 'identical_replays_not_sent': 20, 'double_effects_through': 0}, 'mail': {'trials': 20, 'control_duplicates': 20, 'blocked': 20, 'identical_replays_not_sent': 20, 'double_effects_through': 0}}
+[23:43:09] crash {'rest': {'trials': 5, 'crashed_after_send': 5, 'double_effects_through': 0}, 'sql': {'trials': 5, 'crashed_after_send': 5, 'double_effects_through': 0}}
+[23:44:21] faults {'rest': {'trials': 5, 'missed_effect_caught': 5, 'collateral_caught': 5, 'not_caught': []}, 'sql': {'trials': 5, 'missed_effect_caught': 5, 'collateral_caught': 5, 'not_caught': []}}
+[23:44:21] dolibarr cleanup: removed 125 lab rows
+[23:44:22] {
+  "blocked_double_effects": 60,
+  "control_duplicates": 60,
+  "double_effects_through": 0,
+  "kill_criteria_tripped": [],
+  "mail": {
+    "apply_verified_rounds": 10,
+    "cancelled_in_holdback": 50,
+    "cancelled_never_sent": 50,
+    "cancelled_sent": 0,
+    "false_diffs": 0,
+    "irreversible_released": 50,
+    "missed_effects": 0,
+    "release_double_sends": 0,
+    "released_exactly_once": 50,
+    "released_other": 0,
+    "rounds": 10,
+    "undo_success_rate": null,
+    "undo_supported": 0,
+    "undo_verified": 0,
+    "writes": 100
+  },
+  "rest": {
+    "apply_verified_rounds": 10,
+    "cancelled_in_holdback": 0,
+    "cancelled_never_sent": 0,
+    "cancelled_sent": 0,
+    "false_diffs": 0,
+    "irreversible_released": 0,
+    "missed_effects": 0,
+    "release_double_sends": 0,
+    "released_exactly_once": 0,
+    "released_other": 0,
+    "rounds": 10,
+    "undo_success_rate": 1.0,
+    "undo_supported": 100,
+    "undo_verified": 100,
+    "writes": 100
+  },
+  "sql": {
+    "apply_verified_rounds": 10,
+    "cancelled_in_holdback": 0,
+    "cancelled_never_sent": 0,
+    "cancelled_sent": 0,
+    "false_diffs": 0,
+    "irreversible_released": 0,
+    "missed_effects": 0,
+    "release_double_sends": 0,
+    "released_exactly_once": 0,
+    "released_other": 0,
+    "rounds": 10,
+    "undo_success_rate": 1.0,
+    "undo_supported": 100,
+    "undo_verified": 100,
+    "writes": 100
+  }
+}

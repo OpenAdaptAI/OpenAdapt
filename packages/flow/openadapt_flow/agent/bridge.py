@@ -158,6 +158,9 @@ class AgentBridge:
     #: when runs are allowed. ``mcp.build_server`` serves its job tools and
     #: feeds it every run result.
     ledger: Any = None
+    #: :class:`~openadapt_flow.agent.handoff_tools.HandoffTools` when the
+    #: operator started the server with ``--handoffs`` (or ``--a2a``).
+    handoffs: Any = None
 
     def __init__(
         self,
@@ -381,6 +384,8 @@ class AgentBridge:
         specs.extend(self._repair_specs())
         specs.extend(self._approval_specs())
         specs.extend(self._admission_specs())
+        if self.handoffs is not None:
+            specs.extend(self.handoffs.list_tool_specs(runs_enabled=self.allow_run))
         return specs
 
     def _admission_specs(self) -> list[ToolSpec]:
@@ -741,6 +746,8 @@ class AgentBridge:
                 )
             except ServiceError as exc:
                 raise BridgeError(str(exc)) from exc
+        if self.handoffs is not None and self.handoffs.handles(name):
+            return self._handoff_dispatch(name, arguments)
         if name in (
             "get_approval_mode",
             "list_approval_requests",
@@ -787,6 +794,20 @@ class AgentBridge:
         if name.startswith("run_"):
             return self._run(name[len("run_") :], arguments)
         raise BridgeError("unknown tool name")
+
+    def _handoff_dispatch(self, name: str, arguments: dict) -> dict:
+        if name == "verify_handoff":
+            return self.handoffs.verify(arguments.get("handoff"))
+        if not self.allow_run:
+            raise BridgeError("runs are disabled on this server, so it has no handoffs")
+        return self.handoffs.get(
+            arguments.get("run_id", ""),
+            public=bool(arguments.get("public", False)),
+            result_for=lambda run_id: self.dispatch(
+                "get_run", {"run_id": run_id, "wait_seconds": 0}
+            ),
+            run_dir_for=self._safe_run_dir,
+        )
 
     def _list_workflows(self) -> dict:
         workflows = []

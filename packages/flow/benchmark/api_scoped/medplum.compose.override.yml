@@ -1,0 +1,10 @@
+# The API-verification bench only (benchmark/api_scoped/lab.py), layered on
+# benchmark/fhir_medplum/compose.yml. One client reads the AuditEvent log for
+# every write, which spends Medplum's default per-user FHIR quota (50,000
+# units a minute) within seconds; a 429 then stops the bench. Other Medplum
+# benches keep the defaults.
+services:
+  medplum-server:
+    environment:
+      MEDPLUM_DEFAULT_FHIR_QUOTA: "5000000"
+      MEDPLUM_DEFAULT_RATE_LIMIT: "100000"

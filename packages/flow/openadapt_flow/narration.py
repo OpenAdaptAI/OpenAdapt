@@ -147,6 +147,14 @@ def write_narration(directory: Path, narration: Narration) -> Path:
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / NARRATION_FILE
+    from openadapt_flow import sealed_set
+
+    if sealed_set.is_sealed_path(directory):
+        # What the person said: encrypted with an encrypted recording.
+        sealed_set.write_text(
+            path, narration.model_dump_json(indent=2, by_alias=True) + "\n"
+        )
+        return path
     fd, tmp = tempfile.mkstemp(dir=directory, prefix=".narration-", suffix=".json")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:

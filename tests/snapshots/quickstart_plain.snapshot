@@ -36,14 +36,17 @@ Synthetic data only. Files go to openadapt-quickstart
 
 The screen said "Encounter saved". The database had nothing. A bot that trusts the screen reports Done. OpenAdapt stopped.
 
-Your Seal: Signed
+Your receipt: Signed
+  Signed by this computer
   key seal-ed25519-0123456789abcdef · 6 reports signed
   Open it: openadapt-quickstart/run-1/seal.html
     checks the signature in your browser, offline; nothing is uploaded
-  Real Seals from OpenEMR runs: https://openadapt.ai/seals
+  Real receipts from OpenEMR runs: https://openadapt.ai/seals
 
 Next: Give your agent this task as a tool
   claude mcp add openadapt -- openadapt agent serve --allow-run
   Any other MCP client: openadapt agent serve --allow-run
+  Your own app: openadapt record --backend web --url https://your-app.example --out my-task
+  Playwright/CUA drop-in: with checked_write("verify.yaml", values): ...  # from openadapt_verify
 More next steps: openadapt quickstart --more
 Done in 2.5s. Reports: openadapt-quickstart, one REPORT.md per run; side by side: openadapt-quickstart/index.html

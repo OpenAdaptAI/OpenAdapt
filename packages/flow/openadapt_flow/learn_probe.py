@@ -15,7 +15,8 @@ the app's own bookkeeping, not something an agent asked for:
    (``begin_write`` with the probe's parameters), send the read-only
    requests as the agent, and judge the frame (``verify_write``). No write
    is sent, so the declared effect is absent; only the frame's moved rows
-   are used.
+   are used. A control window of the same length follows each round with
+   no request; a move it shows is not the request's and is not excused.
 2. Propose from those moves with the learner's own rules
    (:func:`openadapt_flow.learn.propose`): only the acting user's own row
    (``actor_row``), exact columns, ``changed`` only, and never a column a
@@ -39,6 +40,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+import time
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Optional
@@ -50,6 +52,10 @@ READ_ONLY_METHODS = frozenset({"GET", "HEAD"})
 #: The ``frame.learned.approved_by`` of a probe's excuses.
 PROBE_APPROVER = "read-only probe (openadapt-flow learn probe)"
 DEFAULT_ROUNDS = 3
+#: A move is excused only when every one of at least this many rounds shows
+#: it: per-request bookkeeping moves on every request, while a one-off edit
+#: (a person changing the acting user's own row during a round) does not.
+MIN_ROUNDS = 2
 
 
 class ProbeError(_learn.LearnError):
@@ -108,17 +114,21 @@ def probe(
     send: Callable[[], set[str]],
     rounds: int = DEFAULT_ROUNDS,
     workdir: Optional[Path] = None,
+    idle: Callable[[float], None] = time.sleep,
 ) -> list[dict[str, Any]]:
     """Run ``rounds`` read-only windows under ``contract``'s frame.
 
     ``send`` sends the read-only requests as the agent and returns the
     query-parameter names it sent (``learn.query_fields``); it must not
-    write. Returns one episode per round."""
+    write. After each request window, a control window as long as it sends
+    nothing (``idle``): a row that moves there moves without a request, so
+    it is not the request's bookkeeping. Returns one request episode and
+    one control episode (``control: True``) per round."""
 
     from openadapt_flow.verifier import Actor, begin_write, verify_write
 
-    if rounds < 1:
-        raise ProbeError("a probe runs at least one round")
+    if rounds < MIN_ROUNDS:
+        raise ProbeError(f"a probe runs at least {MIN_ROUNDS} rounds")
     config = getattr(contract, "config", None)
     frame = getattr(config, "frame", None)
     if frame is None or getattr(frame, "database", None) is None:
@@ -135,13 +145,33 @@ def probe(
                 write_key=f"read-only-probe-{kind}-{i}",
                 workdir=base / f"round-{i}",
             )
+            started = time.monotonic()
             sent = set(send())
+            elapsed = time.monotonic() - started
             result = verify_write(pending)
             out.append(
                 episode(
                     kind, result, contract=contract, params=params, sent_fields=sent
                 )
             )
+            control = begin_write(
+                contract,
+                dict(params),
+                actor=Actor("agent", str(actor)),
+                ledger=None,
+                write_key=f"read-only-probe-{kind}-{i}-control",
+                workdir=base / f"round-{i}-control",
+            )
+            idle(elapsed)
+            ep = episode(
+                kind,
+                verify_write(control),
+                contract=contract,
+                params=params,
+                sent_fields=set(),
+            )
+            ep["control"] = True
+            out.append(ep)
     return out
 
 
@@ -191,9 +221,10 @@ def users_for_actor_params(manifest_path: Path, schema: Any) -> Optional[_learn.
 def propose(
     episodes: Sequence[Mapping[str, Any]], users: Optional[_learn.Users]
 ) -> dict[str, Any]:
-    """The learner's proposal from probe episodes: a ``changed`` move seen
-    in any one read-only round is enough, since no round carried a task.
-    The relation to the acting user, not the count, decides.
+    """The learner's proposal from probe episodes: a ``changed`` move must
+    show in every read-only round (at least :data:`MIN_ROUNDS`), so a
+    one-off edit to the acting user's own row during one round is not
+    excused. The relation to the acting user then decides.
 
     An ``added`` row is never admitted this way. Its excuse names columns,
     not values, so it would also cover a row the agent itself adds for its
@@ -201,20 +232,66 @@ def propose(
     different property the agent sets). Such moves go under
     ``needs_approval``: a person approves them with ``learn approve``."""
 
-    eps = [dict(e, kind="read_only_probe") for e in episodes if e.get("probe")]
+    probes = [e for e in episodes if e.get("probe")]
+    controls = [e for e in probes if e.get("control")]
+    eps = [dict(e, kind="read_only_probe") for e in probes if not e.get("control")]
+    # fail-open class: correlation-as-attribution. A move seen in every
+    # request round is only timing; it is the request's bookkeeping only
+    # when the control windows (no request) show it never moving on its own.
+    background = {
+        (str(m.get("table")), str(c))
+        for e in controls
+        for m in e.get("moves") or []
+        for c in m.get("columns") or [None]
+    }
     learnable = [e for e in eps if _learn._why_ignored(e) is None]
     n = max(1, len(learnable))
-    proposal = _learn.propose(eps, users=users, k=1, n=n, source="read-only probe")
+    proposal = _learn.propose(eps, users=users, k=n, n=n, source="read-only probe")
+    # A round that showed no usable move (nothing moved, or no frame) means
+    # the move isn't per-request bookkeeping; too few rounds can't tell.
+    every_round = len(learnable) >= MIN_ROUNDS and len(learnable) == len(eps)
     for body in (proposal.get("kinds") or {}).values():
-        kept, held = [], []
+        if not every_round:
+            body["excuses"] = []
+            body["not_learned"] = (
+                f"a move is excused only when all of at least {MIN_ROUNDS} "
+                f"read-only rounds show it ({len(learnable)} of {len(eps)} did)"
+            )
+        kept: list[dict[str, Any]] = []
+        held: list[dict[str, Any]] = []
         for e in body.get("excuses") or []:
-            (held if e.get("change") == "added" else kept).append(e)
+            if e.get("change") == "added":
+                e["why_not"] = (
+                    "an added row: its excuse names columns, not values, so a "
+                    "person approves it (learn approve)"
+                )
+            elif len(controls) < len(eps) or not all(
+                c.get("has_database") and c.get("frame") in ("held", "refuted")
+                for c in controls
+            ):
+                # A control window whose frame wasn't read shows nothing,
+                # which is no evidence that nothing moved.
+                e["why_not"] = (
+                    "no readable control window without requests for every "
+                    "round: nothing shows the move comes from the request, "
+                    "so a person approves it (learn approve)"
+                )
+            elif any(
+                (str(e.get("table")), str(c)) in background
+                or (str(e.get("table")), "None") in background
+                for c in e.get("columns") or []
+            ):
+                e["why_not"] = (
+                    "it also moved in a control window with no request: a "
+                    "background writer, not the request's bookkeeping, so a "
+                    "person approves it (learn approve)"
+                )
+            else:
+                kept.append(e)
+                continue
+            held.append(e)
         for e in held:
             e.pop("id", None)
-            e["why_not"] = (
-                "an added row: its excuse names columns, not values, so a "
-                "person approves it (learn approve)"
-            )
         body["excuses"] = kept
         body["needs_approval"] = held
     proposal.pop("proposal_sha256", None)
@@ -293,21 +370,51 @@ def apply(
 
 def _sees_its_own_harm(contract: Any) -> bool:
     """May a probe excuse go into this (loaded) contract? Only when the
-    frame can see a lost update without the bookkeeping move: every
-    declared record is new (each ``record_written`` effect counts new rows
-    only), or the contract reads the target's versions (``frame.versions``)."""
+    frame can see a lost update without the bookkeeping move.
+
+    Either every declared effect creates new records (``record_written``
+    with ``count_new_only``; a zero-count guard writes nothing), or the
+    contract reads the target's versions (``frame.versions``) and those
+    versions cover every other effect: with a ``target_surface``, each
+    effect that isn't a create must be read on that surface. Anything else,
+    such as a create plus a ``field_equals`` update, gets no excuse."""
+
+    from openadapt_flow.runtime.effects.surfaces import surface_of
 
     config = getattr(contract, "config", None)
     frame = getattr(config, "frame", None)
-    if frame is not None and getattr(frame, "versions", None) is not None:
-        return True
-    records = [
-        e.model_dump(mode="json")
-        for e in getattr(config, "effects", None) or []
-        if str(getattr(getattr(e, "kind", None), "value", getattr(e, "kind", "")))
-        == "record_written"
-    ]
-    return bool(records) and all(r.get("count_new_only") is True for r in records)
+    effects = list(getattr(config, "effects", None) or [])
+
+    def kind(effect: Any) -> str:
+        k = getattr(effect, "kind", "")
+        return str(getattr(k, "value", k))
+
+    def creates(effect: Any) -> bool:
+        return (
+            kind(effect) == "record_written"
+            and getattr(effect, "count_new_only", None) is True
+            and getattr(effect, "expected_count", 1) != 0
+        )
+
+    def guard(effect: Any) -> bool:
+        return (
+            kind(effect) == "record_written"
+            and getattr(effect, "expected_count", 1) == 0
+        )
+
+    others = [e for e in effects if not creates(e) and not guard(e)]
+    if not others:
+        return any(creates(e) for e in effects)
+    versions = getattr(frame, "versions", None) if frame is not None else None
+    if versions is None:
+        return False
+    surface = getattr(versions, "target_surface", None)
+    if surface is None:
+        # fail-open class: ambiguous-subject-binding. An unscoped version
+        # read judges targets by their local id alone, so two records with
+        # one id on two surfaces would share one version check.
+        return len({surface_of(e) for e in others}) == 1
+    return all(surface_of(e) == surface for e in others)
 
 
 def http_sender(
@@ -397,7 +504,7 @@ def cmd_probe(args: Any) -> int:
     return 0
 
 
-def add_parser(steps: Any) -> None:
+def register_parser(steps: Any) -> None:
     """The ``probe`` step of ``openadapt-flow learn``."""
 
     p = steps.add_parser(

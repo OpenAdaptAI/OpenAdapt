@@ -76,7 +76,7 @@ def _clean_name(value: Any) -> Optional[str]:
 
 
 def app_name(report: dict[str, Any]) -> Optional[str]:
-    """The report's app name; otherwise the program name's first word (``openemr``)."""
+    """The report's app name; otherwise the program name's first word."""
     for key in ("app", "app_name", "application_name"):
         name = _clean_name(report.get(key))
         if name:

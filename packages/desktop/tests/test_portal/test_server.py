@@ -501,3 +501,18 @@ def test_the_client_refuses_a_malformed_save_id() -> None:
     with pytest.raises(FlowConsoleUnavailable) as refused:
         client.request("save_approval_detail", request_id="../session")
     assert refused.value.reason == "bad_identifier"
+
+
+def test_the_pinned_interface_font_is_served_same_origin_with_the_existing_csp() -> None:
+    from pathlib import Path
+
+    app, _ = build(FakeFlow())
+    status, headers, body = app.handle("GET", "/fonts/PublicSans-Variable.woff2", {}, b"")
+    assert status == 200
+    assert headers["Content-Type"] == "font/woff2"
+    vendor = Path(__file__).resolve().parents[2] / "src/styles/vendor/semantic-theme/fonts"
+    assert body == (vendor / "PublicSans-Variable.woff2").read_bytes()
+    policy = headers["Content-Security-Policy"]
+    assert "default-src 'self'" in policy
+    assert "font-src" not in policy
+    assert app.handle("GET", "/fonts/../server.py", {}, b"")[0] == 404

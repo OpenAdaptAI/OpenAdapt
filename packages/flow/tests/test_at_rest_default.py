@@ -32,8 +32,10 @@ def default_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     for name in (
         at_rest.OPT_OUT_ENV,
         at_rest.MODE_ENV,
+        at_rest.ENCRYPT_ENV,
         crypto.ENV_KEY,
         sealed_set.RECORDING_ENV_KEY,
+        "OPENADAPT_POLICY",
     ):
         monkeypatch.delenv(name, raising=False)
     home = tmp_path / "at-rest-home"
@@ -41,6 +43,16 @@ def default_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     at_rest._reset_for_tests()
     yield home
     at_rest._reset_for_tests()
+
+
+def _legacy_recording(rec_dir: Path) -> Path:
+    """A plaintext recording an earlier version made. Making it now is a
+    recorded plaintext write (encryption_key=None); that ledger line belongs
+    to the setup, not to the command under test."""
+    rec = _recording(rec_dir, key=None)
+    at_rest.ledger_path().unlink(missing_ok=True)
+    at_rest._reset_for_tests()
+    return rec
 
 
 def _ledger(home: Path) -> list[dict]:
@@ -138,20 +150,21 @@ def test_unsealed_write_names_the_path_or_refuses(
 # -- recordings and bundles -------------------------------------------------------
 
 
-def test_a_plaintext_bundle_is_named_by_default(
-    default_mode: Path, tmp_path: Path, capsys
+def test_a_plaintext_recording_compiles_to_a_sealed_bundle_by_default(
+    default_mode: Path, tmp_path: Path
 ) -> None:
-    rec = _recording(tmp_path / "rec", key=None)
+    rec = _legacy_recording(tmp_path / "rec")  # made before the default
     assert main(["compile", str(rec), "--out", str(tmp_path / "b"), "--name", "x"]) == 0
-    assert (tmp_path / "b" / "workflow.json").is_file()
-    assert str(tmp_path / "b") in capsys.readouterr().err
-    assert _ledger(default_mode)[0]["path"] == str(tmp_path / "b")
+    _assert_ciphertext_only(tmp_path / "b")
+    assert sealed_set.read_header(tmp_path / "b")["version"] == 3
+    assert Workflow.load(tmp_path / "b").name == "x"
+    assert _ledger(default_mode) == []
 
 
 def test_strict_mode_compiles_a_plaintext_recording_to_a_sealed_bundle(
     default_mode: Path, tmp_path: Path, monkeypatch
 ) -> None:
-    rec = _recording(tmp_path / "rec", key=None)  # made before strict mode
+    rec = _legacy_recording(tmp_path / "rec")  # made before strict mode
     monkeypatch.setenv(at_rest.MODE_ENV, "strict")
     assert main(["compile", str(rec), "--out", str(tmp_path / "b"), "--name", "x"]) == 0
     _assert_ciphertext_only(tmp_path / "b")
@@ -164,7 +177,7 @@ def test_compile_under_the_opt_out_stays_plaintext(
     default_mode: Path, tmp_path: Path, monkeypatch
 ) -> None:
     monkeypatch.setenv(at_rest.OPT_OUT_ENV, "fixtures")
-    rec = _recording(tmp_path / "rec", key=None)
+    rec = _legacy_recording(tmp_path / "rec")
     assert main(["compile", str(rec), "--out", str(tmp_path / "b"), "--name", "x"]) == 0
     assert (tmp_path / "b" / "workflow.json").is_file()
     assert any(e["purpose"] == "a compiled bundle" for e in _ledger(default_mode))
@@ -214,11 +227,13 @@ def _record_args(out: Path, *, no_encrypt: bool = False) -> argparse.Namespace:
     return argparse.Namespace(out=str(out), no_encrypt=no_encrypt)
 
 
-def test_web_recordings_are_named_by_default_and_sealed_in_strict_mode(
+def test_web_recordings_are_sealed_by_default_and_in_strict_mode(
     default_mode: Path, tmp_path: Path, monkeypatch
 ) -> None:
-    assert _recording_encryption_key(_record_args(tmp_path / "r"), "web") is None
-    assert _ledger(default_mode)[0]["path"] == str(tmp_path / "r")
+    assert _recording_encryption_key(_record_args(tmp_path / "r"), "web") == (
+        crypto.resolve_key(None)
+    )
+    assert _ledger(default_mode) == []
     monkeypatch.setenv(at_rest.MODE_ENV, "strict")
     assert _recording_encryption_key(_record_args(tmp_path / "r2"), "web") == (
         crypto.resolve_key(None)
@@ -243,13 +258,16 @@ def test_no_encrypt_is_recorded_and_strict_refuses_it(
         _recording_encryption_key(_record_args(tmp_path / "r2", no_encrypt=True), "web")
 
 
-def test_desktop_recorders_work_by_default_and_refuse_in_strict_mode(
-    default_mode: Path, tmp_path: Path, monkeypatch, capsys
+def test_desktop_recordings_are_sealed_by_default_and_refused_in_strict_mode(
+    default_mode: Path, tmp_path: Path, monkeypatch
 ) -> None:
     out = tmp_path / "desk"
-    assert _recording_encryption_key(_record_args(out), "windows") is None
-    assert str(out) in capsys.readouterr().err
-    assert _ledger(default_mode)[0]["path"] == str(out)
+    # The converted recording is sealed; the raw capture is held back in
+    # strict mode, which can't encrypt it while it records.
+    assert _recording_encryption_key(_record_args(out), "windows") == (
+        crypto.resolve_key(None)
+    )
+    assert _ledger(default_mode) == []
     monkeypatch.setenv(at_rest.MODE_ENV, "strict")
     with pytest.raises(SystemExit, match="strict"):
         _recording_encryption_key(_record_args(tmp_path / "desk2"), "windows")
@@ -287,18 +305,20 @@ def _mockmed_run(tmp_path: Path, bundle: Path, run_dir: Path, **kw):
         stop()
 
 
-def test_a_run_directory_is_plaintext_by_default_and_named(
-    default_mode: Path, tmp_path: Path, capsys
+def test_a_run_directory_is_sealed_by_default(
+    default_mode: Path, tmp_path: Path
 ) -> None:
     from tests.test_after_stop_mockmed import _workflow
 
     bundle = tmp_path / "bundle"
-    _workflow().save(bundle)
+    _workflow().save(bundle)  # a plaintext bundle from before the default
     run_dir = tmp_path / "run"
     _mockmed_run(tmp_path, bundle, run_dir)
-    assert (run_dir / "report.json").is_file()
-    assert str(run_dir) in capsys.readouterr().err
-    assert any(e.get("path") == str(run_dir) for e in _ledger(default_mode))
+    assert sealed_set.is_sealed(run_dir)
+    assert not (run_dir / "report.json").exists()
+    assert json.loads(sealed_set.read_text(run_dir / "report.json"))
+    _assert_ciphertext_only(run_dir)
+    assert not any(e.get("path") == str(run_dir) for e in _ledger(default_mode))
 
 
 def test_strict_mode_seals_the_run_directory_of_a_plaintext_bundle(
@@ -377,7 +397,10 @@ def test_default_mode_checkpoints_are_encrypted_on_disk(
         replayer.run(Workflow.load(bundle), bundle_dir=bundle, run_dir=run_dir)
     except Exception:  # noqa: BLE001 - no app is listening; the key is what counts
         pass
-    assert replayer.checkpoint_key == at_rest.local_key()
+    # A version 3 run keys its checkpoints from its own data key (a shred
+    # reaches them), not from the long-lived local passphrase.
+    assert replayer.checkpoint_key == sealed_set.store_passphrase(run_dir)
+    assert replayer.checkpoint_key != at_rest.local_key()
     store = CheckpointStore(run_dir, key=replayer.checkpoint_key)
     marker = secrets.token_hex(16)
     probe = run_dir / "checkpoints" / "probe.json"
@@ -390,9 +413,14 @@ def test_default_mode_checkpoints_are_encrypted_on_disk(
     restored = store._read_json(probe)
     assert restored is not None
     assert Workflow.model_validate(restored).name == marker
-    wrong_store = CheckpointStore(run_dir, key="synthetic-wrong-checkpoint-key")
+    # Any key a caller passes is replaced by the run's own.
+    assert CheckpointStore(run_dir, key="synthetic-wrong-key").key == store.key
     with pytest.raises(crypto.DecryptionError):
-        wrong_store._read_json(probe)
+        crypto.decrypt_bytes(
+            probe.with_name("probe.json.enc").read_bytes(),
+            at_rest.local_key(),
+            aad=crypto.CHECKPOINT_AAD,
+        )
 
 
 def test_a_recording_only_key_reads_back_from_the_environment(
@@ -525,18 +553,20 @@ def test_strict_holds_back_qualification_trials(
         )
 
 
-def test_a_local_key_bundle_under_the_opt_out_refuses_to_run(
+def test_a_local_key_bundle_under_the_opt_out_still_runs_sealed(
     default_mode: Path, tmp_path: Path, monkeypatch
 ) -> None:
+    """The opt-out stops new encryption, not reading what was encrypted:
+    and a sealed bundle still runs into a sealed run directory."""
     from tests.test_after_stop_mockmed import _workflow
 
     bundle = tmp_path / "bundle"
     with sealed_set.writing(bundle, "bundle", crypto.resolve_key(None)):
         _workflow().save(bundle)
     monkeypatch.setenv(at_rest.OPT_OUT_ENV, "desktop")
-    with pytest.raises(sealed_set.SealedSetError):
-        _mockmed_run(tmp_path, bundle, tmp_path / "run")
-    assert not (tmp_path / "run").exists()
+    _mockmed_run(tmp_path, bundle, tmp_path / "run")
+    assert sealed_set.is_sealed(tmp_path / "run")
+    _assert_ciphertext_only(tmp_path / "run")
 
 
 @pytest.mark.skipif(os.name != "posix" or os.geteuid() == 0, reason="POSIX perms")

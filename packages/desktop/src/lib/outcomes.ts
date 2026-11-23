@@ -239,13 +239,13 @@ export function plainResultForReport(report: {
 
 const INPUT_WORDS: Record<string, string> = {
   id: "ID",
-  mrn: "MRN",
   dob: "date of birth",
-  npi: "NPI",
   url: "URL",
+  api: "API",
+  sku: "SKU",
 };
 
-// Whole names that EMR patient tables abbreviate or write in database word
+// Whole names that database tables abbreviate or write in database word
 // order, so "fname" reads "first name" and "phone_home" reads "home phone".
 const INPUT_PHRASES: Record<string, string> = {
   fname: "first name",
@@ -256,7 +256,7 @@ const INPUT_PHRASES: Record<string, string> = {
   "phone biz": "work phone",
 };
 
-/** "member_id" -> "member ID", "patientName" -> "patient name". */
+/** "member_id" -> "member ID", "accountName" -> "account name". */
 export function humanizeInput(name: string): string {
   const words = name
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")

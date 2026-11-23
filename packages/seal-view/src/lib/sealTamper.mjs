@@ -32,7 +32,7 @@ export function tamperOptions(sealOutcome, reportOutcome) {
         {
             id: 'seal-outcome',
             target: 'seal',
-            label: 'Change the outcome in the Seal',
+            label: 'Change the outcome in the receipt',
             field: 'outcome',
             from: sealOutcome,
             to: sealTo,
@@ -48,10 +48,11 @@ export function applyTamper(files, option) {
     if (option.target === 'seal') {
         const seal = JSON.parse(files.sealText)
         if (seal[option.field] !== option.from)
-            throw new Error('The value to change is not in the Seal.')
+            throw new Error('The value to change is not in the receipt.')
         return {
             ...files,
             sealText: JSON.stringify({ ...seal, [option.field]: option.to }, null, 2),
+            receiptText: files.receiptText ? changeReceiptOutcome(files.receiptText) : files.receiptText,
         }
     }
     const text = new TextDecoder().decode(files.report)
@@ -59,4 +60,16 @@ export function applyTamper(files, option) {
     if (!text.includes(from))
         throw new Error('The value to change is not in the report.')
     return { ...files, report: new TextEncoder().encode(text.replace(from, to)) }
+}
+
+// The same change in the signed receipt (record/run/v1): its payload's
+// outcome flips, and the payload is not re-signed.
+function changeReceiptOutcome(text) {
+    const envelope = JSON.parse(text)
+    const payload = new TextDecoder().decode(Uint8Array.from(atob(envelope.payload), (c) => c.charCodeAt(0)))
+    const changed = payload.replace(/"outcome":"(VERIFIED|STOPPED|UNKNOWN|FAILED)"/, (_, o) => `"outcome":"${o === 'VERIFIED' ? 'STOPPED' : 'VERIFIED'}"`)
+    const bytes = new TextEncoder().encode(changed)
+    let bin = ''
+    for (const b of bytes) bin += String.fromCharCode(b)
+    return JSON.stringify({ ...envelope, payload: btoa(bin) })
 }

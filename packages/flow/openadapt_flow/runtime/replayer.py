@@ -44,18 +44,18 @@ import json
 import math
 import os
 import re
-import struct
+import struct  # noqa: F401
 import threading
 import time
 import uuid
 from collections import Counter
-from contextlib import ExitStack
+from contextlib import ExitStack  # noqa: F401
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass  # noqa: F401
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from typing import (
+from typing import (  # noqa: F401
     TYPE_CHECKING,
     Any,
     Callable,
@@ -101,14 +101,14 @@ from openadapt_flow.identity_signals import (
     normalize_signal_text,
     parameterize_identity_text,
 )
-from openadapt_flow.interruptions import (
+from openadapt_flow.interruptions import (  # noqa: F401
     LabelChangedDuringClick,
     class_texts,
     dismiss_label,
     live_control_error,
     whole_interruption_error,
 )
-from openadapt_flow.ir import (
+from openadapt_flow.ir import (  # noqa: F401
     ActionDeliveryUncertainty,
     ActionKind,
     Anchor,
@@ -156,7 +156,7 @@ from openadapt_flow.ir import (
     Workflow,
     predicate_contract_sha256,
 )
-from openadapt_flow.network_scope import EndpointScope, endpoint_scope
+from openadapt_flow.network_scope import EndpointScope, endpoint_scope  # noqa: F401
 from openadapt_flow.privacy import scrub_image_bytes as _scrub_png
 from openadapt_flow.privacy import scrub_text as _scrub_phi
 from openadapt_flow.qualification_environment import (
@@ -164,7 +164,7 @@ from openadapt_flow.qualification_environment import (
     QualificationEnvironmentObservation,
     QualificationEnvironmentObserver,
 )
-from openadapt_flow.qualification_faults import (
+from openadapt_flow.qualification_faults import (  # noqa: F401
     FaultMutationReceipt,
     QualificationFaultContext,
     QualificationFaultDriver,
@@ -174,6 +174,7 @@ from openadapt_flow.qualification_faults import (
     sha256_bytes,
     verify_fault_mutation_receipt,
 )
+from openadapt_flow.receipt_record import save_settled_report
 from openadapt_flow.run_gate import is_consequential
 from openadapt_flow.run_invocation import (
     InvocationContext,
@@ -182,11 +183,12 @@ from openadapt_flow.run_invocation import (
 )
 from openadapt_flow.runtime import clock_checks as _clock_checks
 from openadapt_flow.runtime import heal as heal_mod
-from openadapt_flow.runtime import healing as healing_mod
+from openadapt_flow.runtime import healing as healing_mod  # noqa: F401
 from openadapt_flow.runtime import identity as identity_mod
 from openadapt_flow.runtime import identity_census as census_mod
 from openadapt_flow.runtime import identity_looks as looks_mod
 from openadapt_flow.runtime import keyboard_delivery as keyboard_delivery_mod
+from openadapt_flow.runtime import second_factor_step
 from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
     RuntimeParamScalar,
@@ -227,7 +229,7 @@ from openadapt_flow.runtime.durable.program_checkpoint import (
 from openadapt_flow.runtime.durable.program_checkpoint import (
     history_hash as _history_hash,
 )
-from openadapt_flow.runtime.effect_watch import EffectWatchReport, watch_effects
+from openadapt_flow.runtime.effect_watch import EffectWatchReport, watch_effects  # noqa: F401
 from openadapt_flow.runtime.effects import (
     Effect,
     EffectState,
@@ -269,6 +271,7 @@ from openadapt_flow.secret_inputs import (  # noqa: F401 - compatibility exports
     require_secret_sources,
     secret_env_var,
     secret_env_vars,
+    step_secret_text,
 )
 from openadapt_flow.verification import (
     EffectContractMutationError,
@@ -276,27 +279,6 @@ from openadapt_flow.verification import (
     verify_effect_without_mutation,
 )
 from openadapt_flow.vision.ocr import OcrResolutionRefused
-
-_DeliveryResultT = TypeVar("_DeliveryResultT")
-_MAX_FRESH_ACTUATION_REACQUISITIONS = 2
-# Check-to-click guard on the pixel path (``Replayer._pixel_recheck``): how
-# often a changed target or identity region is re-observed before the click
-# is refused, and how much a pixel must change to count (remote encoders
-# shift colours by a few levels; a dialog or a new row changes far more).
-_PIXEL_RECHECK_REOBSERVES = 2
-# How far a remote codec moved the same hovered target between frames on real
-# AVC444 sessions (benchmark/rdp_avc_real: one pixel on each axis).
-_REMOTE_HOVER_JITTER_PX = 2
-_PIXEL_RECHECK_LEVEL = 24
-_PIXEL_RECHECK_MIN_PIXELS = 4
-
-# How long past its step's timeout a held record check may run under an
-# approval mode before the held report decides the item (a person).
-READBACK_DEADLINE_MARGIN_S = 120.0
-# Private module capability.  The public ``run`` API cannot mint a durable
-# continuation.  ``runtime.durable.resume`` imports this object only after it
-# has validated the pause, approval, bundle, checkpoint, and live state.
-_DURABLE_RESUME_AUTHORITY = object()
 
 if TYPE_CHECKING:
     from openadapt_flow.approval_mode.gate import ApprovalGate
@@ -311,477 +293,69 @@ if TYPE_CHECKING:
     )
     from openadapt_flow.transaction import IdempotencyLedger
 
-# REGION_STABLE template check: how far the expected content may shift from
-# the recorded region (real apps re-layout by a few pixels between runs),
-# and the minimum template-match score to accept it.
-PC_TEMPLATE_SEARCH_PAD = 80
-
-
-_FIELD_CHECK_LIMIT = 32
-_FIELD_VALUE_LIMIT = 256
-
-
-def _field_text(value: Any) -> Optional[str]:
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, (str, int, float)):
-        return str(value)[:_FIELD_VALUE_LIMIT]
-    return None
-
-
-def effect_field_checks(effect: Any, verdict: Any, tier: Any) -> list[Any]:
-    """The field comparisons one effect verdict made, for the local report.
-
-    A ``field_equals`` effect compares one field. A record effect compares
-    each literal ``match`` value against the first matched record. Values
-    that aren't plain text or numbers are left out rather than guessed.
-    """
-
-    from openadapt_flow.ir import EffectFieldCheck
-
-    tier_value = int(tier) if tier is not None else None
-    checks: list[EffectFieldCheck] = []
-    field = getattr(effect, "field", None)
-    expected_value = getattr(verdict, "expected_value", None)
-    if field and expected_value is not None:
-        checks.append(
-            EffectFieldCheck(
-                field=str(field)[:_FIELD_VALUE_LIMIT],
-                expected=_field_text(expected_value),
-                observed=_field_text(getattr(verdict, "observed_value", None)),
-                matched=bool(getattr(verdict, "confirmed", False)),
-                verification_tier=tier_value,
-            )
-        )
-        return checks
-    records = getattr(verdict, "matched_records", None) or []
-    record = records[0] if records and isinstance(records[0], dict) else None
-    for name, want in (getattr(effect, "match", None) or {}).items():
-        expected = _field_text(want)
-        if expected is None:
-            continue
-        observed = _field_text(record.get(name)) if record is not None else None
-        checks.append(
-            EffectFieldCheck(
-                field=str(name)[:_FIELD_VALUE_LIMIT],
-                expected=expected,
-                observed=observed,
-                matched=observed == expected,
-                verification_tier=tier_value,
-            )
-        )
-        if len(checks) >= _FIELD_CHECK_LIMIT:
-            break
-    return checks
-
-
-#: A uniform page scale is inferred only from a click point at least this far
-#: from both edges at the origin, only when both axes agree to within this
-#: fraction, and only inside these bounds (and not within 5% of 1).
-_PAGE_SCALE_MIN_COORD = 40
-_PAGE_SCALE_AXIS_AGREEMENT = 0.02
-_PAGE_SCALE_BOUNDS = (0.5, 2.0)
-#: One pixel of click-point noise moves the estimate by a few tenths of a
-#: percent, enough to drop a wide template below threshold; the check tries
-#: this tight band around it.
-_PAGE_SCALE_BAND = (0.99, 0.995, 1.0, 1.005, 1.01)
-
-
-def _uniform_page_scale(step: Any, result: Any) -> Optional[float]:
-    """The page scale this step's click showed, or ``None``.
-
-    The recorded click point and the point the ladder resolved this run,
-    divided axis by axis. A whole-page zoom multiplies both coordinates by
-    the same factor; a control that merely moved almost never does, so the
-    two axes must agree.
-    """
-
-    resolution = getattr(result, "resolution", None)
-    anchor = getattr(step, "anchor", None)
-    if resolution is None or anchor is None:
-        return None
-    try:
-        rx, ry = (float(v) for v in anchor.click_point)
-        lx, ly = (float(v) for v in resolution.point)
-    except (TypeError, ValueError):
-        return None
-    if min(rx, ry) < _PAGE_SCALE_MIN_COORD:
-        return None
-    sx, sy = lx / rx, ly / ry
-    if abs(sx - sy) > _PAGE_SCALE_AXIS_AGREEMENT * max(sx, sy):
-        return None
-    scale = (sx + sy) / 2
-    low, high = _PAGE_SCALE_BOUNDS
-    if not low <= scale <= high or abs(scale - 1.0) < 0.05:
-        return None
-    return round(scale, 3)
-
-
-def _frame_viewport(frame_png: bytes) -> tuple[int, int]:
-    """Return the viewport of THIS frame, read from the frame itself.
-
-    ``self.backend.viewport`` is a live read. Pairing it with an
-    already-captured frame lets a resize or move between capture and use
-    reinterpret that frame under geometry it never had, which can place a
-    coordinate where the operator never demonstrated one. A PNG carries its own
-    dimensions in the IHDR chunk, so the frame can always answer for itself.
-    """
-
-    if len(frame_png) < 24 or not frame_png.startswith(b"\x89PNG\r\n\x1a\n"):
-        raise ValueError("frame viewport requires valid PNG bytes")
-    width, height = struct.unpack(">II", frame_png[16:24])
-    if width <= 0 or height <= 0:
-        raise ValueError("frame viewport must be positive")
-    return int(width), int(height)
-
-
-PC_TEMPLATE_THRESHOLD = 0.9
-# REGION_STABLE asserts recorded structure, not palette.  The ordinary
-# grayscale template matcher remains the first (stricter) check; this edge-map
-# threshold is a color-invariant fallback.  Exact v1.16.1 MockMed evidence
-# measured correct theme+parameter substitution at 0.86 and a true blocking
-# modal at 0.24, leaving a deliberate margin on both sides.
-PC_STRUCTURAL_TEMPLATE_THRESHOLD = 0.8
-
-# Typed-input verification: height of the visual readback band around the
-# focusing click after TYPE. Without structural field bounds, read the full
-# viewport width: a centered crop can hide the value's beginning or suffix.
-# With no focusing click (e.g. Tab between fields), use the whole frame.
-FIELD_REGION_HEIGHT = 240
-MASKED_FIELD_REGION_WIDTH = 640
-FIELD_REGION_PAD = 16
-
-# Typed-input verification, secret-only diff acceptance: when a SECRET typed
-# value is OCR-able but OCR cannot find it, a pixel change alone is accepted
-# only if the field region gained no other READABLE text — masked fields render
-# dots, which OCR reads as nothing, low-confidence noise, or punctuation
-# runs, while a dialog rendering over the region adds confident words.
-# "Readable" therefore counts alphanumeric characters of lines OCR is
-# confident about (>= MASKED_MIN_CONFIDENCE), EXCLUDING homogeneous glyph
-# runs: a dot row can misread as a confident digit run (measured on the
-# Linux renderer: 17 bullets -> '0000000000006' at 0.81 confidence), and
-# such runs are >= MASKED_REPEAT_FRACTION one repeated character —
-# no real dialog sentence is. Alnum counts are also invariant to
-# segmentation differences between frames. The gain may not exceed
-# MASKED_NEW_TEXT_SLACK.
-MASKED_NEW_TEXT_SLACK = 3
-MASKED_MIN_CONFIDENCE = 0.6
-MASKED_REPEAT_FRACTION = 0.66
-
-# Closed-loop scroll: a SCROLL step keeps scrolling by its recorded delta
-# until the NEXT anchored step's anchor resolves on a settled frame, bounded
-# by this multiple of the step's own recorded scroll distance. Consecutive
-# SCROLL steps hand the loop to each other (each probes first and no-ops
-# once the anchor is in view), so a run of N recorded scrolls has a combined
-# budget of ~2.5x the total recorded distance.
-SCROLL_BUDGET_FACTOR = 2.5
-
-# Bounds for the Phase-2 program interpreter -- deterministic termination
-# guarantees. A worklist loop is bounded per-loop (LoopSpec.max_iterations); the
-# graph walk itself is bounded by a total step budget (so an authored cycle of
-# always-true transitions can never spin forever) and subflow/loop nesting is
-# depth-bounded.
-PROGRAM_MAX_STEPS = 100_000
-PROGRAM_MAX_DEPTH = 64
-
-
-class _GraphStepContext:
-    """Per-action-state context the program interpreter feeds ``_run_step``.
-
-    Supplies the two pieces the linear loop derives from list position but a
-    graph lacks: the previously EXECUTED action (for the click-to-focus TYPE
-    heuristic) and the SCROLL closed-loop successors (the next anchored action
-    state and the immediately following state). All optional; a None field means
-    "no such successor" (the scroll loop then falls back to its open-loop
-    gesture, exactly as at the end of a linear workflow).
-    """
-
-    __slots__ = (
-        "prev_action",
-        "next_anchored",
-        "following",
-        "has_exception_handler",
-    )
-
-    def __init__(
-        self,
-        prev_action: Optional[ActionKind] = None,
-        next_anchored: Optional[Step] = None,
-        following: Optional[Step] = None,
-        has_exception_handler: bool = False,
-    ) -> None:
-        self.prev_action = prev_action
-        self.next_anchored = next_anchored
-        self.following = following
-        self.has_exception_handler = has_exception_handler
-
-
-class _ProgramHalt(Exception):
-    """Internal signal: an unrecoverable state was reached (an unhandled action
-    failure, a dead-end with no matching transition, a bound exceeded, or a
-    ``halt`` / ``escalate`` terminal). Carries the outcome + reason the run
-    report records. Caught only by ``_interpret_program`` -- never escapes the
-    Replayer."""
-
-    def __init__(self, outcome: str, reason: str, *, safety: bool = False) -> None:
-        super().__init__(reason)
-        self.outcome = outcome
-        self.reason = reason
-        self.safety = safety
-        # Populated at an ACTION-state failure before graph frames unwind.
-        # Empty means the halt is not eligible for a generic attended
-        # Continue/Skip transition.
-        self.program_frames: list[GraphFrame] = []
-        self.program_params: dict[str, RuntimeParamScalar] = {}
-        self.program_history_hash: str = ""
-
-
-def effect_endpoint_scope(verifier: Any) -> EndpointScope:
-    """Where an effect verifier reads its system of record.
-
-    A verifier that names a ``base_url`` (REST, FHIR) is ``loopback`` when that
-    URL is on this computer and ``external`` otherwise. A verifier without one
-    is ``unknown``, which keeps a network substrate counted as egress.
-    """
-    base_url = getattr(verifier, "base_url", None)
-    return endpoint_scope(base_url) if isinstance(base_url, str) else "unknown"
-
-
-def _record_loop_iteration(
-    report: RunReport,
-    loop_state_id: str,
-    row_index: int,
-    row: Mapping[str, RuntimeParamScalar],
-) -> None:
-    """Record the row values one loop iteration binds, before it runs.
-
-    ``report.params`` is the run's base scope. A row field overrides it for
-    that iteration, so the audit report needs each row's own values to state
-    what the run typed.
-    """
-    report.loop_iterations.append(
-        LoopIterationBinding(
-            loop_state_id=loop_state_id,
-            row_index=row_index,
-            params=dict(row),
-        )
-    )
-
-
-def _loop_iterations_from_checkpoints(
-    checkpoints: list[ProgramCheckpoint],
-) -> list[LoopIterationBinding]:
-    """Rebuild the loop rows that earlier legs of a resumed run bound.
-
-    A resumed report carries the earlier legs' results, so it also needs the
-    row values those results typed. Each checkpoint's frame stack names the
-    loop row it ran in. A row is listed once, at its first checkpoint, keyed by
-    its position in the frame stack so a nested loop's rows under different
-    outer rows stay distinct.
-    """
-    seen: set[tuple[tuple[str, str, int], ...]] = set()
-    bindings: list[LoopIterationBinding] = []
-    for checkpoint in checkpoints:
-        path: tuple[tuple[str, str, int], ...] = ()
-        for frame in checkpoint.frames:
-            cursor = frame.loop
-            if cursor is None:
-                path = (*path, (frame.graph_id, "", -1))
-                continue
-            path = (*path, (frame.graph_id, cursor.loop_state_id, cursor.row_index))
-            if path in seen or not 0 <= cursor.row_index < len(cursor.rows):
-                continue
-            seen.add(path)
-            bindings.append(
-                LoopIterationBinding(
-                    loop_state_id=cursor.loop_state_id,
-                    row_index=cursor.row_index,
-                    params=dict(cursor.rows[cursor.row_index]),
-                )
-            )
-    return bindings
-
-
-def _all_workflow_steps(workflow: Workflow):
-    """Yield every ``Step`` in a workflow for whole-bundle audits.
-
-    Linear bundle: the ``steps`` list. Program bundle: every ``action`` state's
-    step across the top-level program graph AND all subflows (a loop body's
-    steps included). Order is stable but not execution order -- used only for
-    static coverage counting, not for running.
-    """
-    if workflow.program is None:
-        yield from workflow.steps
-        return
-    graphs = [workflow.program, *workflow.subflows.values()]
-    for graph in graphs:
-        for state in graph.states.values():
-            if state.kind is StateKind.ACTION and state.step is not None:
-                yield state.step
-
-
-class EgressNotPermitted(RuntimeError):
-    """Raised when an egress-capable model component (a grounder / identity-VLM
-    / state-verifier that could send a screenshot off the box) is wired without
-    the operator's explicit ``allow_model_grounding`` opt-in (PHI audit REM-3).
-    """
-
-
-#: How far past its demonstrated position (as a fraction of the frame's extent
-#: along the scroll axis) a scroll target may still be before the closed-loop
-#: scroll counts it as ready.
-SCROLL_POSITION_SLACK_FRACTION = 0.25
-
-
-#: Rungs that show the target itself on screen: what closed-loop scroll
-#: readiness accepts, and all a step accepts after its scroll missed it.
-class _NotActionableError(str):
-    """The error ``_resolve_step`` returns when the structural rung found
-    exactly one candidate but it is covered or off-viewport.
-
-    A ``str`` so it travels as any resolution error; its type marks it. The
-    step polls on it like any miss, and halts with ``target_not_actionable``
-    when it times out or when the fresh re-resolution before input finds it.
-    """
-
-
-_DIRECT_TARGET_RUNGS = frozenset({"structural", "template", "template_global", "ocr"})
-
-#: Steps that own the halt when the closed-loop scroll before them never found
-#: their target (see ``Replayer._act_scroll``).
-_SCROLL_HANDOFF_ACTIONS = frozenset(
-    {ActionKind.CLICK, ActionKind.DOUBLE_CLICK, ActionKind.RIGHT_CLICK}
+from openadapt_flow.runtime.replay._shared import (  # noqa: F401
+    _DIRECT_TARGET_RUNGS,
+    _DURABLE_RESUME_AUTHORITY,
+    _FIELD_CHECK_LIMIT,
+    _FIELD_VALUE_LIMIT,
+    _FORM_GUARD_SETTLE_S,
+    _MAX_FRESH_ACTUATION_REACQUISITIONS,
+    _MAX_SERVER_RESPONSES,
+    _PAGE_SCALE_AXIS_AGREEMENT,
+    _PAGE_SCALE_BAND,
+    _PAGE_SCALE_BOUNDS,
+    _PAGE_SCALE_MIN_COORD,
+    _PIXEL_RECHECK_LEVEL,
+    _PIXEL_RECHECK_MIN_PIXELS,
+    _PIXEL_RECHECK_REOBSERVES,
+    _REMOTE_HOVER_JITTER_PX,
+    _SCROLL_HANDOFF_ACTIONS,
+    FIELD_REGION_HEIGHT,
+    FIELD_REGION_PAD,
+    MASKED_FIELD_REGION_WIDTH,
+    MASKED_MIN_CONFIDENCE,
+    MASKED_NEW_TEXT_SLACK,
+    MASKED_REPEAT_FRACTION,
+    PC_STRUCTURAL_TEMPLATE_THRESHOLD,
+    PC_TEMPLATE_SEARCH_PAD,
+    PC_TEMPLATE_THRESHOLD,
+    PIXEL_CENSUS_OCR_MAX_SIMILARITY,
+    PIXEL_CENSUS_OCR_MIN_CONFIDENCE,
+    PROGRAM_MAX_DEPTH,
+    PROGRAM_MAX_STEPS,
+    READBACK_DEADLINE_MARGIN_S,
+    SCROLL_BUDGET_FACTOR,
+    SCROLL_POSITION_SLACK_FRACTION,
+    EgressNotPermitted,
+    _all_workflow_steps,
+    _DeliveryResultT,
+    _field_text,
+    _frame_viewport,
+    _GraphStepContext,
+    _identity_tokens,
+    _loop_iterations_from_checkpoints,
+    _NotActionableError,
+    _ProgramHalt,
+    _record_loop_iteration,
+    _scroll_target_positioned,
+    _uniform_page_scale,
+    _WebFormApprovalView,
+    _within_hover_jitter,
+    better_identity_read,
+    effect_endpoint_scope,
+    effect_field_checks,
+    identity_read_contradicts,
 )
+from openadapt_flow.runtime.replay.evidence import AssetsHealingAndEvidence
+from openadapt_flow.runtime.replay.qualification_faults import (
+    QualificationFaultInjection,
+)
+from openadapt_flow.runtime.replay.settling import SettlingAndInterstitials
 
 
-def _scroll_target_positioned(
-    recorded: tuple[int, int],
-    resolved: tuple[int, int],
-    scroll_delta: tuple[int, int],
-    frame_png: bytes,
-) -> bool:
-    """Is the resolved target no further along the scroll than recorded?"""
-
-    dx, dy = scroll_delta
-    w, h = _frame_viewport(frame_png)
-    if dy:
-        slack = SCROLL_POSITION_SLACK_FRACTION * h
-        ahead = (resolved[1] - recorded[1]) if dy > 0 else (recorded[1] - resolved[1])
-        if ahead > slack:
-            return False
-    if dx:
-        slack = SCROLL_POSITION_SLACK_FRACTION * w
-        ahead = (resolved[0] - recorded[0]) if dx > 0 else (recorded[0] - resolved[0])
-        if ahead > slack:
-            return False
-    return True
-
-
-def _identity_tokens(text: Any) -> set[str]:
-    return {t for t in re.split(r"[^0-9a-z]+", str(text or "").lower()) if t}
-
-
-def identity_read_contradicts(check: Any) -> bool:
-    """A ``mismatch`` read that saw text the expected identity doesn't have.
-
-    "mismatch" also covers a read that is merely incomplete (columns cut
-    off). Only a read that shows a token the expected record lacks (another
-    MRN, a different spelling or date) is evidence of a different record.
-    """
-
-    if getattr(check, "status", None) != "mismatch":
-        return False
-    expected = _identity_tokens(getattr(check, "expected", None))
-    observed = _identity_tokens(getattr(check, "observed", None))
-    if not expected or not observed:
-        return True  # nothing to compare: keep the refusal
-    return not observed <= expected
-
-
-def better_identity_read(first: Any, retry: Any) -> Any:
-    """The identity read to keep from a first read and its upscaled re-read.
-
-    A read that contradicts the expected record (:func:`identity_read_contradicts`)
-    is final: a second read of the same screen must never turn it into
-    ``verified``. A mismatch that is only incomplete can be rescued by a
-    re-read that verifies. Otherwise ``verified`` beats the "cannot certify"
-    outcomes, then a mismatch, then ``abstain``, then a blank ``unreadable``;
-    a tie goes to the read that covered more of the expected identity.
-    """
-
-    if identity_read_contradicts(first):
-        return first
-    if identity_read_contradicts(retry):
-        return retry
-    rank = {"unreadable": 0, "abstain": 1, "mismatch": 2, "verified": 3}
-    if (rank[retry.status], retry.coverage) > (rank[first.status], first.coverage):
-        return retry
-    return first
-
-
-#: Server answers kept per step (a save makes one or a few write requests).
-_MAX_SERVER_RESPONSES = 64
-
-
-@dataclass(frozen=True)
-class _WebFormApprovalView:
-    """An API step's prepared request, as a person is asked to approve it."""
-
-    prepared: Any
-    #: :func:`~openadapt_flow.runtime.actuators.web_form.operation_digest`.
-    digest: str
-    rows: list[tuple[str, str]]
-    png: bytes
-    ref: Any
-
-
-# The pixel census's OCR tie-break: a place the pixels do not rule out is
-# distinguishable only when OCR reads both crops with every line at or above
-# this confidence, neither text contains the other, and the two texts are less
-# similar than this ratio. One label read two ways measured 0.82-0.95
-# ("Smith, John" / "Smith, S John" / "Smith, 10 lohn"); sibling tab labels
-# ("Contact" / "Stats") measure 0.5 or less.
-PIXEL_CENSUS_OCR_MIN_CONFIDENCE = 0.8
-PIXEL_CENSUS_OCR_MAX_SIMILARITY = 0.6
-
-
-#: How long after a create-new form's save the replayer keeps watching its
-#: submit guard before the next step (a script may submit after the click).
-_FORM_GUARD_SETTLE_S = 2.0
-
-
-def _within_hover_jitter(
-    fresh: tuple[int, int],
-    prepared: tuple[int, int],
-    fresh_region: Optional[Region],
-) -> bool:
-    """Whether a re-resolved point may be the prepared one moved by codec jitter.
-
-    Both points must lie inside the fresh match's own box and differ by at
-    most :data:`_REMOTE_HOVER_JITTER_PX` on each axis. With no box there is
-    nothing to bind the prepared point to. A True answer only permits one
-    re-preparation at the fresh point; the click still needs an exact match.
-    """
-    if fresh_region is None:
-        return False
-    x, y, w, h = fresh_region
-    if w <= 0 or h <= 0:
-        return False
-
-    def inside(point: tuple[int, int]) -> bool:
-        return x <= point[0] < x + w and y <= point[1] < y + h
-
-    return (
-        abs(int(fresh[0]) - int(prepared[0])) <= _REMOTE_HOVER_JITTER_PX
-        and abs(int(fresh[1]) - int(prepared[1])) <= _REMOTE_HOVER_JITTER_PX
-        and inside(fresh)
-        and inside(prepared)
-    )
-
-
-class Replayer:
+class Replayer(
+    QualificationFaultInjection, AssetsHealingAndEvidence, SettlingAndInterstitials
+):
     """Replays a Workflow against a Backend using injected vision.
 
     Args:
@@ -3639,8 +3213,7 @@ class Replayer:
             # to a person, and it never stays held open for the next item.
             if decide_approval:
                 self._stamp_approval(report)
-        report.save(run_dir)
-        return report
+        return save_settled_report(run_dir, report)
 
     def recheck_deferred_readback(
         self,
@@ -7093,191 +6666,6 @@ class Replayer:
         self._qualification_fault_public_key = trusted
         return None
 
-    @staticmethod
-    def _qualification_fault_gate_for_kind(
-        kind: QualificationFaultKind,
-    ) -> QualificationFaultGate:
-        gates: dict[QualificationFaultKind, QualificationFaultGate] = {
-            "ambiguity": "target_resolution",
-            "wrong_identity": "identity_verification",
-            "stale_identity": "actuation_revalidation",
-            "weak_effect": "effect_strength",
-            "missing_effect": "effect_verifier",
-        }
-        return gates[kind]
-
-    def _qualification_fault_context(
-        self,
-        *,
-        gate: QualificationFaultGate,
-        step: Step,
-        actuation_path: Literal["gui", "api"],
-        before_input_sha256: str,
-        effect_verifier: Any,
-        effects: tuple[Any, ...] = (),
-        capture_frame: Any = None,
-    ) -> Optional[QualificationFaultContext]:
-        authorization = self.governed_authorization
-        if authorization is None or authorization.qualification_case_kind in {
-            None,
-            "representative",
-        }:
-            return None
-        kind = cast(QualificationFaultKind, authorization.qualification_case_kind)
-        if self._qualification_fault_gate_for_kind(kind) != gate:
-            return None
-        if authorization.qualification_fault_step_id_sha256 != sha256_bytes(
-            step.id.encode("utf-8")
-        ):
-            return None
-        if self._qualification_case_action_paths.get(step.id) != actuation_path:
-            return None
-        required = (
-            authorization.qualification_project_id,
-            authorization.qualification_project_revision,
-            authorization.qualification_project_contract_sha256,
-            authorization.qualification_campaign_id_sha256,
-            self._qualification_id_sha256(authorization.qualification_case_id),
-            authorization.qualification_case_input_sha256,
-            authorization.qualification_run_id_sha256,
-        )
-        if any(value is None for value in required):
-            raise RuntimeError("qualification_fault_binding_incomplete")
-        return QualificationFaultContext(
-            project_id=cast(str, required[0]),
-            project_revision=cast(int, required[1]),
-            project_contract_sha256=cast(str, required[2]),
-            campaign_id_sha256=cast(str, required[3]),
-            case_id_sha256=cast(str, required[4]),
-            case_input_sha256=cast(str, required[5]),
-            run_id_sha256=cast(str, required[6]),
-            step_id=step.id,
-            actuation_path=actuation_path,
-            fault_kind=kind,
-            gate=gate,
-            before_input_sha256=before_input_sha256,
-            backend=self.backend,
-            vision=self.vision,
-            effect_verifier=effect_verifier,
-            effects=effects,
-            capture_frame=capture_frame,
-            surface_id=(
-                self._surface_router.active_id
-                if self._surface_router is not None
-                else None
-            ),
-        )
-
-    def _require_current_fault_driver_binding(self) -> QualificationFaultDriver:
-        """Snapshot the configured driver identity immediately before mutation."""
-
-        driver = self.qualification_fault_driver
-        authorization = self.governed_authorization
-        if driver is None or authorization is None:
-            raise RuntimeError("qualification_fault_driver_missing")
-        try:
-            observed = (
-                driver.driver_id,
-                driver.contract_sha256,
-                driver.attestation_key_id,
-            )
-        except Exception as exc:
-            raise RuntimeError(
-                "qualification_fault_driver_identity_unavailable"
-            ) from exc
-        expected = (
-            authorization.qualification_fault_driver_id,
-            authorization.qualification_fault_driver_contract_sha256,
-            authorization.qualification_fault_driver_key_id,
-        )
-        if observed != expected:
-            raise RuntimeError("qualification_fault_driver_binding_changed")
-        return driver
-
-    def _validate_fault_mutation(
-        self,
-        context: QualificationFaultContext,
-        receipt: FaultMutationReceipt,
-        *,
-        after_input_sha256: str,
-    ) -> None:
-        authorization = self.governed_authorization
-        if authorization is None:
-            raise RuntimeError("qualification_fault_authorization_missing")
-        expected = {
-            "project_id": context.project_id,
-            "project_revision": context.project_revision,
-            "project_contract_sha256": context.project_contract_sha256,
-            "campaign_id_sha256": context.campaign_id_sha256,
-            "case_id_sha256": context.case_id_sha256,
-            "case_input_sha256": context.case_input_sha256,
-            "run_id_sha256": context.run_id_sha256,
-            "step_id_sha256": sha256_bytes(context.step_id.encode("utf-8")),
-            "actuation_path": context.actuation_path,
-            "fault_kind": context.fault_kind,
-            "gate": context.gate,
-            "driver_id": authorization.qualification_fault_driver_id,
-            "driver_contract_sha256": (
-                authorization.qualification_fault_driver_contract_sha256
-            ),
-            "attestation_key_id": (authorization.qualification_fault_driver_key_id),
-            "before_input_sha256": context.before_input_sha256,
-            "after_input_sha256": after_input_sha256,
-        }
-        actual = receipt.model_dump(mode="python")
-        if any(actual.get(key) != value for key, value in expected.items()):
-            raise RuntimeError("qualification_fault_receipt_binding_invalid")
-        if context.before_input_sha256 == after_input_sha256:
-            raise RuntimeError("qualification_fault_input_unchanged")
-        trusted_key = self._qualification_fault_public_key
-        if trusted_key is None or not verify_fault_mutation_receipt(
-            receipt,
-            trusted_public_key_base64=trusted_key,
-        ):
-            raise RuntimeError("qualification_fault_receipt_signature_invalid")
-        if self._qualification_fault_mutations:
-            raise RuntimeError("qualification_fault_mutation_repeated")
-        self._qualification_fault_mutations.append(receipt)
-
-    def _apply_screen_fault_mutation(
-        self,
-        *,
-        gate: QualificationFaultGate,
-        step: Step,
-        before_png: bytes,
-        effect_verifier: Any,
-        capture: Optional[Callable[[], bytes]] = None,
-    ) -> bytes:
-        if self._qualification_fault_mutations:
-            return before_png
-        # The receipt binds the frame the detector reads. ``capture`` is the
-        # detector's own capture path (see _revalidation_frame_capture): two
-        # paths can encode identical pixels as different PNG bytes.
-        capture_frame = capture or self.backend.screenshot
-        context = self._qualification_fault_context(
-            gate=gate,
-            step=step,
-            actuation_path="gui",
-            before_input_sha256=sha256_bytes(before_png),
-            effect_verifier=effect_verifier,
-            capture_frame=capture_frame,
-        )
-        if context is None:
-            return before_png
-        driver = self._require_current_fault_driver_binding()
-        mutation = driver.mutate(context)
-        if mutation is None:
-            return before_png
-        if mutation.replace_effect_verifier:
-            raise RuntimeError("qualification_screen_fault_replaced_verifier")
-        after_png = capture_frame()
-        self._validate_fault_mutation(
-            context,
-            mutation.receipt,
-            after_input_sha256=sha256_bytes(after_png),
-        )
-        return after_png
-
     def _apply_effect_fault_mutation(
         self,
         *,
@@ -7517,59 +6905,6 @@ class Replayer:
         self._last_click_point = None
         self._last_click_region = None
         self._control_overlay_last_observation_png = None
-
-    def _bind_surface_qualification_environment(
-        self, workflow: Workflow, surface_id: str
-    ) -> Optional[str]:
-        """Observe the newly active surface against its qualified boundary.
-
-        Only a qualification case run observes environments. The primary
-        surface is checked against the project's ``environment`` (as at run
-        start); every other surface against ``surface_environments[id]``
-        (``_begin_surfaces`` already refused a case whose project lacks one).
-        On a match the input-edge guard moves to the new surface's backend,
-        so every later input on that surface rechecks that environment.
-        """
-
-        authorization = self.governed_authorization
-        if authorization is None or authorization.qualification_case_id is None:
-            return None
-        router = self._surface_router
-        project = workflow.qualification
-        if router is None or project is None:
-            return "qualification environment evidence is unavailable"
-        self._qualification_environment_call = None
-        self._qualification_environment_bound = None
-        boundary: Any
-        if surface_id == router.primary_id:
-            boundary = project.environment
-        else:
-            boundary = project.surface_environments.get(surface_id)
-            if boundary is None:
-                return "the qualification project does not bound this surface"
-        refusal, observed, ids = self._bind_qualification_boundary(
-            boundary, surface_scoped=surface_id != router.primary_id
-        )
-        if surface_id != router.primary_id and observed is not None and ids is not None:
-            self._surface_environment_observations[surface_id] = (
-                ObservedSurfaceEnvironment(
-                    target_kind=observed.target_kind,
-                    application_sha256=hashlib.sha256(
-                        observed.application_identity.encode("utf-8")
-                    ).hexdigest(),
-                    application_version_sha256=hashlib.sha256(
-                        observed.application_version.encode("utf-8")
-                    ).hexdigest(),
-                    session_sha256=observed.session_identity_sha256,
-                    environment_digest=observed.environment_digest,
-                    observer_id=ids[0],
-                    observer_contract_sha256=ids[1],
-                    binding_sha256=observed.binding_sha256(
-                        observer_id=ids[0], observer_contract_sha256=ids[1]
-                    ),
-                )
-            )
-        return refusal
 
     def _active_surface_binding(
         self, workflow: Workflow
@@ -12165,46 +11500,6 @@ class Replayer:
         )
         return resolution, region, error
 
-    @timed_span("settle")
-    def _settle_seeded(self) -> bytes:
-        """``vision.wait_settled`` that can extend the last settled run.
-
-        Same contract as ``vision.wait_settled``: a fresh frame is always
-        captured and returned, and it counts as settled only after a run of
-        identical frames polled at the normal interval. When the previous
-        settle on this backend ended settled and no input was delivered since
-        (every input crosses ``_deliver_backend_call``, which bumps the
-        epoch), an identical fresh frame extends that already-observed run
-        instead of starting a new one, saving one poll interval. A changed
-        frame starts over exactly as before.
-        """
-
-        seed_entry = getattr(self, "_settle_seed", None)
-        self._settle_seed = None
-        epoch = getattr(self, "_actuation_epoch", 0)
-        seeded = getattr(self.vision, "wait_settled_seeded", None)
-        seed_type = getattr(self.vision, "SettleSeed", None)
-        if seeded is None or seed_type is None:
-            return self.vision.wait_settled(self.backend)
-        seed = None
-        if seed_entry is not None and seed_entry[1] == epoch:
-            seed = seed_entry[0]
-        result = seeded(self.backend, seed)
-        if result.settled and result.phash:
-            seed_kwargs: dict[str, Any] = {}
-            if getattr(result, "mode", "pixel") == "page":
-                seed_kwargs["png"] = result.png
-            self._settle_seed = (
-                seed_type(
-                    phash=result.phash,
-                    stable_frames=result.stable_frames,
-                    captured_at=result.captured_at,
-                    **seed_kwargs,
-                ),
-                epoch,
-            )
-        return result.png
-
     def _deliver_backend_call(
         self,
         result: StepResult,
@@ -13005,23 +12300,6 @@ class Replayer:
         except Exception:  # noqa: BLE001 - unreadable is never "unchanged"
             return None
 
-    def _is_qualification_fault_step(self, step: Step) -> bool:
-        """Whether ``step`` is the fault step of the fault case this run is.
-
-        A readiness drill (a fault qualification case) passes only when the
-        engine's own detector refuses its changed input before delivery, so
-        nothing is ever delivered at its fault step.
-        """
-
-        authorization = self.governed_authorization
-        return bool(
-            authorization is not None
-            and authorization.qualification_case_kind not in {None, "representative"}
-            and authorization.qualification_fault_step_id_sha256 is not None
-            and authorization.qualification_fault_step_id_sha256
-            == sha256_bytes(step.id.encode("utf-8"))
-        )
-
     def _approval_step_refusal(
         self,
         workflow: Workflow,
@@ -13519,6 +12797,8 @@ class Replayer:
                 before_png=before_png,
                 result=result,
             )
+        if step.action is ActionKind.SECOND_FACTOR:  # bind, ask, type once
+            return second_factor_step.act(self, step, workflow, params, result)
         if step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
             assert resolution is not None  # guaranteed by _resolve_step
             x, y = resolution.point
@@ -14039,25 +13319,11 @@ class Replayer:
             return None
 
         if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
-            if step.secret:
-                # Secret value is never in the bundle/params: inject it from
-                # the environment, failing fast with an actionable message.
-                env_var = getattr(self, "secret_env_overrides", {}).get(
-                    step.param or ""
-                ) or secret_env_var(step.param or "")
-                text = os.environ.get(env_var, "")
-                if not step.param:
-                    return (
-                        f"Step '{step.id}' ({step.intent}) is marked secret "
-                        "but names no parameter"
-                    )
-                if not text:
-                    return (
-                        f"Step '{step.id}' ({step.intent}) requires secret "
-                        f"parameter '{step.param}', but the environment "
-                        f"variable {env_var} is not set — export it with the "
-                        "secret value and re-run"
-                    )
+            if step.secret:  # never in the bundle/params (secret_inputs.py)
+                overrides = getattr(self, "secret_env_overrides", {})
+                text, refusal = step_secret_text(step, overrides)
+                if refusal is not None:
+                    return refusal
             elif step.param is not None:
                 if step.param not in params:
                     return (
@@ -14622,42 +13888,6 @@ class Replayer:
             )
         return live_control_error(it, self.backend, resolution.structural_handle)
 
-    def _interstitial_declaration_mutation(
-        self, workflow: Optional[Workflow]
-    ) -> Optional[str]:
-        """Return a refusal when caller-owned declarations changed mid-run."""
-
-        snapshot_error = (
-            self._runtime_interstitial_snapshot_error
-            or self._workflow_interstitial_snapshot_error
-        )
-        if snapshot_error is not None:
-            return f"{snapshot_error} - refusing to emit an action; run aborted."
-        try:
-            _runtime, runtime_snapshot = self._canonical_interstitial_snapshot(
-                self._runtime_interstitial_source
-            )
-            workflow_snapshot: tuple[str, ...] = ()
-            if workflow is not None:
-                _workflow, workflow_snapshot = self._canonical_interstitial_snapshot(
-                    workflow.interstitials
-                )
-        except Exception as exc:
-            return (
-                "Interstitial declarations changed after admission and are no "
-                f"longer valid ({type(exc).__name__}) - refusing to emit an "
-                "action; run aborted."
-            )
-        if (
-            runtime_snapshot != self._runtime_interstitial_snapshot
-            or workflow_snapshot != self._workflow_interstitial_snapshot
-        ):
-            return (
-                "Interstitial declarations changed after admission - refusing "
-                "to emit an action under a stale authorization; run aborted."
-            )
-        return None
-
     @timed_span("settle")
     def _wait_starting_state_settled(
         self, before_png: bytes
@@ -14722,63 +13952,6 @@ class Replayer:
                 False,
             )
         return frame, None, True
-
-    @staticmethod
-    def _qualification_id_sha256(value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-    def _observe_qualification_environment(
-        self,
-        workflow: Workflow,
-        report: RunReport,
-        *,
-        execution_target_kind: Optional[ExecutionTargetKind],
-    ) -> Optional[str]:
-        """Retain exact live environment evidence for a campaign run.
-
-        Project labels are expected values only. They never become observed
-        evidence. A qualification case refuses before workflow actuation when
-        the active backend cannot independently return the application,
-        application version, and session identity or when either expected
-        application field differs. The one exception is the signed-in web
-        session observer: its version is the operator's Check it confirmation,
-        bound into its contract and environment digests.
-        """
-
-        authorization = self.governed_authorization
-        if authorization is None or authorization.qualification_case_id is None:
-            return None
-        project = workflow.qualification
-        if project is None or execution_target_kind is None:
-            return "qualification environment evidence is unavailable"
-        if (
-            authorization.qualification_run_id_sha256
-            != hashlib.sha256(self._run_id.encode("utf-8")).hexdigest()
-        ):
-            return "qualification run identity does not match its authorization"
-        if execution_target_kind != project.environment.target_kind:
-            return "qualification target kind does not match the project"
-        refusal, observed, observer_ids = self._bind_qualification_boundary(
-            project.environment
-        )
-        if observed is not None and observer_ids is not None:
-            report.observed_application_sha256 = hashlib.sha256(
-                observed.application_identity.encode("utf-8")
-            ).hexdigest()
-            report.observed_application_version_sha256 = hashlib.sha256(
-                observed.application_version.encode("utf-8")
-            ).hexdigest()
-            report.observed_session_sha256 = observed.session_identity_sha256
-            report.observed_environment_digest = observed.environment_digest
-            report.qualification_environment_observer_id = observer_ids[0]
-            report.qualification_environment_observer_contract_sha256 = observer_ids[1]
-            report.observed_environment_binding_sha256 = observed.binding_sha256(
-                observer_id=observer_ids[0],
-                observer_contract_sha256=observer_ids[1],
-            )
-        return refusal
 
     def _bind_qualification_boundary(
         self, boundary: Any, *, surface_scoped: bool = False
@@ -15000,489 +14173,6 @@ class Replayer:
         except LocaleInvariantMismatch as exc:
             return exc.reason
         return None
-
-    def _require_qualification_environment_current(self) -> None:
-        """Recheck the bound environment immediately before an input edge."""
-
-        call = self._qualification_environment_call
-        expected = self._qualification_environment_bound
-        if call is None or expected is None:
-            return
-        try:
-            observed = call()
-        except StructuralResolutionRefused:
-            raise
-        except Exception as exc:
-            raise StructuralResolutionRefused(
-                "qualification environment could not be observed before input"
-            ) from exc
-        if observed != expected:
-            raise StructuralResolutionRefused(
-                "qualification environment changed before input"
-            )
-
-    def _resettle_after_interstitial(
-        self, before_png: bytes
-    ) -> tuple[bytes, Optional[str]]:
-        """Require a settled frame after every automatic dismissal.
-
-        Interstitial handling is itself opt-in, so unlike the legacy entry-frame
-        behavior there is no backwards-compatibility reason to accept a
-        proceed-anyway settle timeout here. A transient blank frame could make a
-        ``TEXT_ABSENT`` clearance pass immediately before the overlay returned.
-        """
-        fn = getattr(self.vision, "wait_settled_result", None)
-        if not callable(fn):
-            return before_png, (
-                "The configured vision facade cannot verify that the screen "
-                "settled after an interstitial dismissal - refusing to act; "
-                "run aborted."
-            )
-        try:
-            result = fn(
-                self.backend,
-                interval_s=self.poll_interval_s,
-                timeout_s=self.settle_readiness_timeout_s,
-            )
-            frame = result.png
-            settled = result.settled
-            if not isinstance(frame, bytes) or not isinstance(settled, bool):
-                raise TypeError("invalid settle result")
-        except Exception as exc:
-            return before_png, (
-                "The screen readiness check failed after dismissing an "
-                f"interstitial ({type(exc).__name__}) - refusing to act; run "
-                "aborted."
-            )
-        if not settled:
-            return frame, (
-                "The screen did not settle after the interstitial dismissal "
-                f"within {self.settle_readiness_timeout_s:.1f}s - refusing to "
-                "verify clearance on a mid-transition frame or act beneath it; "
-                "run aborted."
-            )
-        return frame, None
-
-    @timed_span("postcondition")
-    def _handle_interstitials(
-        self,
-        step: Step,
-        before_png: bytes,
-        bundle_dir: Path,
-        params: Mapping[str, RuntimeParamScalar],
-        result: StepResult,
-        audit_events: list[InterstitialActionResult],
-        workflow: Optional[Workflow],
-    ) -> tuple[bytes, Optional[str]]:
-        """Detect + handle KNOWN interstitials on the entry frame (model-free).
-
-        A detected interstitial with an explicitly reversible,
-        non-consequential dismissal (``dismiss_key`` / ``dismiss_anchor``) gets
-        one audited action followed by its declared visual clearance check. A
-        delivery/clearance failure, persistent detection, or a detected
-        interstitial with NO dismissal HALTs the run GRACEFULLY naming it. Returns
-        ``(frame, None)`` when the screen is clear, else ``(frame, halt_reason)``.
-
-        Unknown / undeclared overlays are NOT guessed at here: one that covers
-        the step's target still HALTs safely downstream (the anchor does not
-        resolve). This method only automates the RECURRING, declared ones so
-        they do not force a babysit-the-queue halt every time they appear.
-        """
-        mutation_error = self._interstitial_declaration_mutation(workflow)
-        if mutation_error is not None:
-            return before_png, mutation_error
-        interstitials = [*self._workflow_interstitials, *self._interstitials]
-        if not interstitials:
-            return before_png, None
-
-        # Revalidate serialized values at the point of use. Pydantic validates
-        # construction/load, but models are intentionally mutable; an in-memory
-        # edit or model_construct must not bypass affirmative detection, visual
-        # clearance, Escape-only, or reversible/non-consequential policy.
-        validated: list[Interstitial] = []
-        for candidate in interstitials:
-            try:
-                validated.append(
-                    Interstitial.model_validate(candidate.model_dump(mode="python"))
-                )
-            except Exception as exc:
-                return before_png, (
-                    f"Interstitial '{candidate.name}' has an invalid automatic "
-                    f"dismissal declaration ({type(exc).__name__}) - refusing "
-                    "to emit an action; run aborted."
-                )
-        interstitials = validated
-
-        handled_indices: set[int] = set()
-        while True:
-            mutation_error = self._interstitial_declaration_mutation(workflow)
-            if mutation_error is not None:
-                return before_png, mutation_error
-            active_index = next(
-                (
-                    index
-                    for index, candidate in enumerate(interstitials)
-                    if self._predicate_holds(
-                        candidate.detect,
-                        before_png,
-                        bundle_dir,
-                        params,
-                        workflow=workflow,
-                    )
-                ),
-                None,
-            )
-            # Detection invokes vision and can therefore cross a callback
-            # boundary. Recheck the caller-owned declarations before trusting
-            # its result or preparing an action.
-            mutation_error = self._interstitial_declaration_mutation(workflow)
-            if mutation_error is not None:
-                return before_png, mutation_error
-            if active_index is None:
-                return before_png, None
-            it = interstitials[active_index]
-            if active_index in handled_indices:
-                return before_png, (
-                    f"Interstitial '{it.name}' reappeared after a verified "
-                    "dismissal in the same step - refusing an automatic retry; "
-                    "run aborted."
-                )
-            if len(handled_indices) >= len(interstitials):
-                return before_png, (
-                    "The interstitial dismissal bound was exhausted before the "
-                    "step entry state became clear - refusing further automatic "
-                    "actions; run aborted."
-                )
-            if it.dismiss_key is None and it.dismiss_anchor is None:
-                # A known BLOCKING interstitial with no safe auto-dismissal.
-                return before_png, (
-                    f"Known blocking interstitial '{it.name}' is on screen "
-                    f"({self._describe_predicate(it.detect)}) and declares no "
-                    "automatic dismissal - refusing to act beneath it; run "
-                    "aborted (handle it, then re-run)."
-                )
-            if (
-                it.risk != "reversible"
-                or it.consequential is not False
-                or it.clearance is None
-                or (it.dismiss_key is not None and it.dismiss_key != "Escape")
-            ):
-                # Defensive runtime check in addition to Pydantic validation:
-                # model_construct/in-memory mutation must never turn this into
-                # an ungoverned consequential or unverifiable action.
-                return before_png, (
-                    f"Interstitial '{it.name}' does not declare an automatic "
-                    "dismissal that is reversible, non-consequential, and "
-                    "visually verifiable - refusing to emit an action; run "
-                    "aborted."
-                )
-
-            resolution: Optional[Resolution] = None
-            action: Literal["key", "click"]
-            if it.dismiss_key is not None:
-                action = "key"
-            else:
-                assert it.dismiss_anchor is not None
-                structural_only = (
-                    not it.dismiss_anchor.template.strip()
-                    and it.dismiss_anchor.structural is not None
-                )
-                structural = (
-                    self.backend
-                    if self.use_structural
-                    and hasattr(self.backend, "locate_structural")
-                    else None
-                )
-                if structural_only and structural is None:
-                    return before_png, (
-                        f"Interstitial '{it.name}' requires a structural-only "
-                        "dismissal, but this backend cannot perform structural "
-                        "resolution - refusing an OCR/geometry/coordinate "
-                        "downgrade; run aborted."
-                    )
-                template_png = self._asset_bytes(
-                    bundle_dir,
-                    it.dismiss_anchor.template,
-                    workflow=workflow,
-                )
-                if self._governed_asset_mutation is not None:
-                    return before_png, self._governed_asset_mutation
-                res = resolve(
-                    it.dismiss_anchor,
-                    before_png,
-                    self.vision,
-                    None,  # NEVER ground a dismissal: stay model-free
-                    it.name,
-                    template_png=template_png,
-                    viewport=_frame_viewport(before_png),
-                    structural=structural,
-                )
-                if res is None:
-                    return before_png, (
-                        f"Interstitial '{it.name}' detected "
-                        f"({self._describe_predicate(it.detect)}) but its dismiss "
-                        "control did not resolve on screen - refusing to act; run "
-                        "aborted."
-                    )
-                resolution, _region = res
-                if structural_only and resolution.rung != "structural":
-                    return before_png, (
-                        f"Interstitial '{it.name}' structural dismissal did not "
-                        "resolve uniquely - refusing an OCR/geometry/coordinate "
-                        "downgrade; run aborted."
-                    )
-                action = "click"
-
-            # Resolution can invoke vision or a structural backend.  A callback
-            # must not be able to replace the declaration between authorization
-            # and the audit-before-delivery boundary.
-            mutation_error = self._interstitial_declaration_mutation(workflow)
-            if mutation_error is not None:
-                return before_png, mutation_error
-            if it.effect_watch:
-                # Classify the whole interruption, never its button word: a
-                # business question dressed as a session prompt halts here,
-                # before any input.
-                reader = getattr(self.backend, "interruption_text", None)
-                locator = (
-                    it.dismiss_anchor.structural
-                    if it.dismiss_anchor is not None
-                    else None
-                )
-                try:
-                    whole = (
-                        reader(locator, class_texts(it)) if callable(reader) else None
-                    )
-                except Exception:  # noqa: BLE001 - unreadable means unproven
-                    whole = None
-                class_error = whole_interruption_error(it, whole)
-                if class_error is None and it.dismiss_anchor is not None:
-                    # The declared label proves nothing until the control
-                    # that will be clicked is shown to carry it.
-                    class_error = self._interruption_control_error(it, resolution)
-                if class_error is not None:
-                    return before_png, (
-                        f"Interruption '{it.name}' was not cleared: {class_error} "
-                        "- refusing to act beneath it; run aborted."
-                    )
-            # Append BEFORE delivery: a backend exception can never create an
-            # unreported key/click attempt. The event carries the exact admitted
-            # policy and expected visual outcome.
-            event = InterstitialActionResult(
-                control_label=dismiss_label(it),
-                interstitial=it.name,
-                action=action,
-                key=it.dismiss_key,
-                expected_clearance=it.clearance,
-                resolution=resolution,
-                before_frame_sha256=hashlib.sha256(before_png).hexdigest(),
-            )
-            audit_events.append(event)
-            handled_indices.add(active_index)
-            if workflow is not None:
-                authorization_error = self._delivery_authorization_refusal(
-                    workflow, params, step, result, interstitial=True
-                )
-                if authorization_error is not None:
-                    event.error = authorization_error
-                    return before_png, authorization_error
-            elif self._durable_continuation_guard is not None:
-                # Normal replay always supplies ``workflow``. Keep the shared
-                # continuation fence fail-closed for direct helper/test use as
-                # well: every backend input edge must cross the same lease.
-                try:
-                    self._durable_continuation_guard.before_delivery()
-                    self._active_delivery_acknowledgers = (
-                        self._durable_continuation_guard,
-                    )
-                except Exception as exc:  # noqa: BLE001 - fencing boundary
-                    result.failure_category = "continuation_preempted"
-                    result.safety_halt = True
-                    event.error = (
-                        f"durable continuation was preempted before delivery: {exc}"
-                    )
-                    return before_png, event.error
-            watch_stack = ExitStack()
-            watch: Optional[EffectWatchReport] = None
-            if it.effect_watch:
-                # An interruption class is cleared only when the dismissal is
-                # proven write-free: every watcher this run has is up around
-                # it, or nothing is sent.
-                watched: list[EffectWatchReport] = []
-
-                def _record_watch() -> None:
-                    # Registered first, so it runs after the watchers close
-                    # on every exit, a failed delivery included.
-                    if watched:
-                        event.effect_watchers = list(watched[0].watchers)
-                        event.write_attempts = list(watched[0].attempts)
-                        event.requests_seen = list(watched[0].requests)
-
-                watch_stack.callback(_record_watch)
-                watch = watch_stack.enter_context(
-                    watch_effects(self.backend, self.effect_verifier)
-                )
-                watched.append(watch)
-                if watch.refusal is not None:
-                    watch_stack.close()
-                    event.error = f"dismissal not watched: {watch.refusal}"
-                    return before_png, (
-                        f"Interruption '{it.name}' can't be cleared: "
-                        f"{watch.refusal} - refusing to act beneath it; run "
-                        "aborted."
-                    )
-            with watch_stack:
-                try:
-                    if it.dismiss_key is not None:
-                        self._require_qualification_environment_current()
-                        self._deliver_backend_call(
-                            result,
-                            lambda: self.backend.press(it.dismiss_key or "Escape"),
-                        )
-                    else:
-                        assert resolution is not None
-                        assert it.dismiss_anchor is not None
-                        if resolution.rung == "structural":
-                            native_act = getattr(self.backend, "act_structural", None)
-                            structural_anchor = it.dismiss_anchor.structural
-                            if (
-                                not callable(native_act)
-                                or resolution.structural_handle is None
-                                or structural_anchor is None
-                            ):
-                                raise StructuralResolutionRefused(
-                                    "structural dismissal cannot be delivered "
-                                    "natively without a stable element handle"
-                                )
-                            if it.effect_watch:
-                                # Again at the last no-input boundary: the
-                                # label may have changed since the check.
-                                control_error = self._interruption_control_error(
-                                    it, resolution
-                                )
-                                if control_error is not None:
-                                    raise StructuralResolutionRefused(control_error)
-                                self._require_qualification_environment_current()
-                                self._deliver_guarded_dismissal(
-                                    result,
-                                    event,
-                                    structural_anchor,
-                                    resolution.structural_handle,
-                                    native_act,
-                                )
-                            else:
-                                self._require_qualification_environment_current()
-                                self._deliver_backend_call(
-                                    result,
-                                    lambda: native_act(
-                                        structural_anchor,
-                                        resolution.structural_handle,
-                                    ),
-                                )
-                        else:
-                            self._require_qualification_environment_current()
-                            self._deliver_backend_call(
-                                result,
-                                lambda: self.backend.click(
-                                    int(resolution.point[0]), int(resolution.point[1])
-                                ),
-                            )
-                    event.delivered = True
-                except Exception as exc:
-                    if isinstance(exc, LabelChangedDuringClick):
-                        # The press reached the page's guard, which blocked
-                        # it: delivery was attempted, and nothing beneath
-                        # the label change is trusted.
-                        event.delivered = True
-                        event.label_violations = list(exc.violations)
-                        result.safety_halt = True
-                    if not isinstance(
-                        exc, (FreshActuationRequired, StructuralResolutionRefused)
-                    ):
-                        target_fingerprint = None
-                        if (
-                            resolution is not None
-                            and resolution.structural_handle is not None
-                        ):
-                            target_fingerprint = (
-                                resolution.structural_handle.target_fingerprint
-                            )
-                        result.delivery_uncertainty = ActionDeliveryUncertainty(
-                            operation="interstitial_dismiss",
-                            native=(
-                                resolution is not None
-                                and resolution.rung == "structural"
-                            ),
-                            target_fingerprint=target_fingerprint,
-                            observed_at=datetime.now(timezone.utc).isoformat(),
-                            cause_type=type(exc).__name__,
-                        )
-                    event.error = (
-                        "dismissal delivery failed "
-                        f"({type(exc).__name__}); outcome is unknown"
-                    )
-                    if it.effect_watch and str(exc):
-                        event.error += f": {exc}"
-                    return before_png, (
-                        f"Interstitial '{it.name}' dismissal delivery failed "
-                        f"({type(exc).__name__}"
-                        + (f": {exc}" if it.effect_watch and str(exc) else "")
-                        + ") - refusing to act beneath it; run aborted."
-                    )
-
-                before_png, settle_error = self._resettle_after_interstitial(before_png)
-            if watch is not None:
-                if watch.attempts:
-                    event.after_frame_sha256 = hashlib.sha256(before_png).hexdigest()
-                    event.error = "the dismissal tried to write"
-                    result.safety_halt = True
-                    return before_png, (
-                        f"Interruption '{it.name}': its dismissal tried to "
-                        f"write ({'; '.join(watch.attempts)}) - it is not a "
-                        "benign interruption; refusing to continue; run aborted."
-                    )
-            event.after_frame_sha256 = hashlib.sha256(before_png).hexdigest()
-            if settle_error is not None:
-                event.error = settle_error
-                return before_png, settle_error
-
-            clearance_holds = self._predicate_holds(
-                it.clearance,
-                before_png,
-                bundle_dir,
-                params,
-                workflow=workflow,
-            )
-            if self._governed_asset_mutation is not None:
-                event.clearance_ok = False
-                event.error = self._governed_asset_mutation
-                return before_png, self._governed_asset_mutation
-            still_detected = False
-            if clearance_holds:
-                still_detected = self._predicate_holds(
-                    it.detect,
-                    before_png,
-                    bundle_dir,
-                    params,
-                    workflow=workflow,
-                )
-                if self._governed_asset_mutation is not None:
-                    event.clearance_ok = False
-                    event.error = self._governed_asset_mutation
-                    return before_png, self._governed_asset_mutation
-            event.clearance_ok = clearance_holds and not still_detected
-            event.ok = event.delivered and event.clearance_ok
-            if not event.ok:
-                event.error = (
-                    "declared visual clearance did not hold"
-                    if not clearance_holds
-                    else "interstitial remained detected after dismissal"
-                )
-                return before_png, (
-                    f"Interstitial '{it.name}' did not satisfy its declared "
-                    "visual clearance after one dismissal - refusing a blind "
-                    "retry or action beneath it; run aborted."
-                )
 
     # -- Workflow-program IR gates: guard + wait_until --------------------------
 
@@ -19925,91 +18615,12 @@ class Replayer:
             )
         return None
 
-    def _asset_bytes(
-        self,
-        bundle_dir: Path,
-        rel: str,
-        *,
-        workflow: Optional[Workflow] = None,
-    ) -> Optional[bytes]:
-        """Return the verified run snapshot for governed asset consumers."""
-        if not rel:
-            # No crop: a record-selecting click rebound to another record
-            # (runtime.target_param) carries none.
-            return None
-        if self.governed_authorization is not None:
-            data = self._governed_asset_snapshot.get(rel)
-            expected = self._governed_asset_hashes.get(rel)
-            if self._governed_plaintext_assets and expected is not None:
-                path = Path(bundle_dir) / rel
-                try:
-                    current = path.read_bytes()
-                except OSError:
-                    current = b""
-                if hashlib.sha256(current).hexdigest() != expected:
-                    self._governed_asset_mutation = (
-                        f"governed sealed asset {rel!r} changed after admission; "
-                        "refusing to act; run aborted"
-                    )
-            return data
-        if workflow is not None and workflow.encrypted:
-            decrypted = workflow.decrypted_template(rel)
-            if decrypted is not None:
-                return decrypted
-        path = Path(bundle_dir) / rel
-        return path.read_bytes() if path.is_file() else None
-
     def _raise_on_governed_asset_mutation(self) -> None:
         """Make predicate-only mutation a non-catchable program safety halt."""
         if self._governed_asset_mutation is not None:
             raise _ProgramHalt("halt", self._governed_asset_mutation, safety=True)
 
     # -- healing ---------------------------------------------------------------
-
-    def _heal_step(
-        self,
-        step: Step,
-        resolution: Resolution,
-        matched_region: Region,
-        frame_png: bytes,
-        workflow: Workflow,
-        run_dir: Path,
-        new_crops: dict[str, bytes],
-    ):
-        """Build, govern, and persist a repair candidate.
-
-        A heal is a governed PATCH, not a silent bundle swap: the raw event is
-        wrapped in a reviewable :class:`~openadapt_flow.runtime.healing.HealPatch`
-        and run through the regression gate (identity + effect + risk) before
-        it may touch the workflow. A patch that would weaken the step's
-        identity band -- the reviewed context-drop bug -- is QUARANTINED
-        (persisted under ``run_dir/heals/<step_id>/patch.json`` for review)
-        and NOT applied; the caller halts the run. A gate-passing local repair
-        can update the in-memory workflow. A gate-passing repair discovered
-        under exact authorization remains a promotable candidate, because the
-        running program cannot change after admission.
-        """
-        event, crop_png = heal_mod.build_heal_event(
-            step, resolution, matched_region, frame_png, self.vision
-        )
-        outcome = healing_mod.govern_heal(step, event, run_dir=run_dir)
-        if outcome.promoted:
-            if self.governed_authorization is None:
-                heal_mod.apply_heal(workflow, event)
-                source = self._execution_workflow_source
-                if source is not None and source is not workflow:
-                    heal_mod.apply_heal(source, event)
-                self._accept_healed_anchor_in_workflow_snapshot(workflow, event)
-                new_crops[step.id] = crop_png
-            else:
-                # Exact authorization binds the admitted workflow semantics.
-                # Keep a gate-passing repair as a reviewable candidate for a
-                # later qualified bundle. Never change the program that is
-                # currently executing under that authorization.
-                outcome.patch.status = "promotable"
-                healing_mod.persist_patch(outcome.patch, run_dir)
-            heal_mod.persist_heal(event, crop_png, frame_png, run_dir)
-        return outcome
 
     def _accept_healed_anchor_in_workflow_snapshot(
         self,
@@ -20052,24 +18663,6 @@ class Replayer:
                     admitted_state.step.anchor = event.new_anchor.model_copy(deep=True)
 
     # -- io ----------------------------------------------------------------------
-
-    @staticmethod
-    def _new_step_evidence_key(run_dir: Path, step_id: str) -> str:
-        """Allocate one stable, collision-free file key for an action occurrence."""
-
-        safe = re.sub(r"[^A-Za-z0-9._-]+", "_", step_id).strip("._-") or "step"
-        if safe != step_id:
-            safe = f"{safe}_{hashlib.sha256(step_id.encode()).hexdigest()[:8]}"
-        steps_dir = Path(run_dir) / "steps"
-        candidate = safe
-        occurrence = 1
-        while any(
-            _sealed.exists(steps_dir / f"{candidate}_{suffix}.png")
-            for suffix in ("before", "after", "attended-before", "attended-after")
-        ):
-            occurrence += 1
-            candidate = f"{safe}__{occurrence:04d}"
-        return candidate
 
     @timed_span("artifact_write")
     def _save_step_png(

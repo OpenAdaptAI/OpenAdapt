@@ -61,7 +61,15 @@ jobs:
         # file this change grew (or whose budget row it edited), so a file
         # someone else left over budget never fails an unrelated change.
         run: python3 scripts/check_file_size_ratchet.py --base HEAD^1
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: No generated page was edited by hand
+        # CAPABILITIES.md and llms-full.txt are generated from sources (row
+        # files under capabilities/, README.md, ...). A change edits the
+        # sources only; refresh-generated.yml regenerates the pages after it
+        # lands. This fails only when the change edits a page so that it no
+        # longer matches its sources, an edit the next refresh would drop. A
+        # page that merely trails its sources passes.
+        run: python3 scripts/build_capabilities.py --check-pr HEAD^1
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: |
