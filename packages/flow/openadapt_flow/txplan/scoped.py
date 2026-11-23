@@ -53,6 +53,7 @@ from openadapt_flow.txplan.audit import (
     AuditReader,
     Cursor,
     ScopedCollection,
+    SearchMatch,
     check_window,
     fill,
     fill_json,
@@ -364,6 +365,58 @@ def _strict_items(got: Any, path: str) -> list[Any]:
     return current
 
 
+_SEVERE_OUTCOME = frozenset({"fatal", "error", "warning"})
+
+
+def _severe_search_outcome(resource: Any) -> bool:
+    if (
+        not isinstance(resource, Mapping)
+        or resource.get("resourceType") != "OperationOutcome"
+    ):
+        return False
+    issues = resource.get("issue")
+    if not isinstance(issues, list):
+        return False
+    return any(
+        isinstance(issue, Mapping) and issue.get("severity") in _SEVERE_OUTCOME
+        for issue in issues
+    )
+
+
+def _search_records(got: Any, path: str, match: Optional[SearchMatch]) -> list[Any]:
+    """The records at ``path``, optionally kept only when ``match`` holds.
+
+    ``match`` applies to each element of the list just above the last
+    step of ``path`` (for ``entry.*.resource``, each entry). Entries that
+    are not a match are dropped, unless they carry a non-informational
+    OperationOutcome, which is an error rather than a found record. The
+    remaining entries are parsed by :func:`_strict_items` so its clauses
+    stay load-bearing. A parent value that is not a list is left for
+    :func:`_strict_items` to refuse (fan-out).
+    """
+    if match is None:
+        return _strict_items(got, path)
+    steps = [p for p in path.split(".") if p]
+    list_path = steps[0]
+    field = steps[-1]
+    if not isinstance(got, Mapping):
+        return _strict_items(got, path)
+    raw = got.get(list_path)
+    if not isinstance(raw, list):
+        return _strict_items(got, path)
+    kept: list[Any] = []
+    for entry in raw:
+        if not isinstance(entry, Mapping):
+            kept.append(entry)
+        elif any(str(v) == match.equals for v in pick(entry, match.path)):
+            kept.append(entry)
+        elif _severe_search_outcome(entry.get(field)):
+            raise AdapterError(
+                "the marker search returned a non-informational OperationOutcome"
+            )  # search-clause: outcome-severity
+    return _strict_items({**got, list_path: kept}, path)
+
+
 def _present(got: Any, spec: str) -> bool:
     """Whether an ``absent`` path is present, resolved strictly.
 
@@ -440,7 +493,7 @@ def _search(
             )  # search-clause: items-field
         records: list[Any] = []
     else:
-        records = _strict_items(got, path)
+        records = _search_records(got, path, scoped.search_match)
     ids = [r.get(id_field) if isinstance(r, Mapping) else None for r in records]
     if not all(_usable_id(i) for i in ids):
         # An item without a usable id (or that isn't an object) may be the
