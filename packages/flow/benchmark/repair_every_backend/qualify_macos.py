@@ -188,6 +188,7 @@ def _rows(db: Path) -> list[tuple[str, str]]:
 
 def _record(binary: Path, root: Path, kind: str, db: Path) -> tuple[Path, dict]:
     """Record the healthy workflow on the old version and compile it."""
+    from openadapt_flow import sealed_set as _sealed
     from openadapt_flow.compiler import compile_recording
     from openadapt_flow.ir import Workflow
     from openadapt_flow.policy import evaluate_policy, load_policy
@@ -215,7 +216,11 @@ def _record(binary: Path, root: Path, kind: str, db: Path) -> tuple[Path, dict]:
         app.close()
     # The banner is every click's identity band (``--identifier`` in a browser).
     events_path = recording / "events.jsonl"
-    events = [json.loads(line) for line in events_path.read_text().splitlines()]
+    # Encrypted at rest by default (#2423): the recording is a sealed set, so
+    # read and rewrite its events through the sealed-set API (in memory).
+    events = [
+        json.loads(line) for line in _sealed.read_text(events_path).splitlines()
+    ]
     pad = 6
     for event in events:
         if event.get("kind") == "click":
@@ -225,7 +230,7 @@ def _record(binary: Path, root: Path, kind: str, db: Path) -> tuple[Path, dict]:
                 banner[2] + 2 * pad,
                 banner[3] + 2 * pad,
             ]
-    events_path.write_text("".join(json.dumps(e) + "\n" for e in events))
+    _sealed.write_text(events_path, "".join(json.dumps(e) + "\n" for e in events))
     bundle = root / "bundle"
     workflow = compile_recording(recording, bundle, name=f"chart-note-{kind}")
     save = workflow.steps[-1]
