@@ -281,6 +281,7 @@ def test_a_sign_in_becomes_secret_parameters_and_never_persists(
 
     _assert_nothing_holds_a_credential(tmp_path, capfd)
     _assert_fields_blacked_out(Path(program["task_dir"]))
+    _assert_no_pixel_check_froze_a_black_box(Path(program["bundle"]), workflow)
 
     # What `openadapt wrap publish` would upload holds no credential either,
     # and names the sign-in inputs as secret parameters, not call inputs.
@@ -309,6 +310,20 @@ def test_a_sign_in_becomes_secret_parameters_and_never_persists(
     assert state.sign_ins >= 3  # run 1, the canary and the cached run
 
     _assert_nothing_holds_a_credential(tmp_path, capfd)
+
+
+def _assert_no_pixel_check_froze_a_black_box(bundle: Path, workflow) -> None:
+    """A REGION_STABLE crop over a withheld field would hold the recorder's
+    black box, which no live screen shows, and refute every hosted run."""
+    import numpy as np
+    from PIL import Image
+
+    for step in workflow.steps:
+        for pc in step.expect:
+            if pc.kind.value != "region_stable" or not pc.template:
+                continue
+            pixels = np.asarray(Image.open(bundle / pc.template).convert("L"))
+            assert (pixels <= 8).mean() < 0.05, (step.id, pc.template)
 
 
 def _assert_nothing_holds_a_credential(
