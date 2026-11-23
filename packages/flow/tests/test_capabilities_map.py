@@ -2,9 +2,10 @@
 
 Reviews of OpenAdapt keep missing capabilities that ship because nothing tied
 the capability map to the code. A new command fails this test until it has a
-file under packages/flow/docs/commands/<group>/ and the list in CAPABILITIES.md
-is regenerated with scripts/build_command_map.py. One file per command keeps
-two pull requests that each add a command from editing the same line.
+file under packages/flow/docs/commands/<group>/. One file per command keeps two
+pull requests that each add a command from editing the same line. The list in
+CAPABILITIES.md is regenerated after the change lands, by the refresh workflow
+(.github/workflows/refresh-generated.yml), not in each pull request.
 """
 
 from __future__ import annotations
@@ -43,8 +44,7 @@ def test_every_command_has_a_capability_file() -> None:
     documented = _command_map().documented_verbs()
     missing = sorted(set(_verbs()) - set(documented))
     assert not missing, (
-        f"add packages/flow/docs/commands/<group>/<verb>.md for {missing}, "
-        "then run: python scripts/build_command_map.py"
+        f"add packages/flow/docs/commands/<group>/<verb>.md for {missing}"
     )
     stale = sorted(set(documented) - set(_verbs()))
     assert not stale, f"no such openadapt-flow command; remove the files for {stale}"
@@ -52,9 +52,14 @@ def test_every_command_has_a_capability_file() -> None:
     assert not duplicated, f"each command belongs to one capability: {duplicated}"
 
 
-def test_capability_map_command_list_is_current() -> None:
+def test_the_assembled_capability_map_holds_the_command_list() -> None:
     command_map = _command_map()
-    text = command_map.MAP.read_text(encoding="utf-8")
-    assert command_map.splice(text, command_map.render()) == text, (
-        "run: python scripts/build_command_map.py"
+    spec = importlib.util.spec_from_file_location(
+        "build_capabilities", REPO / "scripts" / "build_capabilities.py"
     )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    page = module.assemble()
+    assert command_map.render() in page
+    assert page.rfind(command_map.HEADING, 0, page.index(command_map.BEGIN)) != -1
