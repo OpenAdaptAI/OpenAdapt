@@ -24,6 +24,11 @@ Sources, from the environment, first match wins:
   manager's one-time-code command). It is run as
   ``<command> code|approval <step id>`` with no shell. Exit 0 prints the code
   (or confirms the approval), exit 3 means the person declined.
+- The run's own terminal, when it has one (stdin and stderr are both a TTY
+  and ``OPENADAPT_SECOND_FACTOR_PROMPT`` is not ``off``): the person types
+  the code, which is not echoed, or presses Enter after approving
+  (:mod:`openadapt_flow.second_factor_terminal`). A run with no terminal (a
+  service, a hosted sandbox, an MCP server, CI) never prompts.
 
 With no source, or when the source fails, times out, answers after the
 deadline or declines, the step stops before anything is typed, with one closed
@@ -50,6 +55,7 @@ __all__ = [
     "ONE_TIME_CODE_MARKER",
     "ONE_TIME_CODE_PARAM",
     "REFUSAL_CODES",
+    "PROMPT_ENV",
     "SOURCE_ENV_KEYS",
     "TIMEOUT_ENV",
     "URL_ENV",
@@ -74,9 +80,12 @@ URL_ENV = "OPENADAPT_SECOND_FACTOR_URL"
 TOKEN_ENV = "OPENADAPT_RUNNER_TOKEN"
 COMMAND_ENV = "OPENADAPT_SECOND_FACTOR_COMMAND"
 TIMEOUT_ENV = "OPENADAPT_SECOND_FACTOR_TIMEOUT_S"
+#: ``off`` (or ``0``, ``false``) stops an interactive run from asking at its
+#: terminal.
+PROMPT_ENV = "OPENADAPT_SECOND_FACTOR_PROMPT"
 #: Every variable a source reads. :func:`source_env` forwards only the ones
 #: the selected source uses.
-SOURCE_ENV_KEYS = (URL_ENV, TOKEN_ENV, COMMAND_ENV, TIMEOUT_ENV)
+SOURCE_ENV_KEYS = (URL_ENV, TOKEN_ENV, COMMAND_ENV, TIMEOUT_ENV, PROMPT_ENV)
 
 
 def source_env(environ: Optional[Mapping[str, str]] = None) -> dict[str, str]:
@@ -87,7 +96,7 @@ def source_env(environ: Optional[Mapping[str, str]] = None) -> dict[str, str]:
     """
 
     environ = os.environ if environ is None else environ
-    keys = [TIMEOUT_ENV]
+    keys = [TIMEOUT_ENV, PROMPT_ENV]
     if (environ.get(URL_ENV) or "").strip():
         keys += [URL_ENV, TOKEN_ENV]
     elif (environ.get(COMMAND_ENV) or "").strip():
@@ -254,6 +263,10 @@ def source_from_env(env: Optional[Mapping[str, str]] = None) -> Optional[Source]
     command = (env.get(COMMAND_ENV) or "").strip()
     if command:
         return CommandSource(command)
+    from openadapt_flow.second_factor_terminal import PROMPT_OFF, TerminalSource
+
+    if (env.get(PROMPT_ENV) or "").strip().lower() not in PROMPT_OFF:
+        return TerminalSource.open()
     return None
 
 
@@ -282,7 +295,7 @@ def obtain(
         raise SecondFactorRefused(
             "second_factor_unavailable",
             "this sign-in asks for a second factor and no source is set "
-            f"({URL_ENV} or {COMMAND_ENV}); nothing was typed",
+            f"({URL_ENV} or {COMMAND_ENV}, or a terminal); nothing was typed",
         )
     beat = heartbeat or _stderr_heartbeat()
     started = clock()

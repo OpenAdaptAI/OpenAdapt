@@ -41,6 +41,15 @@
   form's submit counts as a sign-in only once, right after a
   username-and-password sign-in. A field split into one box per character
   is refused. See docs/SECOND_FACTOR.md.
+- An interactive run (a terminal on stdin and stderr) asks for a sign-in's
+  second factor at that terminal when no control plane or command is set. A
+  code is read without echo, under the step's deadline, in the calling
+  thread; echo comes back on when the read ends, including on a timeout, and
+  input typed before the prompt is discarded. On Windows the console is read
+  one key at a time with `msvcrt.getwch`, which never echoes, under the same
+  deadline and discard rules. A run without a terminal never
+  prompts and still stops before typing. `OPENADAPT_SECOND_FACTOR_PROMPT=off`
+  turns the prompt off.
 - Effect locations (`openadapt.effect-location/v1`,
   `openadapt_flow/effect_location/`): the place a careful person would look
   again to see an intended value, stored as pack data. Each record holds the

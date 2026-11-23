@@ -115,6 +115,7 @@ first match wins.
 | --- | --- |
 | `OPENADAPT_SECOND_FACTOR_URL` with `OPENADAPT_RUNNER_TOKEN` | The control plane of a hosted or customer-run runner. A named person answers on the dashboard |
 | `OPENADAPT_SECOND_FACTOR_COMMAND` | A local command, run with no shell as `<command> code <step id>` or `<command> approval <step id>`. Exit 0 prints the code (or confirms the approval), and exit 3 means the person declined. A password manager's one-time-code command works here |
+| The run's terminal | Used when no variable above is set and the run's stdin and stderr are both a terminal. The person types the code (not echoed; empty declines), or presses Enter after approving (`n` declines). `OPENADAPT_SECOND_FACTOR_PROMPT=off` turns it off. A service, hosted sandbox or MCP server has no terminal and never prompts. On a POSIX terminal echo is turned off for the read; on Windows the console is read one key at a time with `msvcrt.getwch`, which never echoes. Either way the read runs under the step's deadline without a background thread, input typed before the prompt and input left when the read ends are discarded, and normal input comes back however the read ends |
 
 `OPENADAPT_SECOND_FACTOR_TIMEOUT_S` sets how long a step waits, from 10 to
 600 seconds. The default is 120. While it waits, the runtime prints a line to
@@ -173,6 +174,15 @@ page still showing and halts there.
   refusal, the handoff's bind, re-check, type-once and read-back rules with a
   field that counts every delivery, replay, recording, and the run token's
   scope.
+- `tests/test_second_factor_console.py`: the same line reader over the
+  Windows console's key-at-a-time interface, with a fake keyboard and clock
+  on every platform (the deadline, keys typed before the prompt or left after
+  it, Ctrl-C, function keys, backspace, an over-long answer), plus a test
+  against the real `msvcrt` that runs only on Windows.
+- `tests/test_second_factor_terminal.py`: a real pty. A code is read without
+  echo and echo comes back on; after a timeout the next prompt gets its
+  answer; input typed before a prompt doesn't answer it; a run without a
+  terminal never prompts.
 - `tests/test_second_factor_browser.py`: headless Chromium. Two different
   codes of the same length render the same pixels; a later document masks its
   code field; focus taken during the wait, a prefilled field and an ordinary
