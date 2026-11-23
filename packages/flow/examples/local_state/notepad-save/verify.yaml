@@ -1,0 +1,20 @@
+# Notepad (Windows): type a note into a text file and save it.
+# The check reads the saved file back from disk: its text must be exactly
+# the note this run was asked to type. Synthetic text only.
+schema_version: openadapt.verify/v1
+minimum_effect_strength: independent_system_of_record
+verifier:
+  kind: local-state
+  local_state:
+    - type: file
+      id: note
+      path: ~/openadapt-examples/note.txt
+# Saving rewrites the file, so its hash and size change with its text.
+frame:
+  target_fields: [present, text, sha256, size]
+effects:
+  - kind: field_equals
+    match: {id: note}
+    field: text
+    value: {param: note}
+    timeout_s: 5
