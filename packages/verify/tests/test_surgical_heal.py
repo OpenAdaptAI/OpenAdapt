@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -14,11 +15,14 @@ from openadapt_verify.surgical_heal import (
     FleetPatchError,
     FleetSelectorPatch,
     PatchScope,
+    PinnedPatchKey,
     SurgicalHealCandidate,
     SurgicalSelectorHealer,
     apply_fleet_patch,
     apply_fleet_patch_to_packs,
     compute_program_sha256,
+    load_pinned_patch_keys,
+    write_pinned_patch_keys,
 )
 
 
@@ -90,21 +94,25 @@ def _drifted_portal_candidates() -> list[SurgicalHealCandidate]:
             form_section="Applicant Information",
             input_type="date",
         ),
-        # Hidden element with identical label must be ignored fail-closed.
-        SurgicalHealCandidate(
-            selector="input#hidden-effective-date",
-            aria_role="textbox",
-            accessible_name="Policy Effective Date",
-            form_section="Coverage Dates",
-            input_type="date",
-            visible=False,
-        ),
     ]
 
 
-def test_identity_anchored_heal_emits_signed_candidate_pending_qualification() -> None:
+def test_identity_anchored_heal_emits_signed_candidate_verified_by_pinned_trust_store(
+    tmp_path: Path,
+) -> None:
     signing_key = Ed25519PrivateKey.generate()
-    verify_key = signing_key.public_key()
+    trust_store = write_pinned_patch_keys(
+        tmp_path / "pinned_keys.json",
+        [
+            PinnedPatchKey(
+                key_id="key-primary-2026",
+                public_key=signing_key.public_key(),
+                allowed_tenants=frozenset({"tenant_alpha"}),
+            )
+        ],
+    )
+    pinned_keys = load_pinned_patch_keys(trust_store)
+
     steps = _sample_steps()
     scope = _sample_scope(steps)
     target = _drifted_quote_target()
@@ -123,8 +131,8 @@ def test_identity_anchored_heal_emits_signed_candidate_pending_qualification() -
         scope=scope,
         signing_key=signing_key,
         signer_key_id="key-primary-2026",
-        readback_oracle=readback_oracle,
         pre_action_identity_check=lambda _t, _c: True,
+        readback_oracle=readback_oracle,
     )
 
     assert result.verdict == "HEALED"
@@ -137,17 +145,16 @@ def test_identity_anchored_heal_emits_signed_candidate_pending_qualification() -
     assert result.selected.score == 1.0
     assert oracle_calls == ["input[data-testid='coverage-effective-date-v2']"]
     assert result.patch is not None
-    assert result.patch.verify_signature(verify_key) is True
-    assert result.patch.verify_signature({"key-primary-2026": verify_key}) is True
+    assert result.patch.verify_signature(pinned_keys) is True
 
     roundtripped = FleetSelectorPatch.from_json(result.patch.to_json())
     assert roundtripped == result.patch
-    assert roundtripped.verify_signature(verify_key) is True
+    assert roundtripped.verify_signature(pinned_keys) is True
 
     candidate_prog = apply_fleet_patch(
         steps,
         roundtripped,
-        verify_key=verify_key,
+        pinned_keys_path=trust_store,
         scope=scope,
     )
     assert isinstance(candidate_prog, CandidatePatchedProgram)
@@ -168,9 +175,10 @@ def test_identity_anchored_heal_emits_signed_candidate_pending_qualification() -
     )
 
 
-def test_near_miss_renamed_label_halts_instead_of_healing_wrong_field() -> None:
-    # Adversarial case: "Patient last name" must NEVER heal onto "Patient first name"
-    # or "Surname" even when role, section, and input type all match.
+def test_hard_anchors_section_name_only_and_hidden_ambiguity_halt() -> None:
+    healer = SurgicalSelectorHealer(min_score=0.75, min_margin=0.15)
+
+    # 1. Renamed label ("Patient last name" vs "Patient first name" / "Surname") halts.
     target = ElementTarget(
         workflow_id="wf_intake",
         step_id="step_last_name",
@@ -196,18 +204,85 @@ def test_near_miss_renamed_label_halts_instead_of_healing_wrong_field() -> None:
             input_type="text",
         ),
     ]
-    healer = SurgicalSelectorHealer(min_score=0.75, min_margin=0.15)
-    result = healer.rank_and_select(target, drifted)
+    res_renamed = healer.rank_and_select(target, drifted)
+    assert res_renamed.verdict == "ABSTAIN_HALT"
+    assert "identity anchor" in res_renamed.reason
 
-    assert result.verdict == "ABSTAIN_HALT"
-    assert "identity anchor" in result.reason
-    assert result.selected is None
-    assert result.patch is None
+    # 2. Lone candidate with same label in the WRONG form_section (correct one hidden) halts!
+    addr_target = ElementTarget(
+        workflow_id="wf_order",
+        step_id="step_billing_addr",
+        old_selector="#bill_addr",
+        aria_role="textbox",
+        accessible_name="Street Address",
+        form_section="Billing Address",
+        input_type="text",
+    )
+    wrong_section_only = [
+        SurgicalHealCandidate(
+            selector="#bill_addr_v2",
+            aria_role="textbox",
+            accessible_name="Street Address",
+            form_section="Billing Address",
+            input_type="text",
+            visible=False,
+        ),
+        SurgicalHealCandidate(
+            selector="#ship_addr",
+            aria_role="textbox",
+            accessible_name="Street Address",
+            form_section="Shipping Address",
+            input_type="text",
+            visible=True,
+        ),
+    ]
+    res_section = healer.rank_and_select(addr_target, wrong_section_only)
+    assert res_section.verdict == "ABSTAIN_HALT"
+    assert "form_section" in res_section.reason
 
-    # Single wrong candidate also halts fail-closed.
-    single_wrong = healer.rank_and_select(target, [drifted[0]])
-    assert single_wrong.verdict == "ABSTAIN_HALT"
-    assert single_wrong.selected is None
+    # 3. Hidden/disabled same-identity candidate counts toward ambiguity and halts!
+    hidden_same = [
+        SurgicalHealCandidate(
+            selector="#eff-visible",
+            aria_role="textbox",
+            accessible_name="Policy Effective Date",
+            form_section="Coverage Dates",
+            input_type="date",
+            visible=True,
+        ),
+        SurgicalHealCandidate(
+            selector="#eff-hidden",
+            aria_role="textbox",
+            accessible_name="Policy Effective Date",
+            form_section="Coverage Dates",
+            input_type="date",
+            visible=False,
+        ),
+    ]
+    res_hidden = healer.rank_and_select(_drifted_quote_target(), hidden_same)
+    assert res_hidden.verdict == "ABSTAIN_HALT"
+    assert "ambiguous" in res_hidden.reason
+
+    # 4. Name-only target (missing aria_role / input_type / form_section) halts!
+    name_only_target = ElementTarget(
+        workflow_id="wf_admin",
+        step_id="step_del",
+        old_selector="#del-row",
+        accessible_name="Delete",
+    )
+    res_name_only = healer.rank_and_select(
+        name_only_target,
+        [
+            SurgicalHealCandidate(
+                selector="#del-all",
+                aria_role="button",
+                accessible_name="Delete",
+                form_section="Admin",
+            )
+        ],
+    )
+    assert res_name_only.verdict == "ABSTAIN_HALT"
+    assert "secondary identity anchor" in res_name_only.reason
 
 
 def test_abstain_halt_on_ambiguous_tie_candidates() -> None:
@@ -244,6 +319,7 @@ def test_abstain_halt_on_ambiguous_tie_candidates() -> None:
         scope=scope,
         signing_key=signing_key,
         signer_key_id="key-1",
+        pre_action_identity_check=lambda _t, _c: True,
         readback_oracle=readback_oracle,
     )
 
@@ -255,7 +331,7 @@ def test_abstain_halt_on_ambiguous_tie_candidates() -> None:
     assert oracle_called is False
 
 
-def test_pre_action_identity_check_and_readback_failures_withhold_patch() -> None:
+def test_pre_action_check_and_non_bool_oracle_verdicts_withhold_patch() -> None:
     signing_key = Ed25519PrivateKey.generate()
     target = _drifted_quote_target()
     scope = _sample_scope()
@@ -275,34 +351,60 @@ def test_pre_action_identity_check_and_readback_failures_withhold_patch() -> Non
         scope=scope,
         signing_key=signing_key,
         signer_key_id="key-1",
-        readback_oracle=oracle,
         pre_action_identity_check=lambda _t, _c: False,
+        readback_oracle=oracle,
     )
     assert pre_fail.verdict == "ABSTAIN_HALT"
     assert "pre-action identity check" in pre_fail.reason
     assert pre_fail.patch is None
     assert oracle_called is False
 
-    readback_fail = healer.heal_and_verify(
-        target,
-        candidates,
-        scope=scope,
-        signing_key=signing_key,
-        signer_key_id="key-1",
-        readback_oracle=lambda _cand: False,
-    )
-    assert readback_fail.verdict == "ABSTAIN_HALT"
-    assert readback_fail.readback_verified is False
-    assert readback_fail.patch is None
-    assert "read-back" in readback_fail.reason
+    # Truthy non-bool oracle results ("false", dicts, ints) must NEVER sign a patch!
+    for bad_verdict in (
+        ("false", ""),
+        {"error": "timeout"},
+        "false",
+        1,
+        False,
+    ):
+        res = healer.heal_and_verify(
+            target,
+            candidates,
+            scope=scope,
+            signing_key=signing_key,
+            signer_key_id="key-1",
+            pre_action_identity_check=lambda _t, _c: True,
+            readback_oracle=lambda _cand, v=bad_verdict: v,  # type: ignore[arg-type, return-value]
+        )
+        assert res.verdict == "ABSTAIN_HALT", (
+            f"expected ABSTAIN_HALT for {bad_verdict!r}"
+        )
+        assert res.readback_verified is False
+        assert res.patch is None
 
 
-def test_forged_signature_string_bool_missing_workflow_and_cross_tenant_rejected() -> (
-    None
-):
-    trusted_key = Ed25519PrivateKey.generate()
-    trusted_pub = trusted_key.public_key()
+def test_pinned_trust_store_tenant_key_binding_and_tamper_guards(
+    tmp_path: Path,
+) -> None:
+    key_a = Ed25519PrivateKey.generate()
+    key_b = Ed25519PrivateKey.generate()
     attacker_key = Ed25519PrivateKey.generate()
+
+    trust_store = write_pinned_patch_keys(
+        tmp_path / "pinned_keys.json",
+        [
+            PinnedPatchKey(
+                key_id="key-tenant-a",
+                public_key=key_a.public_key(),
+                allowed_tenants=frozenset({"tenant_a"}),
+            ),
+            PinnedPatchKey(
+                key_id="key-tenant-b",
+                public_key=key_b.public_key(),
+                allowed_tenants=frozenset({"tenant_b"}),
+            ),
+        ],
+    )
 
     steps_a = _sample_steps()
     scope_a = _sample_scope(steps_a, tenant_id="tenant_a")
@@ -316,11 +418,40 @@ def test_forged_signature_string_bool_missing_workflow_and_cross_tenant_rejected
         readback_verified=True,
         confidence=1.0,
         margin=0.4,
-        signing_key=trusted_key,
-        signer_key_id="trusted-key",
+        signing_key=key_a,
+        signer_key_id="key-tenant-a",
     )
 
-    # 1. Forged patch with recomputed sha256 signed by attacker key -> refused.
+    # 1. Missing trust store fails closed.
+    with pytest.raises(FleetPatchError, match="not found"):
+        apply_fleet_patch(
+            steps_a,
+            valid_patch,
+            pinned_keys_path=tmp_path / "missing.json",
+            scope=scope_a,
+        )
+
+    # 2. Pinned key for tenant_b CANNOT sign a patch for tenant_a!
+    cross_key_patch = FleetSelectorPatch.create(
+        scope=scope_a,
+        step_id="step_effective_date",
+        old_selector="input.nw-eff-date-v1",
+        new_selector="input#hijack",
+        readback_verified=True,
+        confidence=1.0,
+        margin=0.4,
+        signing_key=key_b,
+        signer_key_id="key-tenant-b",
+    )
+    with pytest.raises(FleetPatchError, match="verification failed"):
+        apply_fleet_patch(
+            steps_a,
+            cross_key_patch,
+            pinned_keys_path=trust_store,
+            scope=scope_a,
+        )
+
+    # 3. Forged attacker-signed patch -> refused.
     forged_patch = FleetSelectorPatch.create(
         scope=scope_a,
         step_id="step_effective_date",
@@ -330,30 +461,32 @@ def test_forged_signature_string_bool_missing_workflow_and_cross_tenant_rejected
         confidence=1.0,
         margin=0.4,
         signing_key=attacker_key,
-        signer_key_id="trusted-key",
+        signer_key_id="key-tenant-a",
     )
-    assert forged_patch.verify_signature(trusted_pub) is False
-    with pytest.raises(
-        FleetPatchError, match="signature/integrity verification failed"
-    ):
-        apply_fleet_patch(steps_a, forged_patch, verify_key=trusted_pub, scope=scope_a)
+    with pytest.raises(FleetPatchError, match="verification failed"):
+        apply_fleet_patch(
+            steps_a,
+            forged_patch,
+            pinned_keys_path=trust_store,
+            scope=scope_a,
+        )
 
-    # 2. JSON string "false" for readback_verified -> refused at parse time.
+    # 4. JSON string "false" for readback_verified -> refused at parse time.
     bad_json_dict = valid_patch.to_dict()
     bad_json_dict["readback_verified"] = "false"
     with pytest.raises(FleetPatchError, match="JSON boolean"):
         FleetSelectorPatch.from_json(json.dumps(bad_json_dict))
 
-    # 3. Cross-tenant application -> refused.
+    # 5. Cross-tenant batch application fails closed.
     with pytest.raises(FleetPatchError, match="scope mismatch on tenant_id"):
         apply_fleet_patch_to_packs(
             {"pack_a": steps_a, "pack_b": steps_a},
             valid_patch,
-            verify_key=trusted_pub,
+            pinned_keys_path=trust_store,
             pack_scopes={"pack_a": scope_a, "pack_b": scope_b},
         )
 
-    # 4. Step missing workflow_id -> refused (never skipped).
+    # 6. Step missing workflow_id -> refused.
     missing_wf_steps = [
         {"step_id": "step_effective_date", "selector": "input.nw-eff-date-v1"}
     ]
@@ -366,21 +499,23 @@ def test_forged_signature_string_bool_missing_workflow_and_cross_tenant_rejected
         readback_verified=True,
         confidence=1.0,
         margin=0.5,
-        signing_key=trusted_key,
-        signer_key_id="trusted-key",
+        signing_key=key_a,
+        signer_key_id="key-tenant-a",
     )
     with pytest.raises(FleetPatchError, match="missing required workflow_id"):
         apply_fleet_patch(
             missing_wf_steps,
             missing_wf_patch,
-            verify_key=trusted_pub,
+            pinned_keys_path=trust_store,
             scope=missing_wf_scope,
         )
 
-    # 5. Tampered selector with original signature -> refused.
+    # 7. Tampered selector with original signature -> refused.
     tampered = replace(valid_patch, new_selector="button#delete")
-    assert tampered.verify_signature(trusted_pub) is False
-    with pytest.raises(
-        FleetPatchError, match="signature/integrity verification failed"
-    ):
-        apply_fleet_patch(steps_a, tampered, verify_key=trusted_pub, scope=scope_a)
+    with pytest.raises(FleetPatchError, match="verification failed"):
+        apply_fleet_patch(
+            steps_a,
+            tampered,
+            pinned_keys_path=trust_store,
+            scope=scope_a,
+        )

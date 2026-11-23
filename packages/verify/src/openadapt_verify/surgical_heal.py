@@ -5,21 +5,23 @@ module provides a deterministic, fail-closed alternative to falling back to a
 full multi-step agent loop:
 
 1. **Identity-preserving surgical ranking:** Rank visible, enabled DOM/ARIA
-   candidates using deterministic semantic signals. An accessible-name change,
-   ARIA-role mismatch, or input-type mismatch is treated as a **lost identity
-   anchor** (fail closed to ``ABSTAIN_HALT``) rather than fuzzy-matched onto a
-   near-miss sibling field.
-2. **Fail-closed score & margin gate:** Accept a candidate only when all
-   identity anchors hold, ``top_score >= min_score``, and
-   ``top_score - second_score >= min_margin``; otherwise return
-   ``ABSTAIN_HALT`` so an operator can intervene.
-3. **Ed25519-signed, tenant-scoped candidate patches:** Emit a signed
-   :class:`FleetSelectorPatch` (bound to ``tenant_id``, ``program_id``,
+   candidates using deterministic semantic signals. ``accessible_name``,
+   ``aria_role``, ``input_type``, and ``form_section`` (when set on the target)
+   are enforced as **hard identity anchors** (fail closed to ``ABSTAIN_HALT``)
+   rather than fuzzy-matched onto a near-miss sibling field. Targets must carry
+   ``accessible_name`` plus at least one secondary anchor, and hidden/disabled
+   same-identity candidates count toward ambiguity.
+2. **Fail-closed score, margin & pre-action gate:** Accept a candidate only
+   when all identity anchors hold, no hidden/disabled same-identity ambiguity
+   exists, ``top_score >= min_score``, ``top_score - second_score >= min_margin``,
+   and the required ``pre_action_identity_check`` returns strictly ``True``.
+3. **Ed25519-signed, tenant-scoped single-program candidate patches:** Emit a
+   signed :class:`FleetSelectorPatch` (bound to ``tenant_id``, ``program_id``,
    ``program_sha256``, ``app_origin``, and ``workflow_id``) only after an
-   independent read-back oracle confirms the healed step succeeded. Applying a
-   patch verifies the Ed25519 signature against a pinned public key and emits a
-   :class:`CandidatePatchedProgram` marked ``PENDING_QUALIFICATION`` so the
-   changed program must pass qualification and admission before running.
+   independent read-back oracle returns strictly ``True`` (or ``(True, sha)``).
+   Applying a patch loads tenant-bound public keys from a pinned trust-store
+   file (``pinned_keys_path``) and emits a :class:`CandidatePatchedProgram`
+   marked ``PENDING_QUALIFICATION``.
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ import json
 import math
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Literal, Mapping, Sequence
 
 from cryptography.exceptions import InvalidSignature
@@ -40,8 +43,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 FLEET_PATCH_SCHEMA_VERSION = "openadapt.fleet-selector-patch/v2"
+PINNED_KEYS_SCHEMA_VERSION = "openadapt.patch-trust-store/v1"
 
 HealVerdict = Literal["HEALED", "ABSTAIN_HALT"]
 
@@ -62,7 +67,107 @@ _SIGNAL_WEIGHTS: dict[str, float] = {
 
 
 class FleetPatchError(ValueError):
-    """Raised when a fleet selector patch fails signature, scope, or step checks."""
+    """Raised when a selector patch fails trust-store, signature, scope, or step checks."""
+
+
+@dataclass(frozen=True)
+class PinnedPatchKey:
+    """One pinned Ed25519 public key bound to an explicit set of allowed tenants."""
+
+    key_id: str
+    public_key: Ed25519PublicKey
+    allowed_tenants: frozenset[str]
+
+
+def load_pinned_patch_keys(pinned_keys_path: Path | str) -> dict[str, PinnedPatchKey]:
+    """Load tenant-bound pinned Ed25519 verification keys from a trust-store JSON file.
+
+    Fail-closed: raises :class:`FleetPatchError` if the file does not exist,
+    cannot be parsed, has no keys, or contains any key without a valid
+    ``allowed_tenants`` binding.
+    """
+    path = Path(pinned_keys_path)
+    if not path.is_file():
+        raise FleetPatchError(f"pinned patch trust store not found: {path}")
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise FleetPatchError(
+            f"failed to read pinned patch trust store {path}: {exc}"
+        ) from exc
+    if not isinstance(raw, dict):
+        raise FleetPatchError("pinned patch trust store must be a JSON object")
+    if raw.get("schema_version") != PINNED_KEYS_SCHEMA_VERSION:
+        raise FleetPatchError(
+            f"unsupported pinned patch trust store schema_version: {raw.get('schema_version')!r}"
+        )
+    entries = raw.get("keys")
+    if not isinstance(entries, list) or not entries:
+        raise FleetPatchError("pinned patch trust store must contain at least one key")
+
+    pinned: dict[str, PinnedPatchKey] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise FleetPatchError("pinned key entry must be a JSON object")
+        key_id = entry.get("key_id")
+        pub_b64 = entry.get("public_key_b64")
+        tenants_raw = entry.get("allowed_tenants")
+        if not isinstance(key_id, str) or not key_id.strip():
+            raise FleetPatchError("pinned key entry requires non-empty key_id")
+        if key_id in pinned:
+            raise FleetPatchError(f"duplicate key_id in trust store: {key_id!r}")
+        if not isinstance(pub_b64, str) or not pub_b64.strip():
+            raise FleetPatchError(f"pinned key {key_id!r} missing public_key_b64")
+        if not isinstance(tenants_raw, list) or not tenants_raw:
+            raise FleetPatchError(
+                f"pinned key {key_id!r} must bind at least one tenant in allowed_tenants"
+            )
+        tenants: set[str] = set()
+        for t in tenants_raw:
+            if not isinstance(t, str) or not t.strip():
+                raise FleetPatchError(
+                    f"pinned key {key_id!r} has invalid tenant in allowed_tenants"
+                )
+            tenants.add(t.strip())
+        try:
+            pub_bytes = base64.b64decode(pub_b64.encode("ascii"), validate=True)
+            pubkey = Ed25519PublicKey.from_public_bytes(pub_bytes)
+        except Exception as exc:  # noqa: BLE001
+            raise FleetPatchError(
+                f"pinned key {key_id!r} has invalid Ed25519 public_key_b64: {exc}"
+            ) from exc
+        pinned[key_id.strip()] = PinnedPatchKey(
+            key_id=key_id.strip(),
+            public_key=pubkey,
+            allowed_tenants=frozenset(tenants),
+        )
+    return pinned
+
+
+def write_pinned_patch_keys(
+    pinned_keys_path: Path | str,
+    keys: Sequence[PinnedPatchKey],
+) -> Path:
+    """Serialize tenant-bound pinned Ed25519 public keys to a trust-store JSON file."""
+    if not keys:
+        raise FleetPatchError("cannot write an empty pinned patch trust store")
+    payload = {
+        "schema_version": PINNED_KEYS_SCHEMA_VERSION,
+        "keys": [
+            {
+                "key_id": k.key_id,
+                "public_key_b64": base64.b64encode(
+                    k.public_key.public_bytes(Encoding.Raw, PublicFormat.Raw)
+                ).decode("ascii"),
+                "allowed_tenants": sorted(k.allowed_tenants),
+            }
+            for k in keys
+        ],
+    }
+    path = Path(pinned_keys_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    return path
 
 
 def _normalize_text(value: str) -> str:
@@ -109,7 +214,7 @@ def compute_program_sha256(steps: Sequence[Mapping[str, Any]]) -> str:
 
 @dataclass(frozen=True)
 class PatchScope:
-    """Tenant, program, and origin scope bound into a signed selector patch."""
+    """Tenant, single-program, and origin scope bound into a signed selector patch."""
 
     tenant_id: str
     program_id: str
@@ -172,7 +277,7 @@ class ScoredCandidate:
 
 @dataclass(frozen=True)
 class FleetSelectorPatch:
-    """Ed25519-signed, tenant-scoped selector patch promoted after read-back."""
+    """Ed25519-signed, tenant-scoped single-program selector patch promoted after read-back."""
 
     tenant_id: str
     program_id: str
@@ -298,9 +403,9 @@ class FleetSelectorPatch:
 
     def verify_signature(
         self,
-        verify_key: Ed25519PublicKey | Mapping[str, Ed25519PublicKey],
+        pinned_keys: Mapping[str, PinnedPatchKey],
     ) -> bool:
-        """Verify schema, strict bool flag, scope fields, digest, and Ed25519 signature."""
+        """Verify schema, strict bool flag, tenant-bound pinned key, digest, and Ed25519 signature."""
         if self.schema_version != FLEET_PATCH_SCHEMA_VERSION:
             return False
         if (
@@ -324,14 +429,15 @@ class FleetSelectorPatch:
         if not all(isinstance(v, str) and bool(v.strip()) for v in required_strings):
             return False
 
-        if isinstance(verify_key, Mapping):
-            pubkey = verify_key.get(self.signer_key_id)
-            if not isinstance(pubkey, Ed25519PublicKey):
-                return False
-        elif isinstance(verify_key, Ed25519PublicKey):
-            pubkey = verify_key
-        else:
+        if not isinstance(pinned_keys, Mapping):
             return False
+        key_entry = pinned_keys.get(self.signer_key_id)
+        if not isinstance(key_entry, PinnedPatchKey):
+            return False
+        # Enforce tenant-to-key binding: key may only sign for its allowed tenants.
+        if self.tenant_id not in key_entry.allowed_tenants:
+            return False
+        pubkey = key_entry.public_key
 
         payload = self._digest_payload(
             schema_version=self.schema_version,
@@ -490,7 +596,7 @@ class SurgicalSelectorHealer:
         target: ElementTarget,
         candidate: SurgicalHealCandidate,
     ) -> tuple[bool, str]:
-        """Enforce hard identity anchors so renamed/sibling fields never fuzzy-heal."""
+        """Enforce hard identity anchors so renamed/wrong-section fields never fuzzy-heal."""
         if target.accessible_name.strip():
             if _normalize_text(target.accessible_name) != _normalize_text(
                 candidate.accessible_name
@@ -519,6 +625,15 @@ class SurgicalSelectorHealer:
                     False,
                     "lost input_type identity anchor: "
                     f"expected {target.input_type!r}, observed {candidate.input_type!r}",
+                )
+        if target.form_section.strip():
+            if _normalize_text(target.form_section) != _normalize_text(
+                candidate.form_section
+            ):
+                return (
+                    False,
+                    "lost form_section identity anchor: "
+                    f"expected {target.form_section!r}, observed {candidate.form_section!r}",
                 )
         return True, ""
 
@@ -596,7 +711,7 @@ class SurgicalSelectorHealer:
         target: ElementTarget,
         candidates: Sequence[SurgicalHealCandidate],
     ) -> SurgicalHealResult:
-        """Rank candidates with hard identity-anchor and confidence margin gates."""
+        """Rank candidates with hard identity-anchor and ambiguity gates."""
         if not target.accessible_name.strip():
             return SurgicalHealResult(
                 verdict="ABSTAIN_HALT",
@@ -606,14 +721,27 @@ class SurgicalSelectorHealer:
                 margin=0.0,
             )
 
-        eligible = [
-            c
-            for c in candidates
-            if c.visible
-            and c.enabled
-            and isinstance(c.selector, str)
-            and c.selector.strip()
+        has_secondary_anchor = bool(
+            target.aria_role.strip()
+            or target.input_type.strip()
+            or target.form_section.strip()
+        )
+        if not has_secondary_anchor:
+            return SurgicalHealResult(
+                verdict="ABSTAIN_HALT",
+                reason=(
+                    "target must specify at least one secondary identity anchor "
+                    "(aria_role, input_type, or form_section) alongside accessible_name"
+                ),
+                selected=None,
+                ranked=(),
+                margin=0.0,
+            )
+
+        valid_selector_candidates = [
+            c for c in candidates if isinstance(c.selector, str) and c.selector.strip()
         ]
+        eligible = [c for c in valid_selector_candidates if c.visible and c.enabled]
         if not eligible:
             return SurgicalHealResult(
                 verdict="ABSTAIN_HALT",
@@ -622,6 +750,15 @@ class SurgicalSelectorHealer:
                 ranked=(),
                 margin=0.0,
             )
+
+        # Count hidden/disabled same-identity candidates toward ambiguity so
+        # hiding the real field can never let a duplicate slip through unchallenged.
+        hidden_or_disabled_same_identity = [
+            c
+            for c in valid_selector_candidates
+            if not (c.visible and c.enabled)
+            and self._matches_identity_anchors(target, c)[0]
+        ]
 
         identity_matched: list[SurgicalHealCandidate] = []
         rejection_reasons: list[str] = []
@@ -641,6 +778,18 @@ class SurgicalSelectorHealer:
             return SurgicalHealResult(
                 verdict="ABSTAIN_HALT",
                 reason=f"identity anchor check failed ({detail})",
+                selected=None,
+                ranked=(),
+                margin=0.0,
+            )
+
+        if hidden_or_disabled_same_identity:
+            return SurgicalHealResult(
+                verdict="ABSTAIN_HALT",
+                reason=(
+                    "ambiguous candidates: hidden or disabled element(s) also match "
+                    "target identity anchors"
+                ),
                 selected=None,
                 ranked=(),
                 margin=0.0,
@@ -705,11 +854,15 @@ class SurgicalSelectorHealer:
         scope: PatchScope,
         signing_key: Ed25519PrivateKey,
         signer_key_id: str,
+        pre_action_identity_check: PreActionIdentityCheck,
         readback_oracle: ReadbackOracle,
-        pre_action_identity_check: PreActionIdentityCheck | None = None,
     ) -> SurgicalHealResult:
-        """Select an identity-anchored candidate, run pre-action & read-back checks, then sign a patch."""
+        """Select an identity-anchored candidate, run required pre-action & read-back checks, then sign a patch."""
         scope.validate()
+        if not callable(pre_action_identity_check):
+            raise FleetPatchError(
+                "pre_action_identity_check is required and must be callable"
+            )
         if scope.workflow_id != target.workflow_id:
             return SurgicalHealResult(
                 verdict="ABSTAIN_HALT",
@@ -726,31 +879,30 @@ class SurgicalSelectorHealer:
         if selection.verdict != "HEALED" or selection.selected is None:
             return selection
 
-        if pre_action_identity_check is not None:
-            try:
-                identity_ok = bool(
-                    pre_action_identity_check(target, selection.selected.candidate)
-                )
-            except Exception as exc:  # noqa: BLE001 - fail closed
-                return SurgicalHealResult(
-                    verdict="ABSTAIN_HALT",
-                    reason=f"pre-action identity check raised {type(exc).__name__}",
-                    selected=selection.selected,
-                    ranked=selection.ranked,
-                    margin=selection.margin,
-                    readback_verified=False,
-                    patch=None,
-                )
-            if not identity_ok:
-                return SurgicalHealResult(
-                    verdict="ABSTAIN_HALT",
-                    reason="pre-action identity check rejected candidate before acting",
-                    selected=selection.selected,
-                    ranked=selection.ranked,
-                    margin=selection.margin,
-                    readback_verified=False,
-                    patch=None,
-                )
+        try:
+            raw_identity = pre_action_identity_check(
+                target, selection.selected.candidate
+            )
+        except Exception as exc:  # noqa: BLE001 - fail closed
+            return SurgicalHealResult(
+                verdict="ABSTAIN_HALT",
+                reason=f"pre-action identity check raised {type(exc).__name__}",
+                selected=selection.selected,
+                ranked=selection.ranked,
+                margin=selection.margin,
+                readback_verified=False,
+                patch=None,
+            )
+        if type(raw_identity) is not bool or raw_identity is not True:
+            return SurgicalHealResult(
+                verdict="ABSTAIN_HALT",
+                reason="pre-action identity check rejected candidate before acting",
+                selected=selection.selected,
+                ranked=selection.ranked,
+                margin=selection.margin,
+                readback_verified=False,
+                patch=None,
+            )
 
         evidence_sha256 = ""
         try:
@@ -766,10 +918,30 @@ class SurgicalSelectorHealer:
                 patch=None,
             )
 
-        if isinstance(verdict, tuple):
-            ok, evidence_sha256 = bool(verdict[0]), str(verdict[1])
+        # Strict bool check: reject truthy non-bools such as "false", dicts, or ints.
+        ok = False
+        if type(verdict) is bool:
+            ok = verdict is True
+        elif (
+            isinstance(verdict, tuple)
+            and len(verdict) == 2
+            and type(verdict[0]) is bool
+        ):
+            ok = verdict[0] is True
+            evidence_sha256 = str(verdict[1])
         else:
-            ok = bool(verdict)
+            return SurgicalHealResult(
+                verdict="ABSTAIN_HALT",
+                reason=(
+                    "independent read-back oracle returned non-boolean verdict "
+                    f"({type(verdict).__name__}); patch withheld"
+                ),
+                selected=selection.selected,
+                ranked=selection.ranked,
+                margin=selection.margin,
+                readback_verified=False,
+                patch=None,
+            )
 
         if not ok:
             return SurgicalHealResult(
@@ -809,14 +981,16 @@ def apply_fleet_patch(
     pack_steps: Sequence[Mapping[str, Any]],
     patch: FleetSelectorPatch,
     *,
-    verify_key: Ed25519PublicKey | Mapping[str, Ed25519PublicKey],
+    pinned_keys_path: Path | str,
     scope: PatchScope,
 ) -> CandidatePatchedProgram:
-    """Verify a signed, tenant-scoped patch and produce a candidate program pending qualification.
+    """Verify a signed, tenant-scoped patch against a pinned trust store and emit a candidate program.
 
-    Does not mutate ``pack_steps``. Raises :class:`FleetPatchError` if the
-    patch fails Ed25519 verification, scope matching (tenant, program, digest,
-    origin, workflow), or target step selector matching.
+    Loads tenant-bound verification keys from ``pinned_keys_path`` (never
+    accepting an unpinned key passed alongside the patch). Does not mutate
+    ``pack_steps``. Raises :class:`FleetPatchError` if the trust store is
+    missing/empty, the signer key is not pinned for ``patch.tenant_id``, the
+    Ed25519 signature fails, or scope/step checks fail.
     """
     if not isinstance(patch, FleetSelectorPatch):
         raise FleetPatchError("patch must be a FleetSelectorPatch instance")
@@ -827,9 +1001,11 @@ def apply_fleet_patch(
         raise FleetPatchError(
             "refusing to apply FleetSelectorPatch with readback_verified != True"
         )
-    if not patch.verify_signature(verify_key):
+
+    pinned_keys = load_pinned_patch_keys(pinned_keys_path)
+    if not patch.verify_signature(pinned_keys):
         raise FleetPatchError(
-            "FleetSelectorPatch signature/integrity verification failed"
+            "FleetSelectorPatch signature/trust-store verification failed"
         )
 
     actual_program_sha256 = compute_program_sha256(pack_steps)
@@ -903,10 +1079,17 @@ def apply_fleet_patch_to_packs(
     packs: Mapping[str, Sequence[Mapping[str, Any]]],
     patch: FleetSelectorPatch,
     *,
-    verify_key: Ed25519PublicKey | Mapping[str, Ed25519PublicKey],
+    pinned_keys_path: Path | str,
     pack_scopes: Mapping[str, PatchScope],
 ) -> dict[str, CandidatePatchedProgram]:
-    """Produce candidate patched programs only for packs matching the signed patch's scope."""
+    """Fail-closed batch application for copies of one signed program SHA-256.
+
+    Because each :class:`FleetSelectorPatch` is cryptographically bound to a
+    single ``(tenant_id, program_id, program_sha256, app_origin, workflow_id)``,
+    this helper applies only to identical copies of that single program and
+    raises :class:`FleetPatchError` on the first out-of-scope or missing-scope
+    pack, aborting the entire batch.
+    """
     propagated: dict[str, CandidatePatchedProgram] = {}
     for pack_name, steps in packs.items():
         scope = pack_scopes.get(pack_name)
@@ -915,7 +1098,7 @@ def apply_fleet_patch_to_packs(
         propagated[pack_name] = apply_fleet_patch(
             steps,
             patch,
-            verify_key=verify_key,
+            pinned_keys_path=pinned_keys_path,
             scope=scope,
         )
     return propagated
@@ -923,12 +1106,14 @@ def apply_fleet_patch_to_packs(
 
 __all__ = [
     "FLEET_PATCH_SCHEMA_VERSION",
+    "PINNED_KEYS_SCHEMA_VERSION",
     "CandidatePatchedProgram",
     "ElementTarget",
     "FleetPatchError",
     "FleetSelectorPatch",
     "HealVerdict",
     "PatchScope",
+    "PinnedPatchKey",
     "PreActionIdentityCheck",
     "ReadbackOracle",
     "ScoredCandidate",
@@ -939,4 +1124,6 @@ __all__ = [
     "apply_fleet_patch",
     "apply_fleet_patch_to_packs",
     "compute_program_sha256",
+    "load_pinned_patch_keys",
+    "write_pinned_patch_keys",
 ]
