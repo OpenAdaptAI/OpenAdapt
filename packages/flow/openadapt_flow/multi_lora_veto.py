@@ -1,16 +1,16 @@
-"""Multi-LoRA app-adapter registry, hot-swap veto router, and active-learning exporter.
+"""Multi-LoRA app-adapter registry, veto router, and active-learning JSONL export contracts.
 
-Supports loading a single base visual-veto model and hot-swapping compact
-per-app or per-tenant LoRA adapters at request time with strict BYOC tenant
-isolation, per-adapter temperature calibration, fail-closed ``ABSTAIN -> HALT``
-semantics, and deduplicated QLoRA JSONL export from resolved Exception Inbox
-items.
+Defines the control-plane registry, routing, temperature calibration,
+fail-closed ``ABSTAIN -> HALT_ESCALATE`` semantics, and deduplicated QLoRA JSONL
+export from resolved Exception Inbox items. No model weight loader or trainer is
+wired in this module.
 """
 
 from __future__ import annotations
 
 import fnmatch
 import hashlib
+import hmac
 import json
 import math
 import os
@@ -28,6 +28,9 @@ ADAPTER_REGISTRY_SCHEMA = "openadapt.adapter-registry/v1"
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
+_FIELD_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+_NONCE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_MIN_HMAC_KEY_BYTES = 16
 
 
 class TenantScope(str, Enum):
@@ -38,7 +41,11 @@ class TenantScope(str, Enum):
 
 
 class VetoDecision(str, Enum):
-    """Fail-closed decision emitted by the visual veto router."""
+    """Fail-closed decision emitted by the visual veto router.
+
+    ``ALLOW`` means strictly **"no veto"** — it NEVER means ``VERIFIED`` and
+    NEVER proves that a write persisted in the system of record.
+    """
 
     ALLOW = "ALLOW"
     VETO = "VETO"
@@ -50,6 +57,36 @@ class InboxResolutionLabel(str, Enum):
 
     TRUE_FAULT = "true_fault"
     FALSE_ALARM = "false_alarm"
+
+
+def hmac_field_value(
+    tenant_key: bytes | str,
+    field_slug: str,
+    value: str,
+) -> str:
+    """Compute a keyed HMAC-SHA256 digest for a form field value.
+
+    Design: ``tenant_key`` is a per-tenant secret (at least 16 bytes) that
+    stays strictly inside the customer VPC and is NEVER written to training
+    JSONL exports. To compare expected values without sending raw form values
+    on the wire, both the client and the customer-VPC server backend share the
+    per-tenant key: the backend reads the rendered field from the screen,
+    computes ``hmac_field_value(tenant_key, field_slug, observed)``, and
+    compares the digest in constant time.
+    """
+    if not _FIELD_SLUG_RE.match(field_slug):
+        raise ValueError(
+            f"field_slug must match {_FIELD_SLUG_RE.pattern!r} (got {field_slug!r})."
+        )
+    key_bytes = (
+        tenant_key.encode("utf-8") if isinstance(tenant_key, str) else bytes(tenant_key)
+    )
+    if len(key_bytes) < _MIN_HMAC_KEY_BYTES:
+        raise ValueError(
+            f"tenant_key must be at least {_MIN_HMAC_KEY_BYTES} bytes long."
+        )
+    msg = f"{field_slug}\x00{value}".encode("utf-8")
+    return hmac.new(key_bytes, msg, hashlib.sha256).hexdigest()
 
 
 class AdapterSpec(BaseModel):
@@ -103,30 +140,42 @@ class AdapterSpec(BaseModel):
         return self
 
 
+def _validate_sha256_hex(value: str, field_name: str) -> str:
+    normalized = value.strip().lower()
+    if not _SHA256_RE.match(normalized):
+        raise ValueError(f"{field_name} must be 64 lowercase hex characters.")
+    return normalized
+
+
 def _validate_sha256_map(values: dict[str, str]) -> dict[str, str]:
     cleaned: dict[str, str] = {}
     for key, digest in values.items():
-        if not key or not key.strip():
-            raise ValueError("Field hash key must be non-empty.")
+        if not isinstance(key, str) or not _FIELD_SLUG_RE.match(key):
+            raise ValueError(
+                f"Field hash key must be a lowercase slug matching {_FIELD_SLUG_RE.pattern!r}."
+            )
         normalized = digest.strip().lower()
         if not _SHA256_RE.match(normalized):
             raise ValueError(
-                f"expected_field_hashes[{key!r}] must be 64 lowercase hex characters "
+                "expected_field_hashes values must be 64 lowercase hex HMAC-SHA256 digests "
                 "(raw form values are forbidden)."
             )
-        cleaned[key.strip()] = normalized
+        cleaned[key] = normalized
     return cleaned
 
 
 class VetoInferenceRequest(BaseModel):
     """Value-free pre/post-submit visual veto request routed to an app adapter.
 
-    Design: this control-plane request carries only SHA-256 image references
-    and value-free field digests/booleans (zero raw form values or screenshots
-    on the wire). A real :class:`LoraBackend` dereferences
-    ``pre_submit_image_sha256`` / ``post_submit_image_sha256`` from a local or
-    customer-VPC encrypted artifact store and MUST return ``abstain=True`` if
-    either image cannot be loaded or verified against its SHA-256 digest.
+    Design: this control-plane request carries only 64-hex SHA-256 image
+    references and keyed HMAC-SHA256 field digests (computed via
+    :func:`hmac_field_value` with a customer-VPC per-tenant secret; no raw
+    form values, screenshots, or caller self-vouching booleans on the wire).
+    A real :class:`LoraBackend` dereferences ``pre_submit_image_sha256`` /
+    ``post_submit_image_sha256`` from a local or customer-VPC encrypted
+    artifact store, binds them to ``step_nonce`` when present, and MUST return
+    ``abstain=True`` if either image cannot be loaded or verified against its
+    SHA-256 digest.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -136,11 +185,30 @@ class VetoInferenceRequest(BaseModel):
     workflow_id: str | None = None
     domain: str | None = None
     tenant_id: str | None = None
-    pre_submit_image_sha256: str = Field(min_length=1)
-    post_submit_image_sha256: str = Field(min_length=1)
+    step_nonce: str | None = None
+    pre_submit_image_sha256: str = Field(min_length=64, max_length=64)
+    post_submit_image_sha256: str = Field(min_length=64, max_length=64)
     expected_field_hashes: dict[str, str] = Field(default_factory=dict)
-    expected_field_matches: dict[str, bool] = Field(default_factory=dict)
     dom_claims_success: bool = False
+
+    @field_validator("pre_submit_image_sha256")
+    @classmethod
+    def _check_pre_image_sha256(cls, value: str) -> str:
+        return _validate_sha256_hex(value, "pre_submit_image_sha256")
+
+    @field_validator("post_submit_image_sha256")
+    @classmethod
+    def _check_post_image_sha256(cls, value: str) -> str:
+        return _validate_sha256_hex(value, "post_submit_image_sha256")
+
+    @field_validator("step_nonce")
+    @classmethod
+    def _check_step_nonce(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not _NONCE_RE.match(value):
+            raise ValueError(f"step_nonce must match {_NONCE_RE.pattern!r}.")
+        return value
 
     @field_validator("expected_field_hashes")
     @classmethod
@@ -200,11 +268,11 @@ def vllm_request_payload(
             "request_id": request.request_id,
             "app_id": request.app_id,
             "workflow_id": request.workflow_id,
+            "step_nonce": request.step_nonce,
             "pre_submit_image_sha256": request.pre_submit_image_sha256,
             "post_submit_image_sha256": request.post_submit_image_sha256,
         },
         "expected_field_hashes": dict(request.expected_field_hashes),
-        "expected_field_matches": dict(request.expected_field_matches),
     }
 
 
@@ -258,6 +326,20 @@ class AppAdapterRegistry:
         if spec.tenant_scope is TenantScope.PUBLIC:
             return True
         return tenant_id is not None and spec.tenant_id == tenant_id
+
+    def has_workflow_adapters(
+        self,
+        *,
+        app_id: str,
+        tenant_id: str | None = None,
+    ) -> bool:
+        """Return True if any accessible workflow-specific adapter exists for ``app_id``."""
+        return any(
+            self._is_accessible(spec, tenant_id)
+            and spec.app_id == app_id
+            and spec.workflow_id is not None
+            for spec in self._adapters
+        )
 
     def resolve(
         self,
@@ -405,7 +487,7 @@ class LoraBackend(Protocol):
 
 
 class MultiLoraVetoRouter:
-    """Single-base, multi-LoRA hot-swap router with fail-closed calibration."""
+    """Single-base, multi-LoRA router with fail-closed calibration."""
 
     def __init__(
         self,
@@ -425,6 +507,10 @@ class MultiLoraVetoRouter:
     @property
     def base_model(self) -> str:
         return self._base_model
+
+    @property
+    def registry(self) -> AppAdapterRegistry:
+        return self._registry
 
     @property
     def active_adapter_id(self) -> str | None:
@@ -504,7 +590,7 @@ class MultiLoraVetoRouter:
 
         reason = raw.rationale.strip() or (
             f"Calibrated fault probability {prob:.4f} < threshold "
-            f"{spec.calibrated_threshold:.4f}; visual check passed."
+            f"{spec.calibrated_threshold:.4f}; visual veto did not fire (no veto)."
         )
         return VetoOutcome(
             request_id=request.request_id,
@@ -521,7 +607,12 @@ class MultiLoraVetoRouter:
 
 
 class InboxResolutionItem(BaseModel):
-    """Value-free Exception Inbox resolution item eligible for QLoRA active learning."""
+    """Value-free Exception Inbox resolution item eligible for QLoRA active learning.
+
+    ``expected_field_hashes`` MUST contain per-tenant keyed HMAC-SHA256 digests
+    produced by :func:`hmac_field_value` (with the tenant key kept strictly
+    inside the customer VPC and never exported).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -530,10 +621,20 @@ class InboxResolutionItem(BaseModel):
     workflow_id: str | None = None
     tenant_id: str = Field(min_length=1)
     label: InboxResolutionLabel
-    pre_submit_image_ref: str = Field(min_length=1)
-    post_submit_image_ref: str = Field(min_length=1)
+    pre_submit_image_ref: str = Field(min_length=64, max_length=64)
+    post_submit_image_ref: str = Field(min_length=64, max_length=64)
     expected_field_hashes: dict[str, str] = Field(default_factory=dict)
     resolved_at: str = Field(min_length=1)
+
+    @field_validator("pre_submit_image_ref")
+    @classmethod
+    def _check_pre_image_ref(cls, value: str) -> str:
+        return _validate_sha256_hex(value, "pre_submit_image_ref")
+
+    @field_validator("post_submit_image_ref")
+    @classmethod
+    def _check_post_image_ref(cls, value: str) -> str:
+        return _validate_sha256_hex(value, "post_submit_image_ref")
 
     @field_validator("expected_field_hashes")
     @classmethod
@@ -566,9 +667,10 @@ def export_inbox_training_jsonl(
 ) -> int:
     """Export resolved Exception Inbox items into deduplicated, value-free QLoRA JSONL pairs.
 
-    Never writes raw form values or free-text reviewer notes into training files.
-    When ``tenant_id`` is provided, enforces strict single-tenant VPC isolation
-    by exporting only records belonging to that tenant.
+    Never writes raw form values, tenant HMAC keys, or free-text reviewer notes
+    into training files. When ``tenant_id`` is provided, enforces strict
+    single-tenant VPC isolation by exporting only records belonging to that
+    tenant.
     """
     seen: set[str] = set()
     records: list[dict[str, Any]] = []
@@ -666,6 +768,7 @@ __all__ = [
     "VetoOutcome",
     "calibrate_probability",
     "export_inbox_training_jsonl",
+    "hmac_field_value",
     "ollama_model_tag",
     "vllm_request_payload",
 ]

@@ -132,7 +132,7 @@ def _validate_structural_metadata(
     for key, val in raw.items():
         if key not in ALLOWED_STRUCTURAL_METADATA_KEYS:
             raise ValueError(
-                f"Zero-PHI violation: disallowed structural_metadata key {key!r}. "
+                f"Value-free violation: disallowed structural_metadata key {key!r}. "
                 f"Allowed keys: {sorted(ALLOWED_STRUCTURAL_METADATA_KEYS)}"
             )
         if isinstance(val, bool):
@@ -143,23 +143,23 @@ def _validate_structural_metadata(
             s = val.strip()
             if len(s) > 64:
                 raise ValueError(
-                    f"Zero-PHI violation: structural_metadata[{key!r}] exceeds 64 characters."
+                    f"Value-free violation: structural_metadata[{key!r}] exceeds 64 characters."
                 )
             if _EMAIL_RE.search(s) or _SSN_RE.search(s) or _PHONE_RE.search(s):
                 raise ValueError(
-                    f"Zero-PHI violation: structural_metadata[{key!r}] matched a PII pattern."
+                    f"Value-free violation: structural_metadata[{key!r}] matched a PII pattern."
                 )
             cleaned[key] = s
         else:
             raise ValueError(
-                f"Zero-PHI violation: structural_metadata[{key!r}] must be a scalar "
+                f"Value-free violation: structural_metadata[{key!r}] must be a scalar "
                 f"(str, int, float, or bool), got {type(val).__name__}."
             )
     return cleaned
 
 
 class CalibrationOverrideRecord(BaseModel):
-    """Value-free, zero-PHI operator override record for LoRA calibration."""
+    """Value-free operator override record for offline LoRA calibration."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -282,7 +282,11 @@ def _compute_fingerprint(
 
 
 class CalibrationCollector:
-    """Tenant-isolated, zero-PHI JSONL queue for overnight per-app LoRA calibration."""
+    """Tenant-isolated, value-free JSONL queue for offline per-app LoRA calibration.
+
+    No trainer is wired in this module; records are queued locally for future
+    offline calibration workflows.
+    """
 
     def __init__(
         self,
@@ -404,7 +408,7 @@ class CalibrationCollector:
         app_id: str | None = None,
         deduplicate: bool = True,
     ) -> list[CalibrationOverrideRecord]:
-        """Read zero-PHI calibration records belonging strictly to ``tenant_id``."""
+        """Read value-free calibration records belonging strictly to ``tenant_id``."""
         safe_tenant = self._enforce_tenant_access(tenant_id)
         tenant_dir = (self._queue_root / safe_tenant).resolve()
         if not tenant_dir.is_dir():
@@ -444,7 +448,7 @@ class CalibrationCollector:
         *,
         min_samples: int = 10,
     ) -> CalibrationReadinessSummary:
-        """Report whether enough deduplicated overrides exist for overnight LoRA tuning."""
+        """Report whether enough deduplicated overrides exist for offline LoRA calibration."""
         records = self.read_tenant_queue(tenant_id, app_id=app_id, deduplicate=True)
         false_pauses = sum(
             1 for r in records if r.override_kind is OverrideKind.FALSE_PAUSE

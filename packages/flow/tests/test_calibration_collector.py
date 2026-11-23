@@ -109,7 +109,7 @@ def test_zero_phi_rejects_disallowed_metadata_keys_and_pii_values(
         "reviewer_note",
         "dom_html",
     ):
-        with pytest.raises(ValueError, match="Zero-PHI violation"):
+        with pytest.raises(ValueError, match="Value-free violation"):
             collector.record_operator_override(
                 tenant_id="clinic-north",
                 app_id="ehr-portal",
@@ -122,7 +122,7 @@ def test_zero_phi_rejects_disallowed_metadata_keys_and_pii_values(
             )
 
     for pii_val in ("jane.doe@clinic.org", "123-45-6789", "555-234-5678", "x" * 65):
-        with pytest.raises(ValueError, match="Zero-PHI violation"):
+        with pytest.raises(ValueError, match="Value-free violation"):
             collector.record_operator_override(
                 tenant_id="clinic-north",
                 app_id="ehr-portal",

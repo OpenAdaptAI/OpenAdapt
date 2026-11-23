@@ -11,6 +11,7 @@ import pytest
 
 from openadapt_flow.byoc_veto_server import (
     ByocVetoServer,
+    RunBinding,
     create_byoc_veto_server,
     post_verify_request,
 )
@@ -130,14 +131,26 @@ def _raw_http(
         return exc.code, json.loads(exc.read().decode("utf-8"))
 
 
-def test_server_refuses_unauthenticated_or_duplicate_key_startup() -> None:
+def test_server_refuses_unauthenticated_duplicate_key_or_missing_allowlist_startup() -> (
+    None
+):
     router, _ = _build_router()
     with pytest.raises(ValueError, match="at least one tenant key"):
-        ByocVetoServer(router=router, tenant_api_keys={})
+        ByocVetoServer(router=router, tenant_api_keys={}, tenant_allowed_apps={})
+    with pytest.raises(ValueError, match="tenant_allowed_apps"):
+        ByocVetoServer(
+            router=router,
+            tenant_api_keys={"clinic-a": "secret-a"},
+            tenant_allowed_apps={},
+        )
     with pytest.raises(ValueError, match="Duplicate API keys"):
         ByocVetoServer(
             router=router,
             tenant_api_keys={"clinic-a": "shared-secret", "clinic-b": "shared-secret"},
+            tenant_allowed_apps={
+                "clinic-a": {"ehr-portal"},
+                "clinic-b": {"ehr-portal"},
+            },
         )
 
 
@@ -237,7 +250,35 @@ def test_non_loopback_requires_tls_and_client_fails_closed_when_server_stopped()
 
     # Non-loopback bind without ssl_context is refused
     with pytest.raises(ValueError, match="requires ssl_context"):
-        ByocVetoServer(router=router, tenant_api_keys=keys, host="0.0.0.0")
+        ByocVetoServer(
+            router=router,
+            tenant_api_keys=keys,
+            tenant_allowed_apps={"clinic-a": {"ehr-portal"}},
+            host="0.0.0.0",
+        )
+
+    # Client refuses plaintext http:// to non-loopback host (fail closed)
+    remote_plain = post_verify_request(
+        "http://veto.internal.example:8443",
+        api_key=keys["clinic-a"],
+        payload={
+            "request_id": "req-plain",
+            "app_id": "ehr-portal",
+            "pre_submit_image_sha256": _IMG_PRE,
+            "post_submit_image_sha256": _IMG_POST,
+        },
+    )
+    assert remote_plain.decision is VetoDecision.HALT_ESCALATE
+    assert "http://" in remote_plain.reason
+
+    # Client catches TypeError (non-JSON-serializable payload) and fails closed
+    bad_ser = post_verify_request(
+        "http://127.0.0.1:9",
+        api_key=keys["clinic-a"],
+        payload={"request_id": "req-ser", "bad": object()},
+    )
+    assert bad_ser.decision is VetoDecision.HALT_ESCALATE
+    assert "TypeError" in bad_ser.reason
 
     # 422 response never echoes raw client input values
     with create_byoc_veto_server(
@@ -259,6 +300,21 @@ def test_non_loopback_requires_tls_and_client_fails_closed_when_server_stopped()
         )
         assert code == 422
         assert "123-45-6789" not in json.dumps(body)
+
+        # Dropping workflow_id when a workflow adapter exists is blocked (anti-downgrade -> 403)
+        code, body = _raw_http(
+            f"{srv.base_url}/v1/verify",
+            method="POST",
+            headers={"Authorization": f"Bearer {keys['clinic-a']}"},
+            payload={
+                "request_id": "req-drop-wf",
+                "app_id": "ehr-portal",
+                "pre_submit_image_sha256": _IMG_PRE,
+                "post_submit_image_sha256": _IMG_POST,
+            },
+        )
+        assert code == 403
+        assert body["decision"] == "HALT_ESCALATE"
 
         # Unauthorized app_id for tenant -> 403
         code, body = _raw_http(
@@ -304,7 +360,29 @@ def test_http_tenant_auth_cross_tenant_rejection_and_fail_closed_503() -> None:
         "pre_submit_image_sha256": _IMG_PRE,
         "post_submit_image_sha256": _IMG_POST,
     }
-    with create_byoc_veto_server(router=router, tenant_api_keys=keys) as srv:
+    with create_byoc_veto_server(
+        router=router,
+        tenant_api_keys=keys,
+        tenant_allowed_apps={"clinic-a": {"ehr-portal"}, "clinic-b": {"ehr-portal"}},
+        run_bindings={
+            "req-1": RunBinding(
+                tenant_id="clinic-a",
+                app_id="ehr-portal",
+                workflow_id="intake",
+                step_nonce="nonce-1",
+            )
+        },
+    ) as srv:
+        base_payload = {**base_payload, "step_nonce": "nonce-1"}
+        # Mismatched step_nonce against server-side run binding -> 403
+        code, body = _raw_http(
+            f"{srv.base_url}/v1/verify",
+            method="POST",
+            headers={"Authorization": f"Bearer {keys['clinic-a']}"},
+            payload={**base_payload, "step_nonce": "replayed-nonce"},
+        )
+        assert code == 403
+        assert body["decision"] == "HALT_ESCALATE"
         # Missing auth -> 401
         code, body = _raw_http(
             f"{srv.base_url}/v1/verify", method="POST", payload=base_payload
@@ -356,3 +434,44 @@ def test_http_tenant_auth_cross_tenant_rejection_and_fail_closed_503() -> None:
         # Unknown route -> 404
         code, _ = _raw_http(f"{srv.base_url}/v1/unknown")
         assert code == 404
+
+
+def test_client_rejects_mismatched_response_request_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _ForgedResponse:
+        def __enter__(self) -> _ForgedResponse:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "request_id": "forged-other-req",
+                    "adapter_id": "veto-clinic-a-ehr",
+                    "base_model": _BASE_MODEL,
+                    "decision": "ALLOW",
+                    "calibrated_fault_prob": 0.01,
+                    "calibrated_threshold": 0.5,
+                    "temperature": 1.0,
+                    "abstained": False,
+                    "dom_override_blocked": False,
+                    "reason": "replayed",
+                }
+            ).encode("utf-8")
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **kw: _ForgedResponse())
+    res = post_verify_request(
+        "http://127.0.0.1:9999",
+        api_key="k",
+        payload={
+            "request_id": "expected-req-123",
+            "app_id": "ehr-portal",
+            "pre_submit_image_sha256": _IMG_PRE,
+            "post_submit_image_sha256": _IMG_POST,
+        },
+    )
+    assert res.decision is VetoDecision.HALT_ESCALATE
+    assert "request_id" in res.reason

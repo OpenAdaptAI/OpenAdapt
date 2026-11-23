@@ -22,6 +22,7 @@ from openadapt_flow.multi_lora_veto import (
     VetoInferenceRequest,
     calibrate_probability,
     export_inbox_training_jsonl,
+    hmac_field_value,
     ollama_model_tag,
     vllm_request_payload,
 )
@@ -310,6 +311,7 @@ def test_router_refuses_mismatched_base_model_and_backend_helpers() -> None:
     req = VetoInferenceRequest(
         request_id="req-mismatch",
         app_id="app-z",
+        step_nonce="run-42-step-3",
         pre_submit_image_sha256="1" * 64,
         post_submit_image_sha256="2" * 64,
     )
@@ -319,12 +321,56 @@ def test_router_refuses_mismatched_base_model_and_backend_helpers() -> None:
     payload = vllm_request_payload(base, req)
     assert payload["model"] == "veto-base"
     assert payload["metadata"]["base_model"] == BASE_MODEL
+    assert payload["metadata"]["step_nonce"] == "run-42-step-3"
+    assert "expected_field_matches" not in payload
     assert ollama_model_tag(base) == f"{BASE_MODEL}:veto-base"
     ollama_spec = _make_spec("veto-oll", adapter_uri="ollama://openadapt/veto:v2")
     assert ollama_model_tag(ollama_spec) == "openadapt/veto:v2"
 
 
+def test_hmac_field_value_and_strict_schema_guards() -> None:
+    d1 = hmac_field_value("tenant-1-vpc-secret-key-0001", "dob", "1980-02-14")
+    d2 = hmac_field_value("tenant-2-vpc-secret-key-0002", "dob", "1980-02-14")
+    assert len(d1) == 64 and d1 != d2
+    with pytest.raises(ValueError, match="16 bytes"):
+        hmac_field_value("short", "dob", "1980-02-14")
+    with pytest.raises(ValueError, match="field_slug"):
+        hmac_field_value("tenant-1-vpc-secret-key-0001", "Jane Doe DOB", "1980-02-14")
+
+    # Free-text image reference is rejected (must be 64 lowercase hex)
+    with pytest.raises(ValidationError):
+        VetoInferenceRequest(
+            request_id="req-bad-img",
+            app_id="app-alpha",
+            pre_submit_image_sha256="Jane Doe MRN 0123456 screenshot",
+            post_submit_image_sha256=SHA_B,
+        )
+    # Free-text field hash key is rejected
+    with pytest.raises(ValidationError):
+        VetoInferenceRequest(
+            request_id="req-bad-key",
+            app_id="app-alpha",
+            pre_submit_image_sha256=SHA_A,
+            post_submit_image_sha256=SHA_B,
+            expected_field_hashes={"Jane Doe DOB 1980-02-14": d1},
+        )
+    # Caller self-vouching field (expected_field_matches) is forbidden
+    with pytest.raises(ValidationError):
+        VetoInferenceRequest.model_validate(
+            {
+                "request_id": "req-self-vouch",
+                "app_id": "app-alpha",
+                "pre_submit_image_sha256": SHA_A,
+                "post_submit_image_sha256": SHA_B,
+                "expected_field_matches": {"dob": True},
+            }
+        )
+
+
 def test_export_inbox_training_jsonl_dedup_and_tenant_isolation(tmp_path: Path) -> None:
+    hmac_a = hmac_field_value("tenant-1-vpc-secret-key-0001", "email", "a@example.com")
+    hmac_b = hmac_field_value("tenant-1-vpc-secret-key-0001", "email", "b@example.com")
+    hmac_c = hmac_field_value("tenant-2-vpc-secret-key-0002", "email", "c@example.com")
     items = [
         InboxResolutionItem(
             item_id="inbox-1",
@@ -332,9 +378,9 @@ def test_export_inbox_training_jsonl_dedup_and_tenant_isolation(tmp_path: Path) 
             workflow_id="intake-v1",
             tenant_id="tenant-1",
             label=InboxResolutionLabel.TRUE_FAULT,
-            pre_submit_image_ref="file://pre-1.png",
-            post_submit_image_ref="file://post-1.png",
-            expected_field_hashes={"email": SHA_A},
+            pre_submit_image_ref=SHA_A,
+            post_submit_image_ref=SHA_B,
+            expected_field_hashes={"email": hmac_a},
             resolved_at="2026-11-22T18:00:00Z",
         ),
         # Duplicate content fingerprint (different item_id) -> must deduplicate
@@ -344,9 +390,9 @@ def test_export_inbox_training_jsonl_dedup_and_tenant_isolation(tmp_path: Path) 
             workflow_id="intake-v1",
             tenant_id="tenant-1",
             label=InboxResolutionLabel.TRUE_FAULT,
-            pre_submit_image_ref="file://pre-1.png",
-            post_submit_image_ref="file://post-1.png",
-            expected_field_hashes={"email": SHA_A},
+            pre_submit_image_ref=SHA_A,
+            post_submit_image_ref=SHA_B,
+            expected_field_hashes={"email": hmac_a},
             resolved_at="2026-11-22T18:05:00Z",
         ),
         InboxResolutionItem(
@@ -355,9 +401,9 @@ def test_export_inbox_training_jsonl_dedup_and_tenant_isolation(tmp_path: Path) 
             workflow_id="intake-v1",
             tenant_id="tenant-1",
             label=InboxResolutionLabel.FALSE_ALARM,
-            pre_submit_image_ref="file://pre-2.png",
-            post_submit_image_ref="file://post-2.png",
-            expected_field_hashes={"email": SHA_B},
+            pre_submit_image_ref=SHA_C,
+            post_submit_image_ref=SHA_D,
+            expected_field_hashes={"email": hmac_b},
             resolved_at="2026-11-22T18:10:00Z",
         ),
         # Different tenant -> excluded when exporting tenant-1 VPC dataset
@@ -367,9 +413,9 @@ def test_export_inbox_training_jsonl_dedup_and_tenant_isolation(tmp_path: Path) 
             workflow_id="intake-v1",
             tenant_id="tenant-2",
             label=InboxResolutionLabel.TRUE_FAULT,
-            pre_submit_image_ref="file://pre-3.png",
-            post_submit_image_ref="file://post-3.png",
-            expected_field_hashes={"email": SHA_C},
+            pre_submit_image_ref=SHA_D,
+            post_submit_image_ref=SHA_E,
+            expected_field_hashes={"email": hmac_c},
             resolved_at="2026-11-22T18:15:00Z",
         ),
     ]
@@ -381,8 +427,8 @@ def test_export_inbox_training_jsonl_dedup_and_tenant_isolation(tmp_path: Path) 
             app_id="app-alpha",
             tenant_id="tenant-1",
             label=InboxResolutionLabel.TRUE_FAULT,
-            pre_submit_image_ref="file://pre-1.png",
-            post_submit_image_ref="file://post-1.png",
+            pre_submit_image_ref=SHA_A,
+            post_submit_image_ref=SHA_B,
             expected_field_hashes={"email": "patient@example.com"},
             resolved_at="2026-11-22T18:00:00Z",
         )
