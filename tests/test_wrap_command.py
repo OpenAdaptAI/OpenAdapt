@@ -44,7 +44,10 @@ def test_the_wrap_extra_brings_the_built_in_agent_sdk_and_the_base_stays_lean():
     # the base launcher install must not pull its SDK.
     from pathlib import Path
 
-    import tomllib
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10 CI
+        import tomli as tomllib
 
     project = tomllib.loads(
         (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()

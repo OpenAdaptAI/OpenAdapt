@@ -1,0 +1,1 @@
+| Guarded save: a safety layer any agent wraps around one write (check the record, hold for approval, read back) | Released ([#1258](https://github.com/OpenAdaptAI/OpenAdapt/pull/1258)) | Synthetic | `GUARDED_SAVE.md` |

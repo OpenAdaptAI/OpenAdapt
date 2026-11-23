@@ -1,4 +1,4 @@
-"""Render CAPABILITIES.md's "Every command, by capability" list from files.
+"""Render the "Every command, by capability" list in CAPABILITIES.md from files.
 
 Each openadapt-flow command has one file, packages/flow/docs/commands/<group>/<verb>.md.
 The group directory names the capability (its README.md holds the title; the
@@ -7,15 +7,23 @@ note shown after it. Adding a command adds a file, and the rendered list has
 one command per line, so two pull requests that add commands rarely touch the
 same line.
 
-    python scripts/build_command_map.py          # rewrite the section
+scripts/build_capabilities.py places the list where
+capabilities/<NN>-every-command-by-capability/section.md has the line
+``<!-- generated: scripts/build_command_map.py -->``. A pull request adds the
+command's file and does not regenerate CAPABILITIES.md; the refresh workflow
+(.github/workflows/refresh-generated.yml) does that after it lands. Running
+this script rewrites the whole CAPABILITIES.md, like build_capabilities.py.
+
+    python scripts/build_command_map.py          # rewrite CAPABILITIES.md
     python scripts/build_command_map.py --check  # fail if it is out of date
 
-packages/flow/tests/test_capabilities_map.py fails when a command has no file,
-a file names no command, or the section is out of date.
+packages/flow/tests/test_capabilities_map.py fails when a command has no file
+or a file names no command.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import sys
 from pathlib import Path
 
@@ -66,18 +74,12 @@ def splice(text: str, block: str) -> str:
 
 
 def main(argv: list[str]) -> int:
-    text = MAP.read_text("utf-8")
-    updated = splice(text, render())
-    if "--check" in argv:
-        if updated != text:
-            print(
-                "CAPABILITIES.md command list is out of date; "
-                "run: python scripts/build_command_map.py"
-            )
-            return 1
-        return 0
-    MAP.write_text(updated, "utf-8")
-    return 0
+    path = Path(__file__).resolve().parent / "build_capabilities.py"
+    spec = importlib.util.spec_from_file_location("build_capabilities", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.main([arg for arg in argv if arg == "--check"])
 
 
 if __name__ == "__main__":

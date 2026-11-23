@@ -229,7 +229,10 @@ def test_recorded_read_compiles_to_read_step_and_replays(tmp_path) -> None:
     assert report.model_calls == 0
 
 
-def test_seal_pointers_come_from_the_run_receipt(tmp_path) -> None:
+def test_seal_pointers_come_from_the_run_receipt(tmp_path, monkeypatch) -> None:
+    # The receipt folder here is not an encrypted run directory, so the field
+    # values go there in plaintext only under the recorded opt-out.
+    monkeypatch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "synthetic test data")
     import hashlib
 
     from openadapt_flow.records.run import (
