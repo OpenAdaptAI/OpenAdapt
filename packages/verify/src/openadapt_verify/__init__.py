@@ -27,7 +27,7 @@ from openadapt_flow.write_receipt import verify as verify_receipt
 
 from openadapt_verify.guard import checked_write, verified
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 __all__ = [
     "Actor",

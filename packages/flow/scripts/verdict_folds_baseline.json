@@ -207,6 +207,9 @@
   "packages/flow/openadapt_flow/assurance.py": {
     "says_success": 1
   },
+  "packages/flow/openadapt_flow/at_rest.py": {
+    "swallow_wide": 1
+  },
   "packages/flow/openadapt_flow/attest_bridge.py": {
     "swallow": 2,
     "swallow_wide": 2
@@ -493,7 +496,7 @@
   },
   "packages/flow/openadapt_flow/console/data.py": {
     "cmp_literal": 5,
-    "swallow": 4,
+    "swallow": 5,
     "swallow_wide": 1,
     "empty_change_set": 2
   },
@@ -1421,6 +1424,9 @@
     "swallow": 1
   },
   "packages/flow/openadapt_flow/seal_timestamp.py": {
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/sealed_set.py": {
     "slice_count": 1
   },
   "packages/flow/openadapt_flow/second_factor.py": {

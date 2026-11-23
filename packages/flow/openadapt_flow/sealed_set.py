@@ -55,7 +55,7 @@ import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Final, Iterator, Literal, Optional
+from typing import Any, Final, Iterator, Literal, Optional
 
 from openadapt_flow import crypto
 from openadapt_flow.sealed_maintenance import mutation_lock
@@ -64,13 +64,18 @@ HEADER: Final[str] = ".openadapt-sealed.json"
 FORMAT: Final[str] = "openadapt-flow-sealed-set"
 FORMAT_VERSION: Final[int] = 1
 SEALED_SUFFIX: Final[str] = ".enc"
+#: Format version 3: a per-set data key wrapped to a bucket key
+#: (:mod:`openadapt_flow.key_hierarchy`), Tink streaming payload.
+ENVELOPE_VERSION: Final[int] = 3
 _LEGACY_DERIVATION_FIELDS: Final[frozenset[str]] = frozenset(
     {"salt", "kdf", "kdf_n", "kdf_r", "kdf_p"}
 )
 
 Kind = Literal["bundle", "recording", "run", "library", "sanitized"]
 Codec = Literal["set", "plain", "external"]
-Classification = Literal["phi", "structural"]
+#: ``export`` is a plaintext file a person asked for (the receipt page),
+#: kept beside an encrypted run and recorded in the plaintext ledger.
+Classification = Literal["phi", "structural", "export"]
 
 _INDEX_AAD: Final[bytes] = b"openadapt-flow/sealed-set/index/"
 _FILE_AAD: Final[bytes] = b"openadapt-flow/sealed-set/file/"
@@ -87,6 +92,11 @@ class SealedSetError(ValueError):
 
 class SealedSetKeyError(SealedSetError):
     """A sealed set was found but no key was configured to open it."""
+
+
+class SealedSetRestoreRequired(SealedSetKeyError):
+    """Only the recovery code opens this set; it opens only through an
+    explicit restore (:func:`restore`)."""
 
 
 @dataclass(frozen=True)
@@ -194,6 +204,7 @@ BUNDLE_FILES: Final[tuple[FileKind, ...]] = (
     ),
     FileKind("qualification/*", "phi", "qualification cases, inputs and reports"),
     FileKind("evidence/*", "phi", "run evidence a command copied into the bundle"),
+    FileKind("narration.json", "phi", "the recording's scrubbed narration"),
 )
 
 RECORDING_FILES: Final[tuple[FileKind, ...]] = (
@@ -243,6 +254,7 @@ RECORDING_FILES: Final[tuple[FileKind, ...]] = (
         "a scaffolded effect contract with observed values",
     ),
     FileKind("distill.json", "phi", "a distillation report"),
+    FileKind("narration.json", "phi", "what the person said, scrubbed"),
     FileKind(
         ".openadapt-approval.json", "phi", "approval answers about recorded steps"
     ),
@@ -263,7 +275,36 @@ RUN_FILES: Final[tuple[FileKind, ...]] = (
         "a random per-run capability secret (no recorded data)",
     ),
     FileKind(".attended_action.lease", "structural", "an action lease marker"),
+    FileKind(
+        "item-approval/approver-root.json",
+        "structural",
+        "the run's approver-root pin: a key fingerprint, key directory and "
+        "roster head, written before the run (no record data)",
+    ),
+    FileKind(
+        ".report_run_id",
+        "structural",
+        "the random UUID that makes reporting this run to Cloud idempotent",
+    ),
     FileKind("*.lock", "structural", "a lock file"),
+    # The receipt files stay readable without the key: they hold signatures,
+    # outcomes, counts and SHA-256 digests over the plaintext report.json,
+    # never its contents (docs/phi_at_rest.md, "Receipts").
+    FileKind("seal.json", "structural", "the signed run receipt over report.json"),
+    FileKind("seal.anchor.json", "structural", "the receipt's transparency-log proof"),
+    FileKind("seal.tsa.json", "structural", "the receipt's timestamp record"),
+    FileKind("seal.tsr", "structural", "the receipt's RFC 3161 timestamp token"),
+    FileKind("seal.publish.json", "structural", "where the public receipt was posted"),
+    FileKind("public-seal.json", "structural", "the allow-listed public card"),
+    FileKind("receipt.json", "structural", "the allow-listed run receipt"),
+    FileKind("receipt.md", "structural", "the allow-listed run receipt as text"),
+    FileKind("receipt.png", "structural", "the allow-listed run receipt as an image"),
+    FileKind(
+        "seal.html",
+        "export",
+        "the receipt page a person opens; it embeds report.json, so it is a "
+        "plaintext copy of the run's inputs, named on stderr and in the ledger",
+    ),
     FileKind("checkpoints/*", "phi", "durable checkpoints (already encrypted)"),
     FileKind(
         "*",
@@ -365,11 +406,19 @@ def missing_key_message(root: Path | str, kind: str) -> str:
     )
 
 
-def _require_passphrase(root: Path, kind: str, key: Optional[str]) -> str:
-    resolved = passphrase_for(kind, key)
-    if not resolved:
-        raise SealedSetKeyError(missing_key_message(root, kind))
-    return resolved
+def _require_passphrase(root: Path, kind: str, key: Optional[str]) -> Optional[str]:
+    """The passphrase to open ``root`` with. A version 3 set needs none (its
+    recipients may be this computer's device identity), so None is allowed
+    there; an older set without a passphrase refuses here."""
+    resolved = passphrase_for(kind, key) or crypto.resolve_read_key(None)
+    if resolved:
+        return resolved
+    try:
+        if read_header(root).get("version") == ENVELOPE_VERSION:
+            return None
+    except SealedSetError:
+        pass
+    raise SealedSetKeyError(missing_key_message(root, kind))
 
 
 def _file_aad(kind: str, rel: str) -> bytes:
@@ -461,7 +510,7 @@ def read_header(root: Path | str) -> dict[str, object]:
         raise SealedSetError(f"unreadable sealed-set header: {exc}") from exc
     if not isinstance(header, dict) or header.get("format") != FORMAT:
         raise SealedSetError("not an openadapt-flow sealed set")
-    if header.get("version") not in (FORMAT_VERSION, 2):
+    if header.get("version") not in (FORMAT_VERSION, 2, ENVELOPE_VERSION):
         raise SealedSetError(
             f"sealed-set format version {header.get('version')!r} is not supported"
         )
@@ -482,8 +531,188 @@ def _wrapping_aad(header: dict[str, object]) -> bytes:
     ).encode("utf-8")
 
 
-def _data_key(header: dict[str, object], passphrase: str) -> bytes:
+_V3_WRAP: Final[bytes] = b"openadapt.ai/sealed-set/v3/wrap\0"
+_V3_PAYLOAD: Final[bytes] = b"openadapt.ai/sealed-set/v3/payload\0"
+_V3_HEADER: Final[bytes] = b"openadapt.ai/sealed-set/v3/header"
+_V3_BUCKET_MAC: Final[bytes] = b"openadapt.ai/sealed-set/v3/bucket-mac"
+_V3_STORE: Final[bytes] = b"openadapt.ai/sealed-set/v3/store\0"
+PAYLOAD: Final[str] = "tink-aes256-gcm-hkdf-1mb"
+_MAC_EXCLUDED: Final[frozenset[str]] = frozenset({"mac", "bucket_mac", "set_digest"})
+
+
+def _hkdf(ikm: bytes, info: bytes) -> bytes:
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
+    return HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=info).derive(ikm)
+
+
+def _v3_wrap_info(header: dict[str, object], fpr: str) -> bytes:
+    return (
+        _V3_WRAP
+        + str(header["set_id"]).encode()
+        + str(header["kind"]).encode()
+        + fpr.encode()
+    )
+
+
+def _mac_body(header: dict[str, object]) -> bytes:
+    body = {k: v for k, v in header.items() if k not in _MAC_EXCLUDED}
+    return json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+class V3Key:
+    """A version 3 set's data key. Files are Tink AES-256-GCM-HKDF 1 MiB
+    streams (:mod:`openadapt_flow.stream_aead`) under a payload key derived
+    from the DEK and the set id, with the file's set path as associated
+    data. ``bucket`` is the opened bucket, which MACs the header."""
+
+    def __init__(self, dek: bytes, set_id: str, bucket: object = None) -> None:
+        self._payload = _hkdf(dek, _V3_PAYLOAD + set_id.encode())
+        self._header_key = _hkdf(dek, _V3_HEADER)
+        self._store = _hkdf(dek, _V3_STORE + set_id.encode())
+        self.bucket = bucket
+
+    @property
+    def store_passphrase(self) -> str:
+        """The passphrase of the stores that keep their own containers inside
+        this set (durable checkpoints, approvals, transition evidence). It
+        comes from the set's data key, so shredding the bucket makes those
+        containers unreadable too, in backups as well."""
+        return base64.urlsafe_b64encode(self._store).decode("ascii")
+
+    def seal(self, plaintext: bytes, *, aad: bytes) -> bytes:
+        from openadapt_flow import stream_aead
+
+        return crypto.SET3_FILE_MAGIC + stream_aead.encrypt(
+            self._payload, plaintext, aad
+        )
+
+    def open(self, container: bytes, *, aad: bytes) -> bytes:
+        from openadapt_flow import stream_aead
+
+        if container[: len(crypto.SET3_FILE_MAGIC)] != crypto.SET3_FILE_MAGIC:
+            raise SealedSetError("not a version 3 sealed-set file")
+        try:
+            return stream_aead.decrypt(
+                self._payload, container[len(crypto.SET3_FILE_MAGIC) :], aad
+            )
+        except stream_aead.StreamError as exc:
+            raise crypto.DecryptionError(str(exc)) from exc
+
+    def _bucket_mac_key(self) -> Optional[bytes]:
+        private = getattr(self.bucket, "private", None)
+        if private is None:
+            return None
+        scalar = private.private_numbers().private_value.to_bytes(32, "big")
+        return _hkdf(scalar, _V3_BUCKET_MAC)
+
+    def stamp(self, header: dict[str, object]) -> None:
+        """Write the header MACs (DEK and bucket key) into ``header``."""
+        import hmac
+
+        body = _mac_body(header)
+        header["mac"] = hmac.new(self._header_key, body, hashlib.sha256).hexdigest()
+        bucket_key = self._bucket_mac_key()
+        if bucket_key is not None:
+            header["bucket_mac"] = hmac.new(
+                bucket_key, body, hashlib.sha256
+            ).hexdigest()
+
+    def check(self, header: dict[str, object]) -> None:
+        import hmac
+
+        body = _mac_body(header)
+        want = hmac.new(self._header_key, body, hashlib.sha256).hexdigest()
+        bucket_key = self._bucket_mac_key()
+        bucket_want = (
+            hmac.new(bucket_key, body, hashlib.sha256).hexdigest()
+            if bucket_key
+            else None
+        )
+        got, bucket_got = header.get("mac"), header.get("bucket_mac")
+        if not (
+            isinstance(got, str)
+            and hmac.compare_digest(got, want)
+            and isinstance(bucket_got, str)
+            and bucket_want is not None
+            and hmac.compare_digest(bucket_got, bucket_want)
+        ):
+            raise SealedSetError(
+                "the encrypted set's header was changed after it was written, or "
+                "was not written with its bucket key (header MAC mismatch)"
+            )
+
+
+def _open_v3(header: dict[str, object], *, restore: bool = False) -> V3Key:
+    """Open a version 3 set: find its bucket record, unwrap the bucket key
+    with a key this computer holds, unwrap the DEK, check the header MACs."""
+    from openadapt_flow import key_hierarchy as kh
+
+    if header.get("shredded"):
+        raise SealedSetError(
+            "this encrypted set was shredded: its bucket key was destroyed, so "
+            "nobody can open it"
+        )
+    key_ref = header.get("key_ref")
+    set_id = header.get("set_id")
+    if (
+        not isinstance(key_ref, dict)
+        or not isinstance(set_id, str)
+        or len(set_id) != 32
+    ):
+        raise SealedSetError("sealed-set version 3 header is malformed")
+    inline = header.get("bucket_record")
+    inline = inline if isinstance(inline, dict) else None
+    try:
+        record = kh.find_record(key_ref, inline)
+        if record.get("bucket_id") != key_ref.get("bucket_id"):
+            raise SealedSetError("the bucket record belongs to another set")
+        # A record the header supplies proves nothing about who wrote the
+        # set: only this computer's device keys or a recovery key open it.
+        bucket = kh.open_bucket(record, from_header=record is inline, restore=restore)
+    except kh.RecoveryRestoreRequired as exc:
+        raise SealedSetRestoreRequired(str(exc)) from exc
+    except kh.NoRecipientKey as exc:
+        raise SealedSetKeyError(str(exc)) from exc
+    except kh.KeyHierarchyError as exc:
+        raise SealedSetError(str(exc)) from exc
+    except RuntimeError as exc:  # the device key is locked, missing or replaced
+        from openadapt_flow import at_rest
+
+        if isinstance(exc, at_rest.LocalKeyError):
+            raise SealedSetKeyError(str(exc)) from exc
+        raise
+    if bucket.fpr != key_ref.get("bucket_pub_fpr"):
+        raise SealedSetError("the bucket record does not match the set's key reference")
+    stanzas = header.get("stanzas")
+    stanza = next(
+        (
+            s
+            for s in (stanzas if isinstance(stanzas, list) else [])
+            if isinstance(s, dict) and s.get("fpr") == bucket.fpr
+        ),
+        None,
+    )
+    if stanza is None:
+        raise SealedSetError("the set has no data key wrapped to its bucket")
+    try:
+        dek = kh.hpke_open(
+            bucket.private,  # type: ignore[arg-type]
+            base64.b64decode(str(stanza["ct"]), validate=True),
+            _v3_wrap_info(header, bucket.fpr),
+        )
+    except Exception as exc:  # noqa: BLE001 - wrong bucket or damaged stanza
+        raise SealedSetError("the set's data key does not unwrap") from exc
+    key = V3Key(dek, set_id, bucket)
+    key.check(header)
+    return key
+
+
+def _data_key(header: dict[str, object], passphrase: Optional[str]) -> bytes:
     """Unwrapped data keys stay in memory; no fallback key resolution here."""
+    if not passphrase:
+        raise SealedSetKeyError("no key is configured to open this sealed set")
     try:
         if header.get("version") == 2:
             wrapped = header.get("wrapped_key")
@@ -519,7 +748,9 @@ def _data_key(header: dict[str, object], passphrase: str) -> bytes:
         raise SealedSetError("sealed-set key header is malformed") from exc
 
 
-def _derive(header: dict[str, object], passphrase: str) -> crypto.SetKey:
+def _derive(header: dict[str, object], passphrase: Optional[str]) -> Any:
+    if header.get("version") == ENVELOPE_VERSION:
+        return _open_v3(header)
     return crypto.SetKey(_data_key(header, passphrase))
 
 
@@ -658,7 +889,7 @@ def _adoptable(root: Path, kind: str, rel: str) -> Optional[Codec]:
     ``plain`` for a structural file the inventory names, ``external`` for
     ciphertext of another keyed store, ``None`` for plaintext (refused)."""
     entry = classify(kind, rel)  # type: ignore[arg-type]
-    if entry is not None and entry.classification == "structural":
+    if entry is not None and entry.classification in ("structural", "export"):
         return "plain"
     if crypto.is_encrypted((root / rel).read_bytes()):
         return "external"
@@ -704,6 +935,94 @@ def _reconcile_run_files(
 # -- writing -----------------------------------------------------------------
 
 
+def _explicit_passphrase(passphrase: Optional[str]) -> bool:
+    """Whether ``passphrase`` is a configured key rather than this computer's
+    local one (which the key hierarchy replaces for new sets)."""
+    if not passphrase:
+        return False
+    from openadapt_flow import at_rest
+
+    return at_rest.explicit_key() or passphrase != at_rest.existing_key()
+
+
+def _new_v3(
+    kind: str, passphrase: Optional[str]
+) -> Optional[tuple[dict[str, object], V3Key]]:
+    """A version 3 header for a new set and its key; None for a configured
+    passphrase outside organization mode (the version 1 header Flow always
+    wrote: explicit keys still win, deprecated)."""
+    from openadapt_flow import key_hierarchy as kh
+
+    try:
+        policy = kh.load_policy()
+        if _explicit_passphrase(passphrase) and policy.mode != "org":
+            return None
+        bucket = kh.new_bucket(kind, policy)
+    except kh.KeyHierarchyError as exc:
+        raise SealedSetError(f"Not writing an encrypted {kind}: {exc}") from exc
+    set_id = secrets.token_hex(16)
+    dek = secrets.token_bytes(32)
+    header: dict[str, object] = {
+        "format": FORMAT,
+        "version": ENVELOPE_VERSION,
+        "set_id": set_id,
+        "kind": kind,
+        "cipher": "AES-256-GCM",
+        "payload": PAYLOAD,
+        "key_ref": bucket.key_ref(),
+        # Authenticated by the header MACs: shredding deletes the archive
+        # copy from this archive, whatever the policy says by then.
+        "records": policy.records,
+    }
+    if policy.records == "archive":
+        header["key_archive"] = policy.key_archive
+    header["stanzas"] = [
+        {
+            "type": kh.STANZA_TYPE,
+            "fpr": bucket.fpr,
+            "ct": base64.b64encode(
+                kh.hpke_seal(bucket.public, dek, _v3_wrap_info(header, bucket.fpr))
+            ).decode("ascii"),
+        }
+    ]
+    if policy.records == "inline":
+        header["bucket_record"] = bucket.record
+    return header, V3Key(dek, set_id, bucket)
+
+
+def new_artifact_key(
+    explicit: Optional[str] | object, artifact: str, path: Path | str
+) -> Optional[str]:
+    """The key for a new recording a library entry point writes: the
+    caller's key; under :data:`at_rest.POLICY`, the policy's (None, plaintext,
+    only under the recorded opt-out); an explicit ``None`` is plaintext through
+    :func:`at_rest.plaintext_by_caller` (refused in strict mode, else
+    recorded)."""
+    from openadapt_flow import at_rest
+
+    if explicit is at_rest.POLICY:
+        return recording_key() if at_rest.seal_new(artifact, path) else None
+    if not explicit:
+        at_rest.plaintext_by_caller(artifact, path)
+        return None
+    return str(explicit)
+
+
+def preflight_new(kind: str, passphrase: Optional[str]) -> None:
+    """Refuse, before a capture starts, a new set :func:`_new_v3` would
+    refuse at sealing time (organization recipients, archive and backlog,
+    hardware key). Makes no record."""
+    from openadapt_flow import key_hierarchy as kh
+
+    try:
+        policy = kh.load_policy()
+        if _explicit_passphrase(passphrase) and policy.mode != "org":
+            return
+        kh.preflight(policy)
+    except kh.KeyHierarchyError as exc:
+        raise SealedSetError(f"Not recording an encrypted {kind}: {exc}") from exc
+
+
 class SealedSetWriter:
     """Write a sealed set file by file, ciphertext only, then finalize it.
 
@@ -718,13 +1037,14 @@ class SealedSetWriter:
         self,
         root: Path | str,
         kind: Kind,
-        passphrase: str,
+        passphrase: Optional[str],
         *,
         resume: bool = False,
     ) -> None:
         self.root = Path(root)
         self.kind: Kind = kind
         self._codecs: dict[str, Codec] = {}
+        self._new = False
         self._hashes: dict[str, str] = {}
         self._lines: dict[str, list[bytes]] = {}
         self._lock = threading.RLock()
@@ -732,8 +1052,10 @@ class SealedSetWriter:
         with mutation_lock(self.root):
             self._initialize(passphrase, resume=resume)
 
-    def _initialize(self, passphrase: str, *, resume: bool) -> None:
+    def _initialize(self, passphrase: Optional[str], *, resume: bool) -> None:
         kind = self.kind
+        if resume and is_sealed(self.root) and self._resume_unfinished():
+            return
         if resume and is_sealed(self.root):
             opened = SealedSet.open(self.root, passphrase, expect=kind)
             self._header: dict[str, object] = dict(opened._header)
@@ -746,6 +1068,14 @@ class SealedSetWriter:
         if is_sealed(self.root):
             raise SealedSetError(f"{self.root} is already a sealed set")
         self.root.mkdir(parents=True, exist_ok=True)
+        created = _new_v3(kind, passphrase)
+        if created is not None:
+            self._header, self._key = created[0], created[1]  # type: ignore[assignment]
+            self._new = True
+            self._write_header()
+            return
+        if not passphrase:
+            raise SealedSetKeyError(missing_key_message(self.root, kind))
         salt = crypto.SetKey.new_salt()
         self._header = {
             "format": FORMAT,
@@ -759,7 +1089,60 @@ class SealedSetWriter:
         self._key = _derive(self._header, passphrase)
         self._write_header()
 
+    def _resume_unfinished(self) -> bool:
+        """Reopen a version 3 run whose writer stopped before finalizing it
+        (a leg cut off mid-run: a crash, or a process killed during an
+        unknown delivery), so a durable resume can carry it on. The header is
+        authenticated first. Each file the earlier leg sealed is adopted only
+        if it authenticates under this set's key at its own path; a
+        structural file the inventory names and another store's ciphertext
+        are adopted as on open. Anything else refuses. False for a finalized
+        set (the ordinary path) or any other kind."""
+        header = read_header(self.root)
+        if (
+            self.kind != "run"
+            or header.get("kind") != "run"
+            or header.get("version") != ENVELOPE_VERSION
+            or isinstance(header.get("index"), str)
+        ):
+            return False
+        key = _open_v3(header)
+        files: dict[str, Codec] = {}
+        hashes: dict[str, str] = {}
+        for physical in _disk_files(self.root):
+            raw = (self.root / physical).read_bytes()
+            if physical.endswith(SEALED_SUFFIX) and raw.startswith(
+                crypto.SET3_FILE_MAGIC
+            ):
+                rel = _check_rel(physical[: -len(SEALED_SUFFIX)])
+                try:
+                    key.open(raw, aad=_file_aad("run", rel))
+                except (crypto.CryptoError, SealedSetError) as exc:
+                    raise SealedSetError(
+                        f"{self.root} was not finalized, and {physical} does not "
+                        "authenticate under its key; refusing to carry it on"
+                    ) from exc
+                files[rel] = "set"
+            else:
+                codec = _adoptable(self.root, "run", physical)
+                if codec is None:
+                    raise SealedSetError(
+                        f"{self.root} holds {physical} in plaintext, outside its "
+                        "sealed writer"
+                    )
+                files[physical] = codec
+                rel = physical
+            hashes[rel] = _sha256(raw)
+        self._header = dict(header)
+        self._key = key  # type: ignore[assignment]
+        self._header_revision = _sha256((self.root / HEADER).read_bytes())
+        self._codecs.update(files)
+        self._hashes.update(hashes)
+        return True
+
     def _write_header(self) -> None:
+        if isinstance(self._key, V3Key):
+            self._key.stamp(self._header)
         raw = json.dumps(self._header, indent=2, sort_keys=True).encode("utf-8")
         _atomic_write(self.root / HEADER, raw)
         self._header_revision = _sha256(raw)
@@ -794,7 +1177,7 @@ class SealedSetWriter:
         entry = self._classified(rel)
         with self._mutation():
             old = self._codecs.get(rel)
-            if entry.classification == "structural":
+            if entry.classification in ("structural", "export"):
                 codec: Codec = "plain"
                 blob = data
             else:
@@ -920,8 +1303,27 @@ class SealedSetWriter:
             # Informational copy for inventories; the authenticated value is
             # the one recomputed from the sealed index on open.
             self._header["set_digest"] = digest
+            if self._new and isinstance(self._key, V3Key) and self.kind != "bundle":
+                self._close_bucket()
             self._write_header()
             return digest
+
+    def _close_bucket(self) -> None:
+        """The set is written: its bucket record loses the runtime stanza, so
+        from now on only the viewer, organization or recovery key opens it.
+        A bundle keeps it: programs replay unattended."""
+        from openadapt_flow import key_hierarchy as kh
+
+        bucket = getattr(self._key, "bucket", None)
+        if bucket is None:
+            return
+        try:
+            kh.close(bucket)
+        except kh.KeyHierarchyError as exc:
+            raise SealedSetError(f"refusing to seal {self.root}: {exc}") from exc
+        if "bucket_record" in self._header:
+            self._header["bucket_record"] = bucket.record
+        self._new = False
 
 
 # -- path-based helpers ------------------------------------------------------
@@ -1012,6 +1414,37 @@ def open_set(root: Path | str, key: Optional[str] = None) -> SealedSet:
                 + " (The local key did not open it.)"
             ) from exc
         raise
+
+
+def store_passphrase_of(writer: "SealedSetWriter") -> Optional[str]:
+    """:func:`store_passphrase` of an open writer's set."""
+    key = getattr(writer, "_key", None)
+    return key.store_passphrase if isinstance(key, V3Key) else None
+
+
+def store_passphrase(run_dir: Path | str) -> Optional[str]:
+    """The passphrase for another store's containers inside a version 3 run
+    (durable checkpoints, approvals, transition evidence), or None when
+    ``run_dir`` is not one.
+
+    It is derived from the set's data key, so it is the same for every
+    process and every leg of a run, and a shred of the set's bucket makes
+    those containers unreadable everywhere, backups included. Only the
+    header is opened (and authenticated), so a run that has not been
+    finalized yet, such as one paused mid-leg, still resolves it. A shredded
+    set, or one no key here opens, refuses: nothing falls back to the
+    long-lived local passphrase.
+    """
+    base = _abs(run_dir)
+    writer = active_writer(base)
+    if writer is not None:
+        return store_passphrase_of(writer)
+    if not is_sealed(base):
+        return None
+    header = read_header(base)
+    if header.get("version") != ENVELOPE_VERSION:
+        return None
+    return _open_v3(header).store_passphrase
 
 
 def _configured(kind: str) -> bool:
@@ -1135,6 +1568,33 @@ def write_bytes(path: Path | str, data: bytes, *, key: Optional[str] = None) -> 
     resumed.finalize()
 
 
+@contextmanager
+def side_lock(path: Path | str, purpose: str) -> Iterator[None]:
+    """A lock for one operation on ``path`` that also writes through the
+    sealed set (whose writer takes the set's own lock for each write, and
+    can't be nested inside it): a private folder per path and purpose."""
+    from openadapt_flow import at_rest
+
+    digest = hashlib.sha256(os.fsencode(_abs(path))).hexdigest()[:32]
+    lock_dir = at_rest._home() / "locks" / f"{purpose}-{digest}"
+    at_rest._private_dir(lock_dir.parent)
+    at_rest._private_dir(lock_dir)
+    with mutation_lock(lock_dir):
+        yield
+
+
+def replace_bytes(path: Path | str, data: bytes) -> None:
+    """Replace ``path`` atomically: through its sealed set when it lies in
+    one (whose writer replaces files atomically), else by a rename."""
+    if is_sealed_path(path):
+        write_bytes(path, data)
+        return
+    target = Path(path)
+    tmp = target.with_name(f".{target.name}.{secrets.token_hex(4)}.tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, target)
+
+
 def write_text(
     path: Path | str, text: str, *, encoding: str = "utf-8", key: Optional[str] = None
 ) -> None:
@@ -1189,8 +1649,230 @@ def require_readable(path: Path | str, what: str) -> None:
         )
 
 
+# -- recipients and shredding --------------------------------------------------
+
+
+def _replace_header(root: Path, header: dict[str, object]) -> None:
+    raw = json.dumps(header, indent=2, sort_keys=True).encode("utf-8")
+    path = root / HEADER
+    tmp = path.with_name(f".{HEADER}.{secrets.token_hex(6)}.tmp")
+    try:
+        with open(tmp, "wb") as fh:
+            fh.write(raw)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    finally:
+        if os.path.lexists(tmp):
+            os.unlink(tmp)
+    if os.name == "posix":
+        fd = os.open(root, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+
+def restore(root: Path | str) -> str:
+    """Restore a set that only the recovery code opens (a backup on a new or
+    reset computer): open it with ``OPENADAPT_RECOVERY_CODE``, wrap its
+    bucket to this computer's device key, and re-stamp the header MACs. From
+    then on it opens here like a set written here. The person runs this on
+    purpose (``at-rest restore DIR --yes``); a set from a header is never
+    opened by the recovery code silently. Returns the device fingerprint."""
+    from openadapt_flow import key_hierarchy as kh
+
+    base = Path(_abs(root))
+    with mutation_lock(base):
+        header = read_header(base)
+        if header.get("version") != ENVELOPE_VERSION or not isinstance(
+            header.get("bucket_record"), dict
+        ):
+            raise SealedSetError(
+                f"{base} keeps no key record in its header; only a solo-mode "
+                "encrypted set is restored with the recovery code"
+            )
+        key = _open_v3(header, restore=True)
+        bucket = key.bucket
+        try:
+            stanza = kh.device_stanza(bucket)  # type: ignore[arg-type]
+        except kh.KeyHierarchyError as exc:
+            raise SealedSetError(f"Not restoring {base}: {exc}") from exc
+        raw_record = header["bucket_record"]
+        assert isinstance(raw_record, dict)
+        record = dict(raw_record)
+        stanzas = [
+            s for s in record.get("stanzas", []) if s.get("fpr") != stanza["fpr"]
+        ]
+        record["stanzas"] = [*stanzas, stanza]
+        header["bucket_record"] = record
+        key.stamp(header)
+        _replace_header(base, header)
+        return stanza["fpr"]
+
+
+def key_record_of(root: Path | str) -> Optional[dict[str, object]]:
+    """The bucket record of a version 3 set (no key material in the clear):
+    inline in the header, or this computer's local copy. None otherwise."""
+    from openadapt_flow import key_hierarchy as kh
+
+    header = read_header(root)
+    if header.get("version") != ENVELOPE_VERSION or header.get("shredded"):
+        return None
+    inline = header.get("bucket_record")
+    try:
+        return kh.find_record(
+            header.get("key_ref") or {},  # type: ignore[arg-type]
+            inline if isinstance(inline, dict) else None,
+        )
+    except kh.KeyHierarchyError:
+        return None
+
+
+_SHRED_HEADER_FIELDS: Final[tuple[str, ...]] = (
+    "bucket_record",
+    "stanzas",
+    "wrapped_key",
+    "salt",
+    "kdf",
+    "kdf_n",
+    "kdf_r",
+    "kdf_p",
+    "mac",
+    "bucket_mac",
+)
+
+
+def _delete_store_files(base: Path) -> list[str]:
+    """Delete the other stores' ciphertext inside a shredded set (durable
+    checkpoints, approvals). Idempotent; the set's own files stay, as
+    ciphertext nobody can open."""
+    removed: list[str] = []
+    for rel in _disk_files(base):
+        path = base / rel
+        try:
+            data = path.read_bytes()
+        except OSError:
+            continue
+        if data[: len(crypto.SET_FILE_MAGIC)] in (
+            crypto.SET_FILE_MAGIC,
+            crypto.SET3_FILE_MAGIC,
+        ):
+            continue  # the set's own ciphertext, now unopenable
+        if crypto.is_encrypted(data):
+            path.unlink()
+            removed.append(rel)
+    return removed
+
+
+def _finish_shred(base: Path, header: dict[str, object]) -> dict[str, object]:
+    """Carry an interrupted or incomplete shred forward: delete any store
+    ciphertext still there, and retry the archive deletion this computer
+    recorded as pending. The header of a shredded set has no MAC, so nothing
+    here is chosen by it: the archive retry acts only on this computer's own
+    pending marker."""
+    from openadapt_flow import key_hierarchy as kh
+
+    previous = header.get("shred_record")
+    record: dict[str, object] = dict(previous) if isinstance(previous, dict) else {}
+    deleted = [*record.get("store_files_deleted", []), *_delete_store_files(base)]  # type: ignore[misc]
+    record["store_files_deleted"] = deleted
+    record["stores_deleted"] = True
+    bucket_id = record.get("bucket_id")
+    archive_done = record.get("archive_complete", record.get("complete")) is not False
+    if not archive_done and isinstance(bucket_id, str):
+        try:
+            archive_done = kh.retry_shred(bucket_id)
+        except kh.KeyHierarchyError:
+            archive_done = False
+        if archive_done:
+            record["copies_destroyed"] = [
+                *record.get("copies_destroyed", []),  # type: ignore[misc]
+                "archive",
+            ]
+    record["archive_complete"] = archive_done
+    record["complete"] = archive_done
+    header["shred_record"] = record
+    _replace_header(base, header)
+    if archive_done and isinstance(bucket_id, str):
+        try:
+            kh.clear_pending_shred(bucket_id)
+        except kh.KeyHierarchyError:
+            pass
+    return record
+
+
+def shred(root: Path | str) -> dict[str, object]:
+    """Crypto-shred a sealed set.
+
+    A version 3 set: authenticate its header with a key this computer holds
+    (so a changed header can't point the deletion at another set's key),
+    then destroy its bucket key's tracked copies (this computer's record,
+    overwritten then deleted, and the copy in the archive the set was
+    written to), drop the record and data-key stanza from the header, and
+    delete the durable checkpoints and other stores' ciphertext inside it.
+    The shred record says ``complete`` only after the last of these. In solo
+    mode (record inline) this reaches only the copy on this disk: backups
+    still hold a record the recovery key opens. An older set loses its salt
+    (v1) or wrapped key (v2) instead. Returns the shred record. It can't be
+    undone.
+    """
+    from openadapt_flow import key_hierarchy as kh
+
+    base = Path(_abs(root))
+    with mutation_lock(base):
+        header = read_header(base)
+        if header.get("shredded"):
+            return _finish_shred(base, header)
+        shred_record: dict[str, object] = {
+            "schema": kh.SHRED_SCHEMA,
+            "copies_destroyed": [],
+            "complete": True,
+        }
+        if header.get("version") == ENVELOPE_VERSION:
+            try:
+                key = _open_v3(header)
+            except SealedSetKeyError as exc:
+                raise SealedSetKeyError(
+                    f"Not shredding {base}: no key this computer holds "
+                    f"authenticates its header ({exc}), so Flow can't tell which "
+                    "key it may destroy. Nothing was destroyed. Shred it where "
+                    "it was written, or as the organization (its archive record "
+                    f"in {kh.buckets_dir()} and {kh.ORG_KEY_FILE_ENV})."
+                ) from exc
+            bucket = key.bucket
+            records = header.get("records") or bucket.record.get("records")  # type: ignore[attr-defined]
+            location = header.get("key_archive")
+            try:
+                shred_record = kh.shred(
+                    bucket.bucket_id,  # type: ignore[attr-defined]
+                    records=str(records) if records else None,
+                    key_archive=str(location) if location else None,
+                )
+            except kh.KeyHierarchyError as exc:
+                raise SealedSetError(f"Not shredding {base}: {exc}") from exc
+        for name in _SHRED_HEADER_FIELDS:
+            header.pop(name, None)
+        header["shredded"] = True
+        header["version"] = ENVELOPE_VERSION
+        header.setdefault("set_id", secrets.token_hex(16))
+        # Durable progress: not complete until the store files are gone too.
+        shred_record["archive_complete"] = shred_record.get("complete") is not False
+        shred_record["complete"] = False
+        shred_record["stores_deleted"] = False
+        shred_record["store_files_deleted"] = []
+        header["shred_record"] = shred_record
+        _replace_header(base, header)
+        return _finish_shred(base, header)
+
+
 __all__ = [
     "BUNDLE_FILES",
+    "ENVELOPE_VERSION",
+    "V3Key",
+    "key_record_of",
+    "shred",
+    "store_passphrase",
     "HEADER",
     "LIBRARY_FILES",
     "RECORDING_ENV_KEY",
@@ -1199,6 +1881,8 @@ __all__ = [
     "SealedSet",
     "SealedSetError",
     "SealedSetKeyError",
+    "SealedSetRestoreRequired",
+    "restore",
     "SealedSetWriter",
     "append_line",
     "classify",
