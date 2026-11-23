@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any, Mapping
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from openadapt_verify import (
     McpifyServer,
@@ -24,9 +26,11 @@ from openadapt_verify import (
 )
 from openadapt_verify.mcpify import (
     JSONRPC_INVALID_PARAMS,
+    JSONRPC_INVALID_REQUEST,
     JSONRPC_METHOD_NOT_FOUND,
     JSONRPC_PARSE_ERROR,
     MCP_PROTOCOL_VERSION,
+    issue_mcpify_receipt,
 )
 
 
@@ -80,6 +84,23 @@ def _init_sqlite_db(db_path: Path) -> None:
             "entry_code TEXT NOT NULL, "
             "quantity INTEGER NOT NULL)"
         )
+
+
+def _handshake_messages() -> list[str]:
+    return [
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": MCP_PROTOCOL_VERSION,
+                    "clientInfo": {"name": "test-client", "version": "1.0"},
+                },
+            }
+        ),
+        json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+    ]
 
 
 def _run_stdio_session(
@@ -196,12 +217,46 @@ def test_stdio_roundtrip_verified_with_ed25519_receipt(tmp_path: Path) -> None:
     receipt = structured["receipt"]
     assert receipt["algorithm"] == "Ed25519"
     assert len(receipt["receipt_digest"]) == 64
-    assert verify_mcpify_receipt(receipt) is True
+    assert (
+        verify_mcpify_receipt(receipt, trusted_public_key=server.public_key_b64) is True
+    )
 
     # Tampering with any payload field invalidates the Ed25519 receipt.
     tampered = json.loads(json.dumps(receipt))
     tampered["payload"]["tool_name"] = "forged_tool"
-    assert verify_mcpify_receipt(tampered) is False
+    assert (
+        verify_mcpify_receipt(tampered, trusted_public_key=server.public_key_b64)
+        is False
+    )
+
+    # Self-vouching forgery with an unrelated Ed25519 key must be rejected.
+    attacker_key = Ed25519PrivateKey.generate()
+    forged = issue_mcpify_receipt(
+        tool_name="steal_funds",
+        arguments={"amount": 1000000},
+        steps=[{"op": "wire"}],
+        readback=ReadbackResult(verdict="VERIFIED", reason="invented"),
+        signing_key=attacker_key,
+    )
+    assert (
+        verify_mcpify_receipt(forged, trusted_public_key=server.public_key_b64) is False
+    )
+
+    # Different arguments produce different steps_sha256 (hashes interpolated steps, not templates).
+    second_resp = server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+                "name": "record_ledger_entry",
+                "arguments": {"entry_code": "ORD-1002", "quantity": 9},
+            },
+        }
+    )
+    assert second_resp is not None
+    receipt2 = second_resp["result"]["structuredContent"]["receipt"]
+    assert receipt2["payload"]["steps_sha256"] != receipt["payload"]["steps_sha256"]
 
 
 def test_stdio_silent_fail_readback_mismatch_halts(tmp_path: Path) -> None:
@@ -225,6 +280,7 @@ def test_stdio_silent_fail_readback_mismatch_halts(tmp_path: Path) -> None:
     responses = _run_stdio_session(
         server,
         [
+            *_handshake_messages(),
             json.dumps(
                 {
                     "jsonrpc": "2.0",
@@ -235,12 +291,12 @@ def test_stdio_silent_fail_readback_mismatch_halts(tmp_path: Path) -> None:
                         "arguments": {"entry_code": "ORD-2002", "quantity": 7},
                     },
                 }
-            )
+            ),
         ],
     )
 
-    assert len(responses) == 1
-    result = responses[0]["result"]
+    assert len(responses) == 2
+    result = responses[1]["result"]
     assert result["isError"] is True
     structured = result["structuredContent"]
     assert structured["status"] == "HALT"
@@ -263,6 +319,7 @@ def test_stdio_readback_abstain_halts_fail_closed(tmp_path: Path) -> None:
     responses = _run_stdio_session(
         server,
         [
+            *_handshake_messages(),
             json.dumps(
                 {
                     "jsonrpc": "2.0",
@@ -273,11 +330,11 @@ def test_stdio_readback_abstain_halts_fail_closed(tmp_path: Path) -> None:
                         "arguments": {"entry_code": "ORD-3003", "quantity": 2},
                     },
                 }
-            )
+            ),
         ],
     )
 
-    result = responses[0]["result"]
+    result = responses[1]["result"]
     assert result["isError"] is True
     structured = result["structuredContent"]
     assert structured["status"] == "HALT"
@@ -302,9 +359,26 @@ def test_stdio_invalid_args_and_unknown_tool_fail_closed(tmp_path: Path) -> None
         return {"llm_calls": 0}
 
     server = McpifyServer(spec, runner=spy_runner)
+    # Calling tools/call before notifications/initialized must be rejected.
+    early = server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "tools/call",
+            "params": {
+                "name": "record_ledger_entry",
+                "arguments": {"entry_code": "ORD-1", "quantity": 1},
+            },
+        }
+    )
+    assert early is not None
+    assert early["error"]["code"] == JSONRPC_INVALID_REQUEST
+    assert runner_calls == 0
+
     responses = _run_stdio_session(
         server,
         [
+            *_handshake_messages(),
             # Missing required argument 'quantity'.
             json.dumps(
                 {
@@ -349,14 +423,15 @@ def test_stdio_invalid_args_and_unknown_tool_fail_closed(tmp_path: Path) -> None
     )
 
     assert runner_calls == 0
-    assert responses[0]["error"]["code"] == JSONRPC_INVALID_PARAMS
-    assert "quantity" in responses[0]["error"]["message"]
+    # responses[0] is initialize
     assert responses[1]["error"]["code"] == JSONRPC_INVALID_PARAMS
-    assert "integer" in responses[1]["error"]["message"]
+    assert "quantity" in responses[1]["error"]["message"]
     assert responses[2]["error"]["code"] == JSONRPC_INVALID_PARAMS
-    assert "Unknown tool" in responses[2]["error"]["message"]
-    assert responses[3]["error"]["code"] == JSONRPC_METHOD_NOT_FOUND
-    assert responses[4]["error"]["code"] == JSONRPC_PARSE_ERROR
+    assert "integer" in responses[2]["error"]["message"]
+    assert responses[3]["error"]["code"] == JSONRPC_INVALID_PARAMS
+    assert "Unknown tool" in responses[3]["error"]["message"]
+    assert responses[4]["error"]["code"] == JSONRPC_METHOD_NOT_FOUND
+    assert responses[5]["error"]["code"] == JSONRPC_PARSE_ERROR
 
 
 def test_nonzero_llm_calls_violates_zero_token_invariant(tmp_path: Path) -> None:
@@ -378,6 +453,10 @@ def test_nonzero_llm_calls_violates_zero_token_invariant(tmp_path: Path) -> None
         return ReadbackResult(verdict="VERIFIED", reason="ok")
 
     server = McpifyServer(spec, runner=leaky_runner, readback_oracle=always_ok_oracle)
+    server.handle_message(
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
+    )
+    server.handle_message({"jsonrpc": "2.0", "method": "notifications/initialized"})
     resp = server.handle_message(
         {
             "jsonrpc": "2.0",
@@ -428,10 +507,27 @@ def test_generate_mcp_client_config_claude_and_cursor(tmp_path: Path) -> None:
 
 def test_cli_serve_and_config_subprocess(tmp_path: Path) -> None:
     json_target = tmp_path / "record.json"
-    json_target.write_text(
-        json.dumps({"entry_code": "CLI-1", "quantity": 3}), encoding="utf-8"
+    # Operator-pinned Ed25519 key loaded via --signing-key.
+    op_key = Ed25519PrivateKey.generate()
+    key_path = tmp_path / "operator.pem"
+    key_path.write_bytes(
+        op_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
     )
+    trusted_pub = op_key.public_key()
+
+    # Executable json_write step: target file does NOT exist beforehand.
     spec_data = _sample_spec_dict(tmp_path / "unused.sqlite")
+    spec_data["steps"] = [
+        {
+            "op": "json_write",
+            "path": str(json_target),
+            "data": {"entry_code": "{entry_code}", "quantity": "{quantity}"},
+        }
+    ]
     spec_data["readback_contract"] = {
         "kind": "json_file",
         "path": str(json_target),
@@ -445,7 +541,7 @@ def test_cli_serve_and_config_subprocess(tmp_path: Path) -> None:
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join([str(verify_src), str(flow_root)])
 
-    # Test `config` subcommand.
+    # Test `config` subcommand with --signing-key.
     cfg_run = subprocess.run(
         [
             sys.executable,
@@ -456,6 +552,8 @@ def test_cli_serve_and_config_subprocess(tmp_path: Path) -> None:
             str(spec_path),
             "--client",
             "claude",
+            "--signing-key",
+            str(key_path),
         ],
         capture_output=True,
         text=True,
@@ -465,14 +563,16 @@ def test_cli_serve_and_config_subprocess(tmp_path: Path) -> None:
     assert cfg_run.returncode == 0, cfg_run.stderr
     parsed_cfg = json.loads(cfg_run.stdout)
     assert "record_ledger_entry" in parsed_cfg["mcpServers"]
+    assert "--signing-key" in parsed_cfg["mcpServers"]["record_ledger_entry"]["args"]
 
-    # Test `serve` subcommand over real stdio pipes.
+    # Test `serve` subcommand over real stdio pipes with pinned --signing-key.
     stdin_payload = (
         "\n".join(
             [
                 json.dumps(
                     {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
                 ),
+                json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}),
                 json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
                 json.dumps(
                     {
@@ -497,6 +597,8 @@ def test_cli_serve_and_config_subprocess(tmp_path: Path) -> None:
             "serve",
             "--spec",
             str(spec_path),
+            "--signing-key",
+            str(key_path),
         ],
         input=stdin_payload,
         capture_output=True,
@@ -505,9 +607,44 @@ def test_cli_serve_and_config_subprocess(tmp_path: Path) -> None:
         check=False,
     )
     assert serve_run.returncode == 0, serve_run.stderr
+    assert json_target.is_file()
     lines = [json.loads(line) for line in serve_run.stdout.strip().splitlines()]
     assert [line["id"] for line in lines] == [1, 2, 3]
     call_res = lines[2]["result"]
     assert call_res["isError"] is False
     assert call_res["structuredContent"]["status"] == "VERIFIED"
-    assert verify_mcpify_receipt(call_res["structuredContent"]["receipt"]) is True
+    assert (
+        verify_mcpify_receipt(
+            call_res["structuredContent"]["receipt"], trusted_public_key=trusted_pub
+        )
+        is True
+    )
+
+    # Non-executing GUI-only spec against a pre-existing matching file MUST HALT (ABSTAIN), never VERIFIED.
+    noop_spec = _sample_spec_dict(tmp_path / "unused.sqlite")
+    noop_spec["readback_contract"] = spec_data["readback_contract"]
+    noop_server = McpifyServer(
+        WorkflowToolSpec.from_dict(noop_spec), signing_key=op_key
+    )
+    noop_resps = _run_stdio_session(
+        noop_server,
+        [
+            *_handshake_messages(),
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 9,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "record_ledger_entry",
+                        "arguments": {"entry_code": "CLI-1", "quantity": 3},
+                    },
+                }
+            ),
+        ],
+    )
+    noop_call = noop_resps[1]["result"]
+    assert noop_call["isError"] is True
+    assert noop_call["structuredContent"]["status"] == "HALT"
+    assert noop_call["structuredContent"]["verdict"] == "ABSTAIN"
+    assert noop_call["structuredContent"]["receipt"] is None

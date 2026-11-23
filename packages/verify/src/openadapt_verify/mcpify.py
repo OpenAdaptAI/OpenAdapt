@@ -1,18 +1,19 @@
 """Compile a deterministic workflow pack into a verified, $0-token local MCP server.
 
 ``openadapt_verify.mcpify`` turns a compiled workflow specification (``.oapack.json``
-or workflow manifest JSON) into a zero-dependency standard-library MCP JSON-RPC 2.0
-``stdio`` server.
+or workflow manifest JSON) into a lightweight MCP JSON-RPC 2.0 ``stdio`` server
+using Python stdlib + ``cryptography`` (no external MCP SDK required).
 
 Every ``tools/call`` invocation:
-1. Validates the tool name and input arguments against the tool's typed JSON Schema
+1. Requires the MCP ``initialize`` + ``notifications/initialized`` handshake.
+2. Validates the tool name and input arguments against the tool's typed JSON Schema
    (fail-closed on unknown tool or missing/invalid arguments).
-2. Runs the compiled deterministic step callback with zero LLM token calls.
-3. Queries an independent read-back oracle against the system of record.
-4. Returns ``VERIFIED`` with a tamper-evident Ed25519 receipt digest only when the
-   independent read-back confirms the expected state; otherwise returns ``HALT``
-   (``isError: true``) with the exact mismatch/abstain reason and human-review
-   handoff details.
+3. Runs the compiled deterministic step callback with zero LLM token calls.
+4. Queries an independent read-back oracle against the system of record.
+5. Returns ``VERIFIED`` with a tamper-evident Ed25519 receipt digest only when a
+   write was applied and independent read-back confirms the expected state;
+   otherwise returns ``HALT`` (``isError: true``) with the exact mismatch/abstain
+   reason and human-review handoff details.
 
 No external MCP SDK is required, and no vision, GUI, or ML dependencies are imported.
 """
@@ -22,6 +23,7 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import hmac
 import json
 import re
 import sqlite3
@@ -353,10 +355,55 @@ def issue_mcpify_receipt(
     )
 
 
-def verify_mcpify_receipt(receipt: Union[SignedReceipt, Mapping[str, Any]]) -> bool:
-    """Verify the Ed25519 signature and digest integrity of a ``SignedReceipt``."""
+def load_signing_key(key_path: Union[str, Path]) -> Ed25519PrivateKey:
+    """Load a PEM-encoded Ed25519 private signing key from disk."""
+    raw = Path(key_path).read_bytes()
+    key = serialization.load_pem_private_key(raw, password=None)
+    if not isinstance(key, Ed25519PrivateKey):
+        raise ValueError(
+            f"Expected an Ed25519 private key in {key_path}, got {type(key).__name__}"
+        )
+    return key
+
+
+def _coerce_trusted_public_key(
+    trusted_public_key: Union[str, bytes, Ed25519PublicKey],
+) -> tuple[Ed25519PublicKey, str]:
+    if isinstance(trusted_public_key, Ed25519PublicKey):
+        raw = trusted_public_key.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        return trusted_public_key, base64.b64encode(raw).decode("ascii")
+    if isinstance(trusted_public_key, bytes):
+        pub = Ed25519PublicKey.from_public_bytes(trusted_public_key)
+        return pub, base64.b64encode(trusted_public_key).decode("ascii")
+    if isinstance(trusted_public_key, str):
+        raw = base64.b64decode(trusted_public_key, validate=True)
+        pub = Ed25519PublicKey.from_public_bytes(raw)
+        return pub, base64.b64encode(raw).decode("ascii")
+    raise TypeError(
+        "trusted_public_key must be a base64 str, 32-byte raw key, or Ed25519PublicKey"
+    )
+
+
+def verify_mcpify_receipt(
+    receipt: Union[SignedReceipt, Mapping[str, Any]],
+    *,
+    trusted_public_key: Union[str, bytes, Ed25519PublicKey],
+) -> bool:
+    """Verify a ``SignedReceipt`` against an operator-pinned Ed25519 public key.
+
+    Refuses self-vouching receipts: *trusted_public_key* is required, the
+    receipt's embedded ``public_key_b64`` must match it in constant time, and
+    the signature is verified strictly using the trusted key.
+    """
     data = receipt.to_dict() if isinstance(receipt, SignedReceipt) else dict(receipt)
     try:
+        trusted_pub, expected_pub_b64 = _coerce_trusted_public_key(trusted_public_key)
+        receipt_pub_b64 = str(data["public_key_b64"])
+        if not hmac.compare_digest(receipt_pub_b64, expected_pub_b64):
+            return False
         payload = data["payload"]
         payload_bytes = _canonical_json_bytes(payload)
         expected_payload_sha = _sha256_hex(payload_bytes)
@@ -368,9 +415,8 @@ def verify_mcpify_receipt(receipt: Union[SignedReceipt, Mapping[str, Any]]) -> b
         )
         if data.get("receipt_digest") != expected_digest:
             return False
-        public_raw = base64.b64decode(str(data["public_key_b64"]), validate=True)
         signature = base64.b64decode(signature_b64, validate=True)
-        Ed25519PublicKey.from_public_bytes(public_raw).verify(signature, payload_bytes)
+        trusted_pub.verify(signature, payload_bytes)
         return True
     except (KeyError, ValueError, TypeError, InvalidSignature):
         return False
@@ -479,11 +525,70 @@ ReadbackOracle = Callable[
 def default_deterministic_runner(
     spec: WorkflowToolSpec, arguments: Mapping[str, Any]
 ) -> dict[str, Any]:
-    """Resolve and execute compiled workflow steps deterministically (0 LLM calls)."""
+    """Resolve and execute compiled workflow steps deterministically (0 LLM calls).
+
+    Executes supported deterministic write ops (``json_write``, ``sqlite_insert``)
+    and tracks ``writes_applied``. Steps with non-executable/UI-only ops do not
+    increment ``writes_applied``, causing independent read-back to fail closed
+    instead of verifying pre-existing state.
+    """
     executed_steps = [_render_value(step, arguments) for step in spec.steps]
+    writes_applied = 0
+    unexecuted_ops: list[str] = []
+
+    for step in executed_steps:
+        if not isinstance(step, Mapping):
+            continue
+        op = step.get("op")
+        if op == "json_write":
+            target_raw = step.get("path")
+            data = step.get("data")
+            if not isinstance(target_raw, str) or not isinstance(data, Mapping):
+                raise ValueError(
+                    "json_write step requires string 'path' and object 'data'"
+                )
+            target = Path(target_raw)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            tmp = target.with_suffix(target.suffix + ".tmp")
+            tmp.write_text(json.dumps(dict(data), sort_keys=True), encoding="utf-8")
+            tmp.replace(target)
+            writes_applied += 1
+        elif op == "sqlite_insert":
+            db_raw = step.get("database")
+            table = step.get("table")
+            values = step.get("values")
+            if (
+                not isinstance(db_raw, str)
+                or not isinstance(table, str)
+                or not _SAFE_SQL_IDENTIFIER_RE.match(table)
+                or not isinstance(values, Mapping)
+                or not values
+            ):
+                raise ValueError(
+                    "sqlite_insert step requires valid 'database', 'table', and non-empty 'values'"
+                )
+            cols = list(values.keys())
+            for col in cols:
+                if not isinstance(col, str) or not _SAFE_SQL_IDENTIFIER_RE.match(col):
+                    raise ValueError(
+                        f"Unsafe column identifier in sqlite_insert: {col!r}"
+                    )
+            placeholders = ", ".join("?" for _ in cols)
+            col_list = ", ".join(cols)
+            with sqlite3.connect(db_raw) as conn:
+                conn.execute(
+                    f"INSERT INTO {table} ({col_list}) VALUES ({placeholders})",
+                    [values[c] for c in cols],
+                )
+            writes_applied += 1
+        elif isinstance(op, str):
+            unexecuted_ops.append(op)
+
     return {
         "executed_steps": executed_steps,
         "step_count": len(executed_steps),
+        "writes_applied": writes_applied,
+        "unexecuted_ops": unexecuted_ops,
         "llm_calls": 0,
     }
 
@@ -495,9 +600,25 @@ def default_readback_oracle(
 ) -> ReadbackResult:
     """Built-in read-back oracle supporting SQLite and JSON file contracts.
 
-    Fails closed (returns ``ABSTAIN``) whenever the contract cannot be read
-    independently or has an unsupported kind.
+    Fails closed (returns ``ABSTAIN``) whenever the runner did not apply a write,
+    the contract cannot be read independently, or the contract kind is unsupported.
     """
+    if (
+        "writes_applied" in execution_output
+        and int(execution_output["writes_applied"]) <= 0
+    ):
+        return ReadbackResult(
+            verdict="ABSTAIN",
+            reason=(
+                "Runner applied 0 writes to the target store; refusing to verify "
+                "pre-existing state without an executed write"
+            ),
+            observed={
+                "writes_applied": 0,
+                "unexecuted_ops": list(execution_output.get("unexecuted_ops", ())),
+            },
+        )
+
     contract = spec.readback_contract
     kind = contract.get("kind")
 
@@ -635,7 +756,7 @@ def default_readback_oracle(
 
 
 class McpifyServer:
-    """Zero-dependency stdlib MCP JSON-RPC 2.0 ``stdio`` server."""
+    """MCP JSON-RPC 2.0 ``stdio`` server (stdlib + ``cryptography``, no MCP SDK)."""
 
     def __init__(
         self,
@@ -798,6 +919,12 @@ class McpifyServer:
     def _handle_tools_call(
         self, request_id: Any, params: Mapping[str, Any]
     ) -> dict[str, Any]:
+        if not self.initialized:
+            return self._error(
+                request_id,
+                JSONRPC_INVALID_REQUEST,
+                "Server not initialized; send 'initialize' and 'notifications/initialized' before 'tools/call'",
+            )
         tool_name = params.get("name")
         if not isinstance(tool_name, str) or tool_name not in self._specs:
             return self._error(
@@ -895,10 +1022,16 @@ class McpifyServer:
                 ),
             )
 
+        raw_executed = execution_output.get("executed_steps")
+        executed_steps: Sequence[Mapping[str, Any]] = (
+            raw_executed
+            if isinstance(raw_executed, list)
+            else [_render_value(step, arguments) for step in spec.steps]
+        )
         receipt = issue_mcpify_receipt(
             tool_name=spec.name,
             arguments=arguments,
-            steps=spec.steps,
+            steps=executed_steps,
             readback=readback,
             signing_key=self._signer,
             llm_calls=0,
@@ -954,6 +1087,7 @@ def generate_mcp_client_config(
     *,
     client: str = "generic",
     python_executable: Optional[str] = None,
+    signing_key_path: Optional[Union[str, Path]] = None,
 ) -> dict[str, Any]:
     """Generate a copy-paste ``mcpServers`` JSON snippet for an MCP client."""
     if client not in SUPPORTED_CLIENTS:
@@ -966,17 +1100,23 @@ def generate_mcp_client_config(
     effective_name = server_name or specs[0].name
     command = python_executable or sys.executable
 
+    args = [
+        "-m",
+        "openadapt_verify.mcpify",
+        "serve",
+        "--spec",
+        str(resolved_spec),
+        "--server-name",
+        effective_name,
+    ]
+    if signing_key_path is not None:
+        args.extend(
+            ["--signing-key", str(Path(signing_key_path).expanduser().resolve())]
+        )
+
     entry: dict[str, Any] = {
         "command": command,
-        "args": [
-            "-m",
-            "openadapt_verify.mcpify",
-            "serve",
-            "--spec",
-            str(resolved_spec),
-            "--server-name",
-            effective_name,
-        ],
+        "args": args,
     }
     if client == "cursor":
         entry["type"] = "stdio"
@@ -1005,6 +1145,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="MCP server name reported in serverInfo (defaults to first tool name).",
     )
+    serve_cmd.add_argument(
+        "--signing-key",
+        default=None,
+        help="Path to a PEM-encoded Ed25519 private key so receipts use a stable operator key across restarts.",
+    )
 
     config_cmd = sub.add_parser(
         "config",
@@ -1026,6 +1171,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Key name under mcpServers (defaults to first tool name).",
     )
+    config_cmd.add_argument(
+        "--signing-key",
+        default=None,
+        help="Optional PEM-encoded Ed25519 private key path to include in the serve args.",
+    )
 
     return parser
 
@@ -1037,7 +1187,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.command == "serve":
         specs = load_workflow_specs(args.spec)
         server_name = args.server_name or specs[0].name
-        server = McpifyServer(specs, server_name=server_name)
+        signing_key = load_signing_key(args.signing_key) if args.signing_key else None
+        server = McpifyServer(specs, server_name=server_name, signing_key=signing_key)
         server.serve_stdio()
         return 0
 
@@ -1046,6 +1197,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             args.spec,
             server_name=args.server_name,
             client=args.client,
+            signing_key_path=args.signing_key,
         )
         print(json.dumps(snippet, indent=2))
         return 0
