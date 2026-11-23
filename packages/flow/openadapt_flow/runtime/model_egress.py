@@ -252,3 +252,86 @@ def model_calls_in_process(result: Any) -> int:
     return int(
         _grounder_resolution(result, local=True) + result.local_identity_vlm_calls
     )
+
+
+class ModelComponentMixin:
+    """Wrap model components on every assignment for fail-closed egress recording."""
+
+    @property
+    def _egress(self) -> EgressRecorder:
+        """The egress recorder, created on first use when ``__init__`` didn't run.
+
+        Every assignment to ``grounder``, ``identity_vlm`` or
+        ``state_verifier`` goes through :meth:`_set_model_component`, which
+        wraps the component with this recorder. A replayer built without
+        ``__init__`` (``Replayer.__new__``, a stubbed constructor) therefore
+        gets its recorder here, at the first assignment or call. An unbound
+        recorder admits nothing unless ``OPENADAPT_FLOW_EGRESS_LEDGER`` names
+        a ledger, so an off-box call made outside ``run`` is refused.
+        """
+
+        recorder = self.__dict__.get("_egress_recorder")
+        if recorder is None:
+            recorder = EgressRecorder()
+            self.__dict__["_egress_recorder"] = recorder
+        return recorder
+
+    def _get_model_component(self, kind: str) -> Any:
+        try:
+            return self.__dict__["_model_" + kind]
+        except KeyError:
+            raise AttributeError(kind) from None
+
+    def _set_model_component(self, kind: str, component: Any) -> None:
+        """Wrap ``component`` for recording and store it, at any time.
+
+        Assigning a component after construction gets the same treatment as
+        passing it to ``__init__``: one that may send a frame off the box
+        needs ``allow_model_grounding`` (else :class:`EgressNotPermitted`),
+        marks the run as one whose screenshots may leave the box, and is
+        ledgered and counted on every call.
+        """
+
+        from openadapt_flow.runtime.grounder import component_may_egress
+        from openadapt_flow.runtime.replay._shared import EgressNotPermitted
+
+        if component_may_egress(component):
+            if not self.__dict__.get("allow_model_grounding", False):
+                raise EgressNotPermitted(
+                    f"refusing to wire an egress-capable {kind} that could "
+                    "send a screenshot off the box: pass "
+                    "allow_model_grounding=True (CLI: --allow-model-grounding) "
+                    "to opt in explicitly."
+                )
+            self.__dict__["_screenshots_may_leave_box"] = True
+        self.__dict__["_model_" + kind] = self._egress.wrap(kind, component)
+
+    @property
+    def grounder(self) -> Any:
+        """The grounder, wrapped for egress recording on every assignment."""
+
+        return self._get_model_component("grounder")
+
+    @grounder.setter
+    def grounder(self, component: Any) -> None:
+        self._set_model_component("grounder", component)
+
+    @property
+    def identity_vlm(self) -> Any:
+        """The identity VLM, wrapped for egress recording on every assignment."""
+
+        return self._get_model_component("identity_vlm")
+
+    @identity_vlm.setter
+    def identity_vlm(self, component: Any) -> None:
+        self._set_model_component("identity_vlm", component)
+
+    @property
+    def state_verifier(self) -> Any:
+        """The state verifier, wrapped for egress recording on every assignment."""
+
+        return self._get_model_component("state_verifier")
+
+    @state_verifier.setter
+    def state_verifier(self, component: Any) -> None:
+        self._set_model_component("state_verifier", component)

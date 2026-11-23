@@ -263,12 +263,14 @@ def _history(
 
     from openadapt_types import receipt as r
 
+    from openadapt_flow import sealed_set
     from openadapt_flow.handoffs.followup import SIDECAR
 
-    orphans = (
-        any(run_dir.glob("receipt.update-*.json")) or (run_dir / SIDECAR).is_file()
-    )
-    if not (run_dir / r.RECEIPT_FILE).is_file() and not orphans:
+    # Read through the run's sealed set: it is encrypted by default.
+    orphans = bool(
+        sealed_set.list_files(run_dir, "receipt.update-*.json")
+    ) or sealed_set.is_file(run_dir / SIDECAR)
+    if not sealed_set.is_file(run_dir / r.RECEIPT_FILE) and not orphans:
         return {"error": "no receipt.json in the run"} if sign else None
     try:
         from openadapt_flow.handoffs.followup import sign_updates, verify_history

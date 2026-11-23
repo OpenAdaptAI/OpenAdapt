@@ -3,21 +3,25 @@ import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
-// The app bundles two SIL OFL 1.1 fonts (src/styles/fonts/SOURCES.md). The
+// The app bundles SIL OFL 1.1 fonts from its local and shared theme sources. The
 // licence has to travel with every copy of a font, so the built frontend
-// carries both licence files next to the fonts it ships.
-const FONT_LICENCES = ["OFL-PublicSans.txt", "OFL-SourceSerif4.txt"];
+// carries each licence next to the fonts it ships.
+const FONT_LICENCES = [
+  ["OFL-PublicSans.txt", "./src/styles/fonts/OFL-PublicSans.txt"],
+  ["OFL-SourceSerif4.txt", "./src/styles/fonts/OFL-SourceSerif4.txt"],
+  ["OFL-InterTight.txt", "./src/styles/vendor/semantic-theme/fonts/OFL-InterTight.txt"],
+];
 
 function fontLicences(): Plugin {
   return {
     name: "openadapt-font-licences",
     apply: "build",
     generateBundle() {
-      for (const name of FONT_LICENCES) {
+      for (const [name, source] of FONT_LICENCES) {
         this.emitFile({
           type: "asset",
           fileName: `licenses/${name}`,
-          source: readFileSync(new URL(`./src/styles/fonts/${name}`, import.meta.url), "utf8"),
+          source: readFileSync(new URL(source, import.meta.url), "utf8"),
         });
       }
     },

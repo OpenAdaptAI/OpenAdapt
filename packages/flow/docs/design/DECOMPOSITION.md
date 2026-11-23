@@ -604,6 +604,8 @@ PR #2280 raised `replayer.py` by 12 lines: the call sites of the clock-text chec
 
 PR #2295 raised `replayer.py`, `ir.py`, `interactive_recorder.py` and `playwright_backend.py`: the dropdown choice contract, its dispatch and read-back, unexpected-dialog stops, and the recorder's choice and dialog hooks; the page-side capture code and the actuator live in `choice_capture.py` and `backends/choice.py`. The pinned dialog methods delegate to `runtime/dialog_delivery.py`, preserving the original document arm without rearming after input.
 
+The encryption-at-rest default lowered `__main__.py`: the `at-rest` command, `--no-encrypt`, the desktop recording key, the version 3 key precheck and their command-table entries live in `cli_at_rest.py`.
+
 <!-- size-ratchet:begin -->
 | File | Line budget |
 |---|---:|
