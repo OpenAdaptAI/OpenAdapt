@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 from openadapt_types import receipt as receipt_lib
+
 from openadapt_verify import (
     CommitBlockedError,
     CommitResult,
