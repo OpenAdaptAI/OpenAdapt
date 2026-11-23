@@ -2,11 +2,14 @@
 #
 # Called from packages.yml when a change touches packages/desktop, so its jobs
 # feed the required packages-gate. Pull requests and the merge queue run one
-# Linux lane (Python 3.12). Every push to main and every dispatch run Linux,
-# macOS and Windows on Python 3.11 and 3.12 (Windows checks files out with CRLF
-# and has its own paths). desktop-release.yml releases only from a push-to-main
-# run whose desktop jobs passed, so no release is built without the full
-# matrix.
+# Linux lane (Python 3.12). Every push to main runs Linux on Python 3.11 and
+# 3.12, and macOS and Windows on 3.12 (Windows checks files out with CRLF and
+# has its own paths). macOS and Windows on 3.11 run in the nightly run, on a
+# dispatch, and on every push while Desktop's version has no release tag yet.
+# tests/test_release_intent.py runs in its own job with the same matrix, so a
+# slow Windows runner cannot spend the engine-test budget on git fixtures.
+# desktop-release.yml releases only that version, from a push-to-main run
+# whose desktop jobs passed, so no release is built without the full matrix.
 # Ported from openadapt-desktop's test.yml.
 name: Desktop test
 
@@ -21,15 +24,59 @@ defaults:
     working-directory: packages/desktop
 
 jobs:
+  release-pending:
+    # Push to main only: is Desktop's version still unreleased? Its push run
+    # is then the evidence desktop-release.yml releases from, so it keeps
+    # macOS and Windows on Python 3.11. Any doubt counts as unreleased.
+    name: release pending
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      pending: ${{ steps.tag.outputs.pending }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: packages/desktop/pyproject.toml
+          sparse-checkout-cone-mode: false
+      - name: Look up this version's release tag
+        id: tag
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')" || version=
+          tag="openadapt-desktop-v${version}"
+          # --exit-code: 0 when the tag exists, 2 when it does not, anything
+          # else when the lookup failed.
+          rc=0
+          git ls-remote --exit-code --tags "https://github.com/${REPOSITORY}.git" "refs/tags/${tag}" >/dev/null || rc=$?
+          if [ -n "${version}" ] && [ "${rc}" -eq 0 ]; then
+            echo "${tag} is released: macOS and Windows on Python 3.11 run nightly."
+            echo "pending=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "${tag:-the version} has no release tag yet (lookup ${rc}): the full matrix runs."
+            echo "pending=true" >> "$GITHUB_OUTPUT"
+          fi
+
   test-python:
     name: Python engine tests (${{ matrix.os }}, py${{ matrix.python-version }})
+    needs: release-pending
+    # release-pending runs only on a push; elsewhere it is skipped. Neither a
+    # skipped nor a failed lookup skips these tests: without its answer the
+    # full matrix runs.
+    if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
-        # PR and queue tiers: Linux, one Python. Main and dispatch run macOS
-        # and Windows (CRLF checkouts, Windows paths) on both Pythons.
+        # PR and queue tiers: Linux, one Python. Main, nightly and dispatch
+        # run macOS and Windows (CRLF checkouts, Windows paths) on both
+        # Pythons, except that a push to main whose Desktop version is
+        # already released leaves macOS and Windows on 3.11 to the nightly run.
         os: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
         python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.11", "3.12"]') }}
+        exclude: ${{ fromJSON((github.event_name == 'push' && needs.release-pending.outputs.pending == 'false') && '[{"os":"macos-latest","python-version":"3.11"},{"os":"windows-latest","python-version":"3.11"}]' || '[]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
@@ -38,7 +85,7 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: packages/desktop/uv.lock
@@ -95,7 +142,44 @@ jobs:
       - name: Run tests
         env:
           OPENADAPT_DESKTOP_FLOW_CONTRACT: source
-        run: uv run --no-sync pytest tests/ -v
+        run: uv run --no-sync pytest tests/ --ignore=tests/test_release_intent.py -v
+
+
+  # Same OS/Python matrix as the engine tests. This file starts thousands of
+  # real git processes and recopies large lockfiles; on Windows Python 3.12
+  # that used to exhaust the 45-minute engine-test job while other tests were
+  # still running. The timeout is unchanged. Assertions are unchanged.
+  release-intent-tests:
+    name: Release intent tests (${{ matrix.os }}, py${{ matrix.python-version }})
+    needs: release-pending
+    if: ${{ !cancelled() }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.11", "3.12"]') }}
+        exclude: ${{ fromJSON((github.event_name == 'push' && needs.release-pending.outputs.pending == 'false') && '[{"os":"macos-latest","python-version":"3.11"},{"os":"windows-latest","python-version":"3.11"}]' || '[]') }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: packages/desktop/uv.lock
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install locked dependencies
+        run: uv sync --locked --python ${{ matrix.python-version }} --extra dev --extra build
+
+      - name: Run release-intent tests
+        run: uv run --no-sync pytest tests/test_release_intent.py -v
 
   qualification-contract:
     name: Qualification contract (bundled Flow)
@@ -109,7 +193,7 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: packages/desktop/uv.lock

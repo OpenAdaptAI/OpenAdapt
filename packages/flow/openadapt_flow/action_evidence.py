@@ -184,6 +184,10 @@ def _delivery_receipt_error(
     *,
     params: Mapping[str, RuntimeParamScalar],
 ) -> Optional[str]:
+    if step.choice is not None:
+        # docs/CHOICES.md: a dropdown choice is proven by its read-back, not
+        # by a typed delivery receipt, so receipt-bound runs refuse it.
+        return "dropdown choice steps carry no delivery receipt; refusing"
     receipt = result.delivery_receipt
     if receipt is None:
         return "GUI action lacks its exact delivery receipt"
@@ -430,7 +434,11 @@ def action_evidence_error(
                     return f"drag endpoint: {error}"
         elif result.drag_end_resolution is not None:
             return "non-drag action contains a drag endpoint resolution"
-        if step.action in {ActionKind.TYPE, ActionKind.SELECT_OPTION}:
+        if step.action in {
+            ActionKind.TYPE,
+            ActionKind.SELECT_OPTION,
+            ActionKind.SECOND_FACTOR,
+        }:
             if strict_production and result.input_verified is not True:
                 return "GUI input action lacks exact readback verification"
             if result.input_verified not in {None, True}:
@@ -442,7 +450,8 @@ def action_evidence_error(
             if receipt_error is not None:
                 return receipt_error
     elif (
-        step.action in (ActionKind.WAIT, ActionKind.SWITCH_SURFACE)
+        step.action
+        in (ActionKind.WAIT, ActionKind.SWITCH_SURFACE, ActionKind.SECOND_FACTOR)
         and actuation is None
     ):
         if result.delivery_attempted not in {None, False}:

@@ -27,6 +27,7 @@ from openadapt_flow.ir import (
     ProgramExecutionScopeFrame,
     Workflow,
 )
+from openadapt_flow.private_file import open_binary
 from openadapt_flow.runtime.authorization import RuntimeParamScalar
 from openadapt_flow.runtime.durable.approval import (
     ApprovalRecord,
@@ -300,7 +301,7 @@ class BusinessDecisionStore:
     def _fsync_parent(path: Path) -> None:
         if os.name == "nt":
             return
-        descriptor = os.open(path.parent, os.O_RDONLY)
+        descriptor = open_binary(path.parent, os.O_RDONLY)
         try:
             os.fsync(descriptor)
         finally:
@@ -331,7 +332,7 @@ class BusinessDecisionStore:
         if os.name != "nt":
             os.chmod(path.parent, 0o700)
         temporary = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
-        descriptor = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        descriptor = open_binary(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         try:
             with os.fdopen(descriptor, "wb") as handle:
                 handle.write(payload)
@@ -357,7 +358,7 @@ class BusinessDecisionStore:
             self.run_dir.mkdir(parents=True, exist_ok=True)
             key = secrets.token_bytes(32)
             try:
-                descriptor = os.open(
+                descriptor = open_binary(
                     self.key_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600
                 )
             except FileExistsError:
@@ -391,7 +392,7 @@ class BusinessDecisionStore:
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
         try:
-            descriptor = os.open(self.lock_path, flags, 0o600)
+            descriptor = open_binary(self.lock_path, flags, 0o600)
         except OSError as exc:
             raise BusinessDecisionRefused(
                 "the business decision lock cannot be opened safely"

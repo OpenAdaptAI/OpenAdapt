@@ -552,6 +552,11 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
             Path(server_path or agent_server.__file__),
             rf"{guest_dir}\win_agent_server.py",
         )
+        for helper in ("keyboard_lease", "native_value"):
+            self.push_file(
+                Path(agent_server.__file__).with_name(helper + ".py"),
+                rf"{guest_dir}\win_agent_{helper}.py",
+            )
         if allow_qualification_faults:
             helper = Path(server_path or agent_server.__file__).with_name(
                 "qualification_faults.py"

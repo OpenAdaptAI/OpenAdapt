@@ -1,0 +1,501 @@
+{
+ "click": "8.5.0",
+ "help": {
+  "openadapt": "Usage: openadapt [OPTIONS] COMMAND [ARGS]...\n\n  Record, compile and run workflows with OpenAdapt.\n\n  Compile a demonstrated workflow into deterministic local replay. Healthy runs make no model calls;\n  configured checks can halt on ambiguity. Native and remote substrates use platform-specific extras\n  and permissions; training/evaluation commands are research.\n\n  Quick Start (uv fetches Python 3.12 if needed):\n      uvx --python 3.12 openadapt@latest quickstart\n  Or, on Python 3.10-3.12:\n      python -m pip install --upgrade openadapt\n      openadapt quickstart\n\n  Manual Demo Lifecycle:\n      openadapt flow demo-record --out rec\n      openadapt compile rec --out bundle --name demo\n      openadapt flow lint bundle\n      openadapt flow certify bundle --policy permissive\n      openadapt flow replay bundle --demo-app\n\n  Lint lists the demo's coverage gaps. The demo has warnings, so `lint --strict` exits 1 on it. The\n  manual demo is runnable but not certified for consequential work. Use `openadapt flow tutorial`\n  for the effect-verified first run.\n\n  Give an MCP client your compiled workflows:\n      openadapt agent serve --bundles DIR --mode production\n\nOptions:\n  --version  Show the version and exit.\n  --help     Show this message and exit.\n\nCommands:\n  demo      Try the demonstration and tutorial\n  verify    Check effects, receipts, and evidence\n  record    Record a task and its narration\n  teach     Teach a correction to a stopped workflow\n  compile   Compile and prepare workflow bundles\n  run       Run, resume, and route workflows\n  approve   Review and approve paused work\n  undo      Declare and run approved undo steps\n  qualify   Qualify a workflow for its intended use\n  repair    Review, test, and promote repairs\n  inspect   Inspect workflows, runs, and reports\n  workflow  Manage reusable workflow libraries\n  services  Run local services and connectors\n  setup     Configure connections, privacy, and access\n  research  Run benchmarks and research tools\n  wrap      Run an agent task once, then reuse its checked compiled tool\n\nLegacy commands:\n  agent       Serve compiled workflows to an MCP client...\n  bench       Public benchmarks you can rerun with your...\n  capture     Standalone local human GUI capture...\n  connect     Connect this computer to the signed-in...\n  deploy      Check this host and print the safe...\n  doctor      Check system requirements and dependencies.\n  eval        Research: evaluate computer-use models on...\n  flight      Record any agent you already run, and hold...\n  flow        Run the canonical demonstration compiler...\n  handoff     Hand a result to another agent with its...\n  hooks       Check a coding agent's writes to declared...\n  login       Sign in to OpenAdapt Cloud: `openadapt...\n  plan        Dry-run a batch of writes to external...\n  proxy       Hold the database credentials; give the...\n  pull        Download a packaged workflow: `openadapt...\n  quickstart  Show a task once, run it, then watch it...\n  receipt     Check, view and share a run's receipt:...\n  serve       Research: serve the training dashboard and...\n  shadow      Check each write your agent makes against...\n  train       Research: train ML models on captured...\n  version     Show version information for all packages.",
+  "openadapt approve": "Usage: openadapt approve [OPTIONS]\n\n  Run the canonical demonstration compiler and governed runtime.\n\n  Every argument passes to openadapt-flow unchanged. This keeps the launcher command list, help,\n  options, validation, and exit codes identical to the installed engine version.\n\nOptions:\n  --help  Show this message and exit.",
+  "openadapt compile": "Usage: openadapt compile [OPTIONS]\n\n  Compile a recording. Uses the same options as flow compile.\n\nOptions:\n  --help  Show this message and exit.",
+  "openadapt demo": "Usage: openadapt demo [OPTIONS]\n\n  Run the canonical demonstration compiler and governed runtime.\n\n  Every argument passes to openadapt-flow unchanged. This keeps the launcher command list, help,\n  options, validation, and exit codes identical to the installed engine version.\n\nOptions:\n  --help  Show this message and exit.",
+  "openadapt inspect": "Usage: openadapt inspect [OPTIONS]\n\n  Run the canonical demonstration compiler and governed runtime.\n\n  Every argument passes to openadapt-flow unchanged. This keeps the launcher command list, help,\n  options, validation, and exit codes identical to the installed engine version.\n\nOptions:\n  --help  Show this message and exit.",
+  "openadapt qualify": "Usage: openadapt qualify [OPTIONS]\n\n  Run the canonical demonstration compiler and governed runtime.\n\n  Every argument passes to openadapt-flow unchanged. This keeps the launcher command list, help,\n  options, validation, and exit codes identical to the installed engine version.\n\nOptions:\n  --help  Show this message and exit.",
+  "openadapt record": "Usage: openadapt record [OPTIONS]\n\n  Record a workflow. Uses the same options as flow record.\n\nOptions:\n  --help  Show this message and exit.",
+  "openadapt repair": "Usage: openadapt repair [OPTIONS]\n\n  Run the canonical demonstration compiler and governed runtime.\n\n  Every argument passes to openadapt-flow unchanged. This keeps the launcher command list, help,\n  options, validation, and exit codes identical to the installed engine version.\n\nOptions:\n  --help  Show this message and exit.",
+  "openadapt research": "Usage: openadapt research [OPTIONS]\n\n  Run the canonical demonstration compiler and governed runtime.\n\n  Every argument passes to openadapt-flow unchanged. This keeps the launcher command list, help,\n  options, validation, and exit codes identical to the installed engine version.\n\nOptions:\n  --help  Show this message and exit.",
+  "openadapt run": "Usage: openadapt run [OPTIONS]\n\n  Run a bundle with its checks. Uses the same options as flow run.\n\nOptions:\n  --help  Show this message and exit.",
+  "openadapt services": "Usage: openadapt services [OPTIONS]\n\n  Run the canonical demonstration compiler and governed runtime.\n\n  Every argument passes to openadapt-flow unchanged. This keeps the launcher command list, help,\n  options, validation, and exit codes identical to the installed engine version.\n\nOptions:\n  --help  Show this message and exit.",
+  "openadapt setup": "Usage: openadapt setup [OPTIONS]\n\n  Add OpenAdapt to Claude Code, Cursor, Codex and Gemini CLI.\n\n  For each one installed, register the OpenAdapt MCP server and install a skill that tells the agent\n  how to turn an app task into a tool it can call again. By default the agent teaches read-only\n  tasks in web apps. With --app and --verify it teaches saves in that one app, on the web, the\n  desktop, or over RDP or Citrix. Prints every change. Running it again changes nothing that is\n  already set up.\n\nOptions:\n  --dry-run                       List what setup would change, and change nothing.\n  --undo                          Reverse what earlier setup runs changed.\n  --client [claude|cursor|codex|gemini]\n                                  Set up only this client (repeat for more). Default: every one\n                                  found.\n  --app FILE                      deploy.yaml naming one app (web, desktop, RDP or Citrix). The\n                                  agent then teaches saves in that app, each read back with\n                                  --verify.\n  --verify FILE                   With --app: the verify.yaml that reads the app's system of record.\n  --authorization FILE            With --app: a person's signed teach authorization (openadapt-flow\n                                  teach-authorization). Without one, nothing the agent teaches is\n                                  admitted.\n  --help                          Show this message and exit.\n\n  Also available as: setup clients Operations: clients, connect, deploy, doctor, version",
+  "openadapt teach": "Usage: openadapt teach [OPTIONS]\n\n  Run the canonical demonstration compiler and governed runtime.\n\n  Every argument passes to openadapt-flow unchanged. This keeps the launcher command list, help,\n  options, validation, and exit codes identical to the installed engine version.\n\nOptions:\n  --help  Show this message and exit.",
+  "openadapt undo": "Usage: openadapt undo [OPTIONS]\n\n  Run the canonical demonstration compiler and governed runtime.\n\n  Every argument passes to openadapt-flow unchanged. This keeps the launcher command list, help,\n  options, validation, and exit codes identical to the installed engine version.\n\nOptions:\n  --help  Show this message and exit.",
+  "openadapt verify": "Usage: openadapt verify [OPTIONS] COMMAND [ARGS]...\n\n  Verify writes against the system of record, for any agent.\n\n  Around each write your agent makes, it gets a verified receipt or a refusal, never an unverified\n  success. Python agents use the SDK (`from openadapt.verify import ...`); any MCP client uses\n  `openadapt verify serve`.\n\nOptions:\n  --help  Show this message and exit.\n\nCommands:\n  ledger  Writes whose outcome isn't known yet, held so they aren't sent twice.\n  serve   Serve verify_contracts, verify_begin, verify_check and verify_recheck over MCP (stdio).",
+  "openadapt verify ledger": "Usage: openadapt verify ledger [OPTIONS] COMMAND [ARGS]...\n\n  Writes whose outcome isn't known yet, held so they aren't sent twice.\n\n  Every verified write goes through the ledger. A write that may have landed, or was refuted, is\n  held: no worker sends it again until a read-back resolves it (`reconcile`) or a person checks the\n  record (`release`). The ledger holds no record values.\n\nOptions:\n  --help  Show this message and exit.\n\nCommands:\n  list       Show held and open writes: key, state, when it began, outcome.\n  reconcile  Read held writes back and resolve the ones the store now settles.\n  release    Release a held write after a person checked the record.",
+  "openadapt verify ledger list": "Usage: openadapt verify ledger list [OPTIONS]\n\n  Show held and open writes: key, state, when it began, outcome.\n\n  Also each provisional CONFIRMED whose recheck is still owed, with its due time, so a recheck isn't\n  lost when the server that holds it restarts.\n\nOptions:\n  --ledger DIRECTORY  Ledger folder (must match the configured protected journal, if set).\n  --help              Show this message and exit.",
+  "openadapt verify ledger reconcile": "Usage: openadapt verify ledger reconcile [OPTIONS] [KEY]\n\n  Read held writes back and resolve the ones the store now settles.\n\nOptions:\n  --contracts DIRECTORY  Folder of write contracts (<name>.yaml) the writes were made under.\n                         [required]\n  --ledger DIRECTORY     Ledger folder (must match the configured protected journal, if set).\n  --help                 Show this message and exit.",
+  "openadapt verify ledger release": "Usage: openadapt verify ledger release [OPTIONS] KEY\n\n  Release a held write after a person checked the record.\n\nOptions:\n  --by TEXT                Who checked the record.  [required]\n  --reason TEXT            What they found.  [required]\n  --found [absent|landed]  absent: the write isn't in the store, so it may be sent again. landed: it\n                           is, so it is never sent again.  [required]\n  --ledger DIRECTORY       Ledger folder (must match the configured protected journal, if set).\n  --help                   Show this message and exit.",
+  "openadapt verify serve": "Usage: openadapt verify serve [OPTIONS]\n\n  Serve verify_contracts, verify_begin, verify_check and verify_recheck over MCP (stdio).\n\nOptions:\n  --contracts DIRECTORY  Folder of write contracts (<name>.yaml, openadapt.verify/v1).  [required]\n  --state DIRECTORY      Where baselines and receipts go (default ~/.openadapt/verify).\n  --help                 Show this message and exit.",
+  "openadapt workflow": "Usage: openadapt workflow [OPTIONS]\n\n  Run the canonical demonstration compiler and governed runtime.\n\n  Every argument passes to openadapt-flow unchanged. This keeps the launcher command list, help,\n  options, validation, and exit codes identical to the installed engine version.\n\nOptions:\n  --help  Show this message and exit.",
+  "openadapt wrap": "Usage: openadapt wrap [OPTIONS]\n\n  Run an agent task once, then reuse its checked compiled tool.\n\nOptions:\n  --help  Show this message and exit."
+ },
+ "python": "3.12",
+ "tree": {
+  "openadapt": {
+   "commands": {
+    "approve": false,
+    "compile": false,
+    "demo": false,
+    "inspect": false,
+    "qualify": false,
+    "record": false,
+    "repair": false,
+    "research": false,
+    "run": false,
+    "services": false,
+    "setup": false,
+    "teach": false,
+    "undo": false,
+    "verify": false,
+    "workflow": false,
+    "wrap": false
+   },
+   "group": true,
+   "hidden": false,
+   "params": [
+    {
+     "choices": null,
+     "default": "<Sentinel>",
+     "help": "Show the version and exit.",
+     "hidden": false,
+     "is_flag": true,
+     "kind": "Option",
+     "multiple": false,
+     "name": "version",
+     "nargs": 1,
+     "opts": [
+      "--version"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BoolParamType"
+    }
+   ]
+  },
+  "openadapt approve": {
+   "commands": {},
+   "group": false,
+   "hidden": false,
+   "params": []
+  },
+  "openadapt compile": {
+   "commands": {},
+   "group": false,
+   "hidden": false,
+   "params": []
+  },
+  "openadapt demo": {
+   "commands": {},
+   "group": false,
+   "hidden": false,
+   "params": []
+  },
+  "openadapt inspect": {
+   "commands": {},
+   "group": false,
+   "hidden": false,
+   "params": []
+  },
+  "openadapt qualify": {
+   "commands": {},
+   "group": false,
+   "hidden": false,
+   "params": []
+  },
+  "openadapt record": {
+   "commands": {},
+   "group": false,
+   "hidden": false,
+   "params": []
+  },
+  "openadapt repair": {
+   "commands": {},
+   "group": false,
+   "hidden": false,
+   "params": []
+  },
+  "openadapt research": {
+   "commands": {},
+   "group": false,
+   "hidden": false,
+   "params": []
+  },
+  "openadapt run": {
+   "commands": {},
+   "group": false,
+   "hidden": false,
+   "params": []
+  },
+  "openadapt services": {
+   "commands": {},
+   "group": false,
+   "hidden": false,
+   "params": []
+  },
+  "openadapt setup": {
+   "commands": {},
+   "group": false,
+   "hidden": false,
+   "params": [
+    {
+     "choices": null,
+     "default": "<Sentinel>",
+     "help": "List what setup would change, and change nothing.",
+     "hidden": false,
+     "is_flag": true,
+     "kind": "Option",
+     "multiple": false,
+     "name": "dry_run",
+     "nargs": 1,
+     "opts": [
+      "--dry-run"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BoolParamType"
+    },
+    {
+     "choices": null,
+     "default": "<Sentinel>",
+     "help": "Reverse what earlier setup runs changed.",
+     "hidden": false,
+     "is_flag": true,
+     "kind": "Option",
+     "multiple": false,
+     "name": "undo",
+     "nargs": 1,
+     "opts": [
+      "--undo"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BoolParamType"
+    },
+    {
+     "choices": [
+      "claude",
+      "cursor",
+      "codex",
+      "gemini"
+     ],
+     "default": "<Sentinel>",
+     "help": "Set up only this client (repeat for more). Default: every one found.",
+     "hidden": false,
+     "is_flag": false,
+     "kind": "Option",
+     "multiple": true,
+     "name": "only",
+     "nargs": 1,
+     "opts": [
+      "--client"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "Choice"
+    },
+    {
+     "choices": null,
+     "default": "<Sentinel>",
+     "help": "deploy.yaml naming one app (web, desktop, RDP or Citrix). The agent then teaches saves in that app, each read back with --verify.",
+     "hidden": false,
+     "is_flag": false,
+     "kind": "Option",
+     "multiple": false,
+     "name": "app_config",
+     "nargs": 1,
+     "opts": [
+      "--app"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "Path"
+    },
+    {
+     "choices": null,
+     "default": "<Sentinel>",
+     "help": "With --app: the verify.yaml that reads the app's system of record.",
+     "hidden": false,
+     "is_flag": false,
+     "kind": "Option",
+     "multiple": false,
+     "name": "verify_config",
+     "nargs": 1,
+     "opts": [
+      "--verify"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "Path"
+    },
+    {
+     "choices": null,
+     "default": "<Sentinel>",
+     "help": "With --app: a person's signed teach authorization (openadapt-flow teach-authorization). Without one, nothing the agent teaches is admitted.",
+     "hidden": false,
+     "is_flag": false,
+     "kind": "Option",
+     "multiple": false,
+     "name": "authorization",
+     "nargs": 1,
+     "opts": [
+      "--authorization"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "Path"
+    }
+   ]
+  },
+  "openadapt teach": {
+   "commands": {},
+   "group": false,
+   "hidden": false,
+   "params": []
+  },
+  "openadapt undo": {
+   "commands": {},
+   "group": false,
+   "hidden": false,
+   "params": []
+  },
+  "openadapt verify": {
+   "commands": {
+    "ledger": false,
+    "serve": false
+   },
+   "group": true,
+   "hidden": false,
+   "params": []
+  },
+  "openadapt verify ledger": {
+   "commands": {
+    "list": false,
+    "reconcile": false,
+    "release": false
+   },
+   "group": true,
+   "hidden": false,
+   "params": []
+  },
+  "openadapt verify ledger list": {
+   "commands": {},
+   "group": false,
+   "hidden": false,
+   "params": [
+    {
+     "choices": null,
+     "default": null,
+     "help": "Ledger folder (must match the configured protected journal, if set).",
+     "hidden": false,
+     "is_flag": false,
+     "kind": "Option",
+     "multiple": false,
+     "name": "ledger_dir",
+     "nargs": 1,
+     "opts": [
+      "--ledger"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "Path"
+    }
+   ]
+  },
+  "openadapt verify ledger reconcile": {
+   "commands": {},
+   "group": false,
+   "hidden": false,
+   "params": [
+    {
+     "choices": null,
+     "default": "<Sentinel>",
+     "help": "Folder of write contracts (<name>.yaml) the writes were made under.",
+     "hidden": false,
+     "is_flag": false,
+     "kind": "Option",
+     "multiple": false,
+     "name": "contracts",
+     "nargs": 1,
+     "opts": [
+      "--contracts"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "Path"
+    },
+    {
+     "choices": null,
+     "default": "<Sentinel>",
+     "kind": "Argument",
+     "multiple": false,
+     "name": "key",
+     "nargs": 1,
+     "opts": [
+      "key"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "StringParamType"
+    },
+    {
+     "choices": null,
+     "default": null,
+     "help": "Ledger folder (must match the configured protected journal, if set).",
+     "hidden": false,
+     "is_flag": false,
+     "kind": "Option",
+     "multiple": false,
+     "name": "ledger_dir",
+     "nargs": 1,
+     "opts": [
+      "--ledger"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "Path"
+    }
+   ]
+  },
+  "openadapt verify ledger release": {
+   "commands": {},
+   "group": false,
+   "hidden": false,
+   "params": [
+    {
+     "choices": null,
+     "default": "<Sentinel>",
+     "kind": "Argument",
+     "multiple": false,
+     "name": "key",
+     "nargs": 1,
+     "opts": [
+      "key"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "StringParamType"
+    },
+    {
+     "choices": null,
+     "default": "<Sentinel>",
+     "help": "Who checked the record.",
+     "hidden": false,
+     "is_flag": false,
+     "kind": "Option",
+     "multiple": false,
+     "name": "by",
+     "nargs": 1,
+     "opts": [
+      "--by"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "StringParamType"
+    },
+    {
+     "choices": null,
+     "default": "<Sentinel>",
+     "help": "What they found.",
+     "hidden": false,
+     "is_flag": false,
+     "kind": "Option",
+     "multiple": false,
+     "name": "reason",
+     "nargs": 1,
+     "opts": [
+      "--reason"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "StringParamType"
+    },
+    {
+     "choices": [
+      "absent",
+      "landed"
+     ],
+     "default": "<Sentinel>",
+     "help": "absent: the write isn't in the store, so it may be sent again. landed: it is, so it is never sent again.",
+     "hidden": false,
+     "is_flag": false,
+     "kind": "Option",
+     "multiple": false,
+     "name": "found",
+     "nargs": 1,
+     "opts": [
+      "--found"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "Choice"
+    },
+    {
+     "choices": null,
+     "default": null,
+     "help": "Ledger folder (must match the configured protected journal, if set).",
+     "hidden": false,
+     "is_flag": false,
+     "kind": "Option",
+     "multiple": false,
+     "name": "ledger_dir",
+     "nargs": 1,
+     "opts": [
+      "--ledger"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "Path"
+    }
+   ]
+  },
+  "openadapt verify serve": {
+   "commands": {},
+   "group": false,
+   "hidden": false,
+   "params": [
+    {
+     "choices": null,
+     "default": "<Sentinel>",
+     "help": "Folder of write contracts (<name>.yaml, openadapt.verify/v1).",
+     "hidden": false,
+     "is_flag": false,
+     "kind": "Option",
+     "multiple": false,
+     "name": "contracts",
+     "nargs": 1,
+     "opts": [
+      "--contracts"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "Path"
+    },
+    {
+     "choices": null,
+     "default": null,
+     "help": "Where baselines and receipts go (default ~/.openadapt/verify).",
+     "hidden": false,
+     "is_flag": false,
+     "kind": "Option",
+     "multiple": false,
+     "name": "state",
+     "nargs": 1,
+     "opts": [
+      "--state"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "Path"
+    }
+   ]
+  },
+  "openadapt workflow": {
+   "commands": {},
+   "group": false,
+   "hidden": false,
+   "params": []
+  },
+  "openadapt wrap": {
+   "commands": {},
+   "group": false,
+   "hidden": false,
+   "params": []
+  }
+ },
+ "width": 100
+}

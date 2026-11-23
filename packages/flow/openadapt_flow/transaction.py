@@ -39,6 +39,8 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Optional
 
+from openadapt_flow.private_file import open_binary
+
 if TYPE_CHECKING:
     from openadapt_flow.ir import EffectJournalEntry, RunReport, StepResult, Workflow
 
@@ -1122,10 +1124,10 @@ class IdempotencyLedger:
             flags |= os.O_DIRECTORY
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
-        descriptor = os.open(self.path.parent.anchor, flags)
+        descriptor = open_binary(self.path.parent.anchor, flags)
         try:
             for component in self.path.parent.parts[1:]:
-                child = os.open(component, flags, dir_fd=descriptor)
+                child = open_binary(component, flags, dir_fd=descriptor)
                 os.close(descriptor)
                 descriptor = child
             if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
@@ -1232,9 +1234,9 @@ class IdempotencyLedger:
             flags |= os.O_NOFOLLOW
         try:
             if self._parent_descriptor is None:
-                descriptor = os.open(self.path, flags)
+                descriptor = open_binary(self.path, flags)
             else:
-                descriptor = os.open(
+                descriptor = open_binary(
                     self.path.name, flags, dir_fd=self._parent_descriptor
                 )
         except OSError as error:
@@ -1268,9 +1270,9 @@ class IdempotencyLedger:
             name = f".{self.path.name}.{secrets.token_hex(16)}.sqlite.tmp"
             try:
                 if self._parent_descriptor is None:
-                    descriptor = os.open(self.path.parent / name, flags, 0o600)
+                    descriptor = open_binary(self.path.parent / name, flags, 0o600)
                 else:
-                    descriptor = os.open(
+                    descriptor = open_binary(
                         name, flags, 0o600, dir_fd=self._parent_descriptor
                     )
             except FileExistsError:
@@ -1298,9 +1300,9 @@ class IdempotencyLedger:
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
         if self._parent_descriptor is None:
-            descriptor = os.open(path, flags)
+            descriptor = open_binary(path, flags)
         else:
-            descriptor = os.open(name, flags, dir_fd=self._parent_descriptor)
+            descriptor = open_binary(name, flags, dir_fd=self._parent_descriptor)
         try:
             if not stat.S_ISREG(os.fstat(descriptor).st_mode):
                 raise RuntimeError("idempotency ledger migration file is not regular")
@@ -1378,7 +1380,7 @@ class IdempotencyLedger:
                 flags |= os.O_DIRECTORY
             if hasattr(os, "O_NOFOLLOW"):
                 flags |= os.O_NOFOLLOW
-            return os.open(directory, flags)
+            return open_binary(directory, flags)
 
         self._assert_parent_path_matches_descriptor()
         name = self._claims_directory.name
@@ -1393,7 +1395,7 @@ class IdempotencyLedger:
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
         try:
-            descriptor = os.open(name, flags, dir_fd=self._parent_descriptor)
+            descriptor = open_binary(name, flags, dir_fd=self._parent_descriptor)
         except FileNotFoundError:
             if not create:
                 raise
@@ -1417,11 +1419,13 @@ class IdempotencyLedger:
             flags |= os.O_NOFOLLOW
         try:
             if self._parent_descriptor is None:
-                descriptor = os.open(
+                descriptor = open_binary(
                     self._claims_directory / self._claim_filename(key), flags
                 )
             else:
-                descriptor = os.open(self._claim_filename(key), flags, dir_fd=directory)
+                descriptor = open_binary(
+                    self._claim_filename(key), flags, dir_fd=directory
+                )
         except FileNotFoundError:
             os.close(directory)
             return None
@@ -1474,13 +1478,13 @@ class IdempotencyLedger:
             flags |= os.O_NOFOLLOW
         try:
             if self._parent_descriptor is None:
-                descriptor = os.open(
+                descriptor = open_binary(
                     self._claims_directory / self._claim_filename(key),
                     flags,
                     0o600,
                 )
             else:
-                descriptor = os.open(
+                descriptor = open_binary(
                     self._claim_filename(key), flags, 0o600, dir_fd=directory
                 )
         except FileExistsError:
@@ -1642,7 +1646,7 @@ class IdempotencyLedger:
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
         if self._parent_descriptor is None:
-            descriptor = os.open(lock_path, flags, 0o600)
+            descriptor = open_binary(lock_path, flags, 0o600)
         else:
             # Darwin can transiently return ENOENT for O_CREAT|O_NOFOLLOW on a
             # descriptor-relative pathname while another process creates the
@@ -1650,7 +1654,7 @@ class IdempotencyLedger:
             # back to an absolute pathname.
             for attempt in range(4):
                 try:
-                    descriptor = os.open(
+                    descriptor = open_binary(
                         lock_path.name,
                         flags,
                         0o600,
@@ -1734,7 +1738,7 @@ class IdempotencyLedger:
     def _fsync_directory(path: Path) -> None:
         if os.name == "nt":
             return
-        descriptor = os.open(path, os.O_RDONLY)
+        descriptor = open_binary(path, os.O_RDONLY)
         try:
             os.fsync(descriptor)
         finally:

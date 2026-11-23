@@ -1,0 +1,27 @@
+{
+  "approval": "each_item",
+  "blocked": [
+    {
+      "code": "declined",
+      "hold_ms": 3271.7
+    }
+  ],
+  "ended": "stopped",
+  "hold_ms": [],
+  "mode": "fail_closed",
+  "model_calls": 0,
+  "notes": [],
+  "readback_ms": null,
+  "receipt_path": null,
+  "recording": "/tmp/acp-demo-out/2-gated/runs/prod-approval-decline-ok/recording",
+  "requests": {
+    "save": 1
+  },
+  "saves_held": 1,
+  "schema": "openadapt.agent-guard-run/v1",
+  "scope_blocked": [],
+  "seconds": 14.389,
+  "task_id": "prod-approval-decline-ok",
+  "verdict": null,
+  "would_block": []
+}

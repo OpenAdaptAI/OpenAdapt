@@ -73,6 +73,7 @@ from typing import TYPE_CHECKING, Any, Literal, Optional
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from openadapt_flow.private_file import open_binary
 from openadapt_flow.qualification_faults import (
     FaultMutationReceipt,
     QualificationFaultContext,
@@ -174,7 +175,7 @@ def local_drill_key(
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     try:
-        descriptor = os.open(path, flags)
+        descriptor = open_binary(path, flags)
     except FileNotFoundError:
         if not create:
             return None
@@ -238,7 +239,7 @@ def _create_key(path: Path) -> LocalDrillKey:
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     try:
-        descriptor = os.open(path, flags, 0o600)
+        descriptor = open_binary(path, flags, 0o600)
     except FileExistsError:
         loaded = local_drill_key(path.parent.parent, create=False)
         if loaded is None:

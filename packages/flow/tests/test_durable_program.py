@@ -70,7 +70,7 @@ from openadapt_flow.runtime.replayer import Replayer, _ProgramHalt
 from tests.test_durable_runtime import (
     FakeSoRVerifier,
     _approval,
-    _retry_approval,
+    _StopBeforeInput,
     _vision_ok,
 )
 from tests.test_replayer import FakeBackend, FakeVision, make_png
@@ -742,7 +742,7 @@ def _dirs(tmp_path):
     return tmp_path / "bundle", tmp_path / "run"
 
 
-def _run_branch_loop_to_pause(tmp_path, *, refute="Bob"):
+def _run_branch_loop_to_pause(tmp_path, *, refute="Bob", before_input=False):
     """Run the branch+loop program durably; the ``refute`` row REFUTES -> pause.
 
     Returns (report, run_dir, bundle, verifier)."""
@@ -751,16 +751,33 @@ def _run_branch_loop_to_pause(tmp_path, *, refute="Bob"):
     workflow = _branch_loop_workflow(["Alice", "Bob", "Cara"])
     bundle, run_dir = _dirs(tmp_path)
     workflow.save(bundle)
-    replayer = Replayer(
-        FakeBackend(),
+    backend = FakeBackend()
+    replayer_type = _StopBeforeInput if before_input else Replayer
+    replayer = replayer_type(
+        backend,
         vision=FakeVision(),
         effect_verifier=verifier,
         durable=True,
         poll_interval_s=0.01,
     )
+    if before_input:
+        replayer.stop_before_step = "b_type"
+        replayer.stop_before_params = {"patient": refute}
     report = replayer.run(
         workflow, params={"mode": "go"}, bundle_dir=bundle, run_dir=run_dir
     )
+    if before_input:
+        pending = CheckpointStore(run_dir).read_pending()
+        assert pending is not None and pending.delivery_uncertainty is None
+        failed = next(
+            result for result in reversed(report.results) if result.step_id == "b_type"
+        )
+        assert failed.delivery_attempted is False
+        assert backend.actions == [("type", "Alice")]
+        prefix = CheckpointStore(run_dir).program_checkpoints()
+        assert len(prefix) == 1 and prefix[0].bound_params["patient"] == "Alice"
+        assert pending.program_checkpoint_seq == 1
+        assert pending.program_frames[-1].loop.row_index == 1
     return report, run_dir, bundle, verifier
 
 
@@ -824,11 +841,26 @@ def test_program_pauses_midloop_checkpoints_interpreter_state(tmp_path):
     pending = store.read_pending()
     assert pending is not None
     assert pending.program is True
-    assert pending.category == "effect_refuted"
+    # Fresh delivery keeps its write-ahead hold until a verified successor
+    # checkpoint exists; a negative effect result cannot consume that hold.
+    assert pending.category == "delivery_uncertain"
+    assert pending.delivery_uncertainty is not None
+    assert pending.delivery_uncertainty.operation == "first_local_delivery"
+    assert pending.state_id == pending.program_frames[-1].state_id == "b_type"
+    assert pending.program_frames[-1].loop.row_index == 1
+    assert pending.params["patient"] == "Bob"
+    assert pending.program_frames[-1].params["patient"] == "Bob"
+    assert pending.program_checkpoint_seq == last.seq == 1
+    assert last.bound_params["patient"] == "Alice"
+    failed = next(r for r in reversed(report.results) if r.step_id == "b_type")
+    assert failed.ok is False and failed.effect_verified is False
+    assert any("REFUTED" in line for line in failed.effect_results)
 
 
 def test_program_resume_restores_interpreter_and_completes(tmp_path):
-    report, run_dir, bundle, verifier = _run_branch_loop_to_pause(tmp_path)
+    report, run_dir, bundle, verifier = _run_branch_loop_to_pause(
+        tmp_path, before_input=True
+    )
     assert report.success is False
 
     # Operator fixed the system of record: the refuted row now confirms.
@@ -841,7 +873,7 @@ def test_program_resume_restores_interpreter_and_completes(tmp_path):
         effect_verifier=verifier,
         poll_interval_s=0.01,
     )
-    resumed = resume(run_dir, resume_replayer, approval=_retry_approval(bundle))
+    resumed = resume(run_dir, resume_replayer, approval=_approval(bundle, run_dir))
 
     assert resumed.success is True
     assert resumed.terminal_outcome == "success"
@@ -885,7 +917,9 @@ def test_program_wall_clock_stepping_back_keeps_durable_history_ordered(
     _BackwardsClock.calls = 0
     monkeypatch.setattr(checkpoint_module, "datetime", _BackwardsClock)
     monkeypatch.setattr(program_checkpoint_module, "datetime", _BackwardsClock)
-    report, run_dir, bundle, verifier = _run_branch_loop_to_pause(tmp_path)
+    report, run_dir, bundle, verifier = _run_branch_loop_to_pause(
+        tmp_path, before_input=True
+    )
     assert report.success is False
     store = CheckpointStore(run_dir)
     pending = store.read_pending()
@@ -907,7 +941,7 @@ def test_program_wall_clock_stepping_back_keeps_durable_history_ordered(
             effect_verifier=verifier,
             poll_interval_s=0.01,
         ),
-        approval=_retry_approval(bundle),
+        approval=_approval(bundle, run_dir),
     )
     assert resumed.success is True
     assert resume_backend.actions == [("type", "Bob"), ("type", "Cara")]
@@ -952,7 +986,9 @@ def test_an_exact_program_checkpoint_retry_during_a_pause_is_accepted(tmp_path):
 def test_program_resume_report_lists_every_loop_row_binding(tmp_path):
     """The resumed report carries the paused leg's results, so it also lists
     the rows that leg bound, then the rows the resumed leg ran."""
-    report, run_dir, bundle, verifier = _run_branch_loop_to_pause(tmp_path)
+    report, run_dir, bundle, verifier = _run_branch_loop_to_pause(
+        tmp_path, before_input=True
+    )
     assert [(b.row_index, b.params["patient"]) for b in report.loop_iterations] == [
         (0, "Alice"),
         (1, "Bob"),
@@ -965,7 +1001,7 @@ def test_program_resume_report_lists_every_loop_row_binding(tmp_path):
         effect_verifier=verifier,
         poll_interval_s=0.01,
     )
-    resumed = resume(run_dir, resume_replayer, approval=_retry_approval(bundle))
+    resumed = resume(run_dir, resume_replayer, approval=_approval(bundle, run_dir))
     assert resumed.success is True
     assert [
         (b.loop_state_id, b.row_index, b.params["patient"])
@@ -977,7 +1013,9 @@ def test_program_resume_report_lists_every_loop_row_binding(tmp_path):
 
 
 def test_program_resume_does_not_reperform_confirmed_write(tmp_path):
-    report, run_dir, bundle, verifier = _run_branch_loop_to_pause(tmp_path)
+    report, run_dir, bundle, verifier = _run_branch_loop_to_pause(
+        tmp_path, before_input=True
+    )
     assert report.success is False
 
     verifier.refute.clear()
@@ -988,7 +1026,7 @@ def test_program_resume_does_not_reperform_confirmed_write(tmp_path):
         effect_verifier=verifier,
         poll_interval_s=0.01,
     )
-    resumed = resume(run_dir, resume_replayer, approval=_retry_approval(bundle))
+    resumed = resume(run_dir, resume_replayer, approval=_approval(bundle, run_dir))
 
     assert resumed.success is True
     # The confirmed row's consequential write is NEVER re-performed: Alice's TYPE
@@ -1004,10 +1042,13 @@ def test_program_resume_does_not_reperform_confirmed_write(tmp_path):
 
 
 def test_program_resume_without_approval_is_refused(tmp_path):
-    _report, run_dir, _bundle, _verifier = _run_branch_loop_to_pause(tmp_path)
+    _report, run_dir, _bundle, _verifier = _run_branch_loop_to_pause(
+        tmp_path, before_input=True
+    )
 
+    backend = FakeBackend()
     resume_replayer = Replayer(
-        FakeBackend(),
+        backend,
         vision=FakeVision(),
         effect_verifier=FakeSoRVerifier(),
         poll_interval_s=0.01,
@@ -1016,6 +1057,7 @@ def test_program_resume_without_approval_is_refused(tmp_path):
     # re-execution.
     with pytest.raises(ApprovalRequired):
         resume(run_dir, resume_replayer)
+    assert backend.actions == []
 
     # An approval record with a blank approver is likewise not authentication.
     with pytest.raises(ApprovalRequired):
@@ -1024,6 +1066,7 @@ def test_program_resume_without_approval_is_refused(tmp_path):
             resume_replayer,
             approval=ApprovalRecord(approver="   ", bundle_version=""),
         )
+    assert backend.actions == []
     # The pause is still there (nothing was consumed / resumed).
     assert CheckpointStore(run_dir).read_pending() is not None
 
@@ -1142,25 +1185,43 @@ def _three_state_effect_program() -> Workflow:
     )
 
 
-def _run_two_state_to_pause(tmp_path):
+def _run_two_state_to_pause(tmp_path, *, before_input=False):
     verifier = FakeSoRVerifier()
     verifier.refute.add((("step", "s1"),))  # second state refutes -> pause at s1
     workflow = _two_state_effect_program()
     bundle, run_dir = _dirs(tmp_path)
     workflow.save(bundle)
-    replayer = Replayer(
-        FakeBackend(),
+    backend = FakeBackend()
+    replayer_type = _StopBeforeInput if before_input else Replayer
+    replayer = replayer_type(
+        backend,
         vision=_vision_ok(),
         effect_verifier=verifier,
         durable=True,
         poll_interval_s=0.01,
     )
+    if before_input:
+        replayer.stop_before_step = "s1"
     report = replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)
+    if before_input:
+        pending = CheckpointStore(run_dir).read_pending()
+        assert pending is not None and pending.delivery_uncertainty is None
+        assert pending.state_id == "s1" and pending.program_checkpoint_seq == 1
+        assert backend.actions == [("press", "A")]
+        assert (
+            next(r for r in report.results if r.step_id == "s1").delivery_attempted
+            is False
+        )
+        prefix = CheckpointStore(run_dir).program_checkpoints()
+        assert [checkpoint.verified_state_id for checkpoint in prefix] == ["s0"]
+        assert verifier.records == [{"step": "s0"}]
     return report, run_dir, bundle, verifier
 
 
 def test_program_resume_refused_when_app_state_diverged(tmp_path):
-    report, run_dir, bundle, verifier = _run_two_state_to_pause(tmp_path)
+    report, run_dir, bundle, verifier = _run_two_state_to_pause(
+        tmp_path, before_input=True
+    )
     assert report.success is False
     # The checkpoint for s0 recorded the expected on-screen text.
     last = CheckpointStore(run_dir).last_program_checkpoint()
@@ -1169,32 +1230,47 @@ def test_program_resume_refused_when_app_state_diverged(tmp_path):
     verifier.refute.clear()
     # The live app no longer shows the checkpoint's expected state ("OK" absent).
     diverged_vision = FakeVision()  # empty text_results -> "OK" not present
+    backend = FakeBackend()
     resume_replayer = Replayer(
-        FakeBackend(),
+        backend,
         vision=diverged_vision,
         effect_verifier=verifier,
         poll_interval_s=0.01,
     )
     with pytest.raises(StateDiverged):
-        resume(run_dir, resume_replayer, approval=_retry_approval(bundle))
+        resume(run_dir, resume_replayer, approval=_approval(bundle, run_dir))
+    assert backend.actions == []
+    assert diverged_vision.text_calls == ["OK"]
 
 
 def test_program_resume_refused_when_confirmed_effect_no_longer_holds(tmp_path):
-    report, run_dir, bundle, verifier = _run_two_state_to_pause(tmp_path)
+    report, run_dir, bundle, verifier = _run_two_state_to_pause(
+        tmp_path, before_input=True
+    )
     assert report.success is False
 
     # The app is still on the expected screen, but an already-confirmed effect
     # (s0) has since been reverted -> read-only re-verify REFUTES -> refuse.
     verifier.refute = {(("step", "s0"),)}
     verifier.records = []
-    resume_replayer = Replayer(
-        FakeBackend(),
+    current_readbacks = []
+
+    class ObserveRetainedReadback(Replayer):
+        def _verify_current_effect(self, adapter, expected, current):
+            current_readbacks.append(dict(expected.match))
+            return super()._verify_current_effect(adapter, expected, current)
+
+    backend = FakeBackend()
+    resume_replayer = ObserveRetainedReadback(
+        backend,
         vision=_vision_ok(),
         effect_verifier=verifier,
         poll_interval_s=0.01,
     )
     with pytest.raises(StateDiverged):
-        resume(run_dir, resume_replayer, approval=_retry_approval(bundle))
+        resume(run_dir, resume_replayer, approval=_approval(bundle, run_dir))
+    assert backend.actions == []
+    assert current_readbacks == [{"step": "s0"}]
 
 
 def test_program_resume_revalidates_every_retained_effect_before_input(tmp_path):
@@ -1206,13 +1282,22 @@ def test_program_resume_revalidates_every_retained_effect_before_input(tmp_path)
     bundle, run_dir = _dirs(tmp_path)
     workflow.save(bundle)
 
-    report = Replayer(
-        FakeBackend(),
+    initial_backend = FakeBackend()
+    initial = _StopBeforeInput(
+        initial_backend,
         vision=_vision_ok(),
         effect_verifier=verifier,
         durable=True,
         poll_interval_s=0.01,
-    ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
+    )
+    initial.stop_before_step = "s2"
+    report = initial.run(workflow, bundle_dir=bundle, run_dir=run_dir)
+    pending = CheckpointStore(run_dir).read_pending()
+    assert pending is not None and pending.delivery_uncertainty is None
+    assert initial_backend.actions == [("press", "A"), ("press", "B")]
+    assert (
+        next(r for r in report.results if r.step_id == "s2").delivery_attempted is False
+    )
 
     assert report.success is False
     assert [
@@ -1228,30 +1313,41 @@ def test_program_resume_revalidates_every_retained_effect_before_input(tmp_path)
     verifier.records = [{"step": "s1"}]
     backend = FakeBackend()
 
+    current_readbacks = []
+
+    class ObserveRetainedReadback(Replayer):
+        def _verify_current_effect(self, adapter, expected, current):
+            current_readbacks.append(dict(expected.match))
+            return super()._verify_current_effect(adapter, expected, current)
+
     with pytest.raises(StateDiverged):
         resume(
             run_dir,
-            Replayer(
+            ObserveRetainedReadback(
                 backend,
                 vision=_vision_ok(),
                 effect_verifier=verifier,
                 poll_interval_s=0.01,
             ),
-            approval=_retry_approval(bundle),
+            approval=_approval(bundle, run_dir),
         )
 
     assert backend.actions == []
+    assert current_readbacks == [{"step": "s0"}]
 
 
 # -- 5. an EXPIRED (stale) pause is refused (P0-5) ---------------------------
 
 
 def test_program_resume_refused_when_pause_expired(tmp_path):
-    _report, run_dir, bundle, verifier = _run_branch_loop_to_pause(tmp_path)
+    _report, run_dir, bundle, verifier = _run_branch_loop_to_pause(
+        tmp_path, before_input=True
+    )
     verifier.refute.clear()
 
+    backend = FakeBackend()
     resume_replayer = Replayer(
-        FakeBackend(),
+        backend,
         vision=FakeVision(),
         effect_verifier=verifier,
         poll_interval_s=0.01,
@@ -1262,6 +1358,7 @@ def test_program_resume_refused_when_pause_expired(tmp_path):
     far_future = datetime.now(timezone.utc) + timedelta(days=365)
     with pytest.raises(PauseExpired):
         resume(run_dir, resume_replayer, approval=_approval(bundle), now=far_future)
+    assert backend.actions == []
 
 
 # -- 6. clean durable program run: checkpoints every verified state, no pause -
@@ -1326,7 +1423,9 @@ def test_program_resume_refuses_a_noncontiguous_checkpoint_history(tmp_path):
     store = CheckpointStore(run_dir)
     checkpoint = store.program_checkpoints()[0]
     path = run_dir / "checkpoints" / "pstate_0001.json"
-    path.write_text(checkpoint.model_copy(update={"seq": 2}).model_dump_json(indent=2))
+    # Through the store's own writer, so the tampered checkpoint replaces the
+    # real one in either form (sealed in an encrypted run, the default).
+    store._write_model(path, checkpoint.model_copy(update={"seq": 2}))
 
     backend = FakeBackend()
     calls_before = verifier.capture_calls

@@ -45,7 +45,7 @@ import secrets
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Callable, Iterator, Literal, Optional
+from typing import TYPE_CHECKING, Callable, Iterator, Literal, Optional
 
 from pydantic import BaseModel, Field, model_serializer, model_validator
 
@@ -64,6 +64,7 @@ from openadapt_flow.ir import (
     StepResult,
     SurfaceObservation,
 )
+from openadapt_flow.private_file import open_binary
 from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
     RuntimeParamScalar,
@@ -73,6 +74,9 @@ from openadapt_flow.runtime.durable.program_checkpoint import (
     GraphFrame,
     ProgramCheckpoint,
 )
+
+if TYPE_CHECKING:
+    from openadapt_flow.crypto import ContainerKeys
 
 CHECKPOINTS_DIRNAME = "checkpoints"
 MANIFEST_FILENAME = "_manifest.json"
@@ -488,14 +492,48 @@ class CheckpointStore:
     def __init__(self, run_dir: Path | str, *, key: Optional[str] = None) -> None:
         self.run_dir = Path(run_dir)
         self.checkpoints_dir = self.run_dir / CHECKPOINTS_DIRNAME
-        # None => plaintext (unchanged default). A non-empty passphrase turns on
-        # AEAD sealing for writes and decryption for reads.
-        self.key = key
-        # One salt for every container this store seals, so the passphrase
-        # is stretched once per store (and once per process for reads; see
-        # crypto._derive), not once per checkpoint. Each container still
-        # records the salt and gets its own random nonce.
+        # A non-empty passphrase turns on AEAD sealing for writes and
+        # decryption for reads. Inside a version 3 run the passphrase is
+        # always the run's own (derived from its data key, so a shred reaches
+        # these containers too), whatever the caller resolved. It is looked
+        # up when used, so a store made before its run directory became an
+        # encrypted set still uses the run's key (see :attr:`key`).
+        self._given_key = key
+        self._bound_key: Optional[str] = None
+        # Reuse one public salt for containers this store seals; each
+        # container records the salt and gets its own random nonce.
         self._salt: Optional[bytes] = None
+        # This store's own derived keys (crypto.ContainerKeys): a run reads its
+        # checkpoints back many times, and each read would otherwise run
+        # scrypt again. Used only with an explicit key; another store, or a
+        # changed key, derives again. Every read still authenticates.
+        self._container_keys: Optional["ContainerKeys"] = None
+
+    @property
+    def key(self) -> Optional[str]:
+        """This store's passphrase: the run's own inside a version 3 run (a
+        run that can't be opened, such as a shredded one, refuses), else the
+        one given."""
+        if self._bound_key is None:
+            from openadapt_flow import sealed_set as _sealed
+
+            self._bound_key = _sealed.store_passphrase(self.run_dir)
+        return self._bound_key or self._given_key
+
+    @key.setter
+    def key(self, value: Optional[str]) -> None:
+        self._given_key = value
+
+    def _keys(self) -> Optional["ContainerKeys"]:
+        """This store's derived-key handle, or None without an explicit key."""
+        if not self.key:
+            return None
+        from openadapt_flow import crypto as _crypto
+
+        if self._container_keys is None:
+            self._container_keys = _crypto.ContainerKeys()
+        self._container_keys.rebind(self.key)
+        return self._container_keys
 
     def _container_salt(self) -> bytes:
         if self._salt is None:
@@ -511,6 +549,12 @@ class CheckpointStore:
         sealed with AES-256-GCM when a key is configured. Returns the path
         actually written; removes the counterpart form if it lingers."""
         data = model.model_dump_json(indent=2).encode("utf-8")
+        if not self.key:
+            # No key given: encrypted by default with this computer's key
+            # (docs/phi_at_rest.md); plaintext only under the recorded opt-out.
+            from openadapt_flow import crypto as _crypto
+
+            self.key = _crypto.resolve_key(None)
         if self.key:
             from openadapt_flow import crypto as _crypto
 
@@ -522,6 +566,7 @@ class CheckpointStore:
                     self.key,
                     aad=_crypto.CHECKPOINT_AAD,
                     salt=self._container_salt(),
+                    keys=self._keys(),
                 ),
             )
             if path.exists():
@@ -538,7 +583,7 @@ class CheckpointStore:
         """Persist one directory-entry update where the platform supports it."""
 
         try:
-            descriptor = os.open(path, os.O_RDONLY)
+            descriptor = open_binary(path, os.O_RDONLY)
         except OSError:
             return
         try:
@@ -556,7 +601,7 @@ class CheckpointStore:
         temporary = path.with_name(
             f".{path.name}.{os.getpid()}.{secrets.token_hex(8)}.tmp"
         )
-        descriptor = os.open(
+        descriptor = open_binary(
             temporary,
             os.O_CREAT | os.O_EXCL | os.O_WRONLY,
             0o600,
@@ -579,7 +624,10 @@ class CheckpointStore:
             from openadapt_flow import crypto as _crypto
 
             decrypted = _crypto.decrypt_bytes(
-                enc.read_bytes(), self.key, aad=_crypto.CHECKPOINT_AAD
+                enc.read_bytes(),
+                self.key,
+                aad=_crypto.CHECKPOINT_AAD,
+                keys=self._keys(),
             )
             return json.loads(decrypted)  # type: ignore[no-any-return]
         if path.is_file():
@@ -684,7 +732,7 @@ class CheckpointStore:
 
         self.run_dir.mkdir(parents=True, exist_ok=True)
         path = self.run_dir / STATE_LOCK_FILENAME
-        descriptor = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+        descriptor = open_binary(path, os.O_CREAT | os.O_RDWR, 0o600)
         try:
             if os.name == "nt":
                 import msvcrt
@@ -801,7 +849,7 @@ class CheckpointStore:
             separators=(",", ":"),
         ).encode("utf-8")
         try:
-            descriptor = os.open(
+            descriptor = open_binary(
                 claim,
                 os.O_CREAT | os.O_EXCL | os.O_WRONLY,
                 0o600,

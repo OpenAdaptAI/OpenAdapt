@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-desktop"
-version = "0.30.6"
+version = "0.32.2"
 description = "The OpenAdapt desktop app and local engine: record a data-entry task, run it on a list, and check each saved record"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -125,6 +125,8 @@ openadapt-desktop = "openadapt_desktop.cli:main"
 Homepage = "https://openadapt.ai"
 Repository = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/desktop"
 Issues = "https://github.com/OpenAdaptAI/OpenAdapt/issues"
+Documentation = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/README.md"
+Changelog = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/CHANGELOG.md"
 
 
 [tool.hatch.build.targets.wheel]

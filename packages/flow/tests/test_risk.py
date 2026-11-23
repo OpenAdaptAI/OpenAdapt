@@ -17,6 +17,8 @@ from openadapt_flow.ir import (
     ActionKind,
     Anchor,
     ApiBinding,
+    ChoiceOptionShape,
+    OptionChoice,
     Postcondition,
     PostconditionKind,
     Step,
@@ -167,6 +169,35 @@ class TestHeuristic:
             action=ActionKind.DRAG,
         )
         assert classify_step_risk(destructive_drag) == "irreversible"
+
+    @pytest.mark.parametrize(
+        ("intent", "risk", "review"),
+        [
+            ("choose department", "reversible", True),
+            ("Submit order", "irreversible", False),
+        ],
+    )
+    def test_dropdown_readback_does_not_prove_no_business_effect(
+        self, intent: str, risk: str, review: bool
+    ) -> None:
+        # The same control can save on change. A selected-label read-back
+        # verifies the input, so it cannot waive the existing effect review.
+        step = Step(
+            id="s",
+            intent=intent,
+            action=ActionKind.SELECT_OPTION,
+            anchor=Anchor(template="t.png", region=(0, 0, 10, 10), click_point=(5, 5)),
+            text="Cardiology",
+            choice=OptionChoice(
+                kind="listed_option",
+                label="Cardiology",
+                option=ChoiceOptionShape(role="option", tag="li"),
+                readback="control_text",
+            ),
+        )
+        inference = infer_step_risk(step)
+        assert inference.risk == risk
+        assert inference.requires_review is review
 
     def test_unlabelled_coordinate_click_requires_review(self) -> None:
         step = Step(
@@ -716,6 +747,11 @@ def _actuating_step(kind: ActionKind, label: str | None) -> Step:
                 region=(0, 0, 10, 10),
             )
         }
+    if kind is ActionKind.SECOND_FACTOR:
+        # A person's one-time code is typed into the focused field: no anchor.
+        return Step(
+            id="s", intent=f"{kind.value} {label or ''}", action=kind, one_time="code"
+        )
     fields: dict[str, object] = {"anchor": anchor, **extra}
     return Step(id="s", intent=f"{kind.value} {label or ''}", action=kind, **fields)
 

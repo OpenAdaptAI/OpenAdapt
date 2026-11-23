@@ -312,7 +312,7 @@ export function ControlOverlay() {
       : "Pause";
 
   return (
-    <div className={`control-overlay-host${stage ? " stage" : ""}`}>
+    <div data-theme="phosphor" className={`control-overlay-host${stage ? " stage" : ""}`}>
       {target && (
         <div
           className="overlay-target-ring"

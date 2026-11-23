@@ -13,35 +13,51 @@ machine), [phi_in_transit.md](phi_in_transit.md) (PHI on the wire) and
 
 ## Default, opt-out and strict mode
 
-Flow encrypts with a configured key (`OPENADAPT_BUNDLE_KEY`, or
-`OPENADAPT_RECORDING_KEY` for recordings) or, when none is set, with a key it
-creates on first use at `~/.openadapt/keys/at-rest.key` (`$OPENADAPT_HOME`,
-or `$OPENADAPT_FLOW_AT_REST_HOME`, moves it). The local key is mode 0600 in a
-0700 directory, and Flow checks that only its owner can read it. Back it up
-with your other secrets.
+Flow encrypts recordings, bundles and run directories by default, with no
+setup. Each one gets its own random data key, wrapped through a per-set
+bucket key to this computer's device key and, in an organization, to the
+organization's key (see [Key hierarchy](#key-hierarchy)).
 
 | | Default | `OPENADAPT_FLOW_AT_REST=strict` |
 | --- | --- | --- |
 | Durable checkpoints and attended state | Encrypted | Encrypted |
-| Web recordings | Encrypted with a configured key; otherwise logged | Encrypted |
-| Bundles from `compile`, `induce`, `admit` | Encrypted from encrypted input; otherwise logged | Encrypted |
-| Run directories | Encrypted for a sealed bundle; otherwise logged | Encrypted |
+| Web recordings (`record`, the quickstart and tutorial) | Encrypted | Encrypted |
+| Desktop recordings (`record --backend windows\|macos\|linux\|rdp\|citrix`) | Raw capture plaintext while recording; see [Desktop recordings](#desktop-recordings) | Held back before the command runs |
+| Cross-window recordings (`record --surface`) | Logged | Held back before the command runs |
+| Bundles from `compile`, `induce`, `admit` | Encrypted | Encrypted |
+| Run directories (report, step screenshots, crops, frames, evidence) | Encrypted | Encrypted |
+| A run with an approval gate, an attended draft, a business-decision state or `--save-healed-to` | Logged for a plaintext bundle; refused for an encrypted one (the default since this release) | Refused before it runs |
 | The bundle, skill library and compiled fix of `teach` | Encrypted from encrypted input; otherwise logged | Encrypted |
 | The sanitized review copy and approved archive of `push` | Encrypted from encrypted input; otherwise logged | Encrypted |
-| Desktop recordings, approval requests, `--record-video`, and the output of `visualize`, `explain`, `emit-skill`, `compose`, `process`, `variants`, `route`, `for-each`, `shadow`, `compile-agent`, `guard`, `bench`, `sanitize`, `redact-report`, `jit`, `--save-healed-to`, `--workers` and `induce --report` | Logged | Held back before the command runs |
+| The receipt page (`seal.html`) beside an encrypted run | Logged: it embeds the run report | Not written |
+| Approval requests, `--record-video`, and the output of `visualize`, `explain`, `emit-skill`, `compose`, `process`, `variants`, `route`, `for-each`, `shadow`, `compile-agent`, `guard`, `bench`, `sanitize`, `redact-report`, `jit`, `--workers` and `induce --report` | Logged | Held back before the command runs |
 
 **Logged** means stderr names the path and one line goes to
 `~/.openadapt/plaintext-at-rest.jsonl`; when that line can't be written, the
-write stops. OpenAdapt Desktop shows a notice in
-its window from the same ledger. Issue
-[#1751](https://github.com/OpenAdaptAI/OpenAdapt/issues/1751) tracks moving
-each logged artifact to encrypted by default.
+write stops. OpenAdapt Desktop shows a notice in its window from the same
+ledger. Issue [#1751](https://github.com/OpenAdaptAI/OpenAdapt/issues/1751)
+tracks the logged artifacts that remain.
 
 A sealed bundle always runs into a sealed run directory, in every mode.
 
+**Turning it off.** `OPENADAPT_ENCRYPT_AT_REST=0`, or `--no-encrypt` on
+`record`, `compile`, `run` and `replay`, writes plaintext. So does
+`OPENADAPT_FLOW_PLAINTEXT_AT_REST='<reason>'`, which records the reason. Each
+process prints a one-line warning and adds a ledger line. Strict mode ignores
+all of them. `--no-encrypt` lasts for its one command: an application that
+runs Flow in-process gets encryption back for the next one. Files encrypted
+earlier still read under the opt-out, with the key that encrypted them.
+
+From Python, `Recorder`, `InteractiveRecorder` and `record_desktop_capture`
+follow the same policy by default. Passing `encryption_key=None` writes a
+plaintext recording: strict mode refuses it before anything is written, and
+otherwise stderr names it and a ledger line records it. `report-run --receipt
+DIR` writes the field values a run read (`records.json`) only inside an
+encrypted run directory, or under the opt-out.
+
 **Healthcare and other regulated deployments:** set
-`OPENADAPT_FLOW_AT_REST=strict` and a key from your secret manager. Strict
-mode runs:
+`OPENADAPT_FLOW_AT_REST=strict` and an organization policy
+([Organization policy](#organization-policy)). Strict mode runs:
 
 - `record`, `compile`, `induce`, `admit run`, `run`, `replay` and `resume`,
   which encrypt what they write, plaintext input included;
@@ -49,9 +65,10 @@ mode runs:
   [Commands on sealed input](#commands-on-sealed-input), on encrypted input
   (every directory they are given must be encrypted);
 - the commands that write no recorded data: service health and control, the
-  no-outbound allow list, key and Seal verification. `service run` runs the
-  queue script it is given; the Flow commands the script starts inherit
-  strict mode, and the script's other actions are the operator's.
+  no-outbound allow list, `at-rest status`, key and receipt verification.
+  `service run` runs the queue script it is given; the Flow commands the
+  script starts inherit strict mode, and the script's other actions are the
+  operator's.
 
 Every other command, and qualification trials (`qualify campaign`,
 `qualify run-case`, `qualify drills`), is held back before it starts.
@@ -61,31 +78,29 @@ and a directory holding a plaintext `workflow.json`, `events.jsonl` or
 `report.json` counts as plaintext wherever it sits. Every entry under an encrypted input is checked when the command starts: a symlink or a directory that can't be read below it refuses the run, and with a key the set is opened again rather than taken from an earlier read. `qualify run` and
 `qualify certify` take `--evidence-root`, which is usually a plaintext parent
 of sealed runs, so in strict mode run them on encrypted evidence or outside
-strict mode. It encrypts every recording, bundle and run directory, and an
-unknown value of `OPENADAPT_FLOW_AT_REST` stops the command. `seal` and
-record checks on encrypted bundles use `OPENADAPT_BUNDLE_KEY` only.
-
-`OPENADAPT_FLOW_PLAINTEXT_AT_REST='<reason>'` is for development and
-already de-identified data: it turns encryption off, and each process that
-uses it prints a warning and adds a ledger line with the reason. `record
---no-encrypt` does the same for one web recording. Strict mode ignores both.
+strict mode. An unknown value of `OPENADAPT_FLOW_AT_REST` or
+`OPENADAPT_ENCRYPT_AT_REST` stops the command. `seal` and record checks on
+encrypted bundles use `OPENADAPT_BUNDLE_KEY` only.
 
 OpenAdapt Desktop encrypts certified workflows with per-workflow keys in the
-system keychain, and runs Flow with the opt-out recorded under its own
+system keychain, and still runs Flow with the opt-out recorded under its own
 reason.
 
 ## Summary
 
-With a key configured, these are ciphertext on disk:
+By default, these are ciphertext on disk:
 
-- every file of a sealed bundle that can hold patient data
-  (`openadapt-flow seal`, or `compile` of an encrypted recording);
-- every file of a web recording, from the first frame (`record`);
-- every file of the run directory of a sealed bundle: the report, step
+- every file of a web recording that can hold patient data, from the first
+  frame: screenshots (`frames/`), typed text and DOM text (`events.jsonl`),
+  parameter examples (`meta.json`), network bodies;
+- every such file of a compiled bundle: the program, its crops and sidecars;
+- every file of a run directory: the report (with its inputs), step
   screenshots, identity and resolution crops, transition evidence,
-  checkpoints, pauses, approvals and undo records.
+  checkpoints, pauses, approvals, undo records and `REPORT.md`.
 
-Flow reads them in memory. The test
+Flow reads them in memory: `replay`, `run`, `resume`, `compile`, `inspect
+report-run`, `seal verify`, the receipt page and the quickstart read
+encrypted and plaintext folders alike. The test
 `tests/test_sealed_at_rest.py::test_record_compile_and_governed_run_write_no_plaintext`
 records a demonstration against the synthetic clinic app, compiles it, runs it
 to VERIFIED under the Standard profile and renders the report, while a process
@@ -94,27 +109,264 @@ files included. It fails if any of them holds plaintext.
 
 What stays readable is listed under [What is not encrypted](#what-is-not-encrypted).
 
+## Key hierarchy
+
+Every new recording, bundle and run directory (sealed-set format version 3)
+has three layers of keys:
+
+```
+data key (DEK, 256-bit random, one per set)
+  wrapped with HPKE (RFC 9180: DHKEM P-256, HKDF-SHA256, AES-256-GCM) to
+bucket key pair (P-256, one per set)
+  whose private half is wrapped, in a bucket record, to
+    the device runtime key    only while the set is being written
+    the device viewer key     user presence on hardware
+    organization key(s)       P-256 HPKE or RSA-OAEP-3072; required in org mode
+    a recovery key            solo mode, optional
+```
+
+- **Files.** Each file is a Tink `AES256_GCM_HKDF_1MB` stream (1 MiB
+  segments, last segment flagged, so a truncated file fails to open) under a
+  payload key derived from the DEK and the set id, with the file's path in
+  the set as associated data. `tests/test_stream_aead.py` checks the format
+  against Tink itself.
+- **Header.** `.openadapt-sealed.json` holds the set id, the key reference
+  (bucket id and fingerprint), the DEK wrapped to the bucket's public key,
+  the index, and two HMAC-SHA-256 MACs: one under a key derived from the DEK,
+  one under a key derived from the bucket's private key. The second stops
+  someone who knows the bucket's public key from writing a set this computer
+  would accept.
+- **Algorithms.** NIST-approved throughout: P-256, HKDF-SHA256, AES-256-GCM,
+  RSA-OAEP with SHA-256. All come from the `cryptography` package (50 or
+  later). This is not a FIPS 140-3 validated module unless you run it on a
+  FIPS-validated OpenSSL provider.
+
+### Where the bucket record lives
+
+| | Solo (default, no policy) | Organization mode (`mode: org`) |
+| --- | --- | --- |
+| Record | Inside the set's header (`records: inline`), so it travels with backups | `~/.openadapt/keys/buckets/<id>.json` plus a copy in the organization's `key_archive` (`records: archive`, the only choice in organization mode); never in the header |
+| Wrapped to | Device viewer key (and runtime key while open), recovery key if one exists | Device viewer key (runtime while open, local copy only), organization keys, recovery key if set |
+| Lost laptop | Backups open with the recovery key; without one they can't be opened | Every set whose record reached the archive opens with the organization key |
+| Crypto-shredding | This disk's copy only: a backup still opens with the recovery key | Every tracked copy: the local record (overwritten, then deleted) and the archive copy |
+
+A bundle keeps its runtime stanza after it is written, because programs
+replay unattended. Recordings and runs lose it when they are finalized; from
+then on the viewer key (Touch ID or Windows Hello, on hardware) opens them.
+
+### Device keys
+
+| Platform | Provider | Status |
+| --- | --- | --- |
+| macOS | Secure Enclave runtime key; Secure Enclave viewer key with Touch ID | Interface and test double only; **not built**, pending a check on real hardware |
+| Windows | TPM key through the Platform Crypto Provider; Windows Hello viewer key | Interface and test double only; **not built**, pending a check on real hardware |
+| Linux | TPM2 key | Interface only; **not built** |
+| Everywhere today | A software P-256 key in the OS keychain through `keyring` (macOS Keychain, Windows Credential Manager with DPAPI, Linux Secret Service), else a 0600 file with a warning. `pip install openadapt` includes `keyring`; a bare `openadapt-flow` needs the `keychain` extra | Built; `at-rest status` labels it `software` |
+
+A software key protects against a copied disk, backup or ticket attachment,
+not against code running as you. `require_hardware_device_key: true` in the
+policy refuses the software key. Next to a keychain-held key,
+`~/.openadapt/keys/device-key.store.json` records which entry holds it and a
+check value (no key material). If that entry is later missing, locked or
+different, Flow fails closed and never makes a new key over it.
+`OPENADAPT_FLOW_KEY_STORE` picks the software key's store: `auto`
+(default), `keychain` or `file`.
+
+### Organization policy
+
+The organization makes its key in its own KMS or HSM and distributes a policy
+file. Flow reads the first one found, and a user file never overrides a
+machine one:
+
+1. macOS: the managed preferences profile `ai.openadapt.policy` (MDM);
+2. Windows: `HKLM\SOFTWARE\Policies\OpenAdapt`, value `Policy` (Group
+   Policy, Intune);
+3. Linux: `/etc/openadapt/policy.json`, owned by root and writable by root
+   only;
+4. `OPENADAPT_POLICY=<file>`. It may set organization mode only when it is
+   owned by root, so on Windows only Group Policy or the registry can set it
+   (`OPENADAPT_POLICY_TRUST_USER_FILE=1` lifts that for development, and
+   status says so). A named file that is missing or unreadable stops the
+   command; it never falls back to solo mode.
+
+```json
+{
+  "schema": "openadapt.ai/policy/v1",
+  "org": "example-health",
+  "mode": "org",
+  "recipients": [
+    {"role": "org", "status": "active", "type": "hpke-p256",
+     "public_key": "<base64 SPKI>", "fingerprint": "sha256:…",
+     "kms_uri": "arn:aws:kms:…"},
+    {"role": "org", "status": "retired", "type": "rsa-oaep-3072-sha256",
+     "public_key": "<base64 SPKI>"}
+  ],
+  "key_archive": "file:///Volumes/keys/openadapt/",
+  "require_hardware_device_key": false,
+  "max_unarchived": 50
+}
+```
+
+- In organization mode, a missing or unreadable policy, no active
+  organization recipient, or no `key_archive` stops recording and running.
+  Organization mode keeps records in the archive only: `records: inline`
+  is refused there, so shredding always reaches every tracked copy.
+- The archive counts as reachable only when an empty file named
+  `.openadapt-key-archive` is at its root. The administrator creates it
+  once; Flow never creates the archive folder. An unmounted share (an empty
+  local folder at the mount point) is therefore never mistaken for the
+  archive: records are not written there, and a record missing from it is
+  not taken as deleted. Records are written atomically.
+- Each record notes the archive it was sent to, and so does the set's
+  header (under its MACs). Archiving and shredding use that archive, never
+  the policy in force later, so moving the archive or switching to solo mode
+  never leaves a key copy behind.
+- If the archive is unreachable, records stay local as "not yet archived"
+  (`at-rest status` counts them). A new set whose own record can't reach the
+  archive is refused (and its record destroyed) when more than
+  `max_unarchived` would then be waiting; `max_unarchived: 0` means every
+  record must reach the archive before its set is written. Concurrent
+  writers can't share the last slot. `openadapt-flow at-rest archive` sends
+  waiting records once the archive is back, and the next new set that
+  reaches it sends them too, so recording resumes.
+- Machine policy sources are platform-specific: macOS reads the managed
+  preferences profile and `/etc/openadapt/policy.json`, Windows reads only
+  HKLM, Linux reads only `/etc/openadapt/policy.json`. Every policy file
+  must be owned by root and writable by root only, checked on the file
+  actually read. A registry key the account can't read is an error, never
+  "no policy".
+- Only a local or mounted path (`file://`) is supported as `key_archive` so
+  far; `s3://` and `smb://` refuse.
+- OpenAdapt Cloud never distributes the organization's key or holds any key.
+
+A reviewer opens a set with the archive copy of its record in
+`~/.openadapt/keys/buckets/` and `OPENADAPT_ORG_KEY_FILE` (a PEM private
+key). An organization key never opens a record that a set's own header
+carries: anyone who knows the organization's public key could make such a
+set. A record from a header opens only with this computer's device keys or a
+recovery key. If the device key's keychain entry is missing, Flow still
+tries the recovery code and organization key before it reports that. Unwrapping through the KMS itself (`Decrypt`, `DeriveSharedSecret`) is
+not built yet.
+
+### Solo recovery
+
+`openadapt-flow at-rest recovery create` makes a recovery key: 32 random
+bytes shown once as a 52-character code, turned into a P-256 key with HPKE's
+DeriveKeyPair. Only its public half is stored; it becomes a recipient of
+every new set. Without one, a lost or reset computer means its encrypted
+runs can't be opened.
+
+A set's own header carries its key record in solo mode, so the set is bound
+to the computer that wrote it: only that computer's device key opens it
+silently (the device's public key is never written out). The recovery
+public key is on disk, so anyone who reads it could make a set the code
+opens. The code therefore never opens a set silently. To use a backup on a
+new or reset computer, set `OPENADAPT_RECOVERY_CODE` and run
+`openadapt-flow at-rest restore DIR --yes`, which wraps that set to this
+computer's device key so it opens here from then on. Where no device key can
+be made (a restored home whose keychain entry is gone),
+`OPENADAPT_RECOVERY_RESTORE=1` with the code reads backups in place.
+
+### Legacy keys
+
+- `OPENADAPT_BUNDLE_KEY` and `OPENADAPT_RECORDING_KEY` still win outside
+  organization mode: Flow writes the version 1 header it always wrote,
+  keyed by that passphrase (scrypt N=2^15, r=8, p=1). They are deprecated.
+- `~/.openadapt/keys/at-rest.key` (mode 0600), the key earlier versions
+  made, still opens what it encrypted. It is the local passphrase of
+  durable checkpoints and attended state in a plaintext or version 1 or 2
+  run directory. In a version 3 run, durable checkpoints and rollback state
+  use a key derived from the run's own data key instead, so shredding the
+  run reaches them, backups included.
+- Version 1 and 2 sets, and plaintext folders, still read.
+
+`openadapt-flow at-rest status` shows the mode, the policy source, the device
+keys, the organization fingerprints, the recovery key and the unarchived
+count. It prints no key material.
+
+## Crypto-shredding
+
+`openadapt-flow at-rest shred DIR --yes` first authenticates the set's
+header with a key this computer holds, so a changed header can't point the
+deletion at another set's key; a set no key here opens is refused, and
+nothing is destroyed. It then destroys the set's bucket key: the local
+record is overwritten and deleted, and the copy deleted from the archive the
+set was written to. If that copy can't be deleted (an offline, unmounted or
+read-only archive), the command says the shred is not complete and exits
+non-zero; running it again on the same computer, or `at-rest archive`,
+finishes it once the archive is reachable. It also drops the record from the
+header, and deletes the durable checkpoints and other stores' ciphertext
+inside the set. The header says complete only after the last of these, so an
+interrupted shred is finished by running it again. It returns a shred record
+(bucket id, time, copies destroyed). The library call is
+`openadapt_flow.sealed_set.shred`, for a retention job. In solo mode it
+reaches only this disk's copy, and says so.
+
+It does not reach plaintext that leaked earlier (a screenshot pasted into a
+ticket, a crash dump), copies someone opened and saved, or a desktop
+recording's raw capture session.
+
+## Receipts
+
+The receipt (`seal.json`), its timestamp and log proofs, `receipt.json`,
+`receipt.md`, `receipt.png` and the public card (`public-seal.json`) stay
+plaintext beside an encrypted run. They hold signatures, outcomes, counts and
+digests, never the report's contents.
+
+**Every digest is over the plaintext.** The receipt's `subject_sha256` and
+the card's `report_sha256` are the SHA-256 of the plaintext `report.json`
+bytes, decrypted in memory. So a receipt is the same whether the run is
+encrypted or not, and checking it needs a key that opens the report.
+`seal verify` and the receipt page decrypt the report to check it.
+
+The receipt page (`seal.html`) embeds the run report so it can check the
+receipt in the browser. Beside an encrypted run it is therefore a plaintext
+copy of the report (including the run's inputs): writing it is logged, and
+strict mode refuses it.
+
+## Desktop recordings
+
+The desktop recorders capture through openadapt-capture, which writes its
+raw session (input database and screen video) in plaintext while recording,
+in a private 0700 folder beside the output. When recording stops, Flow
+converts it, encrypts the converted recording into the output, and deletes
+the raw session and the converted plaintext. If any of it can't be deleted,
+the recording fails and names the folder, rather than return as if it were
+encrypted. The organization policy (recipients, archive and backlog,
+hardware key) is checked before capture starts, and strict mode refuses
+desktop capture, whatever key a caller passes. Until then, and if the process
+is killed before it converts, they are plaintext on disk; deleting them is not
+a secure erase. So crypto-shredding can't be claimed for a desktop recording
+(NIST SP 800-88r2 3.2.2). Record on an encrypted volume. Encrypting inside the
+recorder, before the first write, is not built yet.
+
 ## Keys
 
 | Variable | Used for |
 | --- | --- |
-| `OPENADAPT_BUNDLE_KEY` | Sealed bundles and their run directories. Also turns on encrypted web recording by default. |
-| `OPENADAPT_RECORDING_KEY` | Recordings. When it is unset, recordings use `OPENADAPT_BUNDLE_KEY`. |
+| `OPENADAPT_POLICY` | A policy file, when no machine policy exists. |
+| `OPENADAPT_RECOVERY_CODE` | The solo recovery code, for `at-rest restore` on another computer. |
+| `OPENADAPT_RECOVERY_RESTORE` | `1`: read backups in place with the recovery code (an explicit restore). |
+| `OPENADAPT_ORG_KEY_FILE` | An organization recipient's PEM private key, for a reviewer. |
+| `OPENADAPT_FLOW_KEY_STORE` | Where the software device key is kept: `auto`, `keychain` or `file`. |
+| `OPENADAPT_BUNDLE_KEY` | Deprecated: a passphrase for bundles and their run directories (version 1 header). |
+| `OPENADAPT_RECORDING_KEY` | Deprecated: the same for recordings. |
 
-The key is a passphrase. Flow stretches it with scrypt (N=2^15, r=8, p=1)
-over a random per-directory salt, once per directory, and seals each file with
-AES-256-GCM under the derived key, a fresh random 96-bit nonce and the file's
-path in the associated data. Both primitives come from the `cryptography`
-package. Key management (KMS, escrow, rotation) is the operator's: Flow reads
-the passphrase from the environment and never writes it.
+Each set is opened once per reader or writer handle, which reuses its keys
+for that operation. Independent path-helper reads open the set again; the
+module retains no reader or passphrase cache. Caller inputs and derived keys
+remain sensitive memory; releasing a handle does not promise erasure. Files
+are encrypted whole in memory: a very large file needs its size in memory to
+read or write.
 
 ## Sealed sets
 
 A sealed bundle, an encrypted recording and an encrypted run directory share
 one format, the sealed set:
 
-- `.openadapt-sealed.json` holds the salt, the scrypt parameters and an index
-  sealed with the derived key. The index lists every other file with the
+- `.openadapt-sealed.json` holds the wrapped data key (version 3: wrapped
+  to the set's bucket key, see [Key hierarchy](#key-hierarchy); version 1:
+  the salt and scrypt parameters) and an index sealed with the data key. The index lists every other file with the
   SHA-256 of its bytes on disk. The header also repeats the index digest
   (`set_digest`) for an inventory that has no key; Flow trusts only the copy
   it recomputes from the authenticated index.
@@ -163,7 +415,7 @@ step with them.
 | `qualification-proposal.json`, `qualification-proposal.draft.json`, `qualification-admission.local-dev.json`, `qualification/*` | Qualification pins, cases and reports | Encrypted |
 | `admission-decision.json`, `admission.json`, `admit.json`, `jit_draft.json` | Admission records; some carry read-back values or a login name | Encrypted |
 | `teach-authorization/*` | The person-signed teach authorization the program was taught under; a spelled-out input or record value is in it | Encrypted |
-| `openadapt-card.json`, `repair/*`, `evidence/*` | Operator card, repair candidates with anchor text, copied evidence | Encrypted |
+| `openadapt-card.json`, `repair/*`, `evidence/*`, `narration.json` | Operator card, repair candidates with anchor text, copied evidence, scrubbed narration | Encrypted |
 | Anything else | Unknown | `seal` refuses |
 
 ### Recording
@@ -176,7 +428,7 @@ step with them.
 | `network.jsonl` | Request URLs, form fields and bodies, response bodies (`--capture-network`) | Encrypted |
 | `sor_snapshots.json`, `verify.proposed.yaml` | System-of-record rows read by `record --verify`, and the effects proposed from them | Encrypted |
 | `check.json`, `check.proposed.json`, `readback.proposed.yaml`, `record_check.proposed.yaml`, `record_check.proof.json`, `identity.proposed.json`, `effect_contract.yaml` | Checks and proposals derived from the recording | Encrypted |
-| `distill.json`, `.openadapt-approval.json`, `.openadapt-sanitization.json` | Derived reports and approvals | Encrypted |
+| `distill.json`, `narration.json`, `.openadapt-approval.json`, `.openadapt-sanitization.json` | Derived reports, scrubbed narration, approvals | Encrypted |
 | Anything else | Unknown | Refused |
 
 ### Skill library
@@ -210,10 +462,19 @@ place is refused. The external attended journal stores each decision-log
 snapshot encrypted and bound to its run and sequence; its hash chain and HMAC
 cover the plaintext. A run whose attended files are plaintext from an earlier
 version still resumes, and its first encrypted write converts them.
-The key is stretched with scrypt once per run, under a random salt kept in the
-run's `.attended_state.encrypted` marker, and each file and journal row gets
-its own nonce under keys derived from it, so the cost doesn't grow with the
-number of files or journal rows. Each file names the salt it was sealed
+
+A durable store is itself a caller-owned handle. It keeps the keys it
+derived from its own explicit key, by salt and work factors, for its own
+lifetime, so one run stretches the passphrase once rather than once per
+checkpoint read. Each read still authenticates the container on disk. Another
+store, a changed key, or a store that reads the key from the environment
+derives again.
+File and journal operations derive their keys with scrypt under the random
+salt kept in the run's `.attended_state.encrypted` marker. A conversion
+operation reuses its local AEAD across the files it converts; independent
+reads and writes derive again, so the cost grows with the number of independent
+crypto operations. Each file and journal row still gets its own nonce. Each
+file names the salt it was sealed
 under, and a file whose salt is not the one in the run's marker is refused, so
 a file copied in from another run under the same key does not read. If two
 processes convert the same run at once, the one that loses the race to write
@@ -227,12 +488,17 @@ still read.
 `tests/test_attended_at_rest.py` runs attended decisions under the same disk
 audit hook and checks that no attended file or journal row holds plaintext.
 
-### Run directory of a sealed bundle
+### Run directory
 
 Every file is encrypted except these structural ones: `.durable_run.claim`
 (run id and namespace), the empty `*.lock` files, `.attended_action.lease`
-(nonce digests and times) and `.attended_capability.key` (a random per-run
-secret, no recorded data). The durable store's checkpoints, pauses and
+(nonce digests and times), `.attended_capability.key` (a random per-run
+secret, no recorded data), and the receipt files (`seal.json`,
+`seal.anchor.json`, `seal.tsa.json`, `seal.tsr`, `seal.publish.json`,
+`public-seal.json`, `receipt.json`, `receipt.md`, `receipt.png`; see
+[Receipts](#receipts)). `seal.html`, the receipt page, is an export: it is
+plaintext and logged. Undo's prior record values (`undo/prior/*`) are
+encrypted with the run. The durable store's checkpoints, pauses and
 approvals are sealed under the same key with their own AES-256-GCM containers,
 and the run set adopts them as ciphertext. A file written in plaintext by any
 other component makes the run refuse to seal its index.
@@ -367,17 +633,23 @@ marks as logged. Also:
 - Names and sizes. File names (`templates/step_003.png.enc`), file counts and
   ciphertext sizes show the number of steps and frames and roughly how large
   each image is.
-- Structural files: `manifest.json`, the sealed-set headers, and the run
-  directory's claim, lock and lease files.
-- Desktop recordings, as above.
+- Structural files: `manifest.json`, the sealed-set headers (with the public
+  recipients), the run directory's claim, lock and lease files, and the
+  receipt files listed under [Receipts](#receipts).
+- The receipt page (`seal.html`) and the quickstart's summary page
+  (`index.html`). The summary page leaves out an encrypted run's
+  screenshots; the receipt page embeds the report.
+- A desktop recording's raw capture session while it records, as above.
 - The admission root's `admission-pending.json` and
   `admission-decision.json`.
 - Bundles encrypted with the older `Workflow.save(encrypt=True)` library call
   and no `seal`: only `workflow.json` and `templates/` are encrypted there.
-- The offline Seal of a run (`local-seal`) is not written for an encrypted
-  run directory yet; the run says so on stderr.
-- Commands outside the list above refuse sealed input rather than decrypt it
-  to disk.
+- Attended continuation (`execute_attended_action`, the Desktop and
+  console path) of an encrypted run directory is not built yet. A run
+  directory from before this release keeps running in plaintext (logged),
+  with its attended state in its own encrypted containers.
+- Commands outside the list above, `repair` among them, refuse sealed input
+  rather than decrypt it to disk. Each says so before it reads anything.
 
 ## The identity template is not encryption
 

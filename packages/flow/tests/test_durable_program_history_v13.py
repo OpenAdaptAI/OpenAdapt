@@ -8,8 +8,6 @@ without repeating an action and that changed history refuses before input.
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from openadapt_flow.ir import ActionKind, State, StateKind, Step, Transition
@@ -18,6 +16,7 @@ from openadapt_flow.runtime.durable.attended import (
     BoundAttendedExecutor,
     execute_attended_action,
 )
+from openadapt_flow.runtime.durable.checkpoint import PendingEscalation
 from openadapt_flow.runtime.durable.program_checkpoint import history_hash
 from openadapt_flow.runtime.replayer import Replayer
 from tests.test_attended_actions import (
@@ -27,7 +26,6 @@ from tests.test_attended_actions import (
 )
 from tests.test_durable_program import (
     _approval,
-    _retry_approval,
     _run_branch_loop_to_pause,
 )
 from tests.test_replayer import FakeBackend, FakeVision, Match
@@ -47,8 +45,10 @@ def _assert_boundary(
 
 
 def _rewrite_checkpoint(run_dir, checkpoint) -> None:
+    # Through the store's own writer: in an encrypted run (the default) a
+    # plaintext file beside the sealed checkpoint would be refused first.
     path = run_dir / "checkpoints" / f"pstate_{checkpoint.seq:04d}.json"
-    path.write_text(checkpoint.model_dump_json(indent=2))
+    CheckpointStore(run_dir)._write_model(path, checkpoint)
 
 
 def _verified_checkpoint_path(checkpoints) -> list[str]:
@@ -88,7 +88,9 @@ def test_normal_checkpoint_and_pause_form_one_append_only_history(tmp_path):
 
 
 def test_direct_resume_extends_the_pause_history_without_repeating_it(tmp_path):
-    _report, run_dir, bundle, verifier = _run_branch_loop_to_pause(tmp_path)
+    _report, run_dir, bundle, verifier = _run_branch_loop_to_pause(
+        tmp_path, before_input=True
+    )
     store = CheckpointStore(run_dir)
     pending = store.read_pending()
     assert pending is not None
@@ -103,7 +105,7 @@ def test_direct_resume_extends_the_pause_history_without_repeating_it(tmp_path):
             effect_verifier=verifier,
             poll_interval_s=0.0,
         ),
-        approval=_retry_approval(bundle),
+        approval=_approval(bundle, run_dir),
     )
 
     assert resumed.success is True
@@ -133,9 +135,11 @@ def test_direct_resume_extends_the_pause_history_without_repeating_it(tmp_path):
 def test_restart_after_post_pause_checkpoint_uses_latest_history_boundary(
     tmp_path,
 ):
-    _report, run_dir, bundle, verifier = _run_branch_loop_to_pause(tmp_path)
+    _report, run_dir, bundle, verifier = _run_branch_loop_to_pause(
+        tmp_path, before_input=True
+    )
     verifier.refute.clear()
-    approval = _retry_approval(bundle)
+    approval = _approval(bundle, run_dir)
 
     class CrashBeforeSecondResumedAction(Replayer):
         resumed_actions = 0
@@ -388,7 +392,10 @@ def test_reordered_checkpoint_history_refuses_before_input(tmp_path):
 def test_deleted_program_checkpoint_refuses_before_input(tmp_path):
     _report, run_dir, bundle, verifier = _run_branch_loop_to_pause(tmp_path)
     path = run_dir / "checkpoints" / "pstate_0001.json"
-    path.unlink()
+    forms = [path, path.with_name(path.name + ".enc")]  # plaintext or sealed
+    assert any(form.exists() for form in forms)
+    for form in forms:
+        form.unlink(missing_ok=True)
 
     backend = FakeBackend()
     with pytest.raises(StateDiverged):
@@ -403,10 +410,12 @@ def test_deleted_program_checkpoint_refuses_before_input(tmp_path):
 def test_changed_pending_history_refuses_before_input(tmp_path):
     _report, run_dir, bundle, verifier = _run_branch_loop_to_pause(tmp_path)
     pending_path = run_dir / "pending_escalation.json"
-    raw = json.loads(pending_path.read_text())
+    store = CheckpointStore(run_dir)
+    raw = store._read_json(pending_path)
+    assert raw is not None
     raw["program_history"] = list(reversed(raw["program_history"]))
     raw["program_history_hash"] = history_hash(raw["program_history"])
-    pending_path.write_text(json.dumps(raw, indent=2))
+    store._write_model(pending_path, PendingEscalation.model_validate(raw))
 
     backend = FakeBackend()
     with pytest.raises(StateDiverged):

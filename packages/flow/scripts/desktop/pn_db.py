@@ -9,7 +9,7 @@ success is decided by DB state, never OCR.
 
 Commands (all print machine-readable output):
 
-    seed [--drift none|siblings|reorder]   (re)create + seed the DB
+    seed [--drift none|siblings|decoy|reorder|absent]   (re)create + seed the DB
     list [filter]                          JSON list of patients (name match)
     save <id> <note_base64>                set a patient's note; prints OK
     get  <id>                              JSON of one patient
@@ -76,6 +76,10 @@ def seed(drift: str = "none") -> None:
         rows += DRIFT_DECOY
     if drift == "reorder":
         rows = list(reversed(rows))
+    if drift == "absent":
+        # The target is gone and only its near-identical sibling matches the
+        # search: every run must stop, never save to the sibling.
+        rows = [r for r in rows if r[0] != 1] + DRIFT_SIBLINGS
     con.executemany(
         "INSERT INTO patients (id, first, last, dob, note) VALUES (?,?,?,?,?)",
         rows,
@@ -86,8 +90,13 @@ def seed(drift: str = "none") -> None:
 
 
 def _patient_dict(r: sqlite3.Row) -> dict:
-    return {"id": r["id"], "first": r["first"], "last": r["last"],
-            "dob": r["dob"], "note": r["note"] or ""}
+    return {
+        "id": r["id"],
+        "first": r["first"],
+        "last": r["last"],
+        "dob": r["dob"],
+        "note": r["note"] or "",
+    }
 
 
 def list_patients(filt: str = "") -> None:
@@ -123,10 +132,19 @@ def get(pid: int) -> None:
     print(json.dumps(_patient_dict(r) if r else None))
 
 
+def _stored_row(r: sqlite3.Row) -> dict:
+    """A row as stored: unlike ``_patient_dict``, a NULL note stays null, so
+    evidence read through ``all`` can tell it from an empty note."""
+    return {"id": r["id"], "first": r["first"], "last": r["last"],
+            "dob": r["dob"], "note": r["note"]}
+
+
 def dump_all() -> None:
     con = _conn()
-    rows = [_patient_dict(r) for r in
-            con.execute("SELECT * FROM patients ORDER BY id").fetchall()]
+    rows = [
+        _stored_row(r)
+        for r in con.execute("SELECT * FROM patients ORDER BY id").fetchall()
+    ]
     con.close()
     print(json.dumps(rows))
 

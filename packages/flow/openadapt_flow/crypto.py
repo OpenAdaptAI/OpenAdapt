@@ -38,12 +38,10 @@ plaintext default, loudly.
 from __future__ import annotations
 
 import base64
-import hmac
 import json
 import os
 import secrets
 import threading
-from collections import OrderedDict
 from typing import Final, Optional
 
 from cryptography.exceptions import InvalidTag
@@ -173,6 +171,8 @@ def is_encrypted(data: bytes) -> bool:
     """
     if data[: len(SET_FILE_MAGIC)] == SET_FILE_MAGIC:
         return True
+    if data[: len(SET3_FILE_MAGIC)] == SET3_FILE_MAGIC:
+        return True
     if data[: len(SALTED_FILE_MAGIC)] == SALTED_FILE_MAGIC:
         return True
     try:
@@ -182,41 +182,22 @@ def is_encrypted(data: bytes) -> bool:
     return isinstance(obj, dict) and obj.get("format") == _MAGIC
 
 
-# Derived keys, in memory only, so one salt costs one scrypt per process. A
-# run's checkpoint store seals every container with one salt
-# (:func:`new_salt` and ``encrypt_bytes(salt=...)``), and reads them back many
-# times per run; without this each read and write ran scrypt again (about 130
-# per run in the screen-path study). An entry is reused only for the same
-# passphrase, compared in constant time, and the same work factors; a
-# different passphrase derives again (and fails to decrypt, as before). Never
-# written anywhere.
-_DERIVED: "OrderedDict[tuple[bytes, int, int, int], tuple[bytes, bytes]]" = (
-    OrderedDict()
-)
-_DERIVED_LIMIT: Final[int] = 32
-_DERIVED_LOCK = threading.Lock()
-#: Count of scrypt runs in this process (for tests and profiling).
+# Each request derives once. Reuse an explicit SetKey within a sealed-set
+# operation instead of retaining a process-global passphrase, verifier or key
+# cache. Derived keys and caller inputs remain sensitive memory; no erasure is
+# promised by returning from an operation.
+_DERIVATION_COUNT_LOCK = threading.Lock()
+#: Count of successful scrypt runs in this process (tests and profiling).
 derivations = 0
 
 
 def _derive(passphrase: str, salt: bytes, *, n: int, r: int, p: int) -> bytes:
     global derivations
-    secret = passphrase.encode("utf-8")
-    slot = (bytes(salt), int(n), int(r), int(p))
-    with _DERIVED_LOCK:
-        cached = _DERIVED.get(slot)
-        if cached is not None:
-            _DERIVED.move_to_end(slot)
-    if cached is not None and hmac.compare_digest(cached[0], secret):
-        return cached[1]
-    kdf = Scrypt(salt=salt, length=_KEY_LEN, n=n, r=r, p=p)
-    key = kdf.derive(secret)
-    with _DERIVED_LOCK:
+    key = Scrypt(salt=salt, length=_KEY_LEN, n=n, r=r, p=p).derive(
+        passphrase.encode("utf-8")
+    )
+    with _DERIVATION_COUNT_LOCK:
         derivations += 1
-        _DERIVED[slot] = (secret, key)
-        _DERIVED.move_to_end(slot)
-        while len(_DERIVED) > _DERIVED_LIMIT:
-            _DERIVED.popitem(last=False)
     return key
 
 
@@ -231,6 +212,7 @@ def encrypt_bytes(
     *,
     aad: bytes,
     salt: Optional[bytes] = None,
+    keys: Optional["ContainerKeys"] = None,
 ) -> bytes:
     """Seal ``plaintext`` into a self-describing AES-256-GCM container.
 
@@ -240,10 +222,12 @@ def encrypt_bytes(
     :data:`CHECKPOINT_AAD`) authenticated -- but not encrypted -- alongside the
     ciphertext. Returns the serialized JSON container as bytes.
 
-    ``salt`` lets one writer (a run's checkpoint store) seal many containers
-    under one derived key, so scrypt runs once for all of them. Each
-    container still records its salt and gets a fresh random nonce, so the
-    format is unchanged. Default: a fresh salt per container.
+    ``salt`` lets one writer seal containers under the same salt. Each call
+    still runs scrypt and uses a fresh random nonce; sharing a salt does not
+    create a process-global key cache. Default: a fresh salt per container.
+    ``keys`` is a caller-owned :class:`ContainerKeys` handle; with it, a salt
+    the handle has already stretched for this passphrase is not stretched
+    again.
     """
     passphrase = require_key(key)
     if salt is None:
@@ -251,7 +235,7 @@ def encrypt_bytes(
     elif len(salt) != _SALT_LEN:
         raise CryptoError("a container salt must be 16 bytes")
     nonce = secrets.token_bytes(_NONCE_LEN)
-    dek = _derive(passphrase, salt, n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P)
+    dek = _container_key(keys, passphrase, salt, n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P)
     ciphertext = AESGCM(dek).encrypt(nonce, plaintext, aad)
     container = {
         "format": _MAGIC,
@@ -269,7 +253,13 @@ def encrypt_bytes(
     return json.dumps(container, indent=2).encode("utf-8")
 
 
-def decrypt_bytes(container: bytes, key: Optional[str], *, aad: bytes) -> bytes:
+def decrypt_bytes(
+    container: bytes,
+    key: Optional[str],
+    *,
+    aad: bytes,
+    keys: Optional["ContainerKeys"] = None,
+) -> bytes:
     """Authenticate and decrypt a container produced by :func:`encrypt_bytes`.
 
     Raises :class:`MissingKeyError` when no passphrase is configured,
@@ -291,7 +281,7 @@ def decrypt_bytes(container: bytes, key: Optional[str], *, aad: bytes) -> bytes:
         raise
     except (ValueError, TypeError, KeyError) as exc:
         raise DecryptionError(f"malformed encrypted container: {exc}") from exc
-    dek = _derive(passphrase, salt, n=n, r=r, p=p)
+    dek = _container_key(keys, passphrase, salt, n=n, r=r, p=p)
     try:
         return AESGCM(dek).decrypt(nonce, ciphertext, aad)
     except InvalidTag as exc:
@@ -299,6 +289,65 @@ def decrypt_bytes(container: bytes, key: Optional[str], *, aad: bytes) -> bytes:
             "decryption failed: wrong key or the ciphertext was tampered with "
             "(authentication tag mismatch). The payload was NOT loaded."
         ) from exc
+
+
+class ContainerKeys:
+    """Derived container keys owned by one caller, such as a checkpoint store.
+
+    A run's checkpoint store reads its own sealed checkpoints back many times
+    per run. Without a handle each read runs scrypt again (131 derivations,
+    about 20 s, on one tutorial run). The handle keeps the keys it derived,
+    by salt and work factors, for its owner's lifetime only. It makes no copy
+    of the passphrase and keeps no verifier: the owner passes its passphrase
+    on every call, and :meth:`rebind` keeps only a reference to the key object
+    the owner already holds, dropping every key when that object changes.
+    Every read still authenticates the container's bytes with AES-GCM, so a
+    wrong key or a tampered file is refused as before. Nothing is module-level
+    and nothing is written anywhere.
+    """
+
+    __slots__ = ("_bound", "_keys", "_lock")
+
+    _LIMIT: Final[int] = 32
+
+    def __init__(self) -> None:
+        self._bound: object = None
+        self._keys: dict[tuple[bytes, int, int, int], bytes] = {}
+        self._lock = threading.Lock()
+
+    def rebind(self, owner_key: object) -> None:
+        """Drop every key unless ``owner_key`` is the object last bound."""
+        with self._lock:
+            if owner_key is not self._bound:
+                self._keys.clear()
+                self._bound = owner_key
+
+    def derive(self, passphrase: str, salt: bytes, *, n: int, r: int, p: int) -> bytes:
+        slot = (bytes(salt), int(n), int(r), int(p))
+        with self._lock:
+            cached = self._keys.get(slot)
+        if cached is not None:
+            return cached
+        key = _derive(passphrase, salt, n=n, r=r, p=p)
+        with self._lock:
+            if len(self._keys) >= self._LIMIT:
+                self._keys.clear()
+            self._keys[slot] = key
+        return key
+
+
+def _container_key(
+    keys: Optional[ContainerKeys],
+    passphrase: str,
+    salt: bytes,
+    *,
+    n: int,
+    r: int,
+    p: int,
+) -> bytes:
+    if keys is None:
+        return _derive(passphrase, salt, n=n, r=r, p=p)
+    return keys.derive(passphrase, salt, n=n, r=r, p=p)
 
 
 # -- one derived key for a whole sealed set ----------------------------------
@@ -314,6 +363,8 @@ def decrypt_bytes(container: bytes, key: Optional[str], *, aad: bytes) -> bytes:
 
 #: Prefix of a per-file container sealed under a :class:`SetKey`.
 SET_FILE_MAGIC: Final[bytes] = b"OAFLOW-SEALED-1\n"
+#: A version 3 sealed-set file: a Tink AES-256-GCM-HKDF stream follows.
+SET3_FILE_MAGIC: Final[bytes] = b"OAFLOW-SEALED-3\n"
 
 
 class SetKey:

@@ -37,19 +37,29 @@ from pydantic import (
     ConfigDict,
     Field,
     PrivateAttr,
+    SerializationInfo,
+    ValidationInfo,
     field_validator,
     model_serializer,
     model_validator,
 )
 
+from openadapt_flow import run_invocation as _run_invocation
 from openadapt_flow.approval_mode.model import ApprovalModeItemEvidence
-from openadapt_flow.qualification_faults import FaultMutationReceipt
-from openadapt_flow.records.schema import (
-    FieldRead,
-    FieldSpec,
-    GradeGate,
-    ReadProof,
+from openadapt_flow.input_evidence import FreshActuationEvent as FreshActuationEvent
+from openadapt_flow.job_authoring import (
+    JobAuthoringBinding,
+    check_workflow_input,
+    checked_bundle_schema,
+    dump_authoring_model,
+    dump_schema3_json,
+    require_checked_json_parser,
+    require_checked_json_projection,
+    require_supported_workflow,
+    validate_authoring_model_json,
 )
+from openadapt_flow.qualification_faults import FaultMutationReceipt
+from openadapt_flow.records.schema import FieldRead, FieldSpec, GradeGate, ReadProof
 
 if TYPE_CHECKING:
     # Type-only import for the Step.effects forward reference. The RUNTIME
@@ -111,6 +121,7 @@ class ActionKind(str, Enum):
     # does not know the value, refuses the whole bundle instead of driving the
     # wrong window (docs/MULTI_SURFACE.md).
     SWITCH_SURFACE = "switch_surface"
+    SECOND_FACTOR = "second_factor"  # a person's sign-in code (second_factor.py)
 
 
 class Landmark(BaseModel):
@@ -329,32 +340,22 @@ class IdentityTemplate(BaseModel):
         ),
     )
     structured: Optional[str] = Field(
-        default=None, description="salted hash of the structured identity string"
+        default=None, description="salted hash of structured identity"
     )
     structured_params: list[str] = Field(
         default_factory=list,
-        description=(
-            "Workflow parameters embedded in the structured identity. Their "
-            "demonstrated values are replaced by fixed sentinels before "
-            "hashing; replay substitutes the run's value before exact compare."
-        ),
+        description="Workflow params replaced by fixed sentinels in structured identity.",
     )
     signal_hashes: dict[str, str] = Field(
         default_factory=dict,
-        description=(
-            "Salted hashes of strict exact/explicitly-normalized identity "
-            "evidence, including operator-selected extracted fields. Keys are "
-            "produced by identity_signals."
-        ),
+        description="Salted hashes of strict identity_signals evidence.",
     )
     context_params: list[str] = Field(
         default_factory=list,
-        description=(
-            "Workflow parameters replaced by fixed sentinels before the "
-            "captured-context signal hashes were computed."
-        ),
+        description="Workflow params replaced by sentinels in captured-context signal hashes.",
     )
     param_token_indices: dict[str, list[int]] = Field(default_factory=dict)
+    sibling_generic_hashes: list[str] = Field(default_factory=list)
     rests_on_confusable_identifier: bool = False
     record_key: Optional[str] = Field(
         default=None,
@@ -410,6 +411,8 @@ class IdentityTemplate(BaseModel):
             data.pop("signal_hashes", None)
         if not self.context_params:
             data.pop("context_params", None)
+        if not self.sibling_generic_hashes:
+            data.pop("sibling_generic_hashes", None)
         if self.record_key is None:
             data.pop("record_key", None)
         if self.structured_row is None:
@@ -2101,8 +2104,9 @@ class DialogResponse(BaseModel):
     A browser ``alert``/``confirm``/``prompt``/``beforeunload`` dialog is not a
     surface: it is a screen state of the page that raised it, and it blocks
     that page until it is answered. On the browser backend the step's action
-    arms a one-shot answer before delivering input; the dialog's message is
-    its identity. A dialog that does not show exactly ``message`` is
+    arms a one-shot answer before delivering input; its recorded kind and
+    message identify the dialog. Legacy contracts without a kind retain their
+    message-only behavior. A dialog that does not show exactly ``message`` is
     dismissed, never accepted, and the step halts. On a screen-driven backend
     (desktop, RDP, Citrix) a dialog is just pixels and is recorded as the
     clicks that answer it, so this field is browser-only
@@ -2117,8 +2121,16 @@ class DialogResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     response: Literal["accept", "dismiss"]
+    kind: Optional[Literal["alert", "confirm", "prompt", "beforeunload"]] = None
     message: Optional[str] = Field(default=None, min_length=1, max_length=2000)
     message_pattern: Optional[str] = Field(default=None, min_length=1, max_length=4000)
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.kind is None:
+            data.pop("kind", None)
+        return data
 
     @model_validator(mode="after")
     def _one_identity(self) -> "DialogResponse":
@@ -2204,6 +2216,108 @@ class NativeSelectContract(BaseModel):
         return self
 
 
+class ChoiceOptionShape(BaseModel):
+    """What the demonstrated option looked like among its siblings.
+
+    Replay finds the option list by shape, never by position: elements with
+    ``role`` (``option`` or ``treeitem``), or, for a list without ARIA, the
+    ``tag`` and every class in ``classes`` (the classes the chosen option
+    shared with the other options in its list; none for a list of bare
+    items). Only elements that appeared after the control opened count.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    role: Optional[Literal["option", "treeitem"]] = None
+    tag: str = Field(min_length=1, max_length=32, pattern=r"^[a-z][a-z0-9-]*$")
+    classes: tuple[str, ...] = Field(default=(), max_length=8)
+
+    @model_validator(mode="after")
+    def _findable(self) -> "ChoiceOptionShape":
+        # No role and no classes is a plain list of bare items (``<li>``):
+        # replay then matches the tag among elements that appeared after the
+        # control opened.
+        for token in self.classes:
+            if not re.fullmatch(r"[A-Za-z_-][A-Za-z0-9_-]{0,127}", token):
+                raise ValueError("an option class is not a plain class token")
+        return self
+
+
+class OptionChoice(BaseModel):
+    """Choose one option of a dropdown by what it says, then read it back.
+
+    One model for every dropdown family (docs/CHOICES.md):
+
+    - ``native_select``: an HTML ``<select>``. The option is set through the
+      DOM and the control's selected option is read back.
+    - ``listed_option``: anything that opens a list of options when the
+      control is clicked (ARIA listboxes, ``<div>`` lists, searchable selects,
+      type-aheads whose options load from the server). Replay clicks the
+      control, types the wanted label when the demonstration typed a search
+      (``query="label"``), waits until the option list stops changing, and
+      clicks the one option whose label (or ``value`` attribute) equals the
+      wanted value. The control must then show that label (``readback``).
+
+    The wanted value is the step's parameter when it has one, else ``label``.
+    No option, more than one, or a disabled one halts the step before the
+    option is clicked; a control that does not show the choice afterwards
+    halts it too. Position never decides which option is chosen.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: Literal["native_select", "listed_option"]
+    label: str = Field(min_length=1, max_length=512)
+    value: Optional[str] = Field(default=None, max_length=512)
+    query: Literal["none", "label", "words"] = "none"
+    #: ``query="words"``: the demonstrated search was the start of words
+    #: ``[first, first + count)`` of the label. Replay types those whole
+    #: words of the wanted label, so a search that matches by word (a name
+    #: list whose labels start with an id) still finds it.
+    query_words: Optional[tuple[int, int]] = None
+    option: Optional[ChoiceOptionShape] = None
+    readback: Literal["select", "control_text", "control_value"]
+    #: Independent named form field whose committed value the choice changes.
+    #: Query text alone cannot establish that a listed option was selected.
+    commit_field: Optional[str] = Field(default=None, min_length=1, max_length=512)
+    #: The exact text the control showed after the demonstrated choice when
+    #: it is not the label (a calendar day writes a date into its field).
+    #: Such a choice is literal: replay requires this text afterwards.
+    shows: Optional[str] = Field(default=None, min_length=1, max_length=512)
+    #: How long replay waits for the options to load and settle.
+    settle_s: float = Field(default=8.0, gt=0, le=30)
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "OptionChoice":
+        if self.kind == "native_select":
+            if self.option is not None or self.query != "none":
+                raise ValueError("a native select needs no option shape or search")
+            if self.readback != "select":
+                raise ValueError("a native select is read back from the select")
+        else:
+            if self.option is None:
+                raise ValueError("a listed option needs the option shape")
+            if self.readback == "select":
+                raise ValueError("a listed option is read back from its control")
+            if self.shows is not None and self.readback != "control_value":
+                raise ValueError("a shown value is read from a text control")
+        if (self.query == "words") != (self.query_words is not None):
+            raise ValueError("a word search names its words, and only a word search")
+        if self.query_words is not None and (
+            self.query_words[0] < 0 or not 1 <= self.query_words[1] <= 16
+        ):
+            raise ValueError("a word search names at least one word")
+        if not choice_text(self.label):
+            raise ValueError("a choice needs a visible label")
+        return self
+
+
+def choice_text(text: str) -> str:
+    """The comparison form of an option label: spaces collapsed, casefolded."""
+
+    return " ".join(str(text).split()).casefold()
+
+
 class Step(BaseModel):
     id: str
     intent: str = Field(description="Human-readable purpose of the step")
@@ -2238,7 +2352,16 @@ class Step(BaseModel):
             " compiler.annotate.FieldLabelAnnotator)."
         ),
     )
+    one_time: Optional[Literal["code", "approval"]] = None  # second_factor.py
     native_selection: Optional[NativeSelectContract] = None
+    choice: Optional[OptionChoice] = Field(
+        default=None,
+        description=(
+            "SELECT_OPTION only: choose the option by its label or value and "
+            "read the control back (OptionChoice). The wanted value is "
+            "params[param] when param is set, else text."
+        ),
+    )
     selection_commit_key: Optional[Literal["Enter", "Tab"]] = Field(
         default=None,
         description=(
@@ -2439,11 +2562,16 @@ class Step(BaseModel):
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         """Keep steps without a selected-record parameter byte-identical."""
         data: dict[str, Any] = handler(self)
-        if self.target_param is None:
-            data.pop("target_param", None)
-        if self.native_selection is None:
-            data.pop("native_selection", None)
+        for key in ("target_param", "one_time", "native_selection", "choice"):
+            if getattr(self, key) is None:
+                data.pop(key, None)
         return data
+
+    @model_validator(mode="after")
+    def _validate_one_time(self) -> "Step":
+        from openadapt_flow.second_factor import check_step_shape
+
+        return check_step_shape(self)
 
     @model_validator(mode="after")
     def _validate_target_param(self) -> "Step":
@@ -2487,6 +2615,28 @@ class Step(BaseModel):
                     "native selection requires a literal SELECT_OPTION with an exact "
                     "structural anchor and no remote selection contract"
                 )
+        if self.choice is not None:
+            if (
+                self.action is not ActionKind.SELECT_OPTION
+                or self.native_selection is not None
+                or self.selection_commit_key is not None
+                or self.selection_region is not None
+                or self.secret
+                or self.anchor is None
+                or self.opens
+                or (self.param is None and self.text != self.choice.label)
+                or (self.param is not None and self.choice.shows is not None)
+            ):
+                raise ValueError(
+                    "a choice is a SELECT_OPTION on its control's anchor, with "
+                    "no other selection contract or new page, choosing its "
+                    "demonstrated label unless a parameter names the value"
+                )
+            if (
+                self.choice.kind == "native_select"
+                and not structural_locator_is_locatable(self.anchor.structural)
+            ):
+                raise ValueError("a native select choice needs the select's locator")
         if (self.selection_commit_key is None) != (self.selection_region is None):
             raise ValueError(
                 "selection_commit_key and selection_region must be set together"
@@ -2503,7 +2653,11 @@ class Step(BaseModel):
                     "option-selection contracts require the demonstrated field "
                     "anchor for fresh pre-commit re-resolution"
                 )
-        elif self.action is ActionKind.SELECT_OPTION and self.native_selection is None:
+        elif (
+            self.action is ActionKind.SELECT_OPTION
+            and self.native_selection is None
+            and self.choice is None
+        ):
             raise ValueError(
                 "SELECT_OPTION requires a native contract or selection_commit_key and selection_region"
             )
@@ -3335,6 +3489,47 @@ class BundleManifest(BaseModel):
         description="mirrors Workflow.encrypted (workflow.json sealed at rest)",
     )
 
+    @model_validator(mode="wrap")
+    @classmethod
+    def _checked_authoring_json_source(
+        cls, value: Any, handler: Any, info: ValidationInfo
+    ) -> "BundleManifest":
+        manifest = handler(value)
+        if manifest.schema_version == 3:
+            # Do not let Pydantic coerce a legacy-looking raw version into 3
+            # after the original-byte profile check selected its schema.
+            checked_bundle_schema(
+                value.get("schema_version")
+                if isinstance(value, dict)
+                else manifest.schema_version
+            )
+            require_checked_json_parser(info)
+        return manifest
+
+    @classmethod
+    def model_validate_json(
+        cls, json_data: str | bytes | bytearray, **kwargs: Any
+    ) -> "BundleManifest":
+        return validate_authoring_model_json(cls, json_data, **kwargs)
+
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+        if self.schema_version != 3:
+            return super().model_dump(**kwargs)
+        return dump_authoring_model(self, **kwargs)
+
+    @model_serializer(mode="wrap")
+    def _checked_authoring_json_projection(
+        self, handler: Any, info: SerializationInfo
+    ) -> dict[str, Any]:
+        if self.schema_version == 3:
+            require_checked_json_projection(info)
+        return handler(self)
+
+    def model_dump_json(self, **kwargs: Any) -> str:
+        if self.schema_version != 3:
+            return super().model_dump_json(**kwargs)
+        return dump_schema3_json(self, **kwargs)
+
 
 class BackendHints(BaseModel):
     """Trusted local execution target captured with a remote-display demo.
@@ -3474,8 +3669,27 @@ class Workflow(BaseModel):
     same identity, risk, resolution, postcondition, and effect contracts.
     """
 
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     schema_version: int = SCHEMA_VERSION
     name: str
+    job_authoring: Optional[JobAuthoringBinding] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _supported_authoring_input(cls, value: Any, info: ValidationInfo) -> Any:
+        if isinstance(value, dict) and value.get("schema_version") == 3:
+            require_checked_json_parser(info)
+        check_workflow_input(
+            value, default_version=SCHEMA_VERSION, allowed_fields=cls.model_fields
+        )
+        return value
+
+    @model_validator(mode="after")
+    def _supported_authoring_model(self) -> "Workflow":
+        require_supported_workflow(self)
+        return self
+
     recording_id: Optional[str] = None
     # -- PHI governance manifest (PHI audit REM-1) --------------------------
     # A compiled bundle is a HIPAA-designated record; these fields let an
@@ -3515,6 +3729,15 @@ class Workflow(BaseModel):
     # or a hosted run summary. Empty for browser/native bundles, preserving
     # their serialized form through the compatibility serializer below.
     backend_hints: Optional[BackendHints] = None
+    dialogs_recorded: bool = Field(
+        default=False,
+        description=(
+            "The recording captured every browser dialog the demonstration "
+            "met (docs/CHOICES.md). A run of such a program stops on a dialog "
+            "no step expects (dialog_unexpected); older programs keep the "
+            "browser's default dismissal."
+        ),
+    )
     #: Locale, date order and keyboard layout recorded with the demonstration
     #: (#1897). Checked before replay; omitted from serialized bytes when unset.
     locale_invariants: Optional["LocaleInvariants"] = None
@@ -3638,6 +3861,23 @@ class Workflow(BaseModel):
     # fresh, empty manifest by hand.
     _unverified_load: bool = PrivateAttr(default=False)
 
+    @classmethod
+    def model_validate_json(
+        cls, json_data: str | bytes | bytearray, **kwargs: Any
+    ) -> "Workflow":
+        return validate_authoring_model_json(cls, json_data, **kwargs)
+
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+        if self.schema_version != 3:
+            return super().model_dump(**kwargs)
+        return dump_authoring_model(self, **kwargs)
+
+    def model_dump_json(self, **kwargs: Any) -> str:
+        if self.schema_version != 3:
+            return super().model_dump_json(**kwargs)
+        require_supported_workflow(self)
+        return dump_schema3_json(self, **kwargs)
+
     def model_copy(self, *, update: Any = None, deep: bool = False) -> "Workflow":
         clone = super().model_copy(update=update, deep=deep)
         from openadapt_flow.bundle_validation import transfer_verified_load_capability
@@ -3653,11 +3893,20 @@ class Workflow(BaseModel):
         return self
 
     @model_serializer(mode="wrap")
-    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+    def _serialize_compatible(
+        self, handler: Any, info: SerializationInfo
+    ) -> dict[str, Any]:
         """Omit empty additive execution hints from legacy bundle bytes."""
+        if self.schema_version == 3:
+            require_checked_json_projection(info)
+        require_supported_workflow(self)
         data: dict[str, Any] = handler(self)
+        if self.job_authoring is None:
+            data.pop("job_authoring", None)
         if self.backend_hints is None:
             data.pop("backend_hints", None)
+        if not self.dialogs_recorded:
+            data.pop("dialogs_recorded", None)
         if self.locale_invariants is None:
             data.pop("locale_invariants", None)
         if self.surface is None:
@@ -3885,119 +4134,15 @@ class Workflow(BaseModel):
           structural validation then run on the decrypted content exactly as for
           a plaintext bundle.
         """
-        bundle = Path(bundle_dir)
-        from openadapt_flow import bundle_validation as _bv
-        from openadapt_flow import sealed_set as _sealed
+        from openadapt_flow import bundle_persistence as _persistence
 
-        encrypted_path = bundle / "workflow.json.enc"
-        plaintext_path = bundle / "workflow.json"
-        sealed_assets: Optional[dict[str, bytes]] = None
-        bundle_encrypted = encrypted_path.is_file()
-        if _sealed.active_writer(bundle) is not None or _sealed.is_sealed(bundle):
-            # A sealed set: verify the whole file set, then decrypt the
-            # workflow and every crop in memory.
-            reader: Any = _sealed.active_writer(bundle) or _sealed.open_set(bundle, key)
-            bundle_encrypted = True
-            raw = json.loads(reader.read_bytes("workflow.json"))
-            sealed_assets = {
-                rel: reader.read_bytes(rel) for rel in reader.files("templates/")
-            }
-        elif bundle_encrypted:
-            from openadapt_flow import crypto as _crypto
-
-            decrypted = _crypto.decrypt_bytes(
-                encrypted_path.read_bytes(), key, aad=_crypto.BUNDLE_AAD
-            )
-            raw = json.loads(decrypted)
-        else:
-            raw = json.loads(plaintext_path.read_bytes())
-        _bv.bundle_schema_version(raw)
-        # Verify the original canonical representation before upgrading or
-        # constructing today's model. Embedded manifest precedence is unchanged.
-        persisted = raw.get("manifest")
-        if persisted is None:
-            sidecar = bundle / "manifest.json"
-            if sidecar.is_file():
-                persisted = json.loads(sidecar.read_text(encoding="utf-8"))
-        stored = None
-        original_payload = None
-        if persisted is not None:
-            _bv.bundle_schema_version(persisted)
-            stored = BundleManifest.model_validate(persisted)
-            if stored.content_digest:
-                original_payload = (
-                    _bv.verify_original_content(raw, stored)
-                    if verify_integrity
-                    else _bv.source_canonical_payload(raw, stored.file_hashes)
-                )
-        if verify_integrity and (stored is None or not stored.content_digest):
-            raise _bv.BundleIntegrityError("bundle has no persisted integrity seal")
-        wf = cls.model_validate(_bv.migrate_bundle_dict(raw))
-        wf._unverified_load = not verify_integrity
-        if stored is not None:
-            wf.manifest = stored
-        if original_payload is not None and stored is not None and verify_integrity:
-            _bv.remember_original_content(
-                wf, original_payload, stored, source_bundle_dir=bundle
-            )
-        if sealed_assets is not None:
-            wf._decrypted_templates = sealed_assets
-        elif bundle_encrypted:
-            # Decrypt the sealed image crops IN MEMORY (fail-loud on wrong key /
-            # tamper, exactly as the workflow.json above). The resolver reads
-            # them via ``decrypted_template``; nothing cleartext lands on disk.
-            wf._decrypted_templates = _decrypt_template_assets(bundle, key)
-
-        if verify_integrity and persisted is not None and wf.manifest is not None:
-            if bundle_encrypted:
-                # On-disk crops are ciphertext, so verify the sealed asset
-                # digests against the decrypted plaintext held in memory.
-                _verify_sealed_template_integrity(
-                    wf, bundle, wf.manifest, wf._decrypted_templates
-                )
-            else:
-                _bv.verify_integrity(wf, bundle, wf.manifest)
-            template = wf.manifest.provenance.governed_authorization_template
-            if template is not None:
-                # Manifest provenance is intentionally outside the content
-                # digest.  Rebuild this derived authority from the sealed
-                # workflow and accepted certification so a replacement
-                # self-consistent template cannot weaken production policy.
-                from openadapt_flow.qualification import (
-                    QualificationError,
-                    build_governed_authorization_template,
-                    record_certified_contract_form,
-                )
-
-                try:
-                    expected_template = build_governed_authorization_template(wf)
-                except QualificationError as exc:
-                    raise _bv.BundleIntegrityError(
-                        "governed authorization template cannot be reproduced "
-                        "from the sealed certification"
-                    ) from exc
-                if template != expected_template:
-                    raise _bv.BundleIntegrityError(
-                        "governed authorization template does not match the "
-                        "sealed workflow and certification"
-                    )
-                record_certified_contract_form(wf)
-
-        if wf.manifest is None:
-            wf.manifest = _bv.build_manifest(wf, bundle)
-
-        if validate:
-            report = _bv.validate_workflow(wf)
-            report.raise_if(categories=("structure",))
-
-        if not bundle_encrypted and wf.encrypted:
-            # The flag is authoritative only with an encrypted envelope on
-            # disk: a plaintext copy (for example a decrypted upload) that
-            # still says encrypted is plaintext, and loads as plaintext.
-            wf.encrypted = False
-            if wf.manifest is not None:
-                wf.manifest = wf.manifest.model_copy(update={"encrypted": False})
-        return wf
+        return _persistence.load_workflow(
+            cls,
+            bundle_dir,
+            validate=validate,
+            verify_integrity=verify_integrity,
+            key=key,
+        )
 
     def stamp_certification(
         self,
@@ -4015,7 +4160,9 @@ class Workflow(BaseModel):
         Persisted on the next :meth:`save`. Returns the manifest for convenience.
         """
         if self.manifest is None:
-            self.manifest = BundleManifest()
+            self.manifest = BundleManifest(
+                schema_version=3 if self.schema_version == 3 else SCHEMA_VERSION
+            )
         prov = self.manifest.provenance
         prov.policy_name = policy_name
         prov.certified = passed
@@ -4206,37 +4353,6 @@ class ActionDeliveryUncertainty(BaseModel):
     postconditions_confirmed: Optional[bool] = None
     effects_confirmed: Optional[bool] = None
     resolved_by_contract: bool = False
-
-
-class FreshActuationEvent(BaseModel):
-    """PHI-free evidence for one pre-input actuation-frame mismatch.
-
-    The runtime records only the number and geometry of changed pixels.  It
-    does not retain the rejected frame or its pixel values.  ``retried`` is
-    true only when no earlier input edge crossed for this workflow step and a
-    bounded reacquisition remained available.
-    """
-
-    attempt: int = Field(ge=1)
-    operation: str = Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
-    changed_pixel_count: int = Field(ge=1)
-    changed_bbox: Region
-    frame_size: tuple[int, int]
-    target_intersection: Optional[bool] = None
-    identity_intersection: Optional[bool] = None
-    retried: bool
-
-    @model_validator(mode="after")
-    def _valid_geometry(self) -> "FreshActuationEvent":
-        frame_width, frame_height = self.frame_size
-        x, y, width, height = self.changed_bbox
-        if frame_width <= 0 or frame_height <= 0:
-            raise ValueError("fresh-actuation frame size must be positive")
-        if x < 0 or y < 0 or width <= 0 or height <= 0:
-            raise ValueError("fresh-actuation bounding box must be positive")
-        if x + width > frame_width or y + height > frame_height:
-            raise ValueError("fresh-actuation bounding box exceeds the frame")
-        return self
 
 
 class IdentitySignalEvidence(BaseModel):
@@ -6070,7 +6186,7 @@ class ReportRedaction(BaseModel):
 
     pointer: str = Field(description="RFC 6901 JSON pointer to the string.")
     reason: str = Field(
-        description="What was removed, e.g. url_param:token_main or header:cookie."
+        description="What was removed, e.g. url_param:session_token or header:cookie."
     )
     by: Optional[str] = Field(
         default=None,
@@ -6083,6 +6199,7 @@ class ReportRedaction(BaseModel):
 
 
 class RunReport(BaseModel):
+    invocation_context: Optional[_run_invocation.InvocationContext] = None
     workflow_name: str
     started_at: str
     execution_profile: Optional[Literal["demo", "standard", "regulated"]] = Field(
@@ -6512,10 +6629,7 @@ class RunReport(BaseModel):
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         """Omit additive multi-surface evidence from single-surface reports."""
 
-        data: dict[str, Any] = handler(self)
-        if not self.observed_surface_environments:
-            data.pop("observed_surface_environments", None)
-        return data
+        return _run_invocation.serialize_report_compatible(self, handler)
 
     @model_validator(mode="after")
     def _validate_outcome_envelope_binding(self) -> "RunReport":
@@ -6526,6 +6640,7 @@ class RunReport(BaseModel):
         mutable from the local report that produced it.
         """
 
+        _run_invocation.validate_report_profile(self)
         expected_qualification_only = bool(self.governed_qualification_case_id_sha256)
         if "qualification_evidence_only" not in self.model_fields_set:
             # Normalize reports written before the typed marker existed from

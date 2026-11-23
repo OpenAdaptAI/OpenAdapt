@@ -1,0 +1,9 @@
+{
+  "gen_time": "2026-11-20T00:29:54Z",
+  "imprint_sha256": "f5528f6c7d15b518610db30bf5c351cb235dfe80385bd2832b8997d1840d0fca",
+  "schema": "openadapt.record-timestamp/v1",
+  "seal_sha256": "f5528f6c7d15b518610db30bf5c351cb235dfe80385bd2832b8997d1840d0fca",
+  "tsa": "https://timestamp.sigstore.dev/api/v1/timestamp",
+  "tsr_file": "seal.tsr",
+  "tsr_sha256": "7f47343ae5fe7206c2dba3969568cb8df16ec1e522e49cb668beefd077773ac9"
+}

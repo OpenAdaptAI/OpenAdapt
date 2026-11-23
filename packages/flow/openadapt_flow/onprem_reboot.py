@@ -42,6 +42,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
+from openadapt_flow.private_file import open_binary
+
 SETTINGS_SCHEMA = "openadapt.onprem-service-settings/v1"
 NOTICE_SCHEMA = "openadapt.onprem-notice/v1"
 EVENT_SCHEMA = "openadapt.onprem-event/v1"
@@ -160,7 +162,7 @@ def record_event(root: Path, event: str, **detail: Any) -> dict[str, Any]:
     line = {"schema": EVENT_SCHEMA, "event": event, "at": _utc(), **detail}
     path = events_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    fd = open_binary(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     try:
         os.write(fd, (json.dumps(line, sort_keys=True) + "\n").encode("utf-8"))
     finally:

@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from openadapt_flow import sealed_set as _sealed_set
 from openadapt_flow.ir import (
     ActionDeliveryReceipt,
     ActionKind,
@@ -267,12 +268,91 @@ class _StopBeforeInput(Replayer):
     """Add an authorization refusal to a synthetic run before any input."""
 
     stop_before_step = None
+    stop_before_params = None
 
     def _fresh_actuation_authorization_refusal(self, workflow, params, step):
         refusal = super()._fresh_actuation_authorization_refusal(workflow, params, step)
+        if self.stop_before_params is not None and any(
+            name not in params
+            or params[name] != value
+            or type(params[name]) is not type(value)
+            for name, value in self.stop_before_params.items()
+        ):
+            return refusal
         if self.stop_before_step is None or self.stop_before_step == step.id:
             return refusal or "synthetic operator stop before input"
         return refusal
+
+
+_OBSERVATION_PREFIX = "__observation_prefix__"
+
+
+def _with_checkpointed_observation_prefix(workflow):
+    """Add an actual no-input WAIT before the unchanged program under test."""
+    from openadapt_flow.ir import State, StateKind, Transition
+
+    workflow = workflow.model_copy(deep=True)
+    assert workflow.program is not None
+    assert _OBSERVATION_PREFIX not in workflow.program.states
+    target = workflow.program.entry
+    workflow.program.states[_OBSERVATION_PREFIX] = State(
+        id=_OBSERVATION_PREFIX,
+        kind=StateKind.ACTION,
+        step=Step(
+            id=_OBSERVATION_PREFIX,
+            intent="observe before continuation",
+            action=ActionKind.WAIT,
+        ),
+        transitions=[Transition(target=target)],
+    )
+    workflow.program.entry = _OBSERVATION_PREFIX
+    return workflow
+
+
+class _PauseAfterObservation(Replayer):
+    """Let the real runner commit WAIT, then pause before selecting its edge."""
+
+    def _record_program_checkpoint(self, state, result, params, report, **kwargs):
+        from openadapt_flow.runtime.replayer import _ProgramHalt
+
+        super()._record_program_checkpoint(state, result, params, report, **kwargs)
+        if state.id == _OBSERVATION_PREFIX:
+            raise _ProgramHalt("halt", "synthetic stop after verified observation")
+
+
+def _run_to_checkpointed_observation_pause(
+    workflow, bundle, run_dir, *, verifier=None, authorization=None
+):
+    """Prove a real empty-effect checkpoint before admitting the original leg."""
+    backend = FakeBackend()
+    report = _PauseAfterObservation(
+        backend,
+        vision=FakeVision(),
+        effect_verifier=verifier,
+        governed_authorization=authorization,
+        durable=True,
+        poll_interval_s=0.0,
+    ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
+    store = CheckpointStore(run_dir)
+    (checkpoint,) = store.program_checkpoints()
+    pending = store.read_pending()
+    assert report.success is False and backend.actions == []
+    result = next(r for r in report.results if r.step_id == _OBSERVATION_PREFIX)
+    assert result.ok is True and result.delivery_attempted is not True
+    assert result.effect_contract_hashes == []
+    assert checkpoint.seq == 1 and checkpoint.verified_state_id == _OBSERVATION_PREFIX
+    assert checkpoint.delivery_attempted is not True
+    assert checkpoint.new_effect_keys == checkpoint.new_unverified_effect_keys == []
+    assert checkpoint.new_effects == checkpoint.new_unverified_effects == []
+    assert checkpoint.new_effect_evidence == []
+    assert pending is not None and pending.delivery_uncertainty is None
+    assert (
+        pending.state_id == _OBSERVATION_PREFIX and pending.program_checkpoint_seq == 1
+    )
+    assert pending.program_history == checkpoint.transition_history
+    assert pending.program_history_delta == []
+    assert pending.program_parent_history_hash == checkpoint.transition_history_hash
+    return report
 
 
 def _resume_after_proven_no_input(
@@ -749,7 +829,9 @@ def test_durable_resume_projection_failure_keeps_fail_closed_terminal_evidence(
     assert resumed.success is False
     assert resumed.execution_outcome == "FAILED"
     assert resumed.transaction_outcome == "RECONCILIATION_REQUIRED"
-    persisted = RunReport.model_validate_json((run_dir / "report.json").read_text())
+    persisted = RunReport.model_validate_json(
+        _sealed_set.read_text(run_dir / "report.json")
+    )
     assert persisted.execution_outcome == "FAILED"
     assert persisted.transaction_outcome == "RECONCILIATION_REQUIRED"
     assert persisted.results[-1].step_id == "<idempotency>"
@@ -766,7 +848,7 @@ def test_durable_resume_projection_failure_keeps_fail_closed_terminal_evidence(
     assert (
         record.report_sha256
         == "sha256:"
-        + hashlib.sha256((run_dir / "report.json").read_bytes()).hexdigest()
+        + hashlib.sha256(_sealed_set.read_bytes(run_dir / "report.json")).hexdigest()
     )
     assert authority.prove_executor_outcome(
         manifest,
@@ -854,7 +936,9 @@ def test_indeterminate_durable_state_fails_closed_without_ledger_projection(
     assert "durable terminal state persistence failed" in (
         report.results[-1].error or ""
     )
-    persisted = RunReport.model_validate_json((run_dir / "report.json").read_text())
+    persisted = RunReport.model_validate_json(
+        _sealed_set.read_text(run_dir / "report.json")
+    )
     assert persisted.execution_outcome == "FAILED"
     assert ledger.lookup("indeterminate-durable-state-key")["outcome"] is None
 

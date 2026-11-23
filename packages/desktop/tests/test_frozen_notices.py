@@ -485,21 +485,65 @@ def test_reviewed_external_notice_is_not_a_version_wildcard(tmp_path: Path) -> N
 
 def test_loguru_uses_exact_reviewed_upstream_notice() -> None:
     loguru = distribution("loguru")
-
-    sources = notices._reviewed_external_notice_sources(  # noqa: SLF001
-        "loguru",
-        loguru,
+    assert str(loguru.version) in {"0.7.3", "0.8.0"}, "new loguru notice requires review"
+    assert hashlib.sha256("\n".join(notices.license_evidence(loguru)).encode()).hexdigest() == (
+        "012477eb0ae60687750030b5b3d1206dd5a17244ffe5ed5300044feaf6ae62ad"
     )
 
-    assert len(sources) == 1
-    source_member, source = sources[0]
-    assert (
-        notices.REVIEWED_EXTERNAL_NOTICE_FILES[("loguru", str(loguru.version))]["source_commit"]
-        in source_member
-    )
+    concrete = notices._notice_sources(loguru)  # noqa: SLF001
+    if str(loguru.version) == "0.8.0":
+        # The reviewed 0.8.0 wheel supplies its concrete license. Require it;
+        # metadata or an external fallback must not conceal a missing file.
+        assert len(concrete) == 1
+        source_member, source = concrete[0]
+        assert source_member == "loguru-0.8.0.dist-info/licenses/LICENSE"
+        assert notices._reviewed_external_notice_sources("loguru", loguru) == []  # noqa: SLF001
+    else:
+        assert not concrete
+        sources = notices._reviewed_external_notice_sources("loguru", loguru)  # noqa: SLF001
+        assert len(sources) == 1
+        source_member, source = sources[0]
+        assert (
+            notices.REVIEWED_EXTERNAL_NOTICE_FILES[("loguru", "0.7.3")]["source_commit"]
+            in source_member
+        )
     assert hashlib.sha256(source.read_bytes()).hexdigest() == (
         "b35d026cc7aca9d5859a02eb87ddf7a386a24c986838651bd1f283f94e003327"
     )
+
+
+def test_loguru_legacy_external_notice_still_requires_exact_reviewed_bytes(tmp_path: Path) -> None:
+    legacy = FakeDistribution(
+        tmp_path / "legacy-loguru",
+        "loguru",
+        version="0.7.3",
+        license_expression=None,
+        classifiers=["License :: OSI Approved :: MIT License"],
+    )
+    sources = notices._reviewed_external_notice_sources("loguru", legacy)  # noqa: SLF001
+    assert len(sources) == 1
+    member, source = sources[0]
+    assert notices.REVIEWED_EXTERNAL_NOTICE_FILES[("loguru", "0.7.3")]["source_commit"] in member
+    assert hashlib.sha256(source.read_bytes()).hexdigest() == (
+        "b35d026cc7aca9d5859a02eb87ddf7a386a24c986838651bd1f283f94e003327"
+    )
+
+
+def test_loguru_0_8_metadata_cannot_replace_its_missing_wheel_license(tmp_path: Path) -> None:
+    missing_notice = FakeDistribution(
+        tmp_path / "loguru-no-notice",
+        "loguru",
+        version="0.8.0",
+        license_expression=None,
+        classifiers=["License :: OSI Approved :: MIT License"],
+    )
+    with pytest.raises(RuntimeError, match="loguru has no concrete license/NOTICE file"):
+        notices.prepare_notice_bundle(
+            tmp_path / "bundle",
+            root_license=tmp_path / "unused",
+            closure={"loguru": missing_notice},
+            required_notice_tokens={"loguru": ("license",)},
+        )
 
 
 def test_rapidocr_uses_exact_reviewed_upstream_notice(tmp_path: Path) -> None:

@@ -56,6 +56,8 @@ PUBLISH_SCHEMA = "openadapt.wrap-publish/v1"
 MANIFEST_NAME = "openadapt-wrap-publish.json"
 READBACK_PATH = "readback/verify.yaml"
 EXECUTE_REQUEST_SCHEMA = "openadapt.execute-request/v1"
+#: The definition's code when the endpoint's secret parameters have no vault set.
+VAULT_SET_REQUIRED = "vault_set_required"
 #: The policy a task certifies under when its task file names none.
 DEFAULT_POLICY = "clinical-write"
 
@@ -72,6 +74,10 @@ _SHELL_SAFE = re.compile(r"[A-Za-z0-9._:/+=-]{1,256}\Z")
 _CODE = re.compile(r"[a-z0-9_]{1,64}\Z")
 _PUBLIC_KEY_HEX = re.compile(r"[0-9a-f]{64}\Z")
 _API_TIMEOUT = 15.0
+#: Admission modes a hosted run can verify: a named person, or a CI admitter
+#: key the organization registered (``admitter-keys``). An agent under a
+#: signed policy and a repair need registries the hosted runner does not hold.
+HOSTED_ADMISSION_MODES = ("person", "admitter_key")
 
 
 class PublishError(Exception):
@@ -167,6 +173,31 @@ def _record_check(bundle: Path) -> tuple[dict[str, Any], str, str]:
     return check, record_check_digest(workflow), str(digest)
 
 
+def _secret_parameters(bundle: Path, parameters: Sequence[str]) -> list[str]:
+    """The task inputs the admitted program types from a secret, sorted.
+
+    A sign-in the first run found (a password field and the username paired
+    with it) makes those inputs secret parameters (``ir.Step.secret``).
+    """
+    from openadapt_flow.ir import Workflow
+
+    try:
+        names = set(Workflow.load(bundle).secret_params)
+    except Exception:  # noqa: BLE001 - _record_check already loaded it
+        raise PublishError(
+            "BUNDLE_UNREADABLE", "the admitted bundle cannot be loaded"
+        ) from None
+    from openadapt_flow.runtime.replayer import secret_env_vars
+
+    try:
+        secret_env_vars(sorted(names))
+        if not names.issubset(parameters):
+            raise ValueError("secret parameter is not a declared task input")
+    except ValueError as exc:
+        raise PublishError("SECRET_PARAMETER_NAMES", str(exc)) from None
+    return sorted(names)
+
+
 def _run_shape(staged: Path, policy: str) -> dict[str, Any]:
     """The staged program's Standard run shape, or a refusal."""
     from openadapt_flow.ir import Workflow
@@ -237,6 +268,26 @@ def _stage_hosted_admission(
         ) from None
 
 
+def hosted_admission_mode(admission: Any) -> str:
+    """The admission's mode, refused unless a hosted run can verify it."""
+
+    mode = (
+        admission.get("admission_mode", "person")
+        if isinstance(admission, Mapping)
+        else None
+    )
+    if mode not in HOSTED_ADMISSION_MODES:
+        raise PublishError(
+            "ADMISSION_MODE_UNSUPPORTED",
+            f"this program was admitted in {mode!r} mode, which a hosted run "
+            "cannot verify. Hosted endpoints accept a program a person admitted "
+            "(--person) or one admitted with a CI admitter key the organization "
+            "registered (--admit-key). Admit it again in one of those modes, "
+            "then publish. Nothing was uploaded",
+        )
+    return str(mode)
+
+
 def stage(
     cache: Any,
     instruction: str,
@@ -288,6 +339,7 @@ def stage(
             "the program's admission does not verify with the local admission "
             "key. Pass the --key-dir that admitted it, or admit it again",
         ) from None
+    hosted_admission_mode(admission)
     _readback_config(checks)
     check, check_digest, content_digest = _record_check(bundle)
     if any(path.is_symlink() for path in bundle.rglob("*")):
@@ -316,15 +368,20 @@ def stage(
     shutil.copytree(bundle, staged, symlinks=True, ignore=local_only)
     (staged / READBACK_PATH).parent.mkdir(parents=True, exist_ok=True)
     _stage_hosted_admission(staged, checks, admission, key_dir)
+    secret = _secret_parameters(bundle, parameters)
+    public = [name for name in parameters if name not in secret]
     manifest = {
         "schema": PUBLISH_SCHEMA,
-        "parameters": list(parameters),
+        "parameters": public,
         "input_schema": {
             "type": "object",
-            "properties": {name: {"type": "string"} for name in parameters},
-            "required": list(parameters),
+            "properties": {name: {"type": "string"} for name in public},
+            "required": public,
             "additionalProperties": False,
         },
+        # Sign-in values the program types from a secret. A hosted call never
+        # carries them: the endpoint's vault set (secrets_ref) supplies them.
+        "secret_parameters": secret,
         "workflow_digest": content_digest,
         "record_check_sha256": check_digest,
         "saves": len(check["saves"]),
@@ -602,6 +659,55 @@ def register_admission_key(
     )
 
 
+def check_admitter_key(
+    client: CloudClient, org_id: str, admission: Mapping[str, Any]
+) -> None:
+    """Refuse an admitter-key admission whose key the org has not registered.
+
+    A hosted run verifies such an admission against the admitter keys an
+    owner or admin of the organization registered. Only the public key and
+    its principal id are compared; nothing is uploaded here.
+    """
+    if admission.get("admission_mode", "person") != "admitter_key":
+        return
+    principal = admission.get("admitted_by_principal_id")
+    public_key = admission.get("admitter_public_key")
+    if not isinstance(principal, str) or not (
+        isinstance(public_key, str) and _PUBLIC_KEY_HEX.fullmatch(public_key)
+    ):
+        raise PublishError(
+            "ADMISSION_INVALID",
+            "the admission names no admitter principal or public key",
+        )
+    fingerprint = "sha256:" + hashlib.sha256(bytes.fromhex(public_key)).hexdigest()
+    status, body = client.request("GET", org_route("", org_id, "admitter-keys"))
+    if status == 401:
+        raise _key_rejected()
+    if status == 404:
+        raise _workflow_api_unavailable(client.host)
+    rows = body.get("admitter_keys") if isinstance(body, dict) else None
+    if status != 200 or not isinstance(rows, list):
+        raise PublishError(
+            "ADMITTER_KEY_UNREGISTERED",
+            "the organization's admitter keys could not be read. Nothing was uploaded",
+        )
+    if any(
+        isinstance(row, dict)
+        and row.get("principal_id") == principal
+        and row.get("fingerprint") == fingerprint
+        for row in rows
+    ):
+        return
+    raise PublishError(
+        "ADMITTER_KEY_UNREGISTERED",
+        f"the admitter key {principal} ({public_key}) is not registered with "
+        "the organization, so a hosted run could not verify this program's "
+        "admission. An owner or admin of the organization registers it in the "
+        "dashboard (Settings, Admitter keys) or with POST /api/admitter-keys, "
+        "then you publish again. Nothing was uploaded",
+    )
+
+
 def fetch_definition(
     client: CloudClient,
     *,
@@ -637,6 +743,16 @@ def fetch_definition(
                 "that the workflow API is enabled for the organization"
             ),
             "code": None,
+        }
+    if status == 409 and code == VAULT_SET_REQUIRED:
+        return {
+            "callable": False,
+            "reason": (
+                "the endpoint signs in with secret parameters, and no vault set "
+                "holding them is attached. An owner or admin attaches one in the "
+                "dashboard, or with PUT .../workflow/{id}/secrets"
+            ),
+            "code": code,
         }
     if status == 409:
         return {
@@ -695,6 +811,9 @@ def curl_examples(endpoint: str, definition: Optional[Mapping[str, Any]]) -> lis
         body[name] = value
     parameters: dict[str, str] = {}
     for row in definition["parameter_schema"]:
+        if isinstance(row, dict) and row.get("secret") is True:
+            # Supplied by the endpoint's vault set, never by the caller.
+            continue
         label = row.get("name") if isinstance(row, dict) else None
         if not isinstance(label, str) or not re.fullmatch(
             r"[A-Za-z_][A-Za-z0-9_]{0,63}", label
@@ -858,29 +977,17 @@ def _check_public_target(url: str) -> str:
 # -- one review of what will be uploaded ----------------------------------------
 
 
-def _derive(source: Path, destination: Path, kind: str) -> dict[str, Any]:
-    """The sanitized derivative of ``source``, reused while ``source`` is unchanged."""
+def _derive(source: Path, destination: Path, kind: str) -> tuple[Path, dict[str, Any]]:
+    """Reuse the current transformation or create a separate unapproved generation."""
     from openadapt_flow import safe_errors
     from openadapt_flow.sanitized_artifact import (
         SanitizationError,
-        load_and_verify_derivative,
-        sanitize_artifact,
-        source_tree_sha256,
+        ensure_current_derivative,
     )
 
-    if destination.is_symlink():
-        raise PublishError("BUNDLE_UNSAFE", "the publish directory is a symbolic link")
     label = "program" if kind == "bundle" else "recording"
     try:
-        if destination.exists():
-            try:
-                manifest = load_and_verify_derivative(destination)
-                if manifest.get("source_tree_sha256") == source_tree_sha256(source):
-                    return manifest
-            except SanitizationError:
-                pass
-            shutil.rmtree(destination)
-        return sanitize_artifact(source, destination, kind=kind)
+        return ensure_current_derivative(source, destination, kind=kind)
     except SanitizationError as exc:
         raise PublishError(
             "SANITIZATION_FAILED",
@@ -912,6 +1019,7 @@ def review_summary(
     org_id: Optional[str] = None,
 ) -> list[str]:
     """A short summary of exactly what will leave the machine."""
+    secret = list(program.manifest.get("secret_parameters") or [])
     files = list(bundle_manifest.get("files") or [])
     changed = sum(1 for row in files if isinstance(row, dict) and row.get("changed"))
     unresolved = len(bundle_manifest.get("residual_findings") or [])
@@ -922,7 +1030,17 @@ def review_summary(
         *([f"  org         {org_id}"] if org_id else []),
         f"  workflow    {name} ({destination})",
         f"  program     {program.manifest['saves']} saving step(s), each read back "
-        "by the task's verify.yaml; inputs: " + ", ".join(parameters),
+        "by the task's verify.yaml; inputs: "
+        + (", ".join(name for name in parameters if name not in secret) or "none"),
+        *(
+            [
+                f"  sign-in     {', '.join(secret)}: secret parameters; no value "
+                "leaves this machine. Each hosted call reads them from the "
+                "endpoint's vault set (secrets_ref)"
+            ]
+            if secret
+            else []
+        ),
         f"  upload      the sanitized program: {len(files)} files, "
         f"{max(1, round(size / 1024))} KB, {changed} changed by the scrubber, "
         f"{unresolved} unresolved findings",
@@ -1177,10 +1295,15 @@ def run(args: argparse.Namespace) -> int:
         # Read-only: which organization this key publishes to. Nothing about
         # the program is sent before the confirmation below.
         org_id = resolve_org(client, args.org)
+        # Read-only: an admitter-key admission needs its key registered with
+        # the organization before a hosted run can verify it.
+        check_admitter_key(client, org_id, program.admission)
         route = upload_route(org_id, args.workflow_id)
 
         bundle_derivative = program.record_dir / "sanitized-bundle"
-        bundle_manifest = _derive(program.staged, bundle_derivative, "bundle")
+        bundle_derivative, bundle_manifest = _derive(
+            program.staged, bundle_derivative, "bundle"
+        )
         if bundle_manifest.get("execution_semantics") != "preserved":
             raise PublishError(
                 "SANITIZATION_CHANGED_PROGRAM",
@@ -1191,7 +1314,9 @@ def run(args: argparse.Namespace) -> int:
         derivatives = [(bundle_derivative, program.staged)]
         recording_derivative = program.record_dir / "sanitized-recording"
         if evidence is not None:
-            _derive(evidence.recording, recording_derivative, "recording")
+            recording_derivative, _ = _derive(
+                evidence.recording, recording_derivative, "recording"
+            )
             derivatives.append((recording_derivative, evidence.recording))
 
         summary = review_summary(
@@ -1402,6 +1527,15 @@ def _finish(
         f"Published. Endpoint: {endpoint}",
         f"Dashboard: {result.get('dashboard_url')}",
     ]
+    secret = list(program.manifest.get("secret_parameters") or [])
+    if secret:
+        document["secret_parameters"] = secret
+        lines.append(
+            "Sign-in: each call reads "
+            + ", ".join(secret)
+            + " from the endpoint's vault set. An owner or admin attaches one "
+            "(Dashboard, Secrets) holding those names before the first call."
+        )
     if check.get("callable"):
         lines.append(
             "The endpoint is callable. Each call returns an execution id; its "

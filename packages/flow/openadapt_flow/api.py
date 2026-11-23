@@ -96,8 +96,12 @@ def replay(
         argv += ["--param", f"{key}={value}"]
     from openadapt_flow.__main__ import main
 
-    main(argv)
+    code = main(argv)
+    from openadapt_flow import sealed_set
+
+    # The run directory is encrypted by default: read the report through the
+    # sealed set, in memory, rather than looking for a plaintext file.
     report_path = Path(run_dir) / "report.json"
-    if not report_path.exists():
-        raise FlowCommandFailed("replay", 1)
-    return RunReport.model_validate_json(report_path.read_text(encoding="utf-8"))
+    if not sealed_set.is_file(report_path):
+        raise FlowCommandFailed("replay", code or 1)
+    return RunReport.model_validate_json(sealed_set.read_text(report_path))

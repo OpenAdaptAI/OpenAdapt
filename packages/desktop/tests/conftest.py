@@ -151,6 +151,11 @@ def _isolated_flow_at_rest(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("OPENADAPT_FLOW_AT_REST_HOME", str(tmp_path_factory.mktemp("at-rest-home")))
     monkeypatch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "test suite: synthetic data")
     monkeypatch.delenv("OPENADAPT_FLOW_AT_REST", raising=False)
+    # Never the OS keychain from tests: no dialog, no login-keychain write.
+    monkeypatch.setenv("OPENADAPT_FLOW_KEY_STORE", "file")
+    # The stop queue also lists Flow's exception registry under
+    # OPENADAPT_HOME; keep a developer's real cards out of every test.
+    monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path_factory.mktemp("openadapt-home")))
 
 
 @pytest.fixture(autouse=True)
@@ -165,21 +170,88 @@ def no_usage_stats_or_update_check(monkeypatch):
     monkeypatch.setenv("OPENADAPT_UPDATE_CHECK", "false")
 
 
-@pytest.fixture
-def no_subprocess_fork(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Fail any subprocess that would fork pytest.
+# On the hosted macOS runners a forked copy of the pytest process sometimes never
+# reached exec, and pytest then waited inside Popen until the job was cancelled.
+# The whole session therefore starts subprocesses without forking.
+#
+# Python starts a child with posix_spawn instead of fork when the program path
+# is absolute, no working directory or new session is asked for, and
+# ``close_fds`` is false. Most calls here and in the engine fail only the last
+# condition, because ``close_fds`` defaults to true, so the session changes that
+# default. Python opens its own descriptors close-on-exec, so a child still
+# inherits only its standard streams. A call that would fork anyway fails with
+# the reason, unless the test asks for the ``forking_allowed`` fixture.
+# Windows has no fork and is left alone. Tests of how the engine itself starts a
+# process ask for ``python_subprocess_defaults`` and get none of this.
+_FORKS: list[str] = []
+_REAL: dict[str, object] = {}
+_FORKING_ALLOWED = False
 
-    By the time the release tests run, earlier tests have loaded macOS system
-    frameworks into the pytest process. On the hosted macOS runners a forked
-    copy of that process sometimes never reached exec, and the parent waited
-    inside Popen until the job was cancelled. With this guard a call that
-    brings the fork back fails at once, on Linux as well as macOS.
-    """
 
-    if not getattr(subprocess, "_USE_POSIX_SPAWN", False):
+def _spawn_is_available() -> bool:
+    return bool(getattr(subprocess, "_USE_POSIX_SPAWN", False))
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _subprocesses_do_not_fork():
+    if not _spawn_is_available():
+        yield
         return
 
-    def refuse(args, *_rest, **_named):
-        raise AssertionError(f"{args!r} would fork pytest; run git through native_release.run_git")
+    patch = pytest.MonkeyPatch()
+    real_init = subprocess.Popen.__init__
+    real_fork_exec = subprocess._fork_exec
 
-    monkeypatch.setattr(subprocess, "_fork_exec", refuse)
+    def init(self, *args, **kwargs):
+        # close_fds is the eighth positional parameter of Popen.
+        if len(args) < 8 and "close_fds" not in kwargs and not kwargs.get("pass_fds"):
+            kwargs["close_fds"] = False
+        real_init(self, *args, **kwargs)
+
+    def fork_exec(args, *rest, **named):
+        command = " ".join(os.fsdecode(part) for part in args)
+        if not _FORKING_ALLOWED:
+            raise AssertionError(
+                f"{command!r} would fork pytest. Give the program's absolute path, "
+                "do not pass cwd, start_new_session, preexec_fn or pass_fds, "
+                "and run git through native_release.run_git."
+            )
+        _FORKS.append(command)
+        return real_fork_exec(args, *rest, **named)
+
+    _REAL.update(init=real_init, fork_exec=real_fork_exec)
+    patch.setattr(subprocess.Popen, "__init__", init)
+    patch.setattr(subprocess, "_fork_exec", fork_exec)
+    yield
+    patch.undo()
+    _REAL.clear()
+
+
+@pytest.fixture
+def python_subprocess_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Give this test Python's own subprocess behaviour, as the installed engine has it.
+
+    A test that checks how production code starts a process must not get the
+    session's ``close_fds`` default, or it would pass whatever the code did.
+    """
+
+    if _REAL:
+        monkeypatch.setattr(subprocess.Popen, "__init__", _REAL["init"])
+        monkeypatch.setattr(subprocess, "_fork_exec", _REAL["fork_exec"])
+
+
+@pytest.fixture
+def forking_allowed():
+    """Let this test start subprocesses that Python can only start with fork."""
+
+    global _FORKING_ALLOWED
+    _FORKING_ALLOWED = True
+    yield
+    _FORKING_ALLOWED = False
+
+
+def pytest_terminal_summary(terminalreporter) -> None:
+    if _spawn_is_available():
+        terminalreporter.write_line(f"subprocesses that forked pytest: {len(_FORKS)}")
+        for command in _FORKS:
+            terminalreporter.write_line(f"  forked: {command[:200]}")

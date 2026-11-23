@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import importlib.util
 import json
@@ -48,9 +49,6 @@ prepare_release = _load("prepare_release")
 check_release_intent = _load("check_release_intent")
 check_release_consistency = _load("check_release_consistency")
 
-# Any subprocess in this module that would fork pytest fails; see conftest.py.
-pytestmark = pytest.mark.usefixtures("no_subprocess_fork")
-
 
 # These tests start thousands of real git processes, many of them from the
 # release scripts under test. Each git call gets no terminal input, no editor,
@@ -65,15 +63,12 @@ pytestmark = pytest.mark.usefixtures("no_subprocess_fork")
 TEST_DEADLINE = 300
 
 
-@pytest.fixture(autouse=True)
-def _hermetic_git(monkeypatch: pytest.MonkeyPatch, tmp_path_factory) -> None:
-    """Isolate every git process in this module, including the scripts' own calls."""
+def _hermetic_git_env(config_path: Path) -> dict[str, str]:
+    """Env that keeps every git process in this module off the machine's Git config."""
 
-    empty = tmp_path_factory.getbasetemp() / "empty.gitconfig"
-    empty.touch()
-    for name, value in {
+    return {
         "GIT_CONFIG_NOSYSTEM": "1",
-        "GIT_CONFIG_GLOBAL": str(empty),
+        "GIT_CONFIG_GLOBAL": str(config_path),
         "GIT_EDITOR": "true",
         "GIT_SEQUENCE_EDITOR": "true",
         "GIT_PAGER": "cat",
@@ -82,7 +77,30 @@ def _hermetic_git(monkeypatch: pytest.MonkeyPatch, tmp_path_factory) -> None:
         "GIT_ASKPASS": "true",
         "SSH_ASKPASS": "true",
         "GIT_OPTIONAL_LOCKS": "0",
-    }.items():
+    }
+
+
+@contextlib.contextmanager
+def _temporary_env(updates: dict[str, str]):
+    previous = {key: os.environ.get(key) for key in updates}
+    os.environ.update(updates)
+    try:
+        yield
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_git(monkeypatch: pytest.MonkeyPatch, tmp_path_factory) -> None:
+    """Isolate every git process in this module, including the scripts' own calls."""
+
+    empty = tmp_path_factory.getbasetemp() / "empty.gitconfig"
+    empty.touch()
+    for name, value in _hermetic_git_env(empty).items():
         monkeypatch.setenv(name, value)
 
 
@@ -193,18 +211,20 @@ def _commit(root: Path, message: str, touch: str | None = None) -> str:
     return _git(root, "rev-parse", "HEAD")
 
 
-@pytest.fixture
-def repo(tmp_path: Path) -> Path:
-    """A git repository holding Desktop's real version files."""
-
+def _copy_version_files(root: Path) -> None:
     for relative in VERSION_FILES:
-        destination = tmp_path / relative
+        destination = root / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / relative, destination)
-    _git(tmp_path, "init", "-q")
-    _git(tmp_path, "config", "user.name", "Test")
-    _git(tmp_path, "config", "user.email", "test@example.com")
-    _git(tmp_path, "config", "core.autocrlf", "false")
+
+
+def _init_release_repo(root: Path) -> None:
+    """git init, hermetic local config, and the starting version-file commit."""
+
+    _git(root, "init", "-q")
+    _git(root, "config", "user.name", "Test")
+    _git(root, "config", "user.email", "test@example.com")
+    _git(root, "config", "core.autocrlf", "false")
     for key, value in (
         ("commit.gpgsign", "false"),
         ("tag.gpgsign", "false"),
@@ -213,8 +233,39 @@ def repo(tmp_path: Path) -> Path:
         ("gc.auto", "0"),
         ("maintenance.auto", "false"),
     ):
-        _git(tmp_path, "config", key, value)
-    _commit(tmp_path, "chore: start from the current release")
+        _git(root, "config", key, value)
+    _commit(root, "chore: start from the current release")
+
+
+@pytest.fixture(scope="session")
+def _release_intent_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Starter git repo with Desktop's version files, built once per session.
+
+    Each test previously recopied uv.lock, package-lock.json and Cargo.lock
+    and ran git init plus a dozen config and commit processes. On Windows
+    Python 3.12 that work dominated the 45-minute engine-test budget.
+    """
+
+    empty = tmp_path_factory.getbasetemp() / "empty.gitconfig"
+    empty.touch()
+    root = tmp_path_factory.mktemp("release-intent-template")
+    _copy_version_files(root)
+    # Session setup runs before the function-scoped hermetic env fixture.
+    with _temporary_env(_hermetic_git_env(empty)):
+        _init_release_repo(root)
+    return root
+
+
+@pytest.fixture
+def repo(_release_intent_template: Path, tmp_path: Path) -> Path:
+    """An isolated copy of the shared starter repo, at the test's tmp_path."""
+
+    for item in _release_intent_template.iterdir():
+        destination = tmp_path / item.name
+        if item.is_dir():
+            shutil.copytree(item, destination, symlinks=False)
+        else:
+            shutil.copy2(item, destination)
     return tmp_path
 
 

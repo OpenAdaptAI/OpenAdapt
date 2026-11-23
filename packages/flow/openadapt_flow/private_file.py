@@ -2,6 +2,33 @@
 
 from __future__ import annotations
 
+import os
+
+
+def open_binary(
+    path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+    flags: int,
+    mode: int | None = None,
+    *,
+    dir_fd: int | None = None,
+) -> int:
+    """Open a raw-byte descriptor without CRT newline or Ctrl-Z translation.
+
+    Callers retain their creation, no-follow, inheritance and permission policy.
+    Python's ``os.read`` and ``os.write`` otherwise use text-mode descriptors on
+    Windows, even when their input and output are bytes.
+    """
+    if flags & getattr(os, "O_TEXT", 0):
+        raise ValueError("raw-byte descriptors cannot use text mode")
+    flags |= getattr(os, "O_BINARY", 0)
+    if dir_fd is None:
+        return os.open(path, flags) if mode is None else os.open(path, flags, mode)
+    return (
+        os.open(path, flags, dir_fd=dir_fd)
+        if mode is None
+        else os.open(path, flags, mode, dir_fd=dir_fd)
+    )
+
 
 class PrivateFileAclError(ValueError):
     """The active platform cannot prove that a private file has a safe ACL."""
@@ -60,4 +87,4 @@ def windows_descriptor_has_private_acl(descriptor: int) -> bool:
         ) from exc
 
 
-__all__ = ["PrivateFileAclError", "windows_descriptor_has_private_acl"]
+__all__ = ["PrivateFileAclError", "open_binary", "windows_descriptor_has_private_acl"]

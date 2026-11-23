@@ -45,6 +45,9 @@ _TARGET_ORIGIN = "https://mockmed.example.com"
 
 
 class _StableScrubber:
+    def sanitization_config(self):
+        return {}
+
     def scrub_text(self, text: str, is_separated: bool = False) -> str:
         return text.replace("Jane Doe", "[PERSON]")
 

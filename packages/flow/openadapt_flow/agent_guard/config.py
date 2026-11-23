@@ -9,6 +9,8 @@
     not_saves:                               # optional: writes that aren't the save
       - {method: POST, path: /chart/signin}
     approval: not_gated                      # or each_item: a person approves each save
+    approval_fields: true                    # the card shows values beside the source
+    readback_provider: verify_run            # optional: how a save is read back
     teach:                                   # optional: compile run 1 for run 2
       dir: .openadapt-teach
       name: triage_note
@@ -51,6 +53,8 @@ _KEYS = {
     "allow_origins",
     "allow_text",
     "write_adapter",
+    "readback_provider",
+    "approval_fields",
 }
 _TEACH_KEYS = {
     "dir",
@@ -108,6 +112,15 @@ class GuardConfig:
     #: Values a save may carry besides the task's own (a fixed encounter
     #: type), for the write adapter's check.
     allow_text: tuple[str, ...] = ()
+    #: How a save is read back: a kind registered as ``readback:<kind>``
+    #: (:mod:`openadapt_flow.agent_guard.readback`), or a mapping with
+    #: ``kind``. None: ``verify_run``.
+    readback_provider: Optional[Any] = None
+    #: The approval card shows each field's value now, the value saved and
+    #: its source (:mod:`openadapt_flow.agent_guard.approval_fields`).
+    approval_fields: bool = True
+    #: Write ``guard_ledger_row.json`` after each read-back or refusal.
+    ledger_row: bool = True
 
     def __post_init__(self) -> None:
         if not origin_of(self.app_url).startswith(("http://", "https://")):
@@ -183,7 +196,17 @@ def parse_config(raw: Mapping[str, Any], *, base: Path) -> GuardConfig:
         ),
         write_adapter=raw.get("write_adapter") or None,
         allow_text=tuple(str(t) for t in (raw.get("allow_text") or []) if str(t)),
+        readback_provider=_provider(raw.get("readback_provider")),
+        approval_fields=bool(raw.get("approval_fields", True)),
     )
+
+
+def _provider(value: Any) -> Any:
+    if value is None or (isinstance(value, str) and value.strip()):
+        return value
+    if isinstance(value, Mapping) and str(value.get("kind") or "").strip():
+        return dict(value)
+    raise ConfigError("readback_provider is a kind, or a mapping with kind")
 
 
 def load_config(path: str | Path) -> GuardConfig:

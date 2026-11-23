@@ -9,11 +9,11 @@ configured key, else this machine's local key), each file is written as
 associated data that names the format version and the file's run-relative
 path, so a ciphertext copied over another path does not decrypt.
 
-scrypt runs once per run, not once per file. The run's marker holds one random
-salt; the key scrypt derives from the passphrase and that salt is kept in
-memory, and HKDF gives one subkey for files and one for journal rows. Each
-container carries the salt it was sealed under, so a reader needs only the
-passphrase. Containers written before this (one scrypt salt each) still
+The run's marker holds one random salt. Each independent operation derives
+its key with scrypt; HKDF gives one subkey for files and one for journal rows.
+An operation may reuse its local AEAD while converting several files, but
+there is no process-global passphrase, verifier or plaintext cache. Each
+container carries its salt, so a reader needs only the passphrase. Containers written before this (one scrypt salt each) still
 decrypt.
 
 Older runs wrote these files in plaintext. A keyed store still reads a
@@ -31,13 +31,10 @@ through its sealed-set writer instead, and never reaches this module's writer.
 from __future__ import annotations
 
 import base64
-import hashlib
-import hmac
 import json
 import os
 import secrets
 import threading
-from collections import OrderedDict
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -98,37 +95,14 @@ class AttendedStateUnreadable(ValueError):
     """An attended file can't be authenticated, decrypted or trusted."""
 
 
-# Older containers each need their own scrypt run, and the attended store
-# reads the same file several times per action. Keep a few of their
-# authenticated plaintexts, keyed by the exact container and associated data,
-# and reuse one only for the same passphrase. Containers sealed under a run
-# key never use this cache.
-_CACHE: "OrderedDict[tuple[bytes, bytes], tuple[str, bytes]]" = OrderedDict()
-_CACHE_LIMIT = 64
-_CACHE_LOCK = threading.Lock()
-
-
-# One scrypt per (passphrase, run salt) per process. Keyed by the run salt;
-# an entry is reused only for the same passphrase (compared in constant time,
-# as the container cache above does), so a different passphrase derives again.
-_RUN_KEYS: "OrderedDict[bytes, tuple[str, tuple[AESGCM, AESGCM]]]" = OrderedDict()
-_RUN_KEY_LIMIT = 32
-_RUN_KEY_LOCK = threading.Lock()
-# A journal salt for a run directory with no salted marker (a sealed run
-# directory, or a run whose first journal row comes before any file write).
+# Public salt metadata for a journal path without a salted marker. This does
+# not retain passphrases, verifiers, plaintext or derived keys.
 _JOURNAL_SALTS: dict[str, bytes] = {}
+_JOURNAL_SALT_LOCK = threading.Lock()
 
 
 def _run_keys(passphrase: str, salt: bytes) -> tuple[AESGCM, AESGCM]:
-    """The (file, journal) AEADs for one run salt, deriving them only once."""
-    with _RUN_KEY_LOCK:
-        cached = _RUN_KEYS.get(salt)
-        if cached is not None:
-            _RUN_KEYS.move_to_end(salt)
-    if cached is not None and hmac.compare_digest(
-        cached[0].encode("utf-8"), passphrase.encode("utf-8")
-    ):
-        return cached[1]
+    """Derive the file/journal AEADs once for the current operation."""
     master = _crypto.derive_data_key(passphrase, salt)
     pair = tuple(
         AESGCM(
@@ -138,12 +112,7 @@ def _run_keys(passphrase: str, salt: bytes) -> tuple[AESGCM, AESGCM]:
         )
         for info in (FILE_SUBKEY_INFO, JOURNAL_SUBKEY_INFO)
     )
-    keys = (pair[0], pair[1])
-    with _RUN_KEY_LOCK:
-        _RUN_KEYS[salt] = (passphrase, keys)
-        while len(_RUN_KEYS) > _RUN_KEY_LIMIT:
-            _RUN_KEYS.popitem(last=False)
-    return keys
+    return pair[0], pair[1]
 
 
 def _seal_salted(aead: AESGCM, salt: bytes, plaintext: bytes, aad: bytes) -> bytes:
@@ -264,15 +233,6 @@ def open_sealed(container: bytes, key: Optional[str], aad: bytes) -> bytes:
     """Authenticate and decrypt one older (per-container scrypt) container,
     or raise :class:`AttendedStateUnreadable`."""
     key = _require_key(key)
-    cache_key = (hashlib.sha256(container).digest(), aad)
-    with _CACHE_LOCK:
-        cached = _CACHE.get(cache_key)
-        if cached is not None:
-            _CACHE.move_to_end(cache_key)
-    if cached is not None and hmac.compare_digest(
-        cached[0].encode("utf-8"), key.encode("utf-8")
-    ):
-        return cached[1]
     try:
         plaintext = _crypto.decrypt_bytes(container, key, aad=aad)
     except _crypto.CryptoError as exc:
@@ -280,10 +240,6 @@ def open_sealed(container: bytes, key: Optional[str], aad: bytes) -> bytes:
             "attended state does not decrypt: wrong key, or the file was "
             "changed or moved from another path"
         ) from exc
-    with _CACHE_LOCK:
-        _CACHE[cache_key] = (key, plaintext)
-        while len(_CACHE) > _CACHE_LIMIT:
-            _CACHE.popitem(last=False)
     return plaintext
 
 
@@ -518,7 +474,7 @@ def _journal_salt(run_dir: Optional[Path], path_key: str) -> bytes:
         _present, salt = _read_marker(Path(run_dir))
         if salt is not None:
             return salt
-    with _RUN_KEY_LOCK:
+    with _JOURNAL_SALT_LOCK:
         salt = _JOURNAL_SALTS.get(path_key)
         if salt is None:
             salt = _crypto.SetKey.new_salt()

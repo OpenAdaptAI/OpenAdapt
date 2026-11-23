@@ -449,6 +449,7 @@ class SkillCache:
         if json.loads(stored.read_text(encoding="utf-8")) != key:
             # Never serve a program compiled for another task or record.
             return None
+        compiler.require_credential_withholding()
         emitted = compiler.out_dir / "emitted.json"
         if (
             not emitted.is_file()
@@ -509,6 +510,29 @@ class SkillCache:
     def run(self, prompt: str, params: Mapping[str, Any], agent: Any) -> SkillRun:
         started = time.monotonic()
         compiler, key = self._compiler(prompt, params)
+        served = self._compiled(compiler, key, params, started)
+        if served is not None:
+            return served
+        return self._first_run(compiler, key, prompt, params, agent, started)
+
+    def replay_only(self, prompt: str, params: Mapping[str, Any]) -> Optional[SkillRun]:
+        """The admitted program, or the hold, and never a first run.
+
+        None when the task has no admitted program (a miss): no agent is
+        involved, so a miss can't start one.
+        """
+
+        started = time.monotonic()
+        compiler, key = self._compiler(prompt, params)
+        return self._compiled(compiler, key, params, started)
+
+    def _compiled(
+        self,
+        compiler: Any,
+        key: dict[str, Any],
+        params: Mapping[str, Any],
+        started: float,
+    ) -> Optional[SkillRun]:
         if (compiler.dir / _STOP_FILE).exists() or (
             compiler.dir / _STOP_FILE
         ).is_symlink():
@@ -538,7 +562,7 @@ class SkillCache:
                     stream.flush()
                     os.fsync(stream.fileno())
             return self._held(compiler, started)
-        return self._first_run(compiler, key, prompt, params, agent, started)
+        return None
 
     def _held(self, compiler: Any, started: float) -> SkillRun:
         try:
@@ -774,6 +798,7 @@ class SkillCache:
     ) -> SkillRun:
         from openadapt_flow.ir import Workflow
 
+        compiler.require_credential_withholding()
         stop = compiler.dir / _STOP_FILE
         workflow = Workflow.load(compiler._jit().bundle_dir)
         if workflow.manifest is None:
@@ -803,7 +828,12 @@ class SkillCache:
             before,
             after,
             expect=self.common["expect"],
-            values={k: str(v) for k, v in params.items()},
+            # A secret parameter (a sign-in value) is never saved in the record.
+            values={
+                k: str(v)
+                for k, v in params.items()
+                if k not in set(workflow.secret_params)
+            },
         )
         verified = (
             reply.get("verified") is True
@@ -998,6 +1028,8 @@ class TaskRecordCheck:
     removed: int
     #: Writes to other records during the run (other users, other tasks).
     outside_run: dict[str, int] = field(default_factory=dict)
+    #: False when either read failed: the zero counts then prove nothing.
+    readable: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return dict(self.__dict__)
@@ -1025,7 +1057,7 @@ def task_record_check(
 
     if before is None or after is None:
         return TaskRecordCheck(
-            False, ["the system of record could not be read"], 0, 0, 0
+            False, ["the system of record could not be read"], 0, 0, 0, readable=False
         )
 
     def mine(record: Optional[Mapping[str, Any]]) -> bool:
@@ -1077,27 +1109,56 @@ def _set_aside(compiler: Any) -> Optional[Path]:
     return target
 
 
+def _child_errlog() -> Any:
+    """A live, fd-backed stderr stream for an MCP child, or None if unavailable."""
+
+    for stream in (sys.stderr, sys.__stderr__):
+        if stream is None or getattr(stream, "closed", False):
+            continue
+        try:
+            stream.fileno()
+        except (AttributeError, OSError, ValueError):
+            continue
+        return stream
+    return None
+
+
 async def _call_skill(python: str, server: Path, params: dict[str, Any]) -> dict:
     """Call the compiled task's one tool over MCP (stdio), as a client would."""
 
+    from contextlib import ExitStack
+
     from mcp import ClientSession, StdioServerParameters
-    from mcp.client.stdio import stdio_client
+    from mcp.client.stdio import get_default_environment, stdio_client
 
-    target = StdioServerParameters(command=python, args=[str(server)])
-    async with stdio_client(target) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            tools = (await session.list_tools()).tools
-            if len(tools) != 1:
-                raise RuntimeError("a compiled skill's server has exactly one tool")
-            from openadapt_flow.request_binding import request_meta
+    from openadapt_flow.second_factor import source_env
 
-            metadata = request_meta()
-            if metadata is None:
-                result = await session.call_tool(tools[0].name, params)
-            else:
-                # Unsupported metadata APIs refuse; never retry without context.
-                result = await session.call_tool(tools[0].name, params, meta=metadata)
+    # The stdio client passes only a minimal environment. A sign-in's second
+    # factor source (and its run token) is what the cached run needs too.
+    env = {**get_default_environment(), **source_env()}
+    target = StdioServerParameters(command=python, args=[str(server)], env=env)
+    # The child's stderr goes to a live fd-backed stderr stream when one exists
+    # (never a closed stream or an in-memory StringIO such as pytest capsys).
+    with ExitStack() as stack:
+        errlog = _child_errlog()
+        if errlog is None:
+            errlog = stack.enter_context(open(os.devnull, "w", encoding="utf-8"))
+        async with stdio_client(target, errlog=errlog) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                tools = (await session.list_tools()).tools
+                if len(tools) != 1:
+                    raise RuntimeError("a compiled skill's server has exactly one tool")
+                from openadapt_flow.request_binding import request_meta
+
+                metadata = request_meta()
+                if metadata is None:
+                    result = await session.call_tool(tools[0].name, params)
+                else:
+                    # Unsupported metadata APIs refuse; never retry without context.
+                    result = await session.call_tool(
+                        tools[0].name, params, meta=metadata
+                    )
     # mcp 2 names these fields in snake case, mcp 1 in camel case.
     if getattr(result, "is_error", None) or getattr(result, "isError", None):
         text = " ".join(getattr(c, "text", "") for c in result.content)

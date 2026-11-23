@@ -285,8 +285,14 @@ text and a screenshot from the agent and reads the record back with
 - **Desktop and remote surfaces, TESTED.** `emit-mcp` generates a server that
   runs `openadapt-flow run --config` for a desktop bundle, and `emit-skill`
   writes matching instructions (`emit/mcp_tool.py`, `emit/skill.py`;
-  `tests/test_backend_parity_refusals.py`). `serve --teach` on RDP and Citrix
-  records and passes its record check (`tests/test_mcp_teach_surfaces.py`).
+  `tests/test_backend_parity_refusals.py`). `serve --teach` requires credential-
+  field observation before capture. Pixel-only RDP and Citrix backends refuse
+  with `CAPTURE_CREDENTIAL_OBSERVATION_UNSUPPORTED`, even when a person can
+  approve saves (`tests/test_mcp_teach_surfaces.py`). Ordinary trusted
+  `compile_agent` capture retains its default behavior; the separate pixel-
+  window tests record and check a synthetic note, then refuse its canary for
+  missing record identity (`tests/test_jit_surface_pixels.py`). These fixtures
+  do not qualify a native RDP or ICA/HDX session.
   `serve-execute --config DEPLOY_YAML` (or an admission's `deployment`) runs
   a desktop bundle through `openadapt-flow run --config`, pinned to the
   bundle's digest, under the admission's `qualification_authority_file`; an
@@ -334,7 +340,20 @@ and `--log-url`, the transparency log) are not app URLs.
 <!-- url-flag-refusals: the test reads this table. -->
 | Command | URL flag | Why it has no backend-neutral alternative |
 | --- | --- | --- |
+| `openadapt-flow readiness import` | `--app-url` | It filters a recorded network capture to the app's origin: a browser recording is the only reference source that has request origins. |
+| `openadapt-flow readiness run` | `--app-url` | The shadow hold works on the browser's own requests (CDP `Fetch`), so it is web-only; a candidate on another surface has no request to hold. |
 | `openadapt-flow validate-hosted` | `--target-url` | The surface comes from the signed run report. A non-web report refuses a target URL ("Target URL is web-only and must be omitted"). |
 | `openadapt-agent authoring connect` | `--url` | `--url` opens a fresh browser. Without it the command pins the local app window (one macOS or Linux window). Windows, RDP and Citrix are coach-only on the mailbox: the person drives and Capture records (`COACH_ONLY_BACKENDS` in `agent/mailbox.py`). |
 | `openadapt-agent seal keys pin` | `--url` | The seal key server's address, not an app. |
+| `openadapt-flow learn probe` | `--base-url` | The probe sends read-only HTTP requests (`GET`, `HEAD`) to the app's API as the agent; it drives no UI, so there is no backend to choose. The frame it reads comes from the contract's `frame.database`. |
+| `openadapt-flow wrap-dispatch` | `--pricing-source-url` | The primary source cited for the model prices the fallback's cost is computed with, not an app. The task's app comes from `--task`. |
 
+
+
+Automatic first-run credential withholding requires field-type observation.
+A backend without that seam, including the current screen-only RDP/Citrix
+implementations, refuses with `CAPTURE_CREDENTIAL_OBSERVATION_UNSUPPORTED`
+before capture or actor input. `tests/test_jit_surface_pixels.py` checks this
+earlier refusal on genuine backends presented with a synthetic client window.
+The explicit person-entered secret pause/continue authoring path remains
+available; it does not infer credential types from pixels.

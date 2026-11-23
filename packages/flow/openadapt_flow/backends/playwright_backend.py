@@ -22,6 +22,15 @@ from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Iterator, Literal, Optional, Sequence
 from urllib.parse import urlsplit
 
+from openadapt_flow.backends._field_metadata_js import (
+    _CREDENTIAL_AT_JS,
+    _CREDENTIAL_KINDS,
+    _DISPLAYED_TEXT_AT_JS,
+    _EDITABLE_VALUE_JS,
+    _FIELD_CREDENTIAL_JS,
+    _FIELD_LABEL_JS,
+    _TEXT_VALUE_AT_JS,
+)
 from openadapt_flow.backends._frame_js import (  # noqa: F401 - re-exported
     _FRAME_BOUNDARY_JS,
     _FRAME_SELECTOR_JS,
@@ -73,6 +82,7 @@ VIEWPORT: tuple[int, int] = (1280, 800)
 # Login pages often attach and detach iframes for a few seconds after a click.
 # Retry until the tree is quiet. Still refuse if it never settles.
 _MASKED_SCREENSHOT_TIMEOUT_S = 8.0
+_DIALOG_CAPTURE_WAIT_S = 120.0
 _MASKED_SCREENSHOT_RETRY_SLEEP_S = 0.05
 # A capture that overlaps a navigation commit (a form POST answered with a
 # redirect, for example) fails in Chromium with "Unable to capture
@@ -80,10 +90,21 @@ _MASKED_SCREENSHOT_RETRY_SLEEP_S = 0.05
 # nothing about the page; wait for the new document and capture again.
 _NAVIGATION_SCREENSHOT_TIMEOUT_S = 30.0
 _NAVIGATION_SCREENSHOT_ATTEMPT_TIMEOUT_MS = 10_000
+# Captures interrupted by a navigation (a form inside an iframe saving and
+# loading the next page) or by a browser dialog, which is answered by the step
+# that expects it or dismissed as unexpected. Retried, never accepted.
+_NAVIGATION_CAPTURE_ERRORS = (
+    "Frame is currently attempting a navigation",
+    "Navigation interrupted",
+    # "interrupted evaluation" and, while a person answers it, "prevents
+    # evaluation".
+    "JavaScript dialog",
+)
 _TRANSIENT_SCREENSHOT_ERRORS = (
     "Unable to capture screenshot",
     "Timeout",
     "Execution context was destroyed",
+    *_NAVIGATION_CAPTURE_ERRORS,
 )
 
 # How long a click that reported its page closed waits for the page to read
@@ -1020,7 +1041,7 @@ _FORM_EXPECTED_JS = (
 
 # Page-structure identity of a FORM FIELD that sits in no record row.
 #
-# A data-entry form (OpenEMR's new-patient page, most CRUD screens) lays its
+# A data-entry form (most CRUD screens) lays its
 # fields out in label/control groups (``.form-group.row`` and the like), not
 # table rows, so the row rule above abstains and identity used to fall to the
 # OCR band read across the field's visual row. This mirrors that band in the
@@ -1517,96 +1538,6 @@ _IDENTITY_CANDIDATES_AT_JS = (
 # more rows than this reports ``incomplete`` and the runtime cannot prove the
 # target unique.
 IDENTITY_CANDIDATE_ROW_CAP = 5000
-
-_TEXT_VALUE_AT_JS = r"""([px, py]) => {
-    const hit = document.elementFromPoint(px, py);
-    if (!hit) return null;
-    const el = hit.closest(
-        'input, textarea, [contenteditable=""], [contenteditable="true"],' +
-        ' [role="textbox"]'
-    );
-    if (!el) return null;
-    if ('value' in el && typeof el.value === 'string') return el.value;
-    if (el.isContentEditable || el.getAttribute('role') === 'textbox') {
-        return el.textContent || '';
-    }
-    return null;
-}"""
-
-# The text the element under a point shows: an input's value, else its
-# rendered text (innerText honours CSS visibility). Null when nothing is hit.
-_DISPLAYED_TEXT_AT_JS = r"""([px, py]) => {
-    const el = document.elementFromPoint(px, py);
-    if (!el || el === document.body || el === document.documentElement) {
-        return null;
-    }
-    if ('value' in el && typeof el.value === 'string' &&
-        el.matches('input, textarea, select')) return el.value;
-    const text = (el.innerText || el.textContent || '').trim();
-    return text || null;
-}"""
-
-_EDITABLE_VALUE_JS = r"""(el) => {
-    if (!el.matches(
-            'input, textarea, [contenteditable=""], [contenteditable="true"],' +
-            ' [role="textbox"]')) return null;
-    if ('value' in el && typeof el.value === 'string') return el.value;
-    return el.textContent || '';
-}"""
-
-# Best available human label for a (focused) editable field, best-first:
-# associated <label for=...>, wrapping <label>, aria-label, aria-labelledby,
-# placeholder, name attribute, title. Whitespace-collapsed; null when the
-# element is not an editable field or carries no label evidence. PASSIVE
-# record-time metadata only (see openadapt_flow.backend.FieldLabelBackend).
-_FIELD_LABEL_JS = r"""(el) => {
-    if (!el.matches(
-            'input, textarea, select, [contenteditable=""],' +
-            ' [contenteditable="true"], [role="textbox"]')) return null;
-    const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
-    if (el.id) {
-        try {
-            const forLabel = document.querySelector(
-                'label[for="' + CSS.escape(el.id) + '"]'
-            );
-            const t = clean(forLabel && forLabel.textContent);
-            if (t) return t;
-        } catch (e) {}
-    }
-    const wrapping = el.closest('label');
-    if (wrapping) {
-        // Label TEXT only: a control nested inside the label (e.g. a
-        // <textarea>) contributes its typed VALUE to textContent -- strip
-        // embedded controls so the captured label is never the value.
-        const cloned = wrapping.cloneNode(true);
-        for (const child of cloned.querySelectorAll(
-                'input, textarea, select, [contenteditable=""],' +
-                ' [contenteditable="true"], [role="textbox"]')) {
-            child.remove();
-        }
-        const t = clean(cloned.textContent);
-        if (t) return t;
-    }
-    const aria = clean(el.getAttribute('aria-label'));
-    if (aria) return aria;
-    const labelledby = el.getAttribute('aria-labelledby');
-    if (labelledby) {
-        const parts = [];
-        for (const id of labelledby.split(/\s+/)) {
-            const ref = document.getElementById(id);
-            const t = clean(ref && ref.textContent);
-            if (t) parts.push(t);
-        }
-        if (parts.length) return parts.join(' ');
-    }
-    const placeholder = clean(el.getAttribute('placeholder'));
-    if (placeholder) return placeholder;
-    const name = clean(el.getAttribute('name'));
-    if (name) return name;
-    const title = clean(el.getAttribute('title'));
-    if (title) return title;
-    return null;
-}"""
 
 _GUARD_CONTAINS_POINT_JS = r"""(el, point) => {
     const [px, py] = point;
@@ -2578,9 +2509,11 @@ class PlaywrightBackend:
         # steps keeps Playwright's default (dismiss) exactly as before.
         self._dialog_listening = False
         self._dialog_armed: Optional[
-            tuple[str, Optional[str], Optional[re.Pattern[str]]]
+            tuple[str, Optional[str], Optional[re.Pattern[str]], Optional[str], int]
         ] = None
         self._dialogs_seen: list[dict[str, Any]] = []
+        self._dialog_document_generation = 0
+        self._choice: Any = None
         self._screenshot_scale = screenshot_scale
         self._screenshot_mask_selectors = screenshot_mask_selectors
         self._structural_state_reader = structural_state_reader
@@ -3331,6 +3264,67 @@ class PlaywrightBackend:
 
         return self._focused_element_eval(_FIELD_LABEL_JS)
 
+    def focused_field_credential(self) -> Optional[dict[str, Any]]:
+        """Whether the focused field takes a sign-in credential, and where it is.
+
+        RECORD-TIME seam (:class:`openadapt_flow.backend.CredentialFieldBackend`).
+        Returns ``{"kind": "password" | "new-password" | "username" |
+        "one-time-code" | "unknown", "box": (x, y, w, h)}``
+        or None. The rules use only the page's own markup, the way a browser's
+        password manager finds a sign-in form:
+
+        * ``password``: an ``<input type="password">``, or an input whose
+          ``autocomplete`` names ``current-password`` (``new-password`` when
+          it names that: a password change or sign-up);
+        * ``username``: an input whose ``autocomplete`` names ``username``,
+          or the uniquely paired text, email or phone input across all
+          password candidates in the composed form (the document when it has
+          no form). Ambiguous controls return ``unknown``; CSS visibility is
+          not used as evidence that a password candidate is irrelevant;
+          ``one-time-code``: ``autocomplete`` names it (a second factor).
+
+        ``box`` is in top-document viewport pixels, or None when the
+        element's box could not be read. Read-only and never raises. None
+        means the control was read and takes no credential; ``unknown``
+        means it could not be read (any doubt about the frame chain, see
+        :meth:`_focused_element_call`), and the recorder then refuses to type
+        a declared input into it.
+        """
+
+        box: dict[str, float] = {}
+        kind = self._focused_element_call(_FIELD_CREDENTIAL_JS, box_out=box)
+        if kind == "none":
+            return None
+        if kind not in _CREDENTIAL_KINDS:
+            # The focused control could not be read (a frame chain that does
+            # not verify, a failed call). The recorder refuses to type a
+            # declared input into it.
+            return {"kind": "unknown", "box": None}
+        try:
+            rect: Optional[tuple[int, int, int, int]] = (
+                int(box["x"]),
+                int(box["y"]),
+                max(1, int(round(box["width"]))),
+                max(1, int(round(box["height"]))),
+            )
+        except (KeyError, TypeError, ValueError):
+            rect = None
+        return {"kind": kind, "box": rect}
+
+    def credential_field_at(self, x: int, y: int) -> Optional[str]:
+        """The credential kind of the field at a top-document point, or None.
+
+        ``"frame"`` when the point is inside a frame (not looked into), and
+        ``"unknown"`` when the page can't be read: the recorder then keeps a
+        sign-in field blacked out, the safe direction.
+        """
+
+        try:
+            found = self.page.evaluate(_CREDENTIAL_AT_JS, [int(x), int(y)])
+        except Exception:
+            return "unknown"
+        return found if found in (*_CREDENTIAL_KINDS, "frame", "unknown") else None
+
     def _focused_element_eval(self, js: str) -> Optional[str]:
         """Evaluate ``js`` on the focused element, descending nested frames.
 
@@ -4030,12 +4024,15 @@ class PlaywrightBackend:
         arg: Any = None,
         with_arg: bool = False,
         frame_path_out: Optional[list[str]] = None,
+        box_out: Optional[dict[str, float]] = None,
     ) -> Any:
         """Evaluate ``js`` on the exactly bound focused element (see above).
 
         Returns the raw result, or None on any frame mismatch or failure.
         ``frame_path_out``, when given, receives the frame chain the focused
         element is in (outermost first; empty in the top document).
+        ``box_out``, when given, receives the element's bounding box in
+        top-document viewport pixels.
         """
 
         scope: Any = self.page
@@ -4061,6 +4058,9 @@ class PlaywrightBackend:
                             return None
                         if frame_path_out is not None:
                             frame_path_out[:] = frame_path
+                        if box_out is not None:
+                            box_out.clear()
+                            box_out.update(box)
                         if with_arg:
                             return focused.evaluate(js, arg)
                         return focused.evaluate(js)
@@ -5839,6 +5839,7 @@ class PlaywrightBackend:
         response: str,
         message: Optional[str],
         message_pattern: Optional[str] = None,
+        kind: Optional[str] = None,
     ) -> None:
         """Answer the next dialog with ``response`` if it shows ``message``.
 
@@ -5852,16 +5853,81 @@ class PlaywrightBackend:
 
         if response not in ("accept", "dismiss"):
             raise ValueError("a dialog response is 'accept' or 'dismiss'")
-        if not self._dialog_listening:
-            self.page.on("dialog", self._on_dialog)
-            self._dialog_listening = True
+        if kind not in (None, "alert", "confirm", "prompt", "beforeunload"):
+            raise ValueError("unsupported dialog kind")
+        self.watch_dialogs()
         pattern = (
             re.compile(message_pattern, re.DOTALL)
             if message_pattern is not None
             else None
         )
-        self._dialog_armed = (response, message, pattern)
+        self._dialog_armed = (
+            response,
+            message,
+            pattern,
+            kind,
+            self._dialog_document_generation,
+        )
         self._dialogs_seen = []
+
+    def watch_dialogs(self) -> None:
+        """Answer every dialog from now on, so none is dismissed unseen.
+
+        Called once by the runtime before a run. A dialog no step armed is
+        dismissed and kept for :meth:`take_unexpected_dialogs`; the runtime
+        stops the run on it instead of carrying on after Playwright's silent
+        default dismissal changed what the page did.
+        """
+
+        if not self._dialog_listening:
+            self.page.on("dialog", self._on_dialog)
+            for event in ("frameattached", "framedetached", "framenavigated"):
+                self.page.on(event, self._dialog_document_changed)
+            self._dialog_listening = True
+
+    def _dialog_document_changed(self, _frame: Any) -> None:
+        self._dialog_document_generation += 1
+
+    def dialog_scope_error(self) -> Optional[str]:
+        """Native Dialog events expose a page, not their producer document.
+
+        A recorded kind is a new scoped contract. One unchanged document is
+        the conservative observable scope; iframe trees cannot be attributed.
+        """
+        try:
+            frames = self.page.frames
+            if len(frames) == 1 and frames[0] == self.page.main_frame:
+                return None
+        except Exception:
+            pass
+        return "browser dialog producer document is ambiguous"
+
+    def take_unexpected_dialogs(self) -> list[dict[str, Any]]:
+        """The dialogs shown while no step had armed an answer, then clear."""
+
+        if self._dialog_armed is not None:
+            return []
+        seen, self._dialogs_seen = self._dialogs_seen, []
+        return seen
+
+    # -- dropdown choices (docs/CHOICES.md) ---------------------------------
+
+    def choose_option(
+        self, contract: Any, wanted: str, *, point: tuple[int, int]
+    ) -> dict[str, Any]:
+        """Choose ``wanted`` in the dropdown at ``point`` (OptionChoice)."""
+
+        from openadapt_flow.backends.choice import BrowserChoice
+
+        if self._choice is None:
+            self._choice = BrowserChoice(self.page, self._frame_point)
+        self._assert_qualification_environment_current()
+        return self._choice.choose(contract, wanted, point)
+
+    def confirm_choice(self) -> bool:
+        """Whether the last chosen option still shows on its control."""
+
+        return self._choice is not None and self._choice.confirm()
 
     def take_dialogs(self, timeout_s: float = 0.0) -> list[dict[str, Any]]:
         """The dialogs answered since the last arm, then disarm.
@@ -5895,11 +5961,23 @@ class PlaywrightBackend:
         armed, self._dialog_armed = self._dialog_armed, None
         matched = False
         if armed is not None:
-            _response, expected, pattern = armed
+            _response, expected, pattern, expected_kind, generation = armed
             if pattern is not None:
                 matched = pattern.fullmatch(message) is not None
             else:
                 matched = expected is None or expected == message
+            matched = matched and (expected_kind is None or expected_kind == kind)
+            if expected_kind is not None:
+                try:
+                    same_page = dialog.page == self.page
+                except Exception:
+                    same_page = False
+                matched = (
+                    matched
+                    and same_page
+                    and generation == self._dialog_document_generation
+                    and self.dialog_scope_error() is None
+                )
         response = armed[0] if armed is not None and matched else "dismiss"
         self._dialogs_seen.append(
             {
@@ -5949,6 +6027,9 @@ class PlaywrightBackend:
             return self._capture_across_navigation(base_options)
 
         deadline = time.monotonic() + _MASKED_SCREENSHOT_TIMEOUT_S
+        # A person answering a browser dialog in a headed recording gets this
+        # long before the capture gives up.
+        dialog_deadline = time.monotonic() + _DIALOG_CAPTURE_WAIT_S
         while True:
             # A retry can observe a different secret boundary even after the
             # frame tree settles. Rebind or refuse before every capture.
@@ -5973,8 +6054,18 @@ class PlaywrightBackend:
                 # Flush lifecycle events that Chromium sent with or before the
                 # screenshot response before accepting the in-memory bytes.
                 self.page.evaluate("() => null")
-            except Exception:
-                if generation != self._screenshot_frame_generation:
+            except Exception as error:
+                # A navigation or a dialog during the capture is retried like
+                # a changed frame tree.
+                if "JavaScript dialog" in str(error):
+                    if time.monotonic() >= dialog_deadline:
+                        raise
+                    deadline = max(deadline, time.monotonic() + 1.0)
+                    time.sleep(_MASKED_SCREENSHOT_RETRY_SLEEP_S)
+                    continue
+                if generation != self._screenshot_frame_generation or any(
+                    marker in str(error) for marker in _NAVIGATION_CAPTURE_ERRORS
+                ):
                     if time.monotonic() >= deadline:
                         break
                     time.sleep(_MASKED_SCREENSHOT_RETRY_SLEEP_S)

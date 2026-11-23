@@ -31,13 +31,13 @@ handles the rest.
 
 from __future__ import annotations
 
-import base64
 import hashlib
-import html as _html
 import json
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Mapping, Optional, Sequence
-from urllib.parse import parse_qsl, quote, quote_plus, unquote, unquote_plus, urlsplit
+from urllib.parse import parse_qsl, urlsplit
+
+from openadapt_flow.secret_redaction import carries_secret, mask_secrets, secret_forms
 
 __all__ = [
     "READ_METHODS",
@@ -56,51 +56,6 @@ READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 # -- sign-in values ---------------------------------------------------------------
-
-
-def secret_forms(value: str) -> set[str]:
-    """Every way ``value`` can show up in a URL, a body or a page: as is,
-    percent- and form-encoded, JSON-escaped, HTML-escaped and in base64."""
-
-    raw = value.encode("utf-8")
-    forms = {
-        value,
-        quote(value, safe=""),
-        quote(value),
-        quote_plus(value),
-        quote(value, safe="").lower(),
-        quote_plus(value).lower(),
-        json.dumps(value)[1:-1],
-        _html.escape(value),
-        base64.b64encode(raw).decode(),
-        base64.urlsafe_b64encode(raw).decode(),
-    }
-    forms |= {f.rstrip("=") for f in list(forms)}
-    return {f for f in forms if len(f) >= 3}
-
-
-def carries_secret(text: str, secrets: Iterable[str]) -> bool:
-    """True when ``text`` holds any form of any of ``secrets``."""
-
-    candidates = {text, unquote(text), unquote_plus(text)}
-    return any(
-        form in candidate
-        for value in secrets
-        if value
-        for form in secret_forms(value)
-        for candidate in candidates
-    )
-
-
-def mask_secrets(text: str, secrets: Iterable[str], mask: str = "•" * 4) -> str:
-    """``text`` with every form of every secret replaced by ``mask``."""
-
-    for value in secrets:
-        if not value:
-            continue
-        for form in sorted(secret_forms(value), key=len, reverse=True):
-            text = text.replace(form, mask)
-    return text
 
 
 # -- request bodies -----------------------------------------------------------------

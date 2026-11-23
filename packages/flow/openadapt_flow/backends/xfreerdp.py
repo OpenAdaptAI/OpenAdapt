@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterator, Literal, Optional, Sequence, TypeVar
 
 from openadapt_flow.backends.rdp_backend import Framebuffer
+from openadapt_flow.private_file import open_binary
 
 _SCALES = (100, 140, 180)
 _DISPLAY_LOCK = threading.Lock()
@@ -95,8 +96,8 @@ class SessionProfile:
         desktop_scale: Scaling the remote desktop applies to its apps, in
             percent. 100 means no Windows display scaling.
         dpi: Virtual display DPI on the client side.
-        lossless: Turn off the GFX, RemoteFX and NSCodec lossy codecs so
-            frames are pixel-identical across runs.
+        lossless: Omit the GFX, RemoteFX and NSCodec enabling options.
+            Explicit color depth prevents automatic codec selection.
         font_smoothing: ClearType on the remote. Off keeps glyph pixels
             stable across sessions.
         wallpaper, themes: Off removes pixels that vary between sessions.
@@ -141,9 +142,10 @@ class SessionProfile:
             f"/scale-desktop:{self.desktop_scale}",
             f"/kbd:layout:{self.keyboard_layout}",
         ]
-        if self.lossless:
-            args += ["-gfx", "-rfx", "-nsc"]
-        elif self.avc444:
+        # FreeRDP 3 treats gfx as optional-valued and rfx/nsc as presence
+        # flags: a minus prefix still enables them. Explicit bpp above
+        # suppresses automatic codec defaults, so lossless omits all three.
+        if not self.lossless and self.avc444:
             args.append("/gfx:AVC444:on")
         args.append("+fonts" if self.font_smoothing else "-fonts")
         args.append("+wallpaper" if self.wallpaper else "-wallpaper")
@@ -269,7 +271,9 @@ def _claim_display() -> int:
             if n in _CLAIMED or not _display_free(n):
                 continue
             try:
-                fd = os.open(_marker(n), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                fd = open_binary(
+                    _marker(n), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600
+                )
             except FileExistsError:
                 continue
             os.write(fd, str(os.getpid()).encode())

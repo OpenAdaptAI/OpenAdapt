@@ -15,6 +15,9 @@ ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = [
     ROOT / "README.md",
     ROOT / "CAPABILITIES.md",
+    # CAPABILITIES.md's sources: a new row is checked before the refresh
+    # workflow regenerates the page.
+    *sorted((ROOT / "capabilities").rglob("*.md")),
     ROOT / "llms.txt",
     *sorted((ROOT / "packages").glob("*/README.md")),
 ]

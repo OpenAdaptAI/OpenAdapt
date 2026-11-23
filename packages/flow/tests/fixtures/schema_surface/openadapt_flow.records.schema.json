@@ -1,0 +1,2955 @@
+{
+ "pydantic": "2.13.4",
+ "models": {
+  "ChannelRead": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "What one channel read for one field.",
+    "properties": {
+     "channel": {
+      "enum": [
+       "clipboard",
+       "ocr",
+       "structure",
+       "accessibility",
+       "export",
+       "database",
+       "api"
+      ],
+      "title": "Channel",
+      "type": "string"
+     },
+     "raw": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Exactly what the channel returned.",
+      "title": "Raw"
+     },
+     "normalized": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Canonical form for the field kind; None if it did not parse.",
+      "title": "Normalized"
+     },
+     "engine_confidence": {
+      "anyOf": [
+       {
+        "maximum": 1.0,
+        "minimum": 0.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Engine Confidence"
+     },
+     "session": {
+      "default": "acting",
+      "enum": [
+       "acting",
+       "reopened",
+       "independent"
+      ],
+      "title": "Session",
+      "type": "string"
+     },
+     "source_kind": {
+      "anyOf": [
+       {
+        "enum": [
+         "live_session",
+         "committed_store"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Required for an export read; must be unset otherwise.",
+      "title": "Source Kind"
+     },
+     "record_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "The record this read came from (its id in the source). Reads of one field that name different records disagree.",
+      "title": "Record Id"
+     },
+     "record_count": {
+      "anyOf": [
+       {
+        "minimum": 0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "How many records the read matched. Anything but 1 is not a read of one record; a database or API read must state it.",
+      "title": "Record Count"
+     }
+    },
+    "required": [
+     "channel",
+     "raw"
+    ],
+    "title": "ChannelRead",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "What one channel read for one field.",
+    "properties": {
+     "channel": {
+      "enum": [
+       "clipboard",
+       "ocr",
+       "structure",
+       "accessibility",
+       "export",
+       "database",
+       "api"
+      ],
+      "title": "Channel",
+      "type": "string"
+     },
+     "raw": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Exactly what the channel returned.",
+      "title": "Raw"
+     },
+     "normalized": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Canonical form for the field kind; None if it did not parse.",
+      "title": "Normalized"
+     },
+     "engine_confidence": {
+      "anyOf": [
+       {
+        "maximum": 1.0,
+        "minimum": 0.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Engine Confidence"
+     },
+     "session": {
+      "default": "acting",
+      "enum": [
+       "acting",
+       "reopened",
+       "independent"
+      ],
+      "title": "Session",
+      "type": "string"
+     },
+     "source_kind": {
+      "anyOf": [
+       {
+        "enum": [
+         "live_session",
+         "committed_store"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Required for an export read; must be unset otherwise.",
+      "title": "Source Kind"
+     },
+     "record_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "The record this read came from (its id in the source). Reads of one field that name different records disagree.",
+      "title": "Record Id"
+     },
+     "record_count": {
+      "anyOf": [
+       {
+        "minimum": 0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "How many records the read matched. Anything but 1 is not a read of one record; a database or API read must state it.",
+      "title": "Record Count"
+     }
+    },
+    "required": [
+     "channel",
+     "raw"
+    ],
+    "title": "ChannelRead",
+    "type": "object"
+   }
+  },
+  "FieldRead": {
+   "validation": {
+    "$defs": {
+     "ChannelRead": {
+      "additionalProperties": false,
+      "description": "What one channel read for one field.",
+      "properties": {
+       "channel": {
+        "enum": [
+         "clipboard",
+         "ocr",
+         "structure",
+         "accessibility",
+         "export",
+         "database",
+         "api"
+        ],
+        "title": "Channel",
+        "type": "string"
+       },
+       "raw": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Exactly what the channel returned.",
+        "title": "Raw"
+       },
+       "normalized": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Canonical form for the field kind; None if it did not parse.",
+        "title": "Normalized"
+       },
+       "engine_confidence": {
+        "anyOf": [
+         {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Engine Confidence"
+       },
+       "session": {
+        "default": "acting",
+        "enum": [
+         "acting",
+         "reopened",
+         "independent"
+        ],
+        "title": "Session",
+        "type": "string"
+       },
+       "source_kind": {
+        "anyOf": [
+         {
+          "enum": [
+           "live_session",
+           "committed_store"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Required for an export read; must be unset otherwise.",
+        "title": "Source Kind"
+       },
+       "record_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "The record this read came from (its id in the source). Reads of one field that name different records disagree.",
+        "title": "Record Id"
+       },
+       "record_count": {
+        "anyOf": [
+         {
+          "minimum": 0,
+          "type": "integer"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "How many records the read matched. Anything but 1 is not a read of one record; a database or API read must state it.",
+        "title": "Record Count"
+       }
+      },
+      "required": [
+       "channel",
+       "raw"
+      ],
+      "title": "ChannelRead",
+      "type": "object"
+     },
+     "SealRef": {
+      "additionalProperties": false,
+      "description": "A pointer to the signed run receipt (Seal) that covers a value.",
+      "properties": {
+       "run_id": {
+        "title": "Run Id",
+        "type": "string"
+       },
+       "receipt_sha256": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "sha256 of the receipt JSON; set once sealed.",
+        "title": "Receipt Sha256"
+       },
+       "receipt_path": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Receipt Path"
+       },
+       "bundle_digest": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Bundle Digest"
+       },
+       "field_commitment": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Salted per-field commitment, when sealed.",
+        "title": "Field Commitment"
+       }
+      },
+      "required": [
+       "run_id"
+      ],
+      "title": "SealRef",
+      "type": "object"
+     },
+     "SourceRegion": {
+      "additionalProperties": false,
+      "description": "Where on which screen a value was read.",
+      "properties": {
+       "frame_sha256": {
+        "description": "sha256 of the full screenshot PNG.",
+        "title": "Frame Sha256",
+        "type": "string"
+       },
+       "bbox": {
+        "description": "x, y, width, height in px.",
+        "maxItems": 4,
+        "minItems": 4,
+        "prefixItems": [
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         }
+        ],
+        "title": "Bbox",
+        "type": "array"
+       },
+       "crop_sha256": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "sha256 of the cropped region PNG.",
+        "title": "Crop Sha256"
+       },
+       "frame_size": {
+        "anyOf": [
+         {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+           {
+            "type": "integer"
+           },
+           {
+            "type": "integer"
+           }
+          ],
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Frame Size"
+       },
+       "step_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Step Id"
+       }
+      },
+      "required": [
+       "frame_sha256",
+       "bbox"
+      ],
+      "title": "SourceRegion",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "One value read for one field, with its evidence.",
+    "properties": {
+     "field": {
+      "title": "Field",
+      "type": "string"
+     },
+     "value": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The normalized value, or None when no channel parsed it.",
+      "title": "Value"
+     },
+     "reads": {
+      "items": {
+       "$ref": "#/$defs/ChannelRead"
+      },
+      "title": "Reads",
+      "type": "array"
+     },
+     "agreement": {
+      "enum": [
+       "agree",
+       "disagree",
+       "ambiguous",
+       "single"
+      ],
+      "title": "Agreement",
+      "type": "string"
+     },
+     "confidence": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Confidence",
+      "type": "number"
+     },
+     "grade": {
+      "enum": [
+       "unchecked",
+       "same_screen",
+       "reopened",
+       "system_of_record"
+      ],
+      "title": "Grade",
+      "type": "string"
+     },
+     "region": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/SourceRegion"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "seal": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/SealRef"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "needs_review": {
+      "default": false,
+      "title": "Needs Review",
+      "type": "boolean"
+     },
+     "review_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Review Reason"
+     },
+     "review_decision": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Id of the signed review decision that settled this value.",
+      "title": "Review Decision"
+     }
+    },
+    "required": [
+     "field",
+     "value",
+     "reads",
+     "agreement",
+     "confidence",
+     "grade"
+    ],
+    "title": "FieldRead",
+    "type": "object"
+   },
+   "serialization": {
+    "$defs": {
+     "ChannelRead": {
+      "additionalProperties": false,
+      "description": "What one channel read for one field.",
+      "properties": {
+       "channel": {
+        "enum": [
+         "clipboard",
+         "ocr",
+         "structure",
+         "accessibility",
+         "export",
+         "database",
+         "api"
+        ],
+        "title": "Channel",
+        "type": "string"
+       },
+       "raw": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Exactly what the channel returned.",
+        "title": "Raw"
+       },
+       "normalized": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Canonical form for the field kind; None if it did not parse.",
+        "title": "Normalized"
+       },
+       "engine_confidence": {
+        "anyOf": [
+         {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Engine Confidence"
+       },
+       "session": {
+        "default": "acting",
+        "enum": [
+         "acting",
+         "reopened",
+         "independent"
+        ],
+        "title": "Session",
+        "type": "string"
+       },
+       "source_kind": {
+        "anyOf": [
+         {
+          "enum": [
+           "live_session",
+           "committed_store"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Required for an export read; must be unset otherwise.",
+        "title": "Source Kind"
+       },
+       "record_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "The record this read came from (its id in the source). Reads of one field that name different records disagree.",
+        "title": "Record Id"
+       },
+       "record_count": {
+        "anyOf": [
+         {
+          "minimum": 0,
+          "type": "integer"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "How many records the read matched. Anything but 1 is not a read of one record; a database or API read must state it.",
+        "title": "Record Count"
+       }
+      },
+      "required": [
+       "channel",
+       "raw"
+      ],
+      "title": "ChannelRead",
+      "type": "object"
+     },
+     "SealRef": {
+      "additionalProperties": false,
+      "description": "A pointer to the signed run receipt (Seal) that covers a value.",
+      "properties": {
+       "run_id": {
+        "title": "Run Id",
+        "type": "string"
+       },
+       "receipt_sha256": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "sha256 of the receipt JSON; set once sealed.",
+        "title": "Receipt Sha256"
+       },
+       "receipt_path": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Receipt Path"
+       },
+       "bundle_digest": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Bundle Digest"
+       },
+       "field_commitment": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Salted per-field commitment, when sealed.",
+        "title": "Field Commitment"
+       }
+      },
+      "required": [
+       "run_id"
+      ],
+      "title": "SealRef",
+      "type": "object"
+     },
+     "SourceRegion": {
+      "additionalProperties": false,
+      "description": "Where on which screen a value was read.",
+      "properties": {
+       "frame_sha256": {
+        "description": "sha256 of the full screenshot PNG.",
+        "title": "Frame Sha256",
+        "type": "string"
+       },
+       "bbox": {
+        "description": "x, y, width, height in px.",
+        "maxItems": 4,
+        "minItems": 4,
+        "prefixItems": [
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         }
+        ],
+        "title": "Bbox",
+        "type": "array"
+       },
+       "crop_sha256": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "sha256 of the cropped region PNG.",
+        "title": "Crop Sha256"
+       },
+       "frame_size": {
+        "anyOf": [
+         {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+           {
+            "type": "integer"
+           },
+           {
+            "type": "integer"
+           }
+          ],
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Frame Size"
+       },
+       "step_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Step Id"
+       }
+      },
+      "required": [
+       "frame_sha256",
+       "bbox"
+      ],
+      "title": "SourceRegion",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "One value read for one field, with its evidence.",
+    "properties": {
+     "field": {
+      "title": "Field",
+      "type": "string"
+     },
+     "value": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The normalized value, or None when no channel parsed it.",
+      "title": "Value"
+     },
+     "reads": {
+      "items": {
+       "$ref": "#/$defs/ChannelRead"
+      },
+      "title": "Reads",
+      "type": "array"
+     },
+     "agreement": {
+      "enum": [
+       "agree",
+       "disagree",
+       "ambiguous",
+       "single"
+      ],
+      "title": "Agreement",
+      "type": "string"
+     },
+     "confidence": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Confidence",
+      "type": "number"
+     },
+     "grade": {
+      "enum": [
+       "unchecked",
+       "same_screen",
+       "reopened",
+       "system_of_record"
+      ],
+      "title": "Grade",
+      "type": "string"
+     },
+     "region": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/SourceRegion"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "seal": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/SealRef"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "needs_review": {
+      "default": false,
+      "title": "Needs Review",
+      "type": "boolean"
+     },
+     "review_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Review Reason"
+     },
+     "review_decision": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Id of the signed review decision that settled this value.",
+      "title": "Review Decision"
+     }
+    },
+    "required": [
+     "field",
+     "value",
+     "reads",
+     "agreement",
+     "confidence",
+     "grade"
+    ],
+    "title": "FieldRead",
+    "type": "object"
+   }
+  },
+  "FieldSpec": {
+   "validation": {
+    "$defs": {
+     "ReadProof": {
+      "additionalProperties": false,
+      "description": "Which proof to collect for a read. Everything is off by default.",
+      "properties": {
+       "double_read": {
+        "default": false,
+        "description": "Read through two channels and compare.",
+        "title": "Double Read",
+        "type": "boolean"
+       },
+       "committed_readback": {
+        "default": false,
+        "description": "Close, reopen by identity fields and read again.",
+        "title": "Committed Readback",
+        "type": "boolean"
+       },
+       "seal": {
+        "default": false,
+        "description": "Cover the value with a signed Seal.",
+        "title": "Seal",
+        "type": "boolean"
+       }
+      },
+      "title": "ReadProof",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "One field of a record: its name, kind and how strictly it is read.",
+    "properties": {
+     "name": {
+      "description": "Lower snake case, unique in the schema.",
+      "title": "Name",
+      "type": "string"
+     },
+     "kind": {
+      "default": "text",
+      "enum": [
+       "text",
+       "code",
+       "date",
+       "currency",
+       "integer",
+       "decimal",
+       "boolean",
+       "enum"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+     },
+     "required": {
+      "default": true,
+      "title": "Required",
+      "type": "boolean"
+     },
+     "choices": {
+      "default": [],
+      "description": "Allowed values; required when kind is enum.",
+      "items": {
+       "type": "string"
+      },
+      "title": "Choices",
+      "type": "array"
+     },
+     "date_order": {
+      "anyOf": [
+       {
+        "enum": [
+         "dmy",
+         "mdy"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "How to read 03/04/2026; unset means ambiguous.",
+      "title": "Date Order"
+     },
+     "pattern": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Regular expression the normalized value matches.",
+      "title": "Pattern"
+     },
+     "min_confidence": {
+      "anyOf": [
+       {
+        "maximum": 1.0,
+        "minimum": 0.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Below this the value goes to the review queue; unset means no confidence gate.",
+      "title": "Min Confidence"
+     },
+     "proof": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/ReadProof"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Overrides the schema's proof for this field."
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "title": "FieldSpec",
+    "type": "object"
+   },
+   "serialization": {
+    "$defs": {
+     "ReadProof": {
+      "additionalProperties": false,
+      "description": "Which proof to collect for a read. Everything is off by default.",
+      "properties": {
+       "double_read": {
+        "default": false,
+        "description": "Read through two channels and compare.",
+        "title": "Double Read",
+        "type": "boolean"
+       },
+       "committed_readback": {
+        "default": false,
+        "description": "Close, reopen by identity fields and read again.",
+        "title": "Committed Readback",
+        "type": "boolean"
+       },
+       "seal": {
+        "default": false,
+        "description": "Cover the value with a signed Seal.",
+        "title": "Seal",
+        "type": "boolean"
+       }
+      },
+      "title": "ReadProof",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "One field of a record: its name, kind and how strictly it is read.",
+    "properties": {
+     "name": {
+      "description": "Lower snake case, unique in the schema.",
+      "title": "Name",
+      "type": "string"
+     },
+     "kind": {
+      "default": "text",
+      "enum": [
+       "text",
+       "code",
+       "date",
+       "currency",
+       "integer",
+       "decimal",
+       "boolean",
+       "enum"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+     },
+     "required": {
+      "default": true,
+      "title": "Required",
+      "type": "boolean"
+     },
+     "choices": {
+      "default": [],
+      "description": "Allowed values; required when kind is enum.",
+      "items": {
+       "type": "string"
+      },
+      "title": "Choices",
+      "type": "array"
+     },
+     "date_order": {
+      "anyOf": [
+       {
+        "enum": [
+         "dmy",
+         "mdy"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "How to read 03/04/2026; unset means ambiguous.",
+      "title": "Date Order"
+     },
+     "pattern": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Regular expression the normalized value matches.",
+      "title": "Pattern"
+     },
+     "min_confidence": {
+      "anyOf": [
+       {
+        "maximum": 1.0,
+        "minimum": 0.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Below this the value goes to the review queue; unset means no confidence gate.",
+      "title": "Min Confidence"
+     },
+     "proof": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/ReadProof"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Overrides the schema's proof for this field."
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "title": "FieldSpec",
+    "type": "object"
+   }
+  },
+  "GradeGate": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "The minimum read grade a write step accepts for the values it writes.",
+    "properties": {
+     "min_grade": {
+      "enum": [
+       "unchecked",
+       "same_screen",
+       "reopened",
+       "system_of_record"
+      ],
+      "title": "Min Grade",
+      "type": "string"
+     },
+     "fields": {
+      "default": [],
+      "description": "Fields the step writes; empty means every field.",
+      "items": {
+       "type": "string"
+      },
+      "title": "Fields",
+      "type": "array"
+     }
+    },
+    "required": [
+     "min_grade"
+    ],
+    "title": "GradeGate",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "The minimum read grade a write step accepts for the values it writes.",
+    "properties": {
+     "min_grade": {
+      "enum": [
+       "unchecked",
+       "same_screen",
+       "reopened",
+       "system_of_record"
+      ],
+      "title": "Min Grade",
+      "type": "string"
+     },
+     "fields": {
+      "default": [],
+      "description": "Fields the step writes; empty means every field.",
+      "items": {
+       "type": "string"
+      },
+      "title": "Fields",
+      "type": "array"
+     }
+    },
+    "required": [
+     "min_grade"
+    ],
+    "title": "GradeGate",
+    "type": "object"
+   }
+  },
+  "ReadProof": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "Which proof to collect for a read. Everything is off by default.",
+    "properties": {
+     "double_read": {
+      "default": false,
+      "description": "Read through two channels and compare.",
+      "title": "Double Read",
+      "type": "boolean"
+     },
+     "committed_readback": {
+      "default": false,
+      "description": "Close, reopen by identity fields and read again.",
+      "title": "Committed Readback",
+      "type": "boolean"
+     },
+     "seal": {
+      "default": false,
+      "description": "Cover the value with a signed Seal.",
+      "title": "Seal",
+      "type": "boolean"
+     }
+    },
+    "title": "ReadProof",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "Which proof to collect for a read. Everything is off by default.",
+    "properties": {
+     "double_read": {
+      "default": false,
+      "description": "Read through two channels and compare.",
+      "title": "Double Read",
+      "type": "boolean"
+     },
+     "committed_readback": {
+      "default": false,
+      "description": "Close, reopen by identity fields and read again.",
+      "title": "Committed Readback",
+      "type": "boolean"
+     },
+     "seal": {
+      "default": false,
+      "description": "Cover the value with a signed Seal.",
+      "title": "Seal",
+      "type": "boolean"
+     }
+    },
+    "title": "ReadProof",
+    "type": "object"
+   }
+  },
+  "RecordRead": {
+   "validation": {
+    "$defs": {
+     "ChannelRead": {
+      "additionalProperties": false,
+      "description": "What one channel read for one field.",
+      "properties": {
+       "channel": {
+        "enum": [
+         "clipboard",
+         "ocr",
+         "structure",
+         "accessibility",
+         "export",
+         "database",
+         "api"
+        ],
+        "title": "Channel",
+        "type": "string"
+       },
+       "raw": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Exactly what the channel returned.",
+        "title": "Raw"
+       },
+       "normalized": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Canonical form for the field kind; None if it did not parse.",
+        "title": "Normalized"
+       },
+       "engine_confidence": {
+        "anyOf": [
+         {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Engine Confidence"
+       },
+       "session": {
+        "default": "acting",
+        "enum": [
+         "acting",
+         "reopened",
+         "independent"
+        ],
+        "title": "Session",
+        "type": "string"
+       },
+       "source_kind": {
+        "anyOf": [
+         {
+          "enum": [
+           "live_session",
+           "committed_store"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Required for an export read; must be unset otherwise.",
+        "title": "Source Kind"
+       },
+       "record_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "The record this read came from (its id in the source). Reads of one field that name different records disagree.",
+        "title": "Record Id"
+       },
+       "record_count": {
+        "anyOf": [
+         {
+          "minimum": 0,
+          "type": "integer"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "How many records the read matched. Anything but 1 is not a read of one record; a database or API read must state it.",
+        "title": "Record Count"
+       }
+      },
+      "required": [
+       "channel",
+       "raw"
+      ],
+      "title": "ChannelRead",
+      "type": "object"
+     },
+     "FieldRead": {
+      "additionalProperties": false,
+      "description": "One value read for one field, with its evidence.",
+      "properties": {
+       "field": {
+        "title": "Field",
+        "type": "string"
+       },
+       "value": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "The normalized value, or None when no channel parsed it.",
+        "title": "Value"
+       },
+       "reads": {
+        "items": {
+         "$ref": "#/$defs/ChannelRead"
+        },
+        "title": "Reads",
+        "type": "array"
+       },
+       "agreement": {
+        "enum": [
+         "agree",
+         "disagree",
+         "ambiguous",
+         "single"
+        ],
+        "title": "Agreement",
+        "type": "string"
+       },
+       "confidence": {
+        "maximum": 1.0,
+        "minimum": 0.0,
+        "title": "Confidence",
+        "type": "number"
+       },
+       "grade": {
+        "enum": [
+         "unchecked",
+         "same_screen",
+         "reopened",
+         "system_of_record"
+        ],
+        "title": "Grade",
+        "type": "string"
+       },
+       "region": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/SourceRegion"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null
+       },
+       "seal": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/SealRef"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null
+       },
+       "needs_review": {
+        "default": false,
+        "title": "Needs Review",
+        "type": "boolean"
+       },
+       "review_reason": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Review Reason"
+       },
+       "review_decision": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Id of the signed review decision that settled this value.",
+        "title": "Review Decision"
+       }
+      },
+      "required": [
+       "field",
+       "value",
+       "reads",
+       "agreement",
+       "confidence",
+       "grade"
+      ],
+      "title": "FieldRead",
+      "type": "object"
+     },
+     "SealRef": {
+      "additionalProperties": false,
+      "description": "A pointer to the signed run receipt (Seal) that covers a value.",
+      "properties": {
+       "run_id": {
+        "title": "Run Id",
+        "type": "string"
+       },
+       "receipt_sha256": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "sha256 of the receipt JSON; set once sealed.",
+        "title": "Receipt Sha256"
+       },
+       "receipt_path": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Receipt Path"
+       },
+       "bundle_digest": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Bundle Digest"
+       },
+       "field_commitment": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Salted per-field commitment, when sealed.",
+        "title": "Field Commitment"
+       }
+      },
+      "required": [
+       "run_id"
+      ],
+      "title": "SealRef",
+      "type": "object"
+     },
+     "SourceRegion": {
+      "additionalProperties": false,
+      "description": "Where on which screen a value was read.",
+      "properties": {
+       "frame_sha256": {
+        "description": "sha256 of the full screenshot PNG.",
+        "title": "Frame Sha256",
+        "type": "string"
+       },
+       "bbox": {
+        "description": "x, y, width, height in px.",
+        "maxItems": 4,
+        "minItems": 4,
+        "prefixItems": [
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         }
+        ],
+        "title": "Bbox",
+        "type": "array"
+       },
+       "crop_sha256": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "sha256 of the cropped region PNG.",
+        "title": "Crop Sha256"
+       },
+       "frame_size": {
+        "anyOf": [
+         {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+           {
+            "type": "integer"
+           },
+           {
+            "type": "integer"
+           }
+          ],
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Frame Size"
+       },
+       "step_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Step Id"
+       }
+      },
+      "required": [
+       "frame_sha256",
+       "bbox"
+      ],
+      "title": "SourceRegion",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "The field reads of one record.",
+    "properties": {
+     "format": {
+      "const": "openadapt.records/v1",
+      "default": "openadapt.records/v1",
+      "title": "Format",
+      "type": "string"
+     },
+     "schema_name": {
+      "title": "Schema Name",
+      "type": "string"
+     },
+     "schema_version": {
+      "title": "Schema Version",
+      "type": "integer"
+     },
+     "record_key": {
+      "description": "Identity field values joined; stable per record.",
+      "title": "Record Key",
+      "type": "string"
+     },
+     "run_id": {
+      "title": "Run Id",
+      "type": "string"
+     },
+     "read_at": {
+      "description": "ISO 8601 with offset.",
+      "title": "Read At",
+      "type": "string"
+     },
+     "fields": {
+      "items": {
+       "$ref": "#/$defs/FieldRead"
+      },
+      "title": "Fields",
+      "type": "array"
+     }
+    },
+    "required": [
+     "schema_name",
+     "schema_version",
+     "record_key",
+     "run_id",
+     "read_at",
+     "fields"
+    ],
+    "title": "RecordRead",
+    "type": "object"
+   },
+   "serialization": {
+    "$defs": {
+     "ChannelRead": {
+      "additionalProperties": false,
+      "description": "What one channel read for one field.",
+      "properties": {
+       "channel": {
+        "enum": [
+         "clipboard",
+         "ocr",
+         "structure",
+         "accessibility",
+         "export",
+         "database",
+         "api"
+        ],
+        "title": "Channel",
+        "type": "string"
+       },
+       "raw": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Exactly what the channel returned.",
+        "title": "Raw"
+       },
+       "normalized": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Canonical form for the field kind; None if it did not parse.",
+        "title": "Normalized"
+       },
+       "engine_confidence": {
+        "anyOf": [
+         {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Engine Confidence"
+       },
+       "session": {
+        "default": "acting",
+        "enum": [
+         "acting",
+         "reopened",
+         "independent"
+        ],
+        "title": "Session",
+        "type": "string"
+       },
+       "source_kind": {
+        "anyOf": [
+         {
+          "enum": [
+           "live_session",
+           "committed_store"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Required for an export read; must be unset otherwise.",
+        "title": "Source Kind"
+       },
+       "record_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "The record this read came from (its id in the source). Reads of one field that name different records disagree.",
+        "title": "Record Id"
+       },
+       "record_count": {
+        "anyOf": [
+         {
+          "minimum": 0,
+          "type": "integer"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "How many records the read matched. Anything but 1 is not a read of one record; a database or API read must state it.",
+        "title": "Record Count"
+       }
+      },
+      "required": [
+       "channel",
+       "raw"
+      ],
+      "title": "ChannelRead",
+      "type": "object"
+     },
+     "FieldRead": {
+      "additionalProperties": false,
+      "description": "One value read for one field, with its evidence.",
+      "properties": {
+       "field": {
+        "title": "Field",
+        "type": "string"
+       },
+       "value": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "The normalized value, or None when no channel parsed it.",
+        "title": "Value"
+       },
+       "reads": {
+        "items": {
+         "$ref": "#/$defs/ChannelRead"
+        },
+        "title": "Reads",
+        "type": "array"
+       },
+       "agreement": {
+        "enum": [
+         "agree",
+         "disagree",
+         "ambiguous",
+         "single"
+        ],
+        "title": "Agreement",
+        "type": "string"
+       },
+       "confidence": {
+        "maximum": 1.0,
+        "minimum": 0.0,
+        "title": "Confidence",
+        "type": "number"
+       },
+       "grade": {
+        "enum": [
+         "unchecked",
+         "same_screen",
+         "reopened",
+         "system_of_record"
+        ],
+        "title": "Grade",
+        "type": "string"
+       },
+       "region": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/SourceRegion"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null
+       },
+       "seal": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/SealRef"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null
+       },
+       "needs_review": {
+        "default": false,
+        "title": "Needs Review",
+        "type": "boolean"
+       },
+       "review_reason": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Review Reason"
+       },
+       "review_decision": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Id of the signed review decision that settled this value.",
+        "title": "Review Decision"
+       }
+      },
+      "required": [
+       "field",
+       "value",
+       "reads",
+       "agreement",
+       "confidence",
+       "grade"
+      ],
+      "title": "FieldRead",
+      "type": "object"
+     },
+     "SealRef": {
+      "additionalProperties": false,
+      "description": "A pointer to the signed run receipt (Seal) that covers a value.",
+      "properties": {
+       "run_id": {
+        "title": "Run Id",
+        "type": "string"
+       },
+       "receipt_sha256": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "sha256 of the receipt JSON; set once sealed.",
+        "title": "Receipt Sha256"
+       },
+       "receipt_path": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Receipt Path"
+       },
+       "bundle_digest": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Bundle Digest"
+       },
+       "field_commitment": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Salted per-field commitment, when sealed.",
+        "title": "Field Commitment"
+       }
+      },
+      "required": [
+       "run_id"
+      ],
+      "title": "SealRef",
+      "type": "object"
+     },
+     "SourceRegion": {
+      "additionalProperties": false,
+      "description": "Where on which screen a value was read.",
+      "properties": {
+       "frame_sha256": {
+        "description": "sha256 of the full screenshot PNG.",
+        "title": "Frame Sha256",
+        "type": "string"
+       },
+       "bbox": {
+        "description": "x, y, width, height in px.",
+        "maxItems": 4,
+        "minItems": 4,
+        "prefixItems": [
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         }
+        ],
+        "title": "Bbox",
+        "type": "array"
+       },
+       "crop_sha256": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "sha256 of the cropped region PNG.",
+        "title": "Crop Sha256"
+       },
+       "frame_size": {
+        "anyOf": [
+         {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+           {
+            "type": "integer"
+           },
+           {
+            "type": "integer"
+           }
+          ],
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Frame Size"
+       },
+       "step_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Step Id"
+       }
+      },
+      "required": [
+       "frame_sha256",
+       "bbox"
+      ],
+      "title": "SourceRegion",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "The field reads of one record.",
+    "properties": {
+     "format": {
+      "const": "openadapt.records/v1",
+      "default": "openadapt.records/v1",
+      "title": "Format",
+      "type": "string"
+     },
+     "schema_name": {
+      "title": "Schema Name",
+      "type": "string"
+     },
+     "schema_version": {
+      "title": "Schema Version",
+      "type": "integer"
+     },
+     "record_key": {
+      "description": "Identity field values joined; stable per record.",
+      "title": "Record Key",
+      "type": "string"
+     },
+     "run_id": {
+      "title": "Run Id",
+      "type": "string"
+     },
+     "read_at": {
+      "description": "ISO 8601 with offset.",
+      "title": "Read At",
+      "type": "string"
+     },
+     "fields": {
+      "items": {
+       "$ref": "#/$defs/FieldRead"
+      },
+      "title": "Fields",
+      "type": "array"
+     }
+    },
+    "required": [
+     "schema_name",
+     "schema_version",
+     "record_key",
+     "run_id",
+     "read_at",
+     "fields"
+    ],
+    "title": "RecordRead",
+    "type": "object"
+   }
+  },
+  "RecordSchema": {
+   "validation": {
+    "$defs": {
+     "FieldSpec": {
+      "additionalProperties": false,
+      "description": "One field of a record: its name, kind and how strictly it is read.",
+      "properties": {
+       "name": {
+        "description": "Lower snake case, unique in the schema.",
+        "title": "Name",
+        "type": "string"
+       },
+       "kind": {
+        "default": "text",
+        "enum": [
+         "text",
+         "code",
+         "date",
+         "currency",
+         "integer",
+         "decimal",
+         "boolean",
+         "enum"
+        ],
+        "title": "Kind",
+        "type": "string"
+       },
+       "description": {
+        "default": "",
+        "title": "Description",
+        "type": "string"
+       },
+       "required": {
+        "default": true,
+        "title": "Required",
+        "type": "boolean"
+       },
+       "choices": {
+        "default": [],
+        "description": "Allowed values; required when kind is enum.",
+        "items": {
+         "type": "string"
+        },
+        "title": "Choices",
+        "type": "array"
+       },
+       "date_order": {
+        "anyOf": [
+         {
+          "enum": [
+           "dmy",
+           "mdy"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "How to read 03/04/2026; unset means ambiguous.",
+        "title": "Date Order"
+       },
+       "pattern": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Regular expression the normalized value matches.",
+        "title": "Pattern"
+       },
+       "min_confidence": {
+        "anyOf": [
+         {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Below this the value goes to the review queue; unset means no confidence gate.",
+        "title": "Min Confidence"
+       },
+       "proof": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/ReadProof"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Overrides the schema's proof for this field."
+       }
+      },
+      "required": [
+       "name"
+      ],
+      "title": "FieldSpec",
+      "type": "object"
+     },
+     "ReadProof": {
+      "additionalProperties": false,
+      "description": "Which proof to collect for a read. Everything is off by default.",
+      "properties": {
+       "double_read": {
+        "default": false,
+        "description": "Read through two channels and compare.",
+        "title": "Double Read",
+        "type": "boolean"
+       },
+       "committed_readback": {
+        "default": false,
+        "description": "Close, reopen by identity fields and read again.",
+        "title": "Committed Readback",
+        "type": "boolean"
+       },
+       "seal": {
+        "default": false,
+        "description": "Cover the value with a signed Seal.",
+        "title": "Seal",
+        "type": "boolean"
+       }
+      },
+      "title": "ReadProof",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "The fields read from one kind of record, and which fields identify it.",
+    "properties": {
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "version": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+     },
+     "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+     },
+     "fields": {
+      "items": {
+       "$ref": "#/$defs/FieldSpec"
+      },
+      "title": "Fields",
+      "type": "array"
+     },
+     "identity_fields": {
+      "description": "Fields that together identify a record; used to reopen it.",
+      "items": {
+       "type": "string"
+      },
+      "title": "Identity Fields",
+      "type": "array"
+     },
+     "proof": {
+      "$ref": "#/$defs/ReadProof",
+      "description": "Proof collected for every field unless a field overrides it."
+     }
+    },
+    "required": [
+     "name",
+     "fields",
+     "identity_fields"
+    ],
+    "title": "RecordSchema",
+    "type": "object"
+   },
+   "serialization": {
+    "$defs": {
+     "FieldSpec": {
+      "additionalProperties": false,
+      "description": "One field of a record: its name, kind and how strictly it is read.",
+      "properties": {
+       "name": {
+        "description": "Lower snake case, unique in the schema.",
+        "title": "Name",
+        "type": "string"
+       },
+       "kind": {
+        "default": "text",
+        "enum": [
+         "text",
+         "code",
+         "date",
+         "currency",
+         "integer",
+         "decimal",
+         "boolean",
+         "enum"
+        ],
+        "title": "Kind",
+        "type": "string"
+       },
+       "description": {
+        "default": "",
+        "title": "Description",
+        "type": "string"
+       },
+       "required": {
+        "default": true,
+        "title": "Required",
+        "type": "boolean"
+       },
+       "choices": {
+        "default": [],
+        "description": "Allowed values; required when kind is enum.",
+        "items": {
+         "type": "string"
+        },
+        "title": "Choices",
+        "type": "array"
+       },
+       "date_order": {
+        "anyOf": [
+         {
+          "enum": [
+           "dmy",
+           "mdy"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "How to read 03/04/2026; unset means ambiguous.",
+        "title": "Date Order"
+       },
+       "pattern": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Regular expression the normalized value matches.",
+        "title": "Pattern"
+       },
+       "min_confidence": {
+        "anyOf": [
+         {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Below this the value goes to the review queue; unset means no confidence gate.",
+        "title": "Min Confidence"
+       },
+       "proof": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/ReadProof"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Overrides the schema's proof for this field."
+       }
+      },
+      "required": [
+       "name"
+      ],
+      "title": "FieldSpec",
+      "type": "object"
+     },
+     "ReadProof": {
+      "additionalProperties": false,
+      "description": "Which proof to collect for a read. Everything is off by default.",
+      "properties": {
+       "double_read": {
+        "default": false,
+        "description": "Read through two channels and compare.",
+        "title": "Double Read",
+        "type": "boolean"
+       },
+       "committed_readback": {
+        "default": false,
+        "description": "Close, reopen by identity fields and read again.",
+        "title": "Committed Readback",
+        "type": "boolean"
+       },
+       "seal": {
+        "default": false,
+        "description": "Cover the value with a signed Seal.",
+        "title": "Seal",
+        "type": "boolean"
+       }
+      },
+      "title": "ReadProof",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "The fields read from one kind of record, and which fields identify it.",
+    "properties": {
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "version": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+     },
+     "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+     },
+     "fields": {
+      "items": {
+       "$ref": "#/$defs/FieldSpec"
+      },
+      "title": "Fields",
+      "type": "array"
+     },
+     "identity_fields": {
+      "description": "Fields that together identify a record; used to reopen it.",
+      "items": {
+       "type": "string"
+      },
+      "title": "Identity Fields",
+      "type": "array"
+     },
+     "proof": {
+      "$ref": "#/$defs/ReadProof",
+      "description": "Proof collected for every field unless a field overrides it."
+     }
+    },
+    "required": [
+     "name",
+     "fields",
+     "identity_fields"
+    ],
+    "title": "RecordSchema",
+    "type": "object"
+   }
+  },
+  "SealRef": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "A pointer to the signed run receipt (Seal) that covers a value.",
+    "properties": {
+     "run_id": {
+      "title": "Run Id",
+      "type": "string"
+     },
+     "receipt_sha256": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "sha256 of the receipt JSON; set once sealed.",
+      "title": "Receipt Sha256"
+     },
+     "receipt_path": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Receipt Path"
+     },
+     "bundle_digest": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Bundle Digest"
+     },
+     "field_commitment": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Salted per-field commitment, when sealed.",
+      "title": "Field Commitment"
+     }
+    },
+    "required": [
+     "run_id"
+    ],
+    "title": "SealRef",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "A pointer to the signed run receipt (Seal) that covers a value.",
+    "properties": {
+     "run_id": {
+      "title": "Run Id",
+      "type": "string"
+     },
+     "receipt_sha256": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "sha256 of the receipt JSON; set once sealed.",
+      "title": "Receipt Sha256"
+     },
+     "receipt_path": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Receipt Path"
+     },
+     "bundle_digest": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Bundle Digest"
+     },
+     "field_commitment": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Salted per-field commitment, when sealed.",
+      "title": "Field Commitment"
+     }
+    },
+    "required": [
+     "run_id"
+    ],
+    "title": "SealRef",
+    "type": "object"
+   }
+  },
+  "SourceRegion": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "Where on which screen a value was read.",
+    "properties": {
+     "frame_sha256": {
+      "description": "sha256 of the full screenshot PNG.",
+      "title": "Frame Sha256",
+      "type": "string"
+     },
+     "bbox": {
+      "description": "x, y, width, height in px.",
+      "maxItems": 4,
+      "minItems": 4,
+      "prefixItems": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "integer"
+       }
+      ],
+      "title": "Bbox",
+      "type": "array"
+     },
+     "crop_sha256": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "sha256 of the cropped region PNG.",
+      "title": "Crop Sha256"
+     },
+     "frame_size": {
+      "anyOf": [
+       {
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         }
+        ],
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Frame Size"
+     },
+     "step_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Step Id"
+     }
+    },
+    "required": [
+     "frame_sha256",
+     "bbox"
+    ],
+    "title": "SourceRegion",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "Where on which screen a value was read.",
+    "properties": {
+     "frame_sha256": {
+      "description": "sha256 of the full screenshot PNG.",
+      "title": "Frame Sha256",
+      "type": "string"
+     },
+     "bbox": {
+      "description": "x, y, width, height in px.",
+      "maxItems": 4,
+      "minItems": 4,
+      "prefixItems": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "integer"
+       }
+      ],
+      "title": "Bbox",
+      "type": "array"
+     },
+     "crop_sha256": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "sha256 of the cropped region PNG.",
+      "title": "Crop Sha256"
+     },
+     "frame_size": {
+      "anyOf": [
+       {
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         }
+        ],
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Frame Size"
+     },
+     "step_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Step Id"
+     }
+    },
+    "required": [
+     "frame_sha256",
+     "bbox"
+    ],
+    "title": "SourceRegion",
+    "type": "object"
+   }
+  }
+ }
+}

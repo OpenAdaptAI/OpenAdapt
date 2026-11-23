@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-types"
-version = "0.24.0"
+version = "0.24.2"
 description = "Pydantic models for computer-use agents: screen state (ComputerState, UINode), actions (Action), and results (ActionResult)"
 readme = "README.md"
 license = "MIT"
@@ -39,9 +39,12 @@ openadapt-vocab-lint = "openadapt_types.vocabulary.lint:main"
 Homepage = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/types"
 Repository = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/types"
 Issues = "https://github.com/OpenAdaptAI/OpenAdapt/issues"
+Documentation = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/types/README.md"
+Changelog = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/types/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
+    "cryptography>=50.0.0",
     "pytest>=7.0",
     "pytest-cov",
 ]

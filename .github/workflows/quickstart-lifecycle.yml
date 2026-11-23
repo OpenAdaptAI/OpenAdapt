@@ -29,7 +29,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: .github/ci-tools/uv.lock
@@ -41,12 +41,32 @@ jobs:
           python scripts/ci/locked_install.py --lock .github/ci-tools:build
           python -m build --wheel --outdir lifecycle-dist
 
+      # Linux system packages are host preparation, not part of the public
+      # command under test. Install Playwright's own Chromium package list
+      # through the cached apt action (no network on a warm cache, mirror
+      # fallback otherwise) instead of `playwright install-deps`, which always
+      # runs `apt-get update` and failed main when the Ubuntu mirrors were
+      # down. Chromium itself is still downloaded lazily by the quickstart.
+      # The throwaway Playwright is the latest release, which is what the
+      # clean environment below resolves (Flow requires playwright>=1.44).
+      - name: Read the Playwright browser dependency list
+        run: |
+          python -m venv "$RUNNER_TEMP/playwright-deps"
+          "$RUNNER_TEMP/playwright-deps/bin/python" -m pip install --disable-pip-version-check -q playwright
+
+      - name: Preinstall Chromium system packages with mirror fallback
+        timeout-minutes: 15
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68
+        with:
+          playwright-deps: chromium
+          playwright-python: ${{ runner.temp }}/playwright-deps/bin/python
+
       - name: Run the public quickstart from a clean environment
         run: >-
           python scripts/quickstart_lifecycle.py
           --launcher-wheel "lifecycle-dist/*.whl"
           --work-dir "runs/launcher-lifecycle"
-          --browser-system-deps
+          --browser-system-deps-preinstalled
           --require-installed-browser
           --source-revision "${{ github.sha }}"
 
@@ -61,4 +81,5 @@ jobs:
             runs/launcher-lifecycle/artifacts/**/REPORT.md
             runs/launcher-lifecycle/artifacts/**/report.json
             runs/launcher-lifecycle/artifacts/**/receipt.json
+            runs/launcher-lifecycle/artifacts/**/run-summary.json
           if-no-files-found: warn
