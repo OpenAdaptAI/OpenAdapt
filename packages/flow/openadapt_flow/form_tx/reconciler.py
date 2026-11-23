@@ -1145,6 +1145,7 @@ class FormReconciler:
         placeholder_values: Sequence[str] = _DEFAULT_PLACEHOLDERS,
         dossier_key: Optional[str] = None,
         run_id: str = "",
+        typeahead_query_chars: Optional[int] = None,
     ) -> Optional[FormHaltItem]:
         """Actuate ``ctrl`` and note the actuation on ``session``.
 
@@ -1161,6 +1162,7 @@ class FormReconciler:
             placeholder_values=placeholder_values,
             dossier_key=dossier_key,
             run_id=run_id,
+            typeahead_query_chars=typeahead_query_chars,
         )
         if halt is None:
             obs = session._last_observation
