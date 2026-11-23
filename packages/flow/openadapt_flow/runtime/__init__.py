@@ -35,6 +35,7 @@ _LAZY_EXPORTS = {
     "RUNG_ORDER": "openadapt_flow.runtime.resolver",
     "is_below_ocr": "openadapt_flow.runtime.resolver",
     "resolve": "openadapt_flow.runtime.resolver",
+    "LocalStateVerifier": "openadapt_flow.runtime.effects.local_state",
 }
 
 
@@ -55,6 +56,7 @@ Replayer: Any
 RUNG_ORDER: Any
 is_below_ocr: Any
 resolve: Any
+LocalStateVerifier: Any
 
 
 def __getattr__(name: str) -> Any:
@@ -73,6 +75,7 @@ def __getattr__(name: str) -> Any:
     global RUNG_ORDER
     global is_below_ocr
     global resolve
+    global LocalStateVerifier
 
     # Literal imports retain deferred loading even when an export shadows
     # its submodule (for example durable.resume). Named globals keep
@@ -132,6 +135,11 @@ def __getattr__(name: str) -> Any:
     if name == "resolve":
         resolve = import_module("openadapt_flow.runtime.resolver").resolve
         return resolve
+    if name == "LocalStateVerifier":
+        LocalStateVerifier = import_module(
+            "openadapt_flow.runtime.effects.local_state"
+        ).LocalStateVerifier
+        return LocalStateVerifier
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -140,6 +148,7 @@ __all__ = [
     "FallbackGrounder",
     "Grounder",
     "GrounderMatch",
+    "LocalStateVerifier",
     "NullGrounder",
     "OCRAnchorGrounder",
     "Replayer",

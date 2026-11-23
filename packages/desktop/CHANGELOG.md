@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.32.1 (2026-11-23)
+
+### Bug Fixes
+
+- **desktop**: sync control overlay contract pin to openadapt-types 0.24.2
+
+
+
 ## v0.32.0 (2026-11-22)
 
 ### Features
