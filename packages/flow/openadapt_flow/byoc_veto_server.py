@@ -11,13 +11,23 @@ Security & fail-closed invariants:
   with an empty key table or without an explicit ``tenant_allowed_apps`` entry
   for every tenant; compares bearer/header tokens in constant time
   (``hmac.compare_digest``).
-- **Server-side adapter/workflow authority:** Supports server-side
-  ``run_bindings`` (authoritative ``request_id -> RunBinding``) and blocks
-  workflow-adapter downgrade attempts (dropping ``workflow_id`` when a
-  workflow-specific adapter exists for the app).
-- **Non-blocking worker-thread TLS handshake:** Wraps accepted sockets inside
-  worker threads with a bounded handshake timeout so idle TCP peers cannot
-  stall the accept loop.
+- **Mandatory server-issued run bindings (anti-steering & anti-replay):**
+  Every ``POST /v1/verify`` request MUST match a server-side :class:`RunBinding`
+  (issued via :meth:`ByocVetoServer.issue_run_binding` or pre-registered at
+  startup) that authoritatively binds ``(tenant_id, app_id, workflow_id,
+  domain, step_nonce, pre_submit_image_sha256, post_submit_image_sha256)``.
+  Each binding and ``step_nonce`` is strictly single-use, payload ``domain`` is
+  ignored, workflow-adapter downgrades (missing or unregistered ``workflow_id``)
+  are rejected, and fallback to ``default_base_adapter`` is disabled by default.
+- **Server-side VPC HMAC enforcement:** Per-tenant HMAC keys stay strictly on
+  the VPC server. Any ``expected_field_hashes`` submitted on ``/v1/verify``
+  must match server-bound keyed HMAC-SHA256 digests computed with the tenant's
+  VPC key; plain SHA-256 digests or digests without a configured key fail
+  closed with ``403 HALT_ESCALATE``.
+- **Bounded TLS handshake, read timeout, and concurrency cap:** Wraps accepted
+  sockets inside worker threads with bounded handshake and request read
+  timeouts (never clearing socket timeouts to ``None``) and caps concurrent
+  connections with a semaphore so idle peers cannot exhaust threads.
 - **Fail-closed ``ABSTAIN -> HALT_ESCALATE``:** Never allows DOM success claims
   to override an abstained visual check; backend failures fail closed with
   ``503`` and ``decision="HALT_ESCALATE"``.
@@ -27,6 +37,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import secrets
 import ssl
 import threading
 import urllib.error
@@ -40,6 +51,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from openadapt_flow.multi_lora_veto import (
+    _MIN_HMAC_KEY_BYTES,
     _NONCE_RE,
     MultiLoraVetoRouter,
     VetoDecision,
@@ -47,20 +59,23 @@ from openadapt_flow.multi_lora_veto import (
     VetoOutcome,
     _validate_sha256_hex,
     _validate_sha256_map,
+    hmac_field_value,
 )
 
 DEFAULT_MAX_BODY_BYTES = 256 * 1024
 DEFAULT_TLS_HANDSHAKE_TIMEOUT_S = 5.0
+DEFAULT_REQUEST_TIMEOUT_S = 10.0
+DEFAULT_MAX_CONCURRENT_CONNECTIONS = 64
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
 class RunBinding(BaseModel):
-    """Server-side authoritative binding for one run/request.
+    """Server-side authoritative, single-use binding for one verification step.
 
-    When provided to :class:`ByocVetoServer`, the server verifies that the
-    authenticated tenant and payload ``app_id``, ``workflow_id``, and
-    ``step_nonce`` match the server-side binding (preventing a caller from
-    switching apps, dropping ``workflow_id``, or replaying older image digests).
+    Binds the authenticated tenant, target ``app_id``, ``workflow_id``,
+    optional ``domain``, single-use ``step_nonce``, expected pre/post-submit
+    image SHA-256 digests, and optional server-computed keyed HMAC-SHA256
+    ``expected_field_hashes``.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -68,15 +83,51 @@ class RunBinding(BaseModel):
     tenant_id: str = Field(min_length=1)
     app_id: str = Field(min_length=1)
     workflow_id: str | None = None
-    step_nonce: str | None = None
+    domain: str | None = None
+    step_nonce: str = Field(min_length=1)
+    pre_submit_image_sha256: str = Field(min_length=64, max_length=64)
+    post_submit_image_sha256: str = Field(min_length=64, max_length=64)
+    expected_field_hashes: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("step_nonce")
+    @classmethod
+    def _check_step_nonce(cls, value: str) -> str:
+        if not _NONCE_RE.match(value):
+            raise ValueError(f"step_nonce must match {_NONCE_RE.pattern!r}.")
+        return value
+
+    @field_validator("pre_submit_image_sha256")
+    @classmethod
+    def _check_pre_image_sha256(cls, value: str) -> str:
+        return _validate_sha256_hex(value, "pre_submit_image_sha256")
+
+    @field_validator("post_submit_image_sha256")
+    @classmethod
+    def _check_post_image_sha256(cls, value: str) -> str:
+        return _validate_sha256_hex(value, "post_submit_image_sha256")
+
+    @field_validator("expected_field_hashes")
+    @classmethod
+    def _check_expected_field_hashes(cls, value: dict[str, str]) -> dict[str, str]:
+        return _validate_sha256_map(value)
+
+
+class IssuedRunBinding(BaseModel):
+    """Opaque server-issued token and single-use nonce returned to the caller."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str = Field(min_length=1)
+    step_nonce: str = Field(min_length=1)
+    expected_field_hashes: dict[str, str] = Field(default_factory=dict)
 
 
 class ByocVerifyPayload(BaseModel):
     """Value-free HTTP request schema for ``POST /v1/verify``.
 
-    Carries only 64-hex SHA-256 image references (dereferenced from the
-    customer-VPC artifact store by the backend) and keyed HMAC-SHA256 field
-    digests (no raw form values or caller self-vouching booleans).
+    Carries only the server-issued ``request_id``, single-use ``step_nonce``,
+    64-hex SHA-256 image references (dereferenced from the customer-VPC
+    artifact store by the backend), and keyed HMAC-SHA256 field digests.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -86,7 +137,7 @@ class ByocVerifyPayload(BaseModel):
     workflow_id: str | None = None
     domain: str | None = None
     tenant_id: str | None = None
-    step_nonce: str | None = None
+    step_nonce: str = Field(min_length=1)
     requested_adapter_id: str | None = None
     pre_submit_image_sha256: str = Field(min_length=64, max_length=64)
     post_submit_image_sha256: str = Field(min_length=64, max_length=64)
@@ -105,9 +156,7 @@ class ByocVerifyPayload(BaseModel):
 
     @field_validator("step_nonce")
     @classmethod
-    def _check_step_nonce(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
+    def _check_step_nonce(cls, value: str) -> str:
         if not _NONCE_RE.match(value):
             raise ValueError(f"step_nonce must match {_NONCE_RE.pattern!r}.")
         return value
@@ -116,6 +165,16 @@ class ByocVerifyPayload(BaseModel):
     @classmethod
     def _check_expected_field_hashes(cls, value: dict[str, str]) -> dict[str, str]:
         return _validate_sha256_map(value)
+
+
+def _digests_equal(left: Mapping[str, str], right: Mapping[str, str]) -> bool:
+    if set(left.keys()) != set(right.keys()):
+        return False
+    matched = True
+    for key, expected in right.items():
+        if not hmac.compare_digest(left[key], expected):
+            matched = False
+    return matched
 
 
 class _ByocThreadingHTTPServer(ThreadingHTTPServer):
@@ -129,23 +188,51 @@ class _ByocThreadingHTTPServer(ThreadingHTTPServer):
         router: MultiLoraVetoRouter,
         tenant_api_keys: dict[str, str],
         tenant_allowed_apps: dict[str, frozenset[str]],
-        run_bindings: dict[str, RunBinding] | None,
+        tenant_hmac_keys: dict[str, bytes],
+        run_bindings: dict[str, RunBinding],
+        allow_default_fallback: bool,
         max_body_bytes: int,
         ssl_context: ssl.SSLContext | None,
         tls_handshake_timeout_s: float,
+        request_timeout_s: float,
+        max_concurrent_connections: int,
     ) -> None:
         self.router = router
         self.tenant_api_keys = dict(tenant_api_keys)
         self.tenant_allowed_apps = dict(tenant_allowed_apps)
-        self.run_bindings = dict(run_bindings) if run_bindings is not None else None
+        self.tenant_hmac_keys = dict(tenant_hmac_keys)
+        self.run_bindings = dict(run_bindings)
+        self.consumed_bindings: set[str] = set()
+        self.consumed_nonces: set[tuple[str, str]] = set()
+        self.allow_default_fallback = allow_default_fallback
         self.max_body_bytes = max_body_bytes
         self.ssl_context = ssl_context
         self.tls_handshake_timeout_s = tls_handshake_timeout_s
+        self.request_timeout_s = request_timeout_s
         self.eval_lock = threading.Lock()
+        self.binding_lock = threading.Lock()
+        self._conn_semaphore = threading.BoundedSemaphore(max_concurrent_connections)
         super().__init__(server_address, _ByocVetoRequestHandler)
 
+    def process_request(self, request: Any, client_address: Any) -> None:
+        """Cap concurrent worker threads; drop excess connections immediately."""
+        if not self._conn_semaphore.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._conn_semaphore.release()
+            raise
+
+    def process_request_thread(self, request: Any, client_address: Any) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._conn_semaphore.release()
+
     def finish_request(self, request: Any, client_address: Any) -> None:
-        """Perform TLS handshake on the worker thread with a bounded timeout."""
+        """Enforce bounded TLS handshake and post-handshake read timeouts."""
         if self.ssl_context is not None:
             tls_sock: Any = None
             try:
@@ -157,9 +244,9 @@ class _ByocThreadingHTTPServer(ThreadingHTTPServer):
                 )
                 tls_sock.settimeout(self.tls_handshake_timeout_s)
                 tls_sock.do_handshake()
-                tls_sock.settimeout(None)
+                tls_sock.settimeout(self.request_timeout_s)
                 super().finish_request(tls_sock, client_address)
-            except (OSError, ssl.SSLError):
+            except (OSError, ssl.SSLError, TimeoutError):
                 return
             finally:
                 if tls_sock is not None:
@@ -168,7 +255,11 @@ class _ByocThreadingHTTPServer(ThreadingHTTPServer):
                     except OSError:
                         pass
             return
-        super().finish_request(request, client_address)
+        try:
+            request.settimeout(self.request_timeout_s)
+            super().finish_request(request, client_address)
+        except (OSError, TimeoutError):
+            return
 
 
 class _ByocVetoRequestHandler(BaseHTTPRequestHandler):
@@ -268,6 +359,16 @@ class _ByocVetoRequestHandler(BaseHTTPRequestHandler):
             return
 
         raw_body = self.rfile.read(content_length)
+        if len(raw_body) != content_length:
+            self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {
+                    "decision": VetoDecision.HALT_ESCALATE.value,
+                    "error": "Incomplete request body.",
+                },
+            )
+            return
+
         try:
             parsed = json.loads(raw_body.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -324,73 +425,101 @@ class _ByocVetoRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
-        # Server-side run binding check when configured (authoritative app/workflow/nonce).
-        bound_app_id = payload.app_id
-        bound_workflow_id = payload.workflow_id
-        bound_step_nonce = payload.step_nonce
-        if self.server.run_bindings is not None:
+        # Mandatory server-side run binding + single-use step_nonce + image/HMAC verification.
+        with self.server.binding_lock:
             binding = self.server.run_bindings.get(payload.request_id)
             if binding is None:
                 self._send_json(
                     HTTPStatus.FORBIDDEN,
                     {
                         "decision": VetoDecision.HALT_ESCALATE.value,
-                        "error": f"Unknown server-side run binding for request_id {payload.request_id!r}.",
+                        "error": (
+                            f"Unknown server-side run binding for request_id "
+                            f"{payload.request_id!r}."
+                        ),
                     },
                 )
                 return
+
+            if (
+                payload.request_id in self.server.consumed_bindings
+                or (tenant_id, payload.step_nonce) in self.server.consumed_nonces
+            ):
+                self._send_json(
+                    HTTPStatus.CONFLICT,
+                    {
+                        "decision": VetoDecision.HALT_ESCALATE.value,
+                        "error": "Run binding or step_nonce already consumed (replay rejected).",
+                    },
+                )
+                return
+
             if (
                 binding.tenant_id != tenant_id
                 or binding.app_id != payload.app_id
                 or binding.workflow_id != payload.workflow_id
-                or (
-                    binding.step_nonce is not None
-                    and binding.step_nonce != payload.step_nonce
+                or not hmac.compare_digest(binding.step_nonce, payload.step_nonce)
+                or not hmac.compare_digest(
+                    binding.pre_submit_image_sha256, payload.pre_submit_image_sha256
+                )
+                or not hmac.compare_digest(
+                    binding.post_submit_image_sha256, payload.post_submit_image_sha256
                 )
             ):
                 self._send_json(
                     HTTPStatus.FORBIDDEN,
                     {
                         "decision": VetoDecision.HALT_ESCALATE.value,
-                        "error": "Request parameters do not match server-side run binding.",
+                        "error": "Request parameters or image digests do not match server-side run binding.",
                     },
                 )
                 return
-            bound_app_id = binding.app_id
-            bound_workflow_id = binding.workflow_id
-            bound_step_nonce = binding.step_nonce
 
-        # Anti-downgrade guard: if workflow-specific adapters exist for this app,
-        # never allow a caller to drop workflow_id to fall back to a looser app adapter.
-        if (
-            bound_workflow_id is None
-            and self.server.router.registry.has_workflow_adapters(
-                app_id=bound_app_id,
-                tenant_id=tenant_id,
-            )
-        ):
-            self._send_json(
-                HTTPStatus.FORBIDDEN,
-                {
-                    "decision": VetoDecision.HALT_ESCALATE.value,
-                    "error": (
-                        f"workflow_id is required for app_id {bound_app_id!r} because "
-                        "workflow-specific veto adapters are registered."
-                    ),
-                },
-            )
-            return
+            # Server-side HMAC enforcement: laptops never hold tenant HMAC keys,
+            # and unkeyed SHA-256 digests are rejected.
+            if payload.expected_field_hashes or binding.expected_field_hashes:
+                if tenant_id not in self.server.tenant_hmac_keys:
+                    self._send_json(
+                        HTTPStatus.FORBIDDEN,
+                        {
+                            "decision": VetoDecision.HALT_ESCALATE.value,
+                            "error": (
+                                "expected_field_hashes cannot be verified without a "
+                                "server-side tenant HMAC key."
+                            ),
+                        },
+                    )
+                    return
+                if not binding.expected_field_hashes or not _digests_equal(
+                    payload.expected_field_hashes, binding.expected_field_hashes
+                ):
+                    self._send_json(
+                        HTTPStatus.FORBIDDEN,
+                        {
+                            "decision": VetoDecision.HALT_ESCALATE.value,
+                            "error": (
+                                "expected_field_hashes do not match server-bound "
+                                "keyed HMAC-SHA256 digests."
+                            ),
+                        },
+                    )
+                    return
 
+            # Mark binding & step_nonce consumed atomically before scoring.
+            self.server.consumed_bindings.add(payload.request_id)
+            self.server.consumed_nonces.add((tenant_id, binding.step_nonce))
+
+        # Resolve strictly from server-side binding; ignore caller-supplied payload.domain.
         inference_req = VetoInferenceRequest(
             request_id=payload.request_id,
-            app_id=bound_app_id,
-            workflow_id=bound_workflow_id,
-            domain=payload.domain,
+            app_id=binding.app_id,
+            workflow_id=binding.workflow_id,
+            domain=binding.domain,
             tenant_id=tenant_id,
-            step_nonce=bound_step_nonce,
-            pre_submit_image_sha256=payload.pre_submit_image_sha256,
-            post_submit_image_sha256=payload.post_submit_image_sha256,
-            expected_field_hashes=payload.expected_field_hashes,
+            step_nonce=binding.step_nonce,
+            pre_submit_image_sha256=binding.pre_submit_image_sha256,
+            post_submit_image_sha256=binding.post_submit_image_sha256,
+            expected_field_hashes=dict(binding.expected_field_hashes),
             dom_claims_success=payload.dom_claims_success,
         )
 
@@ -399,6 +528,8 @@ class _ByocVetoRequestHandler(BaseHTTPRequestHandler):
                 outcome = self.server.router.evaluate(
                     inference_req,
                     requested_adapter_id=payload.requested_adapter_id,
+                    allow_default_fallback=self.server.allow_default_fallback,
+                    require_exact_workflow=True,
                 )
         except PermissionError as exc:
             self._send_json(
@@ -449,12 +580,16 @@ class ByocVetoServer:
         router: MultiLoraVetoRouter,
         tenant_api_keys: Mapping[str, str],
         tenant_allowed_apps: Mapping[str, frozenset[str] | set[str]],
+        tenant_hmac_keys: Mapping[str, bytes | str] | None = None,
         run_bindings: Mapping[str, RunBinding] | None = None,
+        allow_default_fallback: bool = False,
         host: str = "127.0.0.1",
         port: int = 0,
         max_body_bytes: int = DEFAULT_MAX_BODY_BYTES,
         ssl_context: ssl.SSLContext | None = None,
         tls_handshake_timeout_s: float = DEFAULT_TLS_HANDSHAKE_TIMEOUT_S,
+        request_timeout_s: float = DEFAULT_REQUEST_TIMEOUT_S,
+        max_concurrent_connections: int = DEFAULT_MAX_CONCURRENT_CONNECTIONS,
     ) -> None:
         if not tenant_api_keys:
             raise ValueError("tenant_api_keys must contain at least one tenant key.")
@@ -466,6 +601,11 @@ class ByocVetoServer:
             raise ValueError(
                 f"Binding BYOC veto server to non-loopback host {host!r} requires ssl_context (TLS)."
             )
+        if request_timeout_s <= 0.0:
+            raise ValueError("request_timeout_s must be > 0.")
+        if max_concurrent_connections <= 0:
+            raise ValueError("max_concurrent_connections must be >= 1.")
+
         cleaned_keys: dict[str, str] = {}
         seen_secrets: set[str] = set()
         for tid, secret in tenant_api_keys.items():
@@ -493,18 +633,129 @@ class ByocVetoServer:
                     f"tenant_allowed_apps for tenant {tid!r} cannot be empty."
                 )
 
+        cleaned_hmac_keys: dict[str, bytes] = {}
+        if tenant_hmac_keys is not None:
+            for tid, raw_key in tenant_hmac_keys.items():
+                key_tid = tid.strip()
+                if key_tid not in cleaned_keys:
+                    raise ValueError(
+                        f"tenant_hmac_keys contains unknown tenant {tid!r}."
+                    )
+                key_bytes = (
+                    raw_key.encode("utf-8")
+                    if isinstance(raw_key, str)
+                    else bytes(raw_key)
+                )
+                if len(key_bytes) < _MIN_HMAC_KEY_BYTES:
+                    raise ValueError(
+                        f"HMAC key for tenant {key_tid!r} must be at least "
+                        f"{_MIN_HMAC_KEY_BYTES} bytes long."
+                    )
+                cleaned_hmac_keys[key_tid] = key_bytes
+
+        cleaned_bindings: dict[str, RunBinding] = {}
+        if run_bindings is not None:
+            for rid, binding in run_bindings.items():
+                if binding.tenant_id not in cleaned_keys:
+                    raise ValueError(
+                        f"RunBinding {rid!r} references unknown tenant {binding.tenant_id!r}."
+                    )
+                if binding.app_id not in cleaned_allowed[binding.tenant_id]:
+                    raise ValueError(
+                        f"RunBinding {rid!r} references unauthorized app_id {binding.app_id!r} "
+                        f"for tenant {binding.tenant_id!r}."
+                    )
+                cleaned_bindings[rid] = binding
+
         self._use_tls = ssl_context is not None
         self._httpd = _ByocThreadingHTTPServer(
             (host, port),
             router=router,
             tenant_api_keys=cleaned_keys,
             tenant_allowed_apps=cleaned_allowed,
-            run_bindings=dict(run_bindings) if run_bindings is not None else None,
+            tenant_hmac_keys=cleaned_hmac_keys,
+            run_bindings=cleaned_bindings,
+            allow_default_fallback=allow_default_fallback,
             max_body_bytes=max_body_bytes,
             ssl_context=ssl_context,
             tls_handshake_timeout_s=tls_handshake_timeout_s,
+            request_timeout_s=request_timeout_s,
+            max_concurrent_connections=max_concurrent_connections,
         )
         self._thread: threading.Thread | None = None
+
+    def issue_run_binding(
+        self,
+        *,
+        tenant_id: str,
+        app_id: str,
+        pre_submit_image_sha256: str,
+        post_submit_image_sha256: str,
+        workflow_id: str | None = None,
+        domain: str | None = None,
+        expected_field_values: Mapping[str, str] | None = None,
+    ) -> IssuedRunBinding:
+        """Issue an opaque, single-use server-side run binding for one step.
+
+        When ``expected_field_values`` is supplied, keyed HMAC-SHA256 digests
+        are computed strictly server-side using the tenant's VPC HMAC key so
+        laptops never need access to the key.
+        """
+        if tenant_id not in self._httpd.tenant_api_keys:
+            raise PermissionError(f"Unknown tenant_id: {tenant_id!r}")
+        if app_id not in self._httpd.tenant_allowed_apps[tenant_id]:
+            raise PermissionError(
+                f"Tenant {tenant_id!r} is not authorized for app_id {app_id!r}."
+            )
+
+        field_hashes: dict[str, str] = {}
+        if expected_field_values:
+            hmac_key = self._httpd.tenant_hmac_keys.get(tenant_id)
+            if hmac_key is None:
+                raise PermissionError(
+                    f"Tenant {tenant_id!r} has no server-side HMAC key configured."
+                )
+            for slug, value in expected_field_values.items():
+                field_hashes[slug] = hmac_field_value(hmac_key, slug, value)
+
+        request_id = f"run-{secrets.token_urlsafe(18)}"
+        step_nonce = f"nonce-{secrets.token_urlsafe(16)}"
+        binding = RunBinding(
+            tenant_id=tenant_id,
+            app_id=app_id,
+            workflow_id=workflow_id,
+            domain=domain,
+            step_nonce=step_nonce,
+            pre_submit_image_sha256=pre_submit_image_sha256,
+            post_submit_image_sha256=post_submit_image_sha256,
+            expected_field_hashes=field_hashes,
+        )
+        with self._httpd.binding_lock:
+            self._httpd.run_bindings[request_id] = binding
+        return IssuedRunBinding(
+            request_id=request_id,
+            step_nonce=step_nonce,
+            expected_field_hashes=dict(field_hashes),
+        )
+
+    def verify_field_hmac(
+        self,
+        *,
+        tenant_id: str,
+        field_slug: str,
+        observed_value: str,
+        expected_digest: str,
+    ) -> bool:
+        """Verify an observed screen field value against a server-side tenant HMAC digest.
+
+        Fails closed (returns ``False``) if the tenant has no configured VPC
+        HMAC key or if the digest does not match in constant time.
+        """
+        hmac_key = self._httpd.tenant_hmac_keys.get(tenant_id)
+        if hmac_key is None:
+            return False
+        computed = hmac_field_value(hmac_key, field_slug, observed_value)
+        return hmac.compare_digest(computed, expected_digest.strip().lower())
 
     @property
     def server_address(self) -> tuple[str, int]:
@@ -548,34 +799,48 @@ def create_byoc_veto_server(
     router: MultiLoraVetoRouter,
     tenant_api_keys: Mapping[str, str],
     tenant_allowed_apps: Mapping[str, frozenset[str] | set[str]],
+    tenant_hmac_keys: Mapping[str, bytes | str] | None = None,
     run_bindings: Mapping[str, RunBinding] | None = None,
+    allow_default_fallback: bool = False,
     host: str = "127.0.0.1",
     port: int = 0,
     max_body_bytes: int = DEFAULT_MAX_BODY_BYTES,
     ssl_context: ssl.SSLContext | None = None,
     tls_handshake_timeout_s: float = DEFAULT_TLS_HANDSHAKE_TIMEOUT_S,
+    request_timeout_s: float = DEFAULT_REQUEST_TIMEOUT_S,
+    max_concurrent_connections: int = DEFAULT_MAX_CONCURRENT_CONNECTIONS,
 ) -> ByocVetoServer:
     """Create a configured :class:`ByocVetoServer` ready to start."""
     return ByocVetoServer(
         router=router,
         tenant_api_keys=tenant_api_keys,
         tenant_allowed_apps=tenant_allowed_apps,
+        tenant_hmac_keys=tenant_hmac_keys,
         run_bindings=run_bindings,
+        allow_default_fallback=allow_default_fallback,
         host=host,
         port=port,
         max_body_bytes=max_body_bytes,
         ssl_context=ssl_context,
         tls_handshake_timeout_s=tls_handshake_timeout_s,
+        request_timeout_s=request_timeout_s,
+        max_concurrent_connections=max_concurrent_connections,
     )
 
 
 def _fail_closed_outcome(
-    payload: Mapping[str, Any],
+    payload: Mapping[str, Any] | Any,
     *,
     reason: str,
 ) -> VetoOutcome:
+    if isinstance(payload, Mapping):
+        req_id = str(payload.get("request_id") or "unknown")
+        dom_claims = bool(payload.get("dom_claims_success", False))
+    else:
+        req_id = "unknown"
+        dom_claims = False
     return VetoOutcome(
-        request_id=str(payload.get("request_id") or "unknown"),
+        request_id=req_id,
         adapter_id="unavailable",
         base_model="unavailable",
         decision=VetoDecision.HALT_ESCALATE,
@@ -583,7 +848,7 @@ def _fail_closed_outcome(
         calibrated_threshold=0.5,
         temperature=1.0,
         abstained=True,
-        dom_override_blocked=bool(payload.get("dom_claims_success", False)),
+        dom_override_blocked=dom_claims,
         reason=reason,
     )
 
@@ -599,14 +864,36 @@ def post_verify_request(
 ) -> VetoOutcome:
     """Send a ``POST /v1/verify`` request and fail closed to ``HALT_ESCALATE`` on any error.
 
-    Refuses plaintext ``http://`` to non-loopback hosts, checks that the
-    response ``request_id`` matches the sent ``request_id``, and converts any
-    transport, HTTP, TLS, serialization, or validation error into
-    ``HALT_ESCALATE``.
+    Validates payload type, non-empty ``request_id``, URL syntax, TLS for
+    non-loopback hosts, response ``request_id`` match, and fail-closed decision
+    invariants (never accepting ``ALLOW`` when ``abstained=True`` or
+    ``calibrated_fault_prob >= calibrated_threshold``).
     """
-    parsed = urllib.parse.urlparse(base_url)
-    scheme = (parsed.scheme or "").lower()
-    host = (parsed.hostname or "").lower()
+    if not isinstance(payload, Mapping):
+        return _fail_closed_outcome(
+            {},
+            reason=f"Fail-closed client payload error: expected Mapping, got {type(payload).__name__}",
+        )
+
+    raw_request_id = payload.get("request_id")
+    if not isinstance(raw_request_id, str) or not raw_request_id.strip():
+        return _fail_closed_outcome(
+            payload,
+            reason="Fail-closed client request error: non-empty request_id is required.",
+        )
+
+    try:
+        if not isinstance(base_url, str) or not base_url.strip():
+            raise ValueError("base_url must be a non-empty string")
+        parsed = urllib.parse.urlparse(base_url)
+        scheme = (parsed.scheme or "").lower()
+        host = (parsed.hostname or "").lower()
+    except Exception as exc:  # noqa: BLE001
+        return _fail_closed_outcome(
+            payload,
+            reason=f"Fail-closed client URL error: {type(exc).__name__}",
+        )
+
     if scheme not in {"http", "https"}:
         return _fail_closed_outcome(
             payload,
@@ -625,7 +912,7 @@ def post_verify_request(
     }
     if tenant_id is not None:
         headers["X-OpenAdapt-Tenant-Id"] = tenant_id
-    expected_request_id = payload.get("request_id")
+    expected_request_id = raw_request_id
     try:
         req = urllib.request.Request(
             url,
@@ -647,14 +934,26 @@ def post_verify_request(
             payload, reason=f"Fail-closed client error: {type(exc).__name__}"
         )
 
-    if expected_request_id is not None and outcome.request_id != str(
-        expected_request_id
-    ):
+    if outcome.request_id != expected_request_id:
         return _fail_closed_outcome(
             payload,
             reason=(
                 "Fail-closed client response error: response request_id "
                 f"{outcome.request_id!r} != sent {expected_request_id!r}"
+            ),
+        )
+
+    # Enforce fail-closed invariants client-side so a compromised/buggy server
+    # cannot sneak ALLOW past abstained=True or prob >= threshold.
+    if outcome.decision is VetoDecision.ALLOW and (
+        outcome.abstained
+        or outcome.calibrated_fault_prob >= outcome.calibrated_threshold
+    ):
+        return _fail_closed_outcome(
+            payload,
+            reason=(
+                "Fail-closed client invariant error: ALLOW rejected when "
+                "abstained=True or calibrated_fault_prob >= calibrated_threshold."
             ),
         )
     return outcome
@@ -664,7 +963,10 @@ __all__ = [
     "ByocVerifyPayload",
     "ByocVetoServer",
     "DEFAULT_MAX_BODY_BYTES",
+    "DEFAULT_MAX_CONCURRENT_CONNECTIONS",
+    "DEFAULT_REQUEST_TIMEOUT_S",
     "DEFAULT_TLS_HANDSHAKE_TIMEOUT_S",
+    "IssuedRunBinding",
     "RunBinding",
     "create_byoc_veto_server",
     "post_verify_request",

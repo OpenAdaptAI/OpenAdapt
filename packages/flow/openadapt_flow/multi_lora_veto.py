@@ -67,12 +67,13 @@ def hmac_field_value(
     """Compute a keyed HMAC-SHA256 digest for a form field value.
 
     Design: ``tenant_key`` is a per-tenant secret (at least 16 bytes) that
-    stays strictly inside the customer VPC and is NEVER written to training
-    JSONL exports. To compare expected values without sending raw form values
-    on the wire, both the client and the customer-VPC server backend share the
-    per-tenant key: the backend reads the rendered field from the screen,
-    computes ``hmac_field_value(tenant_key, field_slug, observed)``, and
-    compares the digest in constant time.
+    stays strictly server-side inside the customer VPC (never distributed to
+    zero-GPU laptops and never written to training JSONL exports). When the
+    VPC orchestrator binds expected form fields for a run, it computes
+    ``hmac_field_value(tenant_key, field_slug, expected_value)`` server-side;
+    the VPC backend independently reads the rendered field from the screen,
+    computes ``hmac_field_value(tenant_key, field_slug, observed_value)``,
+    and compares the digests in constant time.
     """
     if not _FIELD_SLUG_RE.match(field_slug):
         raise ValueError(
@@ -349,6 +350,8 @@ class AppAdapterRegistry:
         domain: str | None = None,
         tenant_id: str | None = None,
         requested_adapter_id: str | None = None,
+        allow_default_fallback: bool = True,
+        require_exact_workflow: bool = False,
     ) -> AdapterSpec:
         """Resolve the authoritative adapter from server-side bindings with strict BYOC isolation.
 
@@ -358,19 +361,36 @@ class AppAdapterRegistry:
         3. Public ``(app_id, workflow_id)``
         4. Public ``(app_id)`` (no workflow binding)
         5. Matching ``domain_pattern`` (BYOC for ``tenant_id`` first, then public)
-        6. Cold-start ``default_base_adapter``
+        6. Cold-start ``default_base_adapter`` (only when ``allow_default_fallback=True``)
+
+        If ``require_exact_workflow=True`` and workflow-specific adapters exist
+        for ``app_id``, ``workflow_id`` MUST match a registered workflow adapter
+        (closing both missing-workflow and bogus-workflow downgrade bypasses).
 
         If ``requested_adapter_id`` is supplied by the caller, it is accepted
         ONLY when it matches the server-resolved adapter; otherwise
         ``PermissionError`` is raised so a caller can never steer scoring to a
         more lenient adapter.
         """
-        resolved = self._resolve_authoritative(
+        resolved, used_default = self._resolve_authoritative(
             app_id=app_id,
             workflow_id=workflow_id,
             domain=domain,
             tenant_id=tenant_id,
         )
+        if used_default and not allow_default_fallback:
+            raise PermissionError(
+                f"No registered veto adapter for app_id={app_id!r} "
+                "(default adapter fallback is disabled)."
+            )
+        if require_exact_workflow and self.has_workflow_adapters(
+            app_id=app_id, tenant_id=tenant_id
+        ):
+            if workflow_id is None or resolved.workflow_id != workflow_id:
+                raise PermissionError(
+                    f"workflow_id {workflow_id!r} has no registered workflow veto adapter "
+                    f"for app_id={app_id!r} (workflow downgrade rejected)."
+                )
         if (
             requested_adapter_id is not None
             and requested_adapter_id != resolved.adapter_id
@@ -388,7 +408,7 @@ class AppAdapterRegistry:
         workflow_id: str | None = None,
         domain: str | None = None,
         tenant_id: str | None = None,
-    ) -> AdapterSpec:
+    ) -> tuple[AdapterSpec, bool]:
         accessible = [s for s in self._adapters if self._is_accessible(s, tenant_id)]
 
         if tenant_id is not None and workflow_id is not None:
@@ -399,7 +419,7 @@ class AppAdapterRegistry:
                     and spec.app_id == app_id
                     and spec.workflow_id == workflow_id
                 ):
-                    return spec
+                    return spec, False
 
         if tenant_id is not None:
             for spec in accessible:
@@ -409,7 +429,7 @@ class AppAdapterRegistry:
                     and spec.app_id == app_id
                     and spec.workflow_id is None
                 ):
-                    return spec
+                    return spec, False
 
         if workflow_id is not None:
             for spec in accessible:
@@ -418,7 +438,7 @@ class AppAdapterRegistry:
                     and spec.app_id == app_id
                     and spec.workflow_id == workflow_id
                 ):
-                    return spec
+                    return spec, False
 
         for spec in accessible:
             if (
@@ -426,7 +446,7 @@ class AppAdapterRegistry:
                 and spec.app_id == app_id
                 and spec.workflow_id is None
             ):
-                return spec
+                return spec, False
 
         if domain:
             normalized_domain = domain.strip().lower()
@@ -439,9 +459,9 @@ class AppAdapterRegistry:
                             normalized_domain, spec.domain_pattern.lower()
                         )
                     ):
-                        return spec
+                        return spec, False
 
-        return self._default_base
+        return self._default_base, True
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AppAdapterRegistry:
@@ -521,6 +541,8 @@ class MultiLoraVetoRouter:
         request: VetoInferenceRequest,
         *,
         requested_adapter_id: str | None = None,
+        allow_default_fallback: bool = True,
+        require_exact_workflow: bool = False,
     ) -> VetoOutcome:
         spec = self._registry.resolve(
             app_id=request.app_id,
@@ -528,6 +550,8 @@ class MultiLoraVetoRouter:
             domain=request.domain,
             tenant_id=request.tenant_id,
             requested_adapter_id=requested_adapter_id,
+            allow_default_fallback=allow_default_fallback,
+            require_exact_workflow=require_exact_workflow,
         )
         if spec.base_model != self._base_model:
             raise ValueError(
