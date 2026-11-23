@@ -104,8 +104,7 @@ class QuoteForm extends HTMLElement {
         city: city.value,
         alarm: alarm ? alarm.value : '',
       });
-      // Read the reply before leaving the page, so the request is not cut off.
-      await (await fetch('/api/submit', {method: 'POST', body})).text();
+      await fetch('/api/submit', {method: 'POST', body});
       location.href = '/app/summary';
     });
   }
