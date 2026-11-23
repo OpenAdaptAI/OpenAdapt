@@ -609,7 +609,7 @@ The encryption-at-rest default lowered `__main__.py`: the `at-rest` command, `--
 <!-- size-ratchet:begin -->
 | File | Line budget |
 |---|---:|
-| `packages/flow/openadapt_flow/runtime/replayer.py` | 15862 |
+| `packages/flow/openadapt_flow/runtime/replayer.py` | 15872 |
 | `packages/flow/openadapt_flow/__main__.py` | 14237 |
 | `packages/flow/openadapt_flow/qualification/__init__.py` | 4891 |
 | `packages/flow/openadapt_flow/ir.py` | 6830 |
