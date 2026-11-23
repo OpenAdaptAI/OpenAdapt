@@ -76,6 +76,12 @@ package availability, repository text, or a sibling repository.
 - Test durable behavior and package contracts rather than ordinary copy.
 - Keep changes focused and update the canonical documentation when behavior
   changes.
+- A capability change documents itself in the same pull request: add or edit
+  its row file under `capabilities/` (one file per row of the
+  [CAPABILITIES.md](CAPABILITIES.md) tables; `capabilities/README.md` says
+  how). Don't edit or regenerate `CAPABILITIES.md` or `llms-full.txt`: a
+  workflow regenerates them after your change lands, so your pull request
+  doesn't conflict with the others that add rows. CI fails a hand edit.
 - Never place customer-derived data, deployment recipes, or secrets in a public
   fixture or package artifact.
 

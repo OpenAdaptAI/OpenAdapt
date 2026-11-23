@@ -345,6 +345,7 @@ and `--log-url`, the transparency log) are not app URLs.
 | `openadapt-flow validate-hosted` | `--target-url` | The surface comes from the signed run report. A non-web report refuses a target URL ("Target URL is web-only and must be omitted"). |
 | `openadapt-agent authoring connect` | `--url` | `--url` opens a fresh browser. Without it the command pins the local app window (one macOS or Linux window). Windows, RDP and Citrix are coach-only on the mailbox: the person drives and Capture records (`COACH_ONLY_BACKENDS` in `agent/mailbox.py`). |
 | `openadapt-agent seal keys pin` | `--url` | The seal key server's address, not an app. |
+| `openadapt-flow learn probe` | `--base-url` | The probe sends read-only HTTP requests (`GET`, `HEAD`) to the app's API as the agent; it drives no UI, so there is no backend to choose. The frame it reads comes from the contract's `frame.database`. |
 | `openadapt-flow wrap-dispatch` | `--pricing-source-url` | The primary source cited for the model prices the fallback's cost is computed with, not an app. The task's app comes from `--task`. |
 
 
