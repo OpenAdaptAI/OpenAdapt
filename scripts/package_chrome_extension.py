@@ -190,7 +190,8 @@ def build_cws_zip(ext_dir: Path, out_zip: Path) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Validate and package the OpenAdapt Chrome MV3 Co-Pilot extension."
+        description="Validate and package the OpenAdapt Chrome MV3 Co-Pilot extension.",
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--ext-dir",
