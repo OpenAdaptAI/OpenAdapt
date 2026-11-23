@@ -1,7 +1,7 @@
 // See it work on a sample app, before granting any permission.
 //
-// The engine runs Flow's built-in tutorial: a synthetic clinic app with
-// made-up patients, served and driven in a hidden browser on this computer.
+// The engine runs Flow's built-in tutorial: a synthetic sample app with
+// made-up records, served and driven in a hidden browser on this computer.
 // It runs the sample task twice. The first time, the app saves normally. The
 // second time, the app shows "saved" but drops the entry, so the reader sees
 // what OpenAdapt does when the screen and the record disagree.
@@ -20,7 +20,7 @@ import {
 } from "../ui/simple";
 
 const PROVENANCE =
-  "Run on this computer with OpenAdapt's built-in sample app. All patients and data are made up.";
+  "Run on this computer with OpenAdapt's built-in sample app. All records and data are made up.";
 
 function SampleRunCard({ run }: { run: SampleRun }) {
   const copy = resultCopy({ key: run.result, nothingWritten: run.nothing_written });
@@ -40,7 +40,7 @@ function SampleRunCard({ run }: { run: SampleRun }) {
       </header>
       <p className="sample-run-story">
         {normal && run.result === "done_checked"
-          ? `OpenAdapt checked it had the right patient, typed the note, and saved it. Then it read the record back: ${run.record_checks_confirmed} of ${run.record_checks_confirmed + run.record_checks_failed} checks matched.`
+          ? `OpenAdapt checked it had the right record, typed the note, and saved it. Then it read the record back: ${run.record_checks_confirmed} of ${run.record_checks_confirmed + run.record_checks_failed} checks matched.`
           : !normal && run.result === "check_record"
             ? "The app showed “Encounter saved”, but when OpenAdapt read the record back, the note wasn't there. OpenAdapt stopped and flagged the record for a person to check. It doesn't try again on its own."
             : copy.sentence}
@@ -137,7 +137,7 @@ export function Sample({
     <div className="content simple">
       <PageHead
         title="See it work on a sample app"
-        sub="OpenAdapt adds a follow-up note to a made-up patient in a built-in sample clinic app, then reads the record back to check it saved."
+        sub="OpenAdapt adds a follow-up note to a made-up record in a built-in sample app, then reads the record back to check it saved."
       />
 
       {state !== "done" && (

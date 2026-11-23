@@ -310,7 +310,7 @@ class ChildGroup:
     #: the row is still expected, with this value empty.
     co_owners: list[str] = field(default_factory=list)
     #: The app adds this row with an empty value when the task leaves the
-    #: parameter out (Redmine's custom field values): expected then too.
+    #: parameter out (such as custom field values): expected then too.
     empty_when_null: bool = False
     #: The parameter whose value the rows hold (``children`` may hold a
     #: second group for it: a call's lead is its parent and an attendee).
@@ -653,7 +653,7 @@ def _pick(
     """The best location. Among tied ones: the one whose column is named
     like the parameter (``stage``, not ``last_stage``); else drop a column
     that is only a copy of another tied one, lower-cased or digits only, in
-    every row of its table (EspoCRM's ``email_address.lower``,
+    every row of its table (such as a normalized lowercase email column,
     ``phone_number.numeric``)."""
 
     loc, tied = best(found)
@@ -1370,7 +1370,7 @@ def _touched_rows(
 
 def _version_column(schema: Schema, plan: KindPlan) -> Optional[dict[str, Any]]:
     """A whole-number column of the main record that went up by exactly one
-    in every update demonstration (Redmine's ``lock_version``)."""
+    in every update demonstration (such as an optimistic ``lock_version``)."""
 
     t = schema.tables[plan.anchor]
     if len(t.primary_key) != 1:
@@ -1411,8 +1411,8 @@ def _audit_source(
 ) -> Optional[dict[str, Any]]:
     """A table that gained, in every update demonstration, a row naming the
     main record (a column holding its key) and the acting user (a column
-    holding the actor's id): the app's own audit trail of saves (EspoCRM's
-    ``action_history_record``, Dolibarr's agenda events)."""
+    holding the actor's id): the app's own audit trail of saves (such as
+    audit history or agenda event tables)."""
 
     t = schema.tables[plan.anchor]
     if len(t.primary_key) != 1 or not actor_values:

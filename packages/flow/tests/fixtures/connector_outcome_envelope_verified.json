@@ -1,0 +1,79 @@
+{
+ "compensation_actions": 0,
+ "evidence_classes": [
+  "authorization",
+  "effect_tier_1",
+  "identity",
+  "postcondition"
+ ],
+ "execution_completed": true,
+ "external_network_calls": "observed",
+ "model_calls": 0,
+ "outcome": "VERIFIED",
+ "passed_contracts": {
+  "authorization": 1,
+  "effect": 2,
+  "identity": 2,
+  "postcondition": 4
+ },
+ "postcondition_evidence": [
+  {
+   "action_kind": "click",
+   "actuation_path": "gui",
+   "contract_index": 0,
+   "contract_kind": "explicit_predicate",
+   "contract_sha256": "d750488f78772be76ebd73cd59d0f86fc3dfdbb489f2df21c17a17272fcc08a2",
+   "result_index": 0,
+   "step_contract_sha256": "d36ec7bb6a6fa08e1fb9c774009cfa031b5d4110a748c53884e487abcc0b0931",
+   "step_index": 0,
+   "verdict": "passed",
+   "workflow_contract_sha256": "dae8ae6ed64c61d73f8f9e4c2d395c0158b2288fc084a6ebf34acac63ccb02f9"
+  },
+  {
+   "action_kind": "type",
+   "actuation_path": "gui",
+   "contract_index": 0,
+   "contract_kind": "intrinsic_input_readback",
+   "contract_sha256": "9ec4d9a765695df30a2a0004cb83142d34f9364fe85fe26804d034337e0888be",
+   "result_index": 1,
+   "step_contract_sha256": "f1b9a9687e449f73e8ae1d1fd5c8e064d138c28d6f79bb7581e2025e034af7f8",
+   "step_index": 1,
+   "verdict": "passed",
+   "workflow_contract_sha256": "dae8ae6ed64c61d73f8f9e4c2d395c0158b2288fc084a6ebf34acac63ccb02f9"
+  },
+  {
+   "action_kind": "click",
+   "actuation_path": "gui",
+   "contract_index": 0,
+   "contract_kind": "explicit_predicate",
+   "contract_sha256": "b95dcc1092a0382ceb9617ec8454346fca5b60efd3db208cb034eea5f3d05ed4",
+   "result_index": 2,
+   "step_contract_sha256": "7b85a93d484530d98da535f683fae1e53ce232af57d1627ffb4920ad18b0e30b",
+   "step_index": 2,
+   "verdict": "passed",
+   "workflow_contract_sha256": "dae8ae6ed64c61d73f8f9e4c2d395c0158b2288fc084a6ebf34acac63ccb02f9"
+  },
+  {
+   "action_kind": "click",
+   "actuation_path": "gui",
+   "contract_index": 1,
+   "contract_kind": "explicit_predicate",
+   "contract_sha256": "c56c32d7cc387b50bf5709c35cbf4856208c224685da70bb0837ad5f54383356",
+   "result_index": 2,
+   "step_contract_sha256": "7b85a93d484530d98da535f683fae1e53ce232af57d1627ffb4920ad18b0e30b",
+   "step_index": 2,
+   "verdict": "passed",
+   "workflow_contract_sha256": "dae8ae6ed64c61d73f8f9e4c2d395c0158b2288fc084a6ebf34acac63ccb02f9"
+  }
+ ],
+ "production_eligible": true,
+ "profile": "standard",
+ "required_contracts": {
+  "authorization": 1,
+  "effect": 2,
+  "identity": 2,
+  "postcondition": 4
+ },
+ "version": "openadapt.execution-outcome/v1",
+ "workflow_contract_sha256": "dae8ae6ed64c61d73f8f9e4c2d395c0158b2288fc084a6ebf34acac63ccb02f9"
+}

@@ -3698,7 +3698,7 @@ def capture_database(
     caps data rows across tables and auxiliary queries; exceeding it refuses
     the read without returning a partial snapshot.
 
-    ``profile`` (``openemr``) applies an app profile's bookkeeping rules, the
+    ``profile`` (by app-profile name) applies an app profile's bookkeeping rules, the
     same ones the frame uses (``openadapt_flow.app_profiles``); its own-row
     rules need the acting user's sign-in names (``actor_names``), whose ids
     are read in the same transaction. ``before``: a snapshot taken earlier
