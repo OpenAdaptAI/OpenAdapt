@@ -41,7 +41,16 @@ from openadapt_flow.compile_agent.harness import GateRefused, Harness, StaleRef
 from openadapt_flow.jit.adapters import UnsupportedAction
 from openadapt_flow.jit.compile_agent import TaskRequest
 from openadapt_flow.privacy import PLACEHOLDER_HELP
+from openadapt_flow.second_factor import ONE_TIME_CODE_MARKER
 from openadapt_flow.teach_scope import ScopeViolation
+
+#: A sign-in that asks for a one-time code: the agent never has the code.
+SECOND_FACTOR_HELP = (
+    "If a sign-in asks for a one-time code (sent by text message or email, "
+    "or shown by an authenticator app), click the code field and type "
+    + ONE_TIME_CODE_MARKER
+    + "; OpenAdapt gets the code from a person and types it."
+)
 
 __all__ = [
     "AgentLedger",
@@ -272,6 +281,8 @@ run. Do exactly the task, with the values given, and nothing else. When the \
 task is done, or cannot be done, call finish with a one-line summary."""
     + " "
     + PLACEHOLDER_HELP
+    + " "
+    + SECOND_FACTOR_HELP
 )
 
 _EVERY_TURN_SYSTEM = (
@@ -284,6 +295,8 @@ given, and nothing else. When the task is done, or cannot be done, call \
 finish with a one-line summary."""
     + " "
     + PLACEHOLDER_HELP
+    + " "
+    + SECOND_FACTOR_HELP
 )
 
 _CODE_SYSTEM = (
@@ -303,6 +316,8 @@ save, read the screen to confirm it. When the task is done, or cannot be \
 done, call finish with a one-line summary."""
     + " "
     + PLACEHOLDER_HELP
+    + " "
+    + SECOND_FACTOR_HELP
 )
 
 _FINISH_TOOL = {

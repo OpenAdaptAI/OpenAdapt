@@ -1,7 +1,7 @@
 [project]
 name = "openadapt"
 version = "1.23.0"
-description = "Enters approved information into the apps your team already uses, checks that it saved, and stops for a person when something doesn't match."
+description = "Give your agent a program, not a mouse: the open-source, verified execution layer for computer-use agents. Compile one run into a program that makes no model calls, reads each save back from the system of record, and stops instead of guessing."
 # The package description is README.md with its lifecycle block swapped for a
 # link to the live record; see hatch_build.py.
 dynamic = ["readme"]
@@ -11,6 +11,14 @@ authors = [
     {name = "Richard Abrich", email = "richard@openadapt.ai"}
 ]
 keywords = [
+    "computer-use",
+    "computer-use-agents",
+    "ai-agents",
+    "mcp",
+    "model-context-protocol",
+    "agent-verification",
+    "audit-trail",
+    "receipts",
     "gui",
     "automation",
     "workflow",
@@ -20,6 +28,12 @@ keywords = [
     "citrix",
     "emr",
     "data-entry",
+    "mcp",
+    "a2a",
+    "agent2agent",
+    "agent-card",
+    "agent-handoff",
+    "receipts",
 ]
 classifiers = [
     "Intended Audience :: Developers",
@@ -75,6 +89,12 @@ dependencies = [
 
 [project.optional-dependencies]
 # Individual packages
+# `openadapt wrap` runs OpenAdapt's built-in Claude agent on a cache miss:
+# `uvx --python 3.12 'openadapt[wrap]@latest' wrap --example`. The base
+# launcher stays lean; wrap imports the SDK only when it runs the agent.
+wrap = [
+    "anthropic>=0.40; python_version < '3.13'",
+]
 browser = [
     # Kept as a compatibility alias for existing install commands. The base
     # launcher now selects this Flow contract because the bundled quickstart
@@ -133,6 +153,14 @@ flow = [
 # `pip install openadapt[agent]` still resolves.
 agent = [
     "openadapt-agent>=2.1.0,<3; python_version < '3.13'",
+]
+# Agent-to-agent handoffs over the A2A (Agent2Agent) protocol:
+# `openadapt agent serve --a2a`. Handoffs over MCP, HTTP and files need no extra.
+# Listed directly, not as openadapt-flow[a2a], so the extra resolves the same
+# whichever Flow release is installed; keep in step with Flow's a2a extra.
+a2a = [
+    "a2a-sdk[http-server]>=1.3.1,<2; python_version < '3.13'",
+    "uvicorn>=0.29; python_version < '3.13'",
 ]
 # Bundles
 core = [

@@ -747,6 +747,11 @@ def _actuating_step(kind: ActionKind, label: str | None) -> Step:
                 region=(0, 0, 10, 10),
             )
         }
+    if kind is ActionKind.SECOND_FACTOR:
+        # A person's one-time code is typed into the focused field: no anchor.
+        return Step(
+            id="s", intent=f"{kind.value} {label or ''}", action=kind, one_time="code"
+        )
     fields: dict[str, object] = {"anchor": anchor, **extra}
     return Step(id="s", intent=f"{kind.value} {label or ''}", action=kind, **fields)
 

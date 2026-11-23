@@ -604,11 +604,13 @@ PR #2280 raised `replayer.py` by 12 lines: the call sites of the clock-text chec
 
 PR #2295 raised `replayer.py`, `ir.py`, `interactive_recorder.py` and `playwright_backend.py`: the dropdown choice contract, its dispatch and read-back, unexpected-dialog stops, and the recorder's choice and dialog hooks; the page-side capture code and the actuator live in `choice_capture.py` and `backends/choice.py`. The pinned dialog methods delegate to `runtime/dialog_delivery.py`, preserving the original document arm without rearming after input.
 
+The encryption-at-rest default lowered `__main__.py`: the `at-rest` command, `--no-encrypt`, the desktop recording key, the version 3 key precheck and their command-table entries live in `cli_at_rest.py`.
+
 <!-- size-ratchet:begin -->
 | File | Line budget |
 |---|---:|
-| `packages/flow/openadapt_flow/runtime/replayer.py` | 16830 |
-| `packages/flow/openadapt_flow/__main__.py` | 14331 |
+| `packages/flow/openadapt_flow/runtime/replayer.py` | 16820 |
+| `packages/flow/openadapt_flow/__main__.py` | 14237 |
 | `packages/flow/openadapt_flow/qualification/__init__.py` | 4891 |
 | `packages/flow/openadapt_flow/ir.py` | 6830 |
 | `packages/desktop/openadapt_desktop/dispatch.py` | 6524 |
@@ -616,7 +618,7 @@ PR #2295 raised `replayer.py`, `ir.py`, `interactive_recorder.py` and `playwrigh
 | `packages/flow/openadapt_flow/interactive_recorder.py` | 4808 |
 | `packages/flow/openadapt_flow/runtime/durable/attended.py` | 4368 |
 | `packages/flow/openadapt_flow/terminal_verification_v2.py` | 3661 |
-| `packages/flow/openadapt_flow/backends/playwright_backend.py` | 6820 |
+| `packages/flow/openadapt_flow/backends/playwright_backend.py` | 6818 |
 <!-- size-ratchet:end -->
 
 ## 7. Coordination with work in flight

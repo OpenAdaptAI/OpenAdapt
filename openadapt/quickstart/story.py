@@ -26,6 +26,10 @@ from openadapt.quickstart.scene import MOCKMED, Scene
 
 #: The placeholder app address in the "try it on your own app" command.
 YOUR_APP_URL = "https://your-app.example"
+#: One-line Python drop-in for Playwright/CUA agents via ``openadapt-verify``.
+VERIFY_SNIPPET = (
+    'with checked_write("verify.yaml", values): ...  # from openadapt_verify'
+)
 #: Where the finale points for Seals of real runs, after the person's own.
 REAL_SEALS_URL = "https://openadapt.ai/seals"
 
@@ -102,6 +106,8 @@ class NextSteps:
     verify: Optional[str]
     record: str
     agent: str
+    #: One-line drop-in snippet for Playwright/CUA scripts (``openadapt-verify``).
+    verify_snippet: str = VERIFY_SNIPPET
     #: Under ``uvx`` only: the command that installs this version for good.
     keep: Optional[str] = None
     #: Under ``uvx`` only: a warning when the shell's ``openadapt`` is another
@@ -297,12 +303,21 @@ def run_story(
             engine.run_all(inputs, finished)
         outcome.act2_seconds = clock() - act_start
         view.runs_total(outcome)
+        # A run that stopped before its first click, even on its second try,
+        # never reached the save. Say why in plain words; when no run got a
+        # ready screen, Act 3 would only stop the same way, so it is skipped.
+        unready = [run for run in outcome.runs if run.not_ready]
+        skip_break = bool(outcome.runs) and len(unready) == len(outcome.runs)
+        if unready:
+            note = getattr(view, "not_ready", None)
+            if note is not None:
+                note(unready[0].explanation, break_it and skip_break)
         # Sign the checked runs' reports while Act 3 runs; the finale waits.
         sealing = _in_background(lambda: engine.seal(list(outcome.runs)))
 
         # Act 3: break it.
         paging = None
-        if break_it:
+        if break_it and not skip_break:
             view.act(3, "Break it", scene.act3_subtitle)
             view.break_setup()
             if interactive:
@@ -401,6 +416,7 @@ def _act1_subtitle(visible: bool, scene: Scene = MOCKMED) -> str:
 
 
 __all__ = [
+    "VERIFY_SNIPPET",
     "YOUR_APP_URL",
     "display_path",
     "Engine",

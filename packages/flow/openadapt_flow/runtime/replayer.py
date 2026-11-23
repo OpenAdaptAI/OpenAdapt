@@ -174,6 +174,7 @@ from openadapt_flow.qualification_faults import (  # noqa: F401
     sha256_bytes,
     verify_fault_mutation_receipt,
 )
+from openadapt_flow.receipt_record import save_settled_report
 from openadapt_flow.run_gate import is_consequential
 from openadapt_flow.run_invocation import (
     InvocationContext,
@@ -187,6 +188,7 @@ from openadapt_flow.runtime import identity as identity_mod
 from openadapt_flow.runtime import identity_census as census_mod
 from openadapt_flow.runtime import identity_looks as looks_mod
 from openadapt_flow.runtime import keyboard_delivery as keyboard_delivery_mod
+from openadapt_flow.runtime import second_factor_step
 from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
     RuntimeParamScalar,
@@ -269,6 +271,7 @@ from openadapt_flow.secret_inputs import (  # noqa: F401 - compatibility exports
     require_secret_sources,
     secret_env_var,
     secret_env_vars,
+    step_secret_text,
 )
 from openadapt_flow.verification import (  # noqa: F401
     EffectContractMutationError,
@@ -3054,8 +3057,7 @@ class Replayer(
             # to a person, and it never stays held open for the next item.
             if decide_approval:
                 self._stamp_approval(report)
-        report.save(run_dir)
-        return report
+        return save_settled_report(run_dir, report)
 
     def _settle_durable_readback(
         self, entry: Any, error: Optional[str]
@@ -12016,6 +12018,8 @@ class Replayer(
                 before_png=before_png,
                 result=result,
             )
+        if step.action is ActionKind.SECOND_FACTOR:  # bind, ask, type once
+            return second_factor_step.act(self, step, workflow, params, result)
         if step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
             assert resolution is not None  # guaranteed by _resolve_step
             x, y = resolution.point
@@ -12536,25 +12540,11 @@ class Replayer(
             return None
 
         if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
-            if step.secret:
-                # Secret value is never in the bundle/params: inject it from
-                # the environment, failing fast with an actionable message.
-                env_var = getattr(self, "secret_env_overrides", {}).get(
-                    step.param or ""
-                ) or secret_env_var(step.param or "")
-                text = os.environ.get(env_var, "")
-                if not step.param:
-                    return (
-                        f"Step '{step.id}' ({step.intent}) is marked secret "
-                        "but names no parameter"
-                    )
-                if not text:
-                    return (
-                        f"Step '{step.id}' ({step.intent}) requires secret "
-                        f"parameter '{step.param}', but the environment "
-                        f"variable {env_var} is not set — export it with the "
-                        "secret value and re-run"
-                    )
+            if step.secret:  # never in the bundle/params (secret_inputs.py)
+                overrides = getattr(self, "secret_env_overrides", {})
+                text, refusal = step_secret_text(step, overrides)
+                if refusal is not None:
+                    return refusal
             elif step.param is not None:
                 if step.param not in params:
                     return (

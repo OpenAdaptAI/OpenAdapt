@@ -1,0 +1,1 @@
+| A ledger of what changed before a stop, a write-ordering lint, and undo steps a person approves | Released ([#1263](https://github.com/OpenAdaptAI/OpenAdapt/pull/1263)) | Synthetic (MockMed) | change ledger |

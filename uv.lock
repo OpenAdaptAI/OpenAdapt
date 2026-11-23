@@ -27,6 +27,31 @@ constraints = [
 ]
 
 [[package]]
+name = "a2a-sdk"
+version = "1.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "culsans" },
+    { name = "google-api-core" },
+    { name = "googleapis-common-protos" },
+    { name = "httpx" },
+    { name = "json-rpc" },
+    { name = "packaging" },
+    { name = "protobuf" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e6/ca/90d8c95185a53be332772d5b28c42bf1586a2214e8bd937e769f3d566d7c/a2a_sdk-1.3.1.tar.gz", hash = "sha256:f18465fd040d2f75728c8ec915315ff25c072d271e6faeb9fa85a29ac36076ea", size = 456720, upload-time = "2026-11-17T10:51:19.721Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b1/76/baed78b223d9919a013c625ed853ab220c2c932050d8ded974a4eaaf969b/a2a_sdk-1.3.1-py3-none-any.whl", hash = "sha256:6073b8c04989609d087b9fed18ec1c8a13ae7e56246cf7a23c7c55a1a2a3b813", size = 299006, upload-time = "2026-11-17T10:51:17.787Z" },
+]
+
+[package.optional-dependencies]
+http-server = [
+    { name = "sse-starlette" },
+    { name = "starlette" },
+]
+
+[[package]]
 name = "aardwolf"
 version = "0.2.14"
 source = { registry = "https://pypi.org/simple" }
@@ -231,6 +256,20 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/e2/20/349db4af12dbc16070d32028d30c2067123b4520f3dcb2d9013524efeb4f/aiohttp-3.14.4-cp315-cp315t-win_amd64.whl", hash = "sha256:2b2c95f5f769eec92b552969db1f79ea0282058ce5131ed0f2fa540b4af3f14e", size = 531284, upload-time = "2026-10-05T17:43:39.362Z" },
     { url = "https://files.pythonhosted.org/packages/26/21/544c711bc5fad611278ebd153bdcab1bffce8b8581f8ec9096b275948a3c/aiohttp-3.14.4-cp315-cp315t-win_arm64.whl", hash = "sha256:54209fff79346ee1ef0d5cbf92fa80a5bb37396406bb4d932e5107f9c29b2d3f", size = 510623, upload-time = "2026-10-05T17:43:42.15Z" },
     { url = "https://files.pythonhosted.org/packages/2b/27/5e1f8446545be98e9416af59c396b1ed1f9f3294afb0a40ee3a709889273/aiohttp-3.14.4-py3-none-any.whl", hash = "sha256:5c6758ba62aea282c537179cfc8474a90f2b5f7b089cc5ff66d8920d86a9bfdd", size = 279487, upload-time = "2026-10-05T17:43:44.905Z" },
+]
+
+[[package]]
+name = "aiologic"
+version = "0.17.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "sniffio" },
+    { name = "typing-extensions" },
+    { name = "wrapt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f1/7a/d51f2fde1e8ae8a83431f8e97b7a71e9358cdb1d4d2ce6be387fa44d68de/aiologic-0.17.1.tar.gz", hash = "sha256:2e1b93b9e88ced318c2a63ad7b382688f40cbfe40e3d42258d49dc9c5aea179d", size = 252354, upload-time = "2026-06-27T20:41:33.25Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5b/d3/2d310b1b839014034dba0cba685e492df8a5c7ad32c19cab7e979eed6554/aiologic-0.17.1-py3-none-any.whl", hash = "sha256:c66b319830fedb7ca3d2b2125fa6f5b653f89418c2a27ea76f259ec5f00943c0", size = 161331, upload-time = "2026-06-27T20:41:31.877Z" },
 ]
 
 [[package]]
@@ -1191,6 +1230,19 @@ nvrtc = [
 ]
 nvtx = [
     { name = "nvidia-nvtx", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64'" },
+]
+
+[[package]]
+name = "culsans"
+version = "0.11.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiologic" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d9/e3/49afa1bc180e0d28008ec6bcdf82a4072d1c7a41032b5b759b60814ca4b0/culsans-0.11.0.tar.gz", hash = "sha256:0b43d0d05dce6106293d114c86e3fb4bfc63088cfe8ff08ed3fe36891447fe33", size = 107546, upload-time = "2025-12-31T23:15:38.196Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e0/5d/9fb19fb38f6d6120422064279ea5532e22b84aa2be8831d49607194feda3/culsans-0.11.0-py3-none-any.whl", hash = "sha256:278d118f63fc75b9db11b664b436a1b83cc30d9577127848ba41420e66eb5a47", size = 21811, upload-time = "2025-12-31T23:15:37.189Z" },
 ]
 
 [[package]]
@@ -2209,6 +2261,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/d2/73/a009f41c5eed71c49bec53036c4b33555afcdee70682a18c6f66e396c039/jiter-0.13.0-graalpy312-graalpy250_312_native-macosx_11_0_arm64.whl", hash = "sha256:ff732bd0a0e778f43d5009840f20b935e79087b4dc65bd36f1cd0f9b04b8ff7f", size = 303808, upload-time = "2026-02-02T12:37:52.092Z" },
     { url = "https://files.pythonhosted.org/packages/c4/10/528b439290763bff3d939268085d03382471b442f212dca4ff5f12802d43/jiter-0.13.0-graalpy312-graalpy250_312_native-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ab44b178f7981fcaea7e0a5df20e773c663d06ffda0198f1a524e91b2fde7e59", size = 337384, upload-time = "2026-02-02T12:37:53.582Z" },
     { url = "https://files.pythonhosted.org/packages/67/8a/a342b2f0251f3dac4ca17618265d93bf244a2a4d089126e81e4c1056ac50/jiter-0.13.0-graalpy312-graalpy250_312_native-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:7bb00b6d26db67a05fe3e12c76edc75f32077fb51deed13822dc648fa373bc19", size = 343768, upload-time = "2026-02-02T12:37:55.055Z" },
+]
+
+[[package]]
+name = "json-rpc"
+version = "1.15.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/6d/9e/59f4a5b7855ced7346ebf40a2e9a8942863f644378d956f68bcef2c88b90/json-rpc-1.15.0.tar.gz", hash = "sha256:e6441d56c1dcd54241c937d0a2dcd193bdf0bdc539b5316524713f554b7f85b9", size = 28854, upload-time = "2023-06-11T09:45:49.078Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/94/9e/820c4b086ad01ba7d77369fb8b11470a01fac9b4977f02e18659cf378b6b/json_rpc-1.15.0-py2.py3-none-any.whl", hash = "sha256:4a4668bbbe7116feb4abbd0f54e64a4adcf4b8f648f19ffa0848ad0f6606a9bf", size = 39450, upload-time = "2023-06-11T09:45:47.136Z" },
 ]
 
 [[package]]
@@ -3317,6 +3378,10 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+a2a = [
+    { name = "a2a-sdk", extra = ["http-server"], marker = "python_full_version < '3.13'" },
+    { name = "uvicorn", marker = "python_full_version < '3.13'" },
+]
 agent = [
     { name = "openadapt-agent", marker = "python_full_version < '3.13'" },
 ]
@@ -3384,9 +3449,14 @@ viewer = [
 windows = [
     { name = "openadapt-flow", extra = ["windows"], marker = "python_full_version < '3.13'" },
 ]
+wrap = [
+    { name = "anthropic", marker = "python_full_version < '3.13'" },
+]
 
 [package.metadata]
 requires-dist = [
+    { name = "a2a-sdk", extras = ["http-server"], marker = "python_full_version < '3.13' and extra == 'a2a'", specifier = ">=1.3.1,<2" },
+    { name = "anthropic", marker = "python_full_version < '3.13' and extra == 'wrap'", specifier = ">=0.40" },
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.2.0" },
     { name = "click", specifier = ">=8.0.0" },
     { name = "openadapt", extras = ["browser", "core", "grounding", "retrieval", "privacy", "flow", "windows", "rdp", "agent"], marker = "extra == 'all'" },
@@ -3413,8 +3483,9 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "rich", marker = "python_full_version < '3.13'", specifier = ">=13.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
+    { name = "uvicorn", marker = "python_full_version < '3.13' and extra == 'a2a'", specifier = ">=0.29" },
 ]
-provides-extras = ["browser", "capture", "windows", "macos", "linux", "rdp", "ml", "evals", "viewer", "grounding", "retrieval", "privacy", "flow", "agent", "core", "all", "dev"]
+provides-extras = ["wrap", "browser", "capture", "windows", "macos", "linux", "rdp", "ml", "evals", "viewer", "grounding", "retrieval", "privacy", "flow", "agent", "a2a", "core", "all", "dev"]
 
 [[package]]
 name = "openadapt-agent"
