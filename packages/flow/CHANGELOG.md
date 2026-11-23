@@ -69,13 +69,13 @@
 
 - A wrapped sign-in no longer compiles a pixel check that freezes a withheld
   credential field. The recorder blacks out a withheld field in every frame
-  that still shows it, so a  crop that overlapped one held a
+  that still shows it, so a `REGION_STABLE` crop that overlapped one held a
   black rectangle that never matched the unredacted screenshot at replay
   time, failing a step whose region overlapped a credential box during the
   run, for example the click into the password field. Such a check is now
   clipped to the part of its region clear of the box and re-cropped from the
   same frame. When no usable part is left, it is dropped and recorded in
-  . This applies to mined checks and to the
+  `param_hygiene.json`. This applies to mined checks and to the
   focused-field pass.
 - File, document, document-hash and email checks no longer claim
   `system_of_record` (tier 1) for every file. Their strength now follows who
