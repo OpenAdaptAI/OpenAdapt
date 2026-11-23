@@ -1,0 +1,1 @@
+| Say, for every feature under every run profile, whether it works or is refused and why, checked against the runtime in CI | Released ([#1364](https://github.com/OpenAdaptAI/OpenAdapt/pull/1364)) | Synthetic | [COMPATIBILITY.md](packages/flow/docs/COMPATIBILITY.md) |

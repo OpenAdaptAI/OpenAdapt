@@ -22,6 +22,9 @@ import hashlib
 import json
 import os
 import stat
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import httpx
@@ -568,6 +571,110 @@ def test_egress_refusal_reports_whether_the_child_could_have_written(tmp_path, p
         assert callback["bundle_sha256"] == _BUNDLE_SHA256
         assert callback["error_code"] == "egress_refused"
         assert cp.acks[0]["status"] == "done"
+
+
+@pytest.mark.parametrize(
+    "phase",
+    [
+        "before_start",
+        "at_spawn",
+        "after_write",
+        "late_verified",
+        "wrong_target",
+        "legacy_success",
+        "conflicting_exit",
+    ],
+)
+def test_cancellation_reports_effect_evidence_and_releases_the_lease(tmp_path, phase):
+    from openadapt_flow.connector.executor import _subprocess_runner, cancel_job
+
+    cp = StubControlPlane()
+    cp.enqueue("org_demo", _payload())
+    job_id = f"bjob_cancel_{phase}"
+    cp.jobs[0]["id"] = job_id
+    client = ConnectorClient(
+        "https://app.test", transport=httpx.MockTransport(cp.handler)
+    )
+    client.enroll(enrollment_secret="s", org_id="org_demo", name="n")
+    storage = InMemoryCustomerStorage(bundle_bytes=_BUNDLE_BYTES)
+    record = tmp_path / "synthetic-record"
+    if phase == "before_start":
+        cancel_job(job_id)
+
+    def runner(argv, run_dir, env):
+        # The subprocess writes a real synthetic record. A control delivered
+        # before the executor consumes its result can still observe either an
+        # incomplete or an already-finalized report.
+        assert phase != "before_start"
+        report = VERIFIED_REPORT
+        if phase == "legacy_success":
+            report = SUCCESS_REPORT
+        elif phase == "wrong_target":
+            report = {**VERIFIED_REPORT, "execution_target_kind": "citrix"}
+        child = (
+            "import pathlib, sys, time\n"
+            "with pathlib.Path(sys.argv[1]).open('a') as saved: saved.write('saved\\n')\n"
+            "if sys.argv[2]: pathlib.Path(sys.argv[2]).write_text(sys.argv[3])\n"
+            "else: time.sleep(10)\n"
+            "sys.exit(int(sys.argv[4]))\n"
+        )
+        command = [
+            sys.executable,
+            "-c",
+            child,
+            str(record),
+            "" if phase == "after_write" else str(run_dir / "report.json"),
+            json.dumps(report),
+            "1" if phase == "conflicting_exit" else "0",
+        ]
+        if phase == "at_spawn":
+            cancel_job(job_id)
+        if phase == "after_write":
+
+            def stop_after_write():
+                deadline = time.monotonic() + 8
+                while time.monotonic() < deadline:
+                    if record.exists() and record.read_text() == "saved\n":
+                        return cancel_job(job_id)
+                    time.sleep(0.02)
+                return False
+
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                stopped = pool.submit(stop_after_write)
+                outcome = _subprocess_runner(command, run_dir, env)
+                assert stopped.result() and outcome.returncode != 0
+            return outcome
+        outcome = _subprocess_runner(command, run_dir, env)
+        cancel_job(job_id)
+        return outcome
+
+    result = run_once(
+        client, _settings(), runner=runner, storage_factory=lambda job: storage
+    )
+    assert result["callback_accepted"] and len(cp.callbacks) == len(cp.acks) == 1
+    body, ack = cp.callbacks[0]["body"], cp.acks[0]
+    assert "synthetic-record" not in json.dumps(body)
+    if phase in {"before_start", "at_spawn"}:
+        assert not record.exists()
+        assert result["status"] == body["status"] == ack["status"] == "failed"
+        assert ack["error_code"] == "cancelled_by_control_plane"
+    else:
+        assert record.read_text().splitlines() == ["saved"]
+        assert ack["status"] == "done"
+        assert body["bundle_sha256"] == _BUNDLE_SHA256
+        if phase == "late_verified":
+            assert result["status"] == body["status"] == "success"
+            assert body["outcome"]["outcome"] == "VERIFIED"
+            assert ack["error_code"] is None
+        else:
+            assert result["status"] == body["status"] == "halt"
+            assert body["halt"] == {"present": True} and "outcome" not in body
+            assert ack["error_code"] == body["error_code"]
+            assert ack["error_code"] == "cancelled_after_child_start"
+            assert "failure_signal" not in body
+            if phase == "after_write":
+                assert body["report_path"] is None
+                assert "report_sha256" not in body["metrics"]
 
 
 def test_report_write_failure_lease_is_not_acked_failed():
