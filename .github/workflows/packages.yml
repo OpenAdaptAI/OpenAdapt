@@ -290,7 +290,7 @@ jobs:
         env:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
         run: |
-          ruff check --isolated --select E9 --target-version py310 .
+          ruff check --isolated --select E9 --target-version py311 .
           uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Test
         run: pytest -q
@@ -358,7 +358,7 @@ jobs:
         env:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
         run: |
-          ruff check --isolated --select E9 --target-version py310 .
+          ruff check --isolated --select E9 --target-version py311 .
           uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Test
         run: pytest -q
@@ -509,7 +509,7 @@ jobs:
       fail-fast: false
       matrix:
         # PR and queue tiers: Python 3.12. Main, dispatch and nightly add the
-        # oldest supported Python, 3.10. On 2026-11-20 the 3.10 lane passed
+        # oldest supported Python, 3.11. On 2026-11-20 the 3.10 lane passed
         # every one of its 88 pull-request runs and used 168 runner-minutes.
         python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.11", "3.12"]') }}
     services:
@@ -645,7 +645,7 @@ jobs:
         env:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
         run: |
-          ruff check --isolated --select E9 --target-version py310 .
+          ruff check --isolated --select E9 --target-version py311 .
           uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Ruff format check
         run: ruff format --check openadapt_flow tests benchmark/harness benchmark/phase_latency
@@ -1727,7 +1727,7 @@ jobs:
         env:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
         run: |
-          uv run --no-sync ruff check --isolated --select E9 --target-version py310 .
+          uv run --no-sync ruff check --isolated --select E9 --target-version py311 .
           uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Verify the maintained changelog
         # --skip-tags: the monorepo's v* tags are the launcher's. Capture's
@@ -1828,7 +1828,7 @@ jobs:
         env:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
         run: |
-          uv run --no-sync ruff check --isolated --select E9 --target-version py310 .
+          uv run --no-sync ruff check --isolated --select E9 --target-version py311 .
           uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Changelog matches the version and the release workflow
         run: uv run --no-sync pytest tests/test_release_config.py -v
@@ -1916,7 +1916,7 @@ jobs:
         env:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
         run: |
-          uv run --no-sync ruff check --isolated --select E9 --target-version py310 .
+          uv run --no-sync ruff check --isolated --select E9 --target-version py311 .
           uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Build wheel and source distribution
         run: uv build
