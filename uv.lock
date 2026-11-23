@@ -3449,10 +3449,14 @@ viewer = [
 windows = [
     { name = "openadapt-flow", extra = ["windows"], marker = "python_full_version < '3.13'" },
 ]
+wrap = [
+    { name = "anthropic", marker = "python_full_version < '3.13'" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "a2a-sdk", extras = ["http-server"], marker = "python_full_version < '3.13' and extra == 'a2a'", specifier = ">=1.3.1,<2" },
+    { name = "anthropic", marker = "python_full_version < '3.13' and extra == 'wrap'", specifier = ">=0.40" },
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.2.0" },
     { name = "click", specifier = ">=8.0.0" },
     { name = "openadapt", extras = ["browser", "core", "grounding", "retrieval", "privacy", "flow", "windows", "rdp", "agent"], marker = "extra == 'all'" },
@@ -3481,7 +3485,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
     { name = "uvicorn", marker = "python_full_version < '3.13' and extra == 'a2a'", specifier = ">=0.29" },
 ]
-provides-extras = ["browser", "capture", "windows", "macos", "linux", "rdp", "ml", "evals", "viewer", "grounding", "retrieval", "privacy", "flow", "agent", "a2a", "core", "all", "dev"]
+provides-extras = ["wrap", "browser", "capture", "windows", "macos", "linux", "rdp", "ml", "evals", "viewer", "grounding", "retrieval", "privacy", "flow", "agent", "a2a", "core", "all", "dev"]
 
 [[package]]
 name = "openadapt-agent"
