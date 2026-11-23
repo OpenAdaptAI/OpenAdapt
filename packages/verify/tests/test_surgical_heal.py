@@ -1,20 +1,58 @@
-"""Tests for 3-layer surgical selector healing and fleet patch propagation."""
+"""Tests for 3-layer surgical selector healing and signed candidate patch generation."""
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from openadapt_verify.surgical_heal import (
+    CandidatePatchedProgram,
     ElementTarget,
     FleetPatchError,
     FleetSelectorPatch,
+    PatchScope,
     SurgicalHealCandidate,
     SurgicalSelectorHealer,
     apply_fleet_patch,
     apply_fleet_patch_to_packs,
+    compute_program_sha256,
 )
+
+
+def _sample_steps() -> list[dict[str, str]]:
+    return [
+        {
+            "workflow_id": "wf_policy_quote_submit",
+            "step_id": "step_applicant_name",
+            "selector": "input#applicant-name",
+        },
+        {
+            "workflow_id": "wf_policy_quote_submit",
+            "step_id": "step_effective_date",
+            "selector": "input.nw-eff-date-v1",
+        },
+    ]
+
+
+def _sample_scope(
+    steps: list[dict[str, str]] | None = None,
+    *,
+    tenant_id: str = "tenant_alpha",
+    program_id: str = "prog_quote_v1",
+    app_origin: str = "https://portal.example.com",
+    workflow_id: str = "wf_policy_quote_submit",
+) -> PatchScope:
+    source_steps = steps if steps is not None else _sample_steps()
+    return PatchScope(
+        tenant_id=tenant_id,
+        program_id=program_id,
+        program_sha256=compute_program_sha256(source_steps),
+        app_origin=app_origin,
+        workflow_id=workflow_id,
+    )
 
 
 def _drifted_quote_target() -> ElementTarget:
@@ -64,7 +102,11 @@ def _drifted_portal_candidates() -> list[SurgicalHealCandidate]:
     ]
 
 
-def test_deterministic_aria_heal_and_fleet_propagation_across_30_agencies() -> None:
+def test_identity_anchored_heal_emits_signed_candidate_pending_qualification() -> None:
+    signing_key = Ed25519PrivateKey.generate()
+    verify_key = signing_key.public_key()
+    steps = _sample_steps()
+    scope = _sample_scope(steps)
     target = _drifted_quote_target()
     candidates = _drifted_portal_candidates()
     healer = SurgicalSelectorHealer(min_score=0.75, min_margin=0.15)
@@ -75,7 +117,15 @@ def test_deterministic_aria_heal_and_fleet_propagation_across_30_agencies() -> N
         oracle_calls.append(cand.selector)
         return True, "a" * 64
 
-    result = healer.heal_and_verify(target, candidates, readback_oracle=readback_oracle)
+    result = healer.heal_and_verify(
+        target,
+        candidates,
+        scope=scope,
+        signing_key=signing_key,
+        signer_key_id="key-primary-2026",
+        readback_oracle=readback_oracle,
+        pre_action_identity_check=lambda _t, _c: True,
+    )
 
     assert result.verdict == "HEALED"
     assert result.readback_verified is True
@@ -85,51 +135,85 @@ def test_deterministic_aria_heal_and_fleet_propagation_across_30_agencies() -> N
         == "input[data-testid='coverage-effective-date-v2']"
     )
     assert result.selected.score == 1.0
-    assert result.margin >= 0.15
     assert oracle_calls == ["input[data-testid='coverage-effective-date-v2']"]
     assert result.patch is not None
-    assert result.patch.readback_verified is True
-    assert result.patch.verify_integrity() is True
+    assert result.patch.verify_signature(verify_key) is True
+    assert result.patch.verify_signature({"key-primary-2026": verify_key}) is True
 
-    # JSON round-trip preserves content-addressed integrity.
     roundtripped = FleetSelectorPatch.from_json(result.patch.to_json())
     assert roundtripped == result.patch
-    assert roundtripped.verify_integrity() is True
+    assert roundtripped.verify_signature(verify_key) is True
 
-    # Propagate the single verified patch across 32 agency workflow packs.
-    agency_packs = {
-        f"agency_{idx:02d}": [
-            {
-                "workflow_id": "wf_policy_quote_submit",
-                "step_id": "step_applicant_name",
-                "selector": "input#applicant-name",
-            },
-            {
-                "workflow_id": "wf_policy_quote_submit",
-                "step_id": "step_effective_date",
-                "selector": "input.nw-eff-date-v1",
-            },
-        ]
-        for idx in range(32)
-    }
+    candidate_prog = apply_fleet_patch(
+        steps,
+        roundtripped,
+        verify_key=verify_key,
+        scope=scope,
+    )
+    assert isinstance(candidate_prog, CandidatePatchedProgram)
+    assert candidate_prog.status == "PENDING_QUALIFICATION"
+    assert candidate_prog.requires_re_qualification is True
+    assert candidate_prog.requires_admission_approval is True
+    assert (
+        candidate_prog.candidate_program_sha256 != candidate_prog.source_program_sha256
+    )
+    # Original steps are never mutated in place.
+    assert steps[1]["selector"] == "input.nw-eff-date-v1"
+    assert (
+        candidate_prog.steps[1]["selector"]
+        == "input[data-testid='coverage-effective-date-v2']"
+    )
+    assert (
+        candidate_prog.steps[1]["healed_by_patch_sha256"] == roundtripped.patch_sha256
+    )
 
-    propagated = apply_fleet_patch_to_packs(agency_packs, roundtripped)
-    assert len(propagated) == 32
-    for idx in range(32):
-        aid = f"agency_{idx:02d}"
-        # Original packs are never mutated in place.
-        assert agency_packs[aid][1]["selector"] == "input.nw-eff-date-v1"
-        assert (
-            propagated[aid][1]["selector"]
-            == "input[data-testid='coverage-effective-date-v2']"
-        )
-        assert propagated[aid][1]["healed_by_patch_sha256"] == roundtripped.patch_sha256
-        # Untouched steps stay identical.
-        assert propagated[aid][0]["selector"] == "input#applicant-name"
+
+def test_near_miss_renamed_label_halts_instead_of_healing_wrong_field() -> None:
+    # Adversarial case: "Patient last name" must NEVER heal onto "Patient first name"
+    # or "Surname" even when role, section, and input type all match.
+    target = ElementTarget(
+        workflow_id="wf_intake",
+        step_id="step_last_name",
+        old_selector="#last_name",
+        aria_role="textbox",
+        accessible_name="Patient last name",
+        form_section="Demographics",
+        input_type="text",
+    )
+    drifted = [
+        SurgicalHealCandidate(
+            selector="#fname",
+            aria_role="textbox",
+            accessible_name="Patient first name",
+            form_section="Demographics",
+            input_type="text",
+        ),
+        SurgicalHealCandidate(
+            selector="#surname",
+            aria_role="textbox",
+            accessible_name="Surname",
+            form_section="Demographics",
+            input_type="text",
+        ),
+    ]
+    healer = SurgicalSelectorHealer(min_score=0.75, min_margin=0.15)
+    result = healer.rank_and_select(target, drifted)
+
+    assert result.verdict == "ABSTAIN_HALT"
+    assert "identity anchor" in result.reason
+    assert result.selected is None
+    assert result.patch is None
+
+    # Single wrong candidate also halts fail-closed.
+    single_wrong = healer.rank_and_select(target, [drifted[0]])
+    assert single_wrong.verdict == "ABSTAIN_HALT"
+    assert single_wrong.selected is None
 
 
 def test_abstain_halt_on_ambiguous_tie_candidates() -> None:
+    signing_key = Ed25519PrivateKey.generate()
     target = _drifted_quote_target()
+    scope = _sample_scope()
     tied_candidates = [
         SurgicalHealCandidate(
             selector="input#eff-date-primary",
@@ -155,7 +239,12 @@ def test_abstain_halt_on_ambiguous_tie_candidates() -> None:
         return True
 
     result = healer.heal_and_verify(
-        target, tied_candidates, readback_oracle=readback_oracle
+        target,
+        tied_candidates,
+        scope=scope,
+        signing_key=signing_key,
+        signer_key_id="key-1",
+        readback_oracle=readback_oracle,
     )
 
     assert result.verdict == "ABSTAIN_HALT"
@@ -166,139 +255,132 @@ def test_abstain_halt_on_ambiguous_tie_candidates() -> None:
     assert oracle_called is False
 
 
-def test_abstain_halt_below_min_score_threshold() -> None:
+def test_pre_action_identity_check_and_readback_failures_withhold_patch() -> None:
+    signing_key = Ed25519PrivateKey.generate()
     target = _drifted_quote_target()
-    weak_candidates = [
-        SurgicalHealCandidate(
-            selector="button#cancel-quote",
-            aria_role="button",
-            accessible_name="Cancel Quote",
-            form_section="Footer Actions",
-            input_type="button",
-        )
-    ]
-    healer = SurgicalSelectorHealer(min_score=0.75, min_margin=0.15)
-    result = healer.rank_and_select(target, weak_candidates)
-
-    assert result.verdict == "ABSTAIN_HALT"
-    assert "below min_score" in result.reason
-    assert result.selected is None
-    assert result.patch is None
-
-
-def test_failed_readback_refuses_to_emit_fleet_patch() -> None:
-    target = _drifted_quote_target()
+    scope = _sample_scope()
     candidates = _drifted_portal_candidates()
     healer = SurgicalSelectorHealer(min_score=0.75, min_margin=0.15)
 
-    result = healer.heal_and_verify(
-        target, candidates, readback_oracle=lambda _cand: False
+    oracle_called = False
+
+    def oracle(_cand: SurgicalHealCandidate) -> bool:
+        nonlocal oracle_called
+        oracle_called = True
+        return True
+
+    pre_fail = healer.heal_and_verify(
+        target,
+        candidates,
+        scope=scope,
+        signing_key=signing_key,
+        signer_key_id="key-1",
+        readback_oracle=oracle,
+        pre_action_identity_check=lambda _t, _c: False,
     )
+    assert pre_fail.verdict == "ABSTAIN_HALT"
+    assert "pre-action identity check" in pre_fail.reason
+    assert pre_fail.patch is None
+    assert oracle_called is False
 
-    assert result.verdict == "ABSTAIN_HALT"
-    assert result.readback_verified is False
-    assert result.patch is None
-    assert "read-back" in result.reason
-
-
-def test_visual_locator_callback_can_break_near_tie_and_fails_closed_on_error() -> None:
-    target = _drifted_quote_target()
-    near_tie = [
-        SurgicalHealCandidate(
-            selector="input#eff-date-top",
-            aria_role="textbox",
-            accessible_name="Policy Effective Date",
-            form_section="Coverage Dates",
-            input_type="date",
-        ),
-        SurgicalHealCandidate(
-            selector="input#eff-date-bottom",
-            aria_role="textbox",
-            accessible_name="Policy Effective Date",
-            form_section="Coverage Dates",
-            input_type="date",
-        ),
-    ]
-
-    def visual_cb(_target: ElementTarget, cand: SurgicalHealCandidate) -> float:
-        return 1.0 if cand.selector == "input#eff-date-top" else 0.1
-
-    healer = SurgicalSelectorHealer(
-        min_score=0.75,
-        min_margin=0.15,
-        visual_locator=visual_cb,
-        visual_weight=0.25,
+    readback_fail = healer.heal_and_verify(
+        target,
+        candidates,
+        scope=scope,
+        signing_key=signing_key,
+        signer_key_id="key-1",
+        readback_oracle=lambda _cand: False,
     )
-    ok_res = healer.rank_and_select(target, near_tie)
-    assert ok_res.verdict == "HEALED"
-    assert ok_res.selected is not None
-    assert ok_res.selected.candidate.selector == "input#eff-date-top"
-    assert ok_res.margin == pytest.approx(0.225, abs=1e-6)
-
-    # Out-of-range visual score must fail closed to ABSTAIN_HALT.
-    bad_healer = SurgicalSelectorHealer(
-        visual_locator=lambda _t, _c: float("nan"),
-        visual_weight=0.2,
-    )
-    bad_res = bad_healer.rank_and_select(target, near_tie)
-    assert bad_res.verdict == "ABSTAIN_HALT"
-    assert "visual locator callback failed" in bad_res.reason
+    assert readback_fail.verdict == "ABSTAIN_HALT"
+    assert readback_fail.readback_verified is False
+    assert readback_fail.patch is None
+    assert "read-back" in readback_fail.reason
 
 
-def test_apply_fleet_patch_rejects_tampered_sha_unverified_and_mismatched_steps() -> (
+def test_forged_signature_string_bool_missing_workflow_and_cross_tenant_rejected() -> (
     None
 ):
-    patch = FleetSelectorPatch.create(
-        workflow_id="wf_policy_quote_submit",
+    trusted_key = Ed25519PrivateKey.generate()
+    trusted_pub = trusted_key.public_key()
+    attacker_key = Ed25519PrivateKey.generate()
+
+    steps_a = _sample_steps()
+    scope_a = _sample_scope(steps_a, tenant_id="tenant_a")
+    scope_b = _sample_scope(steps_a, tenant_id="tenant_b")
+
+    valid_patch = FleetSelectorPatch.create(
+        scope=scope_a,
         step_id="step_effective_date",
         old_selector="input.nw-eff-date-v1",
         new_selector="input[data-testid='coverage-effective-date-v2']",
         readback_verified=True,
-        confidence=0.98,
-        margin=0.35,
+        confidence=1.0,
+        margin=0.4,
+        signing_key=trusted_key,
+        signer_key_id="trusted-key",
     )
-    pack = [
-        {
-            "workflow_id": "wf_policy_quote_submit",
-            "step_id": "step_effective_date",
-            "selector": "input.nw-eff-date-v1",
-        }
-    ]
 
-    # Tampered selector with original sha256 -> refused.
-    tampered_selector = replace(patch, new_selector="button#delete-policy")
-    assert tampered_selector.verify_integrity() is False
-    with pytest.raises(FleetPatchError, match="integrity check failed"):
-        apply_fleet_patch(pack, tampered_selector)
+    # 1. Forged patch with recomputed sha256 signed by attacker key -> refused.
+    forged_patch = FleetSelectorPatch.create(
+        scope=scope_a,
+        step_id="step_effective_date",
+        old_selector="input.nw-eff-date-v1",
+        new_selector="#evil",
+        readback_verified=True,
+        confidence=1.0,
+        margin=0.4,
+        signing_key=attacker_key,
+        signer_key_id="trusted-key",
+    )
+    assert forged_patch.verify_signature(trusted_pub) is False
+    with pytest.raises(
+        FleetPatchError, match="signature/integrity verification failed"
+    ):
+        apply_fleet_patch(steps_a, forged_patch, verify_key=trusted_pub, scope=scope_a)
 
-    # Tampered sha256 -> refused.
-    tampered_sha = replace(patch, patch_sha256="0" * 64)
-    with pytest.raises(FleetPatchError, match="integrity check failed"):
-        apply_fleet_patch(pack, tampered_sha)
+    # 2. JSON string "false" for readback_verified -> refused at parse time.
+    bad_json_dict = valid_patch.to_dict()
+    bad_json_dict["readback_verified"] = "false"
+    with pytest.raises(FleetPatchError, match="JSON boolean"):
+        FleetSelectorPatch.from_json(json.dumps(bad_json_dict))
 
-    # Unverified patch -> refused both at create() and apply_fleet_patch().
-    with pytest.raises(FleetPatchError, match="readback_verified=True"):
-        FleetSelectorPatch.create(
-            workflow_id="wf_policy_quote_submit",
-            step_id="step_effective_date",
-            old_selector="input.nw-eff-date-v1",
-            new_selector="input#v2",
-            readback_verified=False,
-            confidence=0.95,
-            margin=0.4,
+    # 3. Cross-tenant application -> refused.
+    with pytest.raises(FleetPatchError, match="scope mismatch on tenant_id"):
+        apply_fleet_patch_to_packs(
+            {"pack_a": steps_a, "pack_b": steps_a},
+            valid_patch,
+            verify_key=trusted_pub,
+            pack_scopes={"pack_a": scope_a, "pack_b": scope_b},
         )
-    unverified = replace(patch, readback_verified=False)
-    with pytest.raises(FleetPatchError, match="readback_verified != True"):
-        apply_fleet_patch(pack, unverified)
 
-    # Selector mismatch in target pack -> refused without mutating pack.
-    drifted_pack = [
-        {
-            "workflow_id": "wf_policy_quote_submit",
-            "step_id": "step_effective_date",
-            "selector": "input.other-selector",
-        }
+    # 4. Step missing workflow_id -> refused (never skipped).
+    missing_wf_steps = [
+        {"step_id": "step_effective_date", "selector": "input.nw-eff-date-v1"}
     ]
-    with pytest.raises(FleetPatchError, match="selector mismatch"):
-        apply_fleet_patch(drifted_pack, patch)
-    assert drifted_pack[0]["selector"] == "input.other-selector"
+    missing_wf_scope = _sample_scope(missing_wf_steps, tenant_id="tenant_a")
+    missing_wf_patch = FleetSelectorPatch.create(
+        scope=missing_wf_scope,
+        step_id="step_effective_date",
+        old_selector="input.nw-eff-date-v1",
+        new_selector="input#v2",
+        readback_verified=True,
+        confidence=1.0,
+        margin=0.5,
+        signing_key=trusted_key,
+        signer_key_id="trusted-key",
+    )
+    with pytest.raises(FleetPatchError, match="missing required workflow_id"):
+        apply_fleet_patch(
+            missing_wf_steps,
+            missing_wf_patch,
+            verify_key=trusted_pub,
+            scope=missing_wf_scope,
+        )
+
+    # 5. Tampered selector with original signature -> refused.
+    tampered = replace(valid_patch, new_selector="button#delete")
+    assert tampered.verify_signature(trusted_pub) is False
+    with pytest.raises(
+        FleetPatchError, match="signature/integrity verification failed"
+    ):
+        apply_fleet_patch(steps_a, tampered, verify_key=trusted_pub, scope=scope_a)

@@ -1,25 +1,30 @@
-"""3-layer surgical selector healing and read-back-gated fleet patch propagation.
+"""3-layer surgical selector healing and signed, tenant-scoped candidate patches.
 
 When a compiled workflow encounters a broken locator on a drifted UI, this
 module provides a deterministic, fail-closed alternative to falling back to a
 full multi-step agent loop:
 
-1. **Surgical 1-step ranking:** Rank visible, enabled DOM/ARIA candidates using
-   deterministic semantic signals (ARIA role, accessible name/label similarity,
-   form section proximity, input type match) plus an optional local
-   visual-locator score callback.
-2. **Fail-closed margin gate:** Accept a candidate only when
-   ``top_score >= min_score`` and ``top_score - second_score >= min_margin``;
-   otherwise return ``ABSTAIN_HALT`` so a person can intervene.
-3. **Post-heal read-back gate & fleet propagation:** Emit a content-addressed
-   :class:`FleetSelectorPatch` (with ``readback_verified=True`` and
-   ``patch_sha256``) only after an independent read-back oracle confirms the
-   healed step succeeded, and apply it atomically across compiled workflow
-   packs after verifying integrity.
+1. **Identity-preserving surgical ranking:** Rank visible, enabled DOM/ARIA
+   candidates using deterministic semantic signals. An accessible-name change,
+   ARIA-role mismatch, or input-type mismatch is treated as a **lost identity
+   anchor** (fail closed to ``ABSTAIN_HALT``) rather than fuzzy-matched onto a
+   near-miss sibling field.
+2. **Fail-closed score & margin gate:** Accept a candidate only when all
+   identity anchors hold, ``top_score >= min_score``, and
+   ``top_score - second_score >= min_margin``; otherwise return
+   ``ABSTAIN_HALT`` so an operator can intervene.
+3. **Ed25519-signed, tenant-scoped candidate patches:** Emit a signed
+   :class:`FleetSelectorPatch` (bound to ``tenant_id``, ``program_id``,
+   ``program_sha256``, ``app_origin``, and ``workflow_id``) only after an
+   independent read-back oracle confirms the healed step succeeded. Applying a
+   patch verifies the Ed25519 signature against a pinned public key and emits a
+   :class:`CandidatePatchedProgram` marked ``PENDING_QUALIFICATION`` so the
+   changed program must pass qualification and admission before running.
 """
 
 from __future__ import annotations
 
+import base64
 import copy
 import difflib
 import hashlib
@@ -30,11 +35,18 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, Mapping, Sequence
 
-FLEET_PATCH_SCHEMA_VERSION = "openadapt.fleet-selector-patch/v1"
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+    Ed25519PublicKey,
+)
+
+FLEET_PATCH_SCHEMA_VERSION = "openadapt.fleet-selector-patch/v2"
 
 HealVerdict = Literal["HEALED", "ABSTAIN_HALT"]
 
 VisualLocatorCallback = Callable[["ElementTarget", "SurgicalHealCandidate"], float]
+PreActionIdentityCheck = Callable[["ElementTarget", "SurgicalHealCandidate"], bool]
 ReadbackOracle = Callable[["SurgicalHealCandidate"], bool | tuple[bool, str]]
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -50,7 +62,7 @@ _SIGNAL_WEIGHTS: dict[str, float] = {
 
 
 class FleetPatchError(ValueError):
-    """Raised when a fleet selector patch fails integrity or applicability checks."""
+    """Raised when a fleet selector patch fails signature, scope, or step checks."""
 
 
 def _normalize_text(value: str) -> str:
@@ -71,14 +83,52 @@ def _text_similarity(expected: str, observed: str) -> float:
     return 0.5 * jaccard + 0.5 * seq_ratio
 
 
-def _canonical_patch_digest(payload: Mapping[str, Any]) -> str:
-    canonical = json.dumps(
+def _canonical_json_bytes(payload: Mapping[str, Any]) -> bytes:
+    return json.dumps(
         payload,
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=True,
     ).encode("utf-8")
+
+
+def _canonical_patch_digest(payload: Mapping[str, Any]) -> str:
+    return hashlib.sha256(_canonical_json_bytes(payload)).hexdigest()
+
+
+def compute_program_sha256(steps: Sequence[Mapping[str, Any]]) -> str:
+    """Compute a deterministic SHA-256 over a compiled program's step list."""
+    canonical = json.dumps(
+        [dict(step) for step in steps],
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("utf-8")
     return hashlib.sha256(canonical).hexdigest()
+
+
+@dataclass(frozen=True)
+class PatchScope:
+    """Tenant, program, and origin scope bound into a signed selector patch."""
+
+    tenant_id: str
+    program_id: str
+    program_sha256: str
+    app_origin: str
+    workflow_id: str
+
+    def validate(self) -> None:
+        for field_name, field_val in (
+            ("tenant_id", self.tenant_id),
+            ("program_id", self.program_id),
+            ("program_sha256", self.program_sha256),
+            ("app_origin", self.app_origin),
+            ("workflow_id", self.workflow_id),
+        ):
+            if not isinstance(field_val, str) or not field_val.strip():
+                raise FleetPatchError(
+                    f"PatchScope.{field_name} must be a non-empty string"
+                )
 
 
 @dataclass(frozen=True)
@@ -122,14 +172,20 @@ class ScoredCandidate:
 
 @dataclass(frozen=True)
 class FleetSelectorPatch:
-    """Content-addressed selector patch promoted only after read-back succeeds."""
+    """Ed25519-signed, tenant-scoped selector patch promoted after read-back."""
 
+    tenant_id: str
+    program_id: str
+    program_sha256: str
+    app_origin: str
     workflow_id: str
     step_id: str
     old_selector: str
     new_selector: str
     readback_verified: bool
     patch_sha256: str
+    signer_key_id: str
+    signature_b64: str
     confidence: float = 1.0
     margin: float = 1.0
     readback_evidence_sha256: str = ""
@@ -139,30 +195,41 @@ class FleetSelectorPatch:
     def create(
         cls,
         *,
-        workflow_id: str,
+        scope: PatchScope,
         step_id: str,
         old_selector: str,
         new_selector: str,
         readback_verified: bool,
         confidence: float,
         margin: float,
+        signing_key: Ed25519PrivateKey,
+        signer_key_id: str,
         readback_evidence_sha256: str = "",
     ) -> FleetSelectorPatch:
-        if readback_verified is not True:
+        if type(readback_verified) is not bool or readback_verified is not True:
             raise FleetPatchError(
                 "refusing to create FleetSelectorPatch without readback_verified=True"
             )
+        if not isinstance(scope, PatchScope):
+            raise FleetPatchError("scope must be a PatchScope instance")
+        scope.validate()
+        if not isinstance(signing_key, Ed25519PrivateKey):
+            raise FleetPatchError("signing_key must be an Ed25519PrivateKey")
         for field_name, field_val in (
-            ("workflow_id", workflow_id),
             ("step_id", step_id),
             ("old_selector", old_selector),
             ("new_selector", new_selector),
+            ("signer_key_id", signer_key_id),
         ):
             if not isinstance(field_val, str) or not field_val.strip():
                 raise FleetPatchError(f"{field_name} must be a non-empty string")
         payload = cls._digest_payload(
             schema_version=FLEET_PATCH_SCHEMA_VERSION,
-            workflow_id=workflow_id,
+            tenant_id=scope.tenant_id,
+            program_id=scope.program_id,
+            program_sha256=scope.program_sha256,
+            app_origin=scope.app_origin,
+            workflow_id=scope.workflow_id,
             step_id=step_id,
             old_selector=old_selector,
             new_selector=new_selector,
@@ -170,14 +237,24 @@ class FleetSelectorPatch:
             confidence=round(float(confidence), 6),
             margin=round(float(margin), 6),
             readback_evidence_sha256=readback_evidence_sha256,
+            signer_key_id=signer_key_id,
         )
+        canonical_bytes = _canonical_json_bytes(payload)
+        sig_bytes = signing_key.sign(canonical_bytes)
+        sig_b64 = base64.b64encode(sig_bytes).decode("ascii")
         return cls(
-            workflow_id=workflow_id,
+            tenant_id=scope.tenant_id,
+            program_id=scope.program_id,
+            program_sha256=scope.program_sha256,
+            app_origin=scope.app_origin,
+            workflow_id=scope.workflow_id,
             step_id=step_id,
             old_selector=old_selector,
             new_selector=new_selector,
             readback_verified=True,
-            patch_sha256=_canonical_patch_digest(payload),
+            patch_sha256=hashlib.sha256(canonical_bytes).hexdigest(),
+            signer_key_id=signer_key_id,
+            signature_b64=sig_b64,
             confidence=round(float(confidence), 6),
             margin=round(float(margin), 6),
             readback_evidence_sha256=readback_evidence_sha256,
@@ -188,6 +265,10 @@ class FleetSelectorPatch:
     def _digest_payload(
         *,
         schema_version: str,
+        tenant_id: str,
+        program_id: str,
+        program_sha256: str,
+        app_origin: str,
         workflow_id: str,
         step_id: str,
         old_selector: str,
@@ -196,9 +277,14 @@ class FleetSelectorPatch:
         confidence: float,
         margin: float,
         readback_evidence_sha256: str,
+        signer_key_id: str,
     ) -> dict[str, Any]:
         return {
             "schema_version": schema_version,
+            "tenant_id": tenant_id,
+            "program_id": program_id,
+            "program_sha256": program_sha256,
+            "app_origin": app_origin,
             "workflow_id": workflow_id,
             "step_id": step_id,
             "old_selector": old_selector,
@@ -207,27 +293,52 @@ class FleetSelectorPatch:
             "confidence": confidence,
             "margin": margin,
             "readback_evidence_sha256": readback_evidence_sha256,
+            "signer_key_id": signer_key_id,
         }
 
-    def verify_integrity(self) -> bool:
-        """Verify schema, readback flag, non-empty fields, and SHA-256 digest."""
+    def verify_signature(
+        self,
+        verify_key: Ed25519PublicKey | Mapping[str, Ed25519PublicKey],
+    ) -> bool:
+        """Verify schema, strict bool flag, scope fields, digest, and Ed25519 signature."""
         if self.schema_version != FLEET_PATCH_SCHEMA_VERSION:
             return False
-        if self.readback_verified is not True:
-            return False
-        if not all(
-            isinstance(v, str) and bool(v.strip())
-            for v in (
-                self.workflow_id,
-                self.step_id,
-                self.old_selector,
-                self.new_selector,
-                self.patch_sha256,
-            )
+        if (
+            type(self.readback_verified) is not bool
+            or self.readback_verified is not True
         ):
             return False
+        required_strings = (
+            self.tenant_id,
+            self.program_id,
+            self.program_sha256,
+            self.app_origin,
+            self.workflow_id,
+            self.step_id,
+            self.old_selector,
+            self.new_selector,
+            self.patch_sha256,
+            self.signer_key_id,
+            self.signature_b64,
+        )
+        if not all(isinstance(v, str) and bool(v.strip()) for v in required_strings):
+            return False
+
+        if isinstance(verify_key, Mapping):
+            pubkey = verify_key.get(self.signer_key_id)
+            if not isinstance(pubkey, Ed25519PublicKey):
+                return False
+        elif isinstance(verify_key, Ed25519PublicKey):
+            pubkey = verify_key
+        else:
+            return False
+
         payload = self._digest_payload(
             schema_version=self.schema_version,
+            tenant_id=self.tenant_id,
+            program_id=self.program_id,
+            program_sha256=self.program_sha256,
+            app_origin=self.app_origin,
             workflow_id=self.workflow_id,
             step_id=self.step_id,
             old_selector=self.old_selector,
@@ -236,13 +347,28 @@ class FleetSelectorPatch:
             confidence=self.confidence,
             margin=self.margin,
             readback_evidence_sha256=self.readback_evidence_sha256,
+            signer_key_id=self.signer_key_id,
         )
-        expected = _canonical_patch_digest(payload)
-        return hmac.compare_digest(self.patch_sha256, expected)
+        canonical_bytes = _canonical_json_bytes(payload)
+        expected_sha = hashlib.sha256(canonical_bytes).hexdigest()
+        if not hmac.compare_digest(self.patch_sha256, expected_sha):
+            return False
+        try:
+            sig_bytes = base64.b64decode(
+                self.signature_b64.encode("ascii"), validate=True
+            )
+            pubkey.verify(sig_bytes, canonical_bytes)
+        except (ValueError, InvalidSignature):
+            return False
+        return True
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,
+            "tenant_id": self.tenant_id,
+            "program_id": self.program_id,
+            "program_sha256": self.program_sha256,
+            "app_origin": self.app_origin,
             "workflow_id": self.workflow_id,
             "step_id": self.step_id,
             "old_selector": self.old_selector,
@@ -251,6 +377,8 @@ class FleetSelectorPatch:
             "confidence": self.confidence,
             "margin": self.margin,
             "readback_evidence_sha256": self.readback_evidence_sha256,
+            "signer_key_id": self.signer_key_id,
+            "signature_b64": self.signature_b64,
             "patch_sha256": self.patch_sha256,
         }
 
@@ -260,18 +388,31 @@ class FleetSelectorPatch:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> FleetSelectorPatch:
         try:
+            raw_verified = data["readback_verified"]
+            if type(raw_verified) is not bool:
+                raise FleetPatchError(
+                    f"readback_verified must be a JSON boolean, got {type(raw_verified).__name__}"
+                )
             return cls(
                 schema_version=str(data["schema_version"]),
+                tenant_id=str(data["tenant_id"]),
+                program_id=str(data["program_id"]),
+                program_sha256=str(data["program_sha256"]),
+                app_origin=str(data["app_origin"]),
                 workflow_id=str(data["workflow_id"]),
                 step_id=str(data["step_id"]),
                 old_selector=str(data["old_selector"]),
                 new_selector=str(data["new_selector"]),
-                readback_verified=bool(data["readback_verified"]),
+                readback_verified=raw_verified,
                 patch_sha256=str(data["patch_sha256"]),
+                signer_key_id=str(data["signer_key_id"]),
+                signature_b64=str(data["signature_b64"]),
                 confidence=float(data.get("confidence", 1.0)),
                 margin=float(data.get("margin", 1.0)),
                 readback_evidence_sha256=str(data.get("readback_evidence_sha256", "")),
             )
+        except FleetPatchError:
+            raise
         except (KeyError, TypeError, ValueError) as exc:
             raise FleetPatchError(f"invalid FleetSelectorPatch payload: {exc}") from exc
 
@@ -284,6 +425,29 @@ class FleetSelectorPatch:
         if not isinstance(parsed, dict):
             raise FleetPatchError("FleetSelectorPatch JSON must be an object")
         return cls.from_dict(parsed)
+
+
+@dataclass(frozen=True)
+class CandidatePatchedProgram:
+    """Candidate program produced by applying a signed selector patch.
+
+    A patched program is never runnable directly: it carries
+    ``status="PENDING_QUALIFICATION"``, ``requires_re_qualification=True``,
+    ``requires_admission_approval=True``, and a new ``candidate_program_sha256``
+    distinct from ``source_program_sha256`` so it must pass qualification and
+    admission before execution.
+    """
+
+    tenant_id: str
+    program_id: str
+    app_origin: str
+    source_program_sha256: str
+    candidate_program_sha256: str
+    applied_patch_sha256: str
+    steps: tuple[dict[str, Any], ...]
+    status: Literal["PENDING_QUALIFICATION"] = "PENDING_QUALIFICATION"
+    requires_re_qualification: bool = True
+    requires_admission_approval: bool = True
 
 
 @dataclass(frozen=True)
@@ -300,7 +464,7 @@ class SurgicalHealResult:
 
 
 class SurgicalSelectorHealer:
-    """Deterministic semantic ranker with fail-closed margin and read-back gates."""
+    """Identity-preserving deterministic ranker with fail-closed margin and read-back gates."""
 
     def __init__(
         self,
@@ -320,6 +484,43 @@ class SurgicalSelectorHealer:
         self.min_margin = float(min_margin)
         self.visual_locator = visual_locator
         self.visual_weight = float(visual_weight)
+
+    @staticmethod
+    def _matches_identity_anchors(
+        target: ElementTarget,
+        candidate: SurgicalHealCandidate,
+    ) -> tuple[bool, str]:
+        """Enforce hard identity anchors so renamed/sibling fields never fuzzy-heal."""
+        if target.accessible_name.strip():
+            if _normalize_text(target.accessible_name) != _normalize_text(
+                candidate.accessible_name
+            ):
+                return (
+                    False,
+                    "lost accessible_name identity anchor: "
+                    f"expected {target.accessible_name!r}, observed {candidate.accessible_name!r}",
+                )
+        if target.aria_role.strip():
+            if (
+                target.aria_role.strip().casefold()
+                != candidate.aria_role.strip().casefold()
+            ):
+                return (
+                    False,
+                    "lost aria_role identity anchor: "
+                    f"expected {target.aria_role!r}, observed {candidate.aria_role!r}",
+                )
+        if target.input_type.strip():
+            if (
+                target.input_type.strip().casefold()
+                != candidate.input_type.strip().casefold()
+            ):
+                return (
+                    False,
+                    "lost input_type identity anchor: "
+                    f"expected {target.input_type!r}, observed {candidate.input_type!r}",
+                )
+        return True, ""
 
     def _score_candidate(
         self,
@@ -395,20 +596,11 @@ class SurgicalSelectorHealer:
         target: ElementTarget,
         candidates: Sequence[SurgicalHealCandidate],
     ) -> SurgicalHealResult:
-        """Rank candidates and apply the fail-closed confidence margin gate."""
-        has_semantic_anchor = any(
-            v.strip()
-            for v in (
-                target.aria_role,
-                target.accessible_name,
-                target.form_section,
-                target.input_type,
-            )
-        )
-        if not has_semantic_anchor:
+        """Rank candidates with hard identity-anchor and confidence margin gates."""
+        if not target.accessible_name.strip():
             return SurgicalHealResult(
                 verdict="ABSTAIN_HALT",
-                reason="target has no semantic anchors for deterministic healing",
+                reason="target has no accessible_name identity anchor for deterministic healing",
                 selected=None,
                 ranked=(),
                 margin=0.0,
@@ -431,8 +623,31 @@ class SurgicalSelectorHealer:
                 margin=0.0,
             )
 
-        scored: list[ScoredCandidate] = []
+        identity_matched: list[SurgicalHealCandidate] = []
+        rejection_reasons: list[str] = []
         for candidate in eligible:
+            ok, reason = self._matches_identity_anchors(target, candidate)
+            if ok:
+                identity_matched.append(candidate)
+            else:
+                rejection_reasons.append(reason)
+
+        if not identity_matched:
+            detail = (
+                rejection_reasons[0]
+                if rejection_reasons
+                else "no candidate matched identity anchors"
+            )
+            return SurgicalHealResult(
+                verdict="ABSTAIN_HALT",
+                reason=f"identity anchor check failed ({detail})",
+                selected=None,
+                ranked=(),
+                margin=0.0,
+            )
+
+        scored: list[ScoredCandidate] = []
+        for candidate in identity_matched:
             try:
                 scored.append(self._score_candidate(target, candidate))
             except Exception as exc:  # noqa: BLE001 - fail closed on callback errors
@@ -462,7 +677,7 @@ class SurgicalSelectorHealer:
                 margin=margin,
             )
 
-        if margin < self.min_margin:
+        if len(ranked) > 1 and margin < self.min_margin:
             return SurgicalHealResult(
                 verdict="ABSTAIN_HALT",
                 reason=(
@@ -476,7 +691,7 @@ class SurgicalSelectorHealer:
 
         return SurgicalHealResult(
             verdict="HEALED",
-            reason="selected unique candidate above score and margin thresholds",
+            reason="selected unique identity-anchored candidate above score and margin thresholds",
             selected=top,
             ranked=ranked,
             margin=margin,
@@ -487,12 +702,55 @@ class SurgicalSelectorHealer:
         target: ElementTarget,
         candidates: Sequence[SurgicalHealCandidate],
         *,
+        scope: PatchScope,
+        signing_key: Ed25519PrivateKey,
+        signer_key_id: str,
         readback_oracle: ReadbackOracle,
+        pre_action_identity_check: PreActionIdentityCheck | None = None,
     ) -> SurgicalHealResult:
-        """Select a candidate, verify via independent read-back, then emit a patch."""
+        """Select an identity-anchored candidate, run pre-action & read-back checks, then sign a patch."""
+        scope.validate()
+        if scope.workflow_id != target.workflow_id:
+            return SurgicalHealResult(
+                verdict="ABSTAIN_HALT",
+                reason=(
+                    f"scope workflow_id {scope.workflow_id!r} does not match "
+                    f"target workflow_id {target.workflow_id!r}"
+                ),
+                selected=None,
+                ranked=(),
+                margin=0.0,
+            )
+
         selection = self.rank_and_select(target, candidates)
         if selection.verdict != "HEALED" or selection.selected is None:
             return selection
+
+        if pre_action_identity_check is not None:
+            try:
+                identity_ok = bool(
+                    pre_action_identity_check(target, selection.selected.candidate)
+                )
+            except Exception as exc:  # noqa: BLE001 - fail closed
+                return SurgicalHealResult(
+                    verdict="ABSTAIN_HALT",
+                    reason=f"pre-action identity check raised {type(exc).__name__}",
+                    selected=selection.selected,
+                    ranked=selection.ranked,
+                    margin=selection.margin,
+                    readback_verified=False,
+                    patch=None,
+                )
+            if not identity_ok:
+                return SurgicalHealResult(
+                    verdict="ABSTAIN_HALT",
+                    reason="pre-action identity check rejected candidate before acting",
+                    selected=selection.selected,
+                    ranked=selection.ranked,
+                    margin=selection.margin,
+                    readback_verified=False,
+                    patch=None,
+                )
 
         evidence_sha256 = ""
         try:
@@ -525,18 +783,20 @@ class SurgicalSelectorHealer:
             )
 
         patch = FleetSelectorPatch.create(
-            workflow_id=target.workflow_id,
+            scope=scope,
             step_id=target.step_id,
             old_selector=target.old_selector,
             new_selector=selection.selected.candidate.selector,
             readback_verified=True,
             confidence=selection.selected.score,
             margin=selection.margin,
+            signing_key=signing_key,
+            signer_key_id=signer_key_id,
             readback_evidence_sha256=evidence_sha256,
         )
         return SurgicalHealResult(
             verdict="HEALED",
-            reason="healed selector confirmed by independent read-back",
+            reason="healed selector confirmed by independent read-back and signed",
             selected=selection.selected,
             ranked=selection.ranked,
             margin=selection.margin,
@@ -548,21 +808,49 @@ class SurgicalSelectorHealer:
 def apply_fleet_patch(
     pack_steps: Sequence[Mapping[str, Any]],
     patch: FleetSelectorPatch,
-) -> list[dict[str, Any]]:
-    """Atomically apply a verified FleetSelectorPatch to a compiled workflow pack.
+    *,
+    verify_key: Ed25519PublicKey | Mapping[str, Ed25519PublicKey],
+    scope: PatchScope,
+) -> CandidatePatchedProgram:
+    """Verify a signed, tenant-scoped patch and produce a candidate program pending qualification.
 
     Does not mutate ``pack_steps``. Raises :class:`FleetPatchError` if the
-    patch is unverified, tampered, missing its target step, or if the target
-    step's current selector does not match ``patch.old_selector``.
+    patch fails Ed25519 verification, scope matching (tenant, program, digest,
+    origin, workflow), or target step selector matching.
     """
     if not isinstance(patch, FleetSelectorPatch):
         raise FleetPatchError("patch must be a FleetSelectorPatch instance")
-    if patch.readback_verified is not True:
+    if not isinstance(scope, PatchScope):
+        raise FleetPatchError("scope must be a PatchScope instance")
+    scope.validate()
+    if type(patch.readback_verified) is not bool or patch.readback_verified is not True:
         raise FleetPatchError(
             "refusing to apply FleetSelectorPatch with readback_verified != True"
         )
-    if not patch.verify_integrity():
-        raise FleetPatchError("FleetSelectorPatch integrity check failed (bad sha256)")
+    if not patch.verify_signature(verify_key):
+        raise FleetPatchError(
+            "FleetSelectorPatch signature/integrity verification failed"
+        )
+
+    actual_program_sha256 = compute_program_sha256(pack_steps)
+    if not hmac.compare_digest(actual_program_sha256, scope.program_sha256):
+        raise FleetPatchError(
+            f"pack program_sha256 mismatch: expected {scope.program_sha256!r}, "
+            f"computed {actual_program_sha256!r}"
+        )
+
+    for field_name, patch_val, scope_val in (
+        ("tenant_id", patch.tenant_id, scope.tenant_id),
+        ("program_id", patch.program_id, scope.program_id),
+        ("program_sha256", patch.program_sha256, scope.program_sha256),
+        ("app_origin", patch.app_origin, scope.app_origin),
+        ("workflow_id", patch.workflow_id, scope.workflow_id),
+    ):
+        if not hmac.compare_digest(patch_val, scope_val):
+            raise FleetPatchError(
+                f"patch scope mismatch on {field_name}: patch has {patch_val!r}, "
+                f"target pack has {scope_val!r}"
+            )
 
     updated = [copy.deepcopy(dict(step)) for step in pack_steps]
     matches = [
@@ -577,7 +865,11 @@ def apply_fleet_patch(
 
     target_step = updated[matches[0]]
     step_workflow_id = target_step.get("workflow_id")
-    if step_workflow_id is not None and step_workflow_id != patch.workflow_id:
+    if not isinstance(step_workflow_id, str) or not step_workflow_id.strip():
+        raise FleetPatchError(
+            f"step {patch.step_id!r} is missing required workflow_id; refusing to patch"
+        )
+    if step_workflow_id != patch.workflow_id:
         raise FleetPatchError(
             f"workflow_id mismatch: step has {step_workflow_id!r}, "
             f"patch targets {patch.workflow_id!r}"
@@ -592,26 +884,52 @@ def apply_fleet_patch(
 
     target_step["selector"] = patch.new_selector
     target_step["healed_by_patch_sha256"] = patch.patch_sha256
-    return updated
+    candidate_sha = compute_program_sha256(updated)
+    return CandidatePatchedProgram(
+        tenant_id=scope.tenant_id,
+        program_id=scope.program_id,
+        app_origin=scope.app_origin,
+        source_program_sha256=actual_program_sha256,
+        candidate_program_sha256=candidate_sha,
+        applied_patch_sha256=patch.patch_sha256,
+        steps=tuple(updated),
+        status="PENDING_QUALIFICATION",
+        requires_re_qualification=True,
+        requires_admission_approval=True,
+    )
 
 
 def apply_fleet_patch_to_packs(
     packs: Mapping[str, Sequence[Mapping[str, Any]]],
     patch: FleetSelectorPatch,
-) -> dict[str, list[dict[str, Any]]]:
-    """Atomically propagate a verified FleetSelectorPatch across all agency packs."""
-    propagated: dict[str, list[dict[str, Any]]] = {}
-    for agency_id, steps in packs.items():
-        propagated[agency_id] = apply_fleet_patch(steps, patch)
+    *,
+    verify_key: Ed25519PublicKey | Mapping[str, Ed25519PublicKey],
+    pack_scopes: Mapping[str, PatchScope],
+) -> dict[str, CandidatePatchedProgram]:
+    """Produce candidate patched programs only for packs matching the signed patch's scope."""
+    propagated: dict[str, CandidatePatchedProgram] = {}
+    for pack_name, steps in packs.items():
+        scope = pack_scopes.get(pack_name)
+        if scope is None:
+            raise FleetPatchError(f"missing PatchScope for pack {pack_name!r}")
+        propagated[pack_name] = apply_fleet_patch(
+            steps,
+            patch,
+            verify_key=verify_key,
+            scope=scope,
+        )
     return propagated
 
 
 __all__ = [
     "FLEET_PATCH_SCHEMA_VERSION",
+    "CandidatePatchedProgram",
     "ElementTarget",
     "FleetPatchError",
     "FleetSelectorPatch",
     "HealVerdict",
+    "PatchScope",
+    "PreActionIdentityCheck",
     "ReadbackOracle",
     "ScoredCandidate",
     "SurgicalHealCandidate",
@@ -620,4 +938,5 @@ __all__ = [
     "VisualLocatorCallback",
     "apply_fleet_patch",
     "apply_fleet_patch_to_packs",
+    "compute_program_sha256",
 ]
