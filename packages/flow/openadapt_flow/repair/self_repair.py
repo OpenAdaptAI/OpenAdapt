@@ -1363,6 +1363,7 @@ class SelfRepair:
         patched.steps = steps
         bundle_out = attempt_dir / "bundle"
         from openadapt_flow.bundle_persistence import (
+            copy_bundle_files,
             copy_genesis_template_inputs,
             prepare_derived_assets,
             validate_derived_asset_paths,
@@ -1394,10 +1395,10 @@ class SelfRepair:
         )
         if bundle_out.exists():
             shutil.rmtree(bundle_out)
-        shutil.copytree(
-            bundle_dir,
-            bundle_out,
-            ignore=shutil.ignore_patterns("repair", "manifest.json", "templates"),
+        # A sealed source makes a sealed patched bundle (a nested set in the
+        # run), never a partial copy of the source's index.
+        copy_bundle_files(
+            bundle_dir, bundle_out, ignore=("repair", "manifest.json", "templates")
         )
         copy_genesis_template_inputs(patched, bundle_dir, bundle_out)
         patched.save(bundle_out, encrypt=bool(workflow.encrypted))

@@ -16,6 +16,8 @@ from types import SimpleNamespace
 import pytest
 
 from openadapt_flow import at_rest, crypto, sealed_set
+from openadapt_flow.bundle_persistence import copy_bundle_files
+from openadapt_flow.ir import Workflow
 from openadapt_flow.repair.self_repair import _before_frame
 from openadapt_flow.runtime.heal import (
     has_heal_frame,
@@ -23,7 +25,13 @@ from openadapt_flow.runtime.heal import (
     read_heal_frame,
     write_heal_frame,
 )
-from tests.test_sealed_at_rest import PNG_SIGNATURE, _assert_ciphertext_only, _png
+from tests.test_sealed_at_rest import (
+    KEY,
+    PNG_SIGNATURE,
+    _assert_ciphertext_only,
+    _png,
+    sealed_pair,  # noqa: F401 - the shared sealed-bundle fixture
+)
 
 
 @pytest.fixture
@@ -91,3 +99,41 @@ def test_the_halted_frame_is_read_through_the_sealed_run(sealed_run: Path) -> No
     assert _before_frame(sealed_run, halted) == frame
     missing = SimpleNamespace(before_png="steps/step_009_before.png")
     assert _before_frame(sealed_run, missing) is None
+
+
+def test_a_patched_copy_of_a_sealed_bundle_is_a_sealed_set_that_opens(
+    sealed_pair: tuple[Path, Path],  # noqa: F811 - the shared fixture
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Self-repair copies the bundle without its templates and manifest and
+    then saves the patch into the copy. A file copy of a sealed set that
+    leaves files out no longer matches its index, and the save refused it."""
+    source, _ = sealed_pair
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    workflow = Workflow.load(source)
+    out = tmp_path / "patched"
+    copy_bundle_files(source, out, ignore=("repair", "manifest.json", "templates"))
+    copied = sealed_set.open_set(out).files()
+    assert copied
+    assert not [r for r in copied if r == "manifest.json" or r.startswith("templates/")]
+    _assert_ciphertext_only(out)
+
+    patched = workflow.model_copy(deep=True)
+    patched.name = "patched-copy"
+    patched.save(out, encrypt=True)
+    sealed_set.open_set(out).verify_all()
+    _assert_ciphertext_only(out)
+    assert _plaintext_pngs(out) == []
+    assert Workflow.load(out).name == "patched-copy"
+
+
+def test_a_plain_bundle_copy_is_a_plain_file_copy(tmp_path: Path) -> None:
+    source = tmp_path / "plain"
+    (source / "templates").mkdir(parents=True)
+    (source / "workflow.json").write_text("{}")
+    (source / "manifest.json").write_text("{}")
+    (source / "templates" / "a.png").write_bytes(_png())
+    out = tmp_path / "copy"
+    copy_bundle_files(source, out, ignore=("manifest.json", "templates"))
+    assert sorted(p.name for p in out.rglob("*")) == ["workflow.json"]
