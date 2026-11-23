@@ -75,7 +75,7 @@ def check(dist: Path, root: Path) -> dict:
             if requirement.marker is None
         }
         assert base["openadapt-flow"].extras == {"receipts"}
-        assert base["openadapt-flow"].specifier == SpecifierSet(">=3.0.0,<4")
+        assert base["openadapt-flow"].specifier == SpecifierSet(">=3.0.0,<5")
         assert base["cryptography"].specifier == SpecifierSet(">=50.0.0")
         # Flow 3's base install has no vision stack; nothing here adds one.
         assert set(base) == {"openadapt-flow", "cryptography"}, set(base)

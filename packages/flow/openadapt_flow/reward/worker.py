@@ -140,7 +140,8 @@ def judge_episode(
     * signal ``halted_before_effect`` / ``refused`` / ``rejected_policy``:
       no required effect present -> that outcome; every required effect
       CONFIRMED -> ``ESCALATED_AFTER_EFFECT``, the contract's partial credit
-      (default 0.5), because the work is done and the policy asked a person
+      (0 unless the contract declares it; the synthetic bundle declares
+      0.5), because the work is done and the policy asked a person
       instead of declaring it; any other required effect present (a
       duplicate or wrong write, say) -> ``RECONCILIATION_REQUIRED`` with
       ``effect_uncertain``, since the runtime and the store disagree and a

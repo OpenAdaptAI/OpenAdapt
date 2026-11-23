@@ -66,6 +66,7 @@
         "openadapt_flow.deployment",
         "openadapt_flow.form_tx.receipt",
         "openadapt_flow.key_rotation",
+        "openadapt_flow.local_state_sources",
         "openadapt_flow.offline_seal",
         "openadapt_flow.policy",
         "openadapt_flow.production_qualification",
