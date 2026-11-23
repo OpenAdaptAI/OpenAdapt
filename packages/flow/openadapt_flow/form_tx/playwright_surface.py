@@ -1050,6 +1050,20 @@ _EXTRACT_PORTAL_OPTIONS_JS = r"""
 """
 
 
+# Browser error texts for a request the client itself cancelled (Chromium,
+# Firefox, WebKit), as opposed to a network or server failure.
+_CLIENT_ABORT_MARKERS = ("err_aborted", "ns_binding_aborted", "cancelled")
+
+
+def _is_client_abort(request: Any) -> bool:
+    try:
+        failure = request.failure
+    except Exception:
+        return False
+    text = str(failure or "").casefold()
+    return any(marker in text for marker in _CLIENT_ABORT_MARKERS)
+
+
 class PlaywrightFormSurface:
     """Playwright-backed ``FormSurfaceBackend`` with DOM/network quiescence barriers."""
 
@@ -1075,6 +1089,12 @@ class PlaywrightFormSurface:
         self._pending_mutation_seqs: dict[int, tuple[int, bool, str]] = {}
         self._confirmed_page_mutation_seqs: dict[int, str] = {}
         self._failed_page_mutation_seqs: set[int] = set()
+        # Requests whose status and headers arrived. The answer is the status:
+        # a body cut off afterwards (the page navigated away) does not undo it.
+        # Keyed by the request's sequence number (never by object id, which
+        # can be reused), and cleared with the counter.
+        self._answered_mutation_seqs: set[int] = set()
+        self._body_cut_off_mutation_seqs: set[int] = set()
         self._total_mutation_count = 0
         self._all_time_raw_mutations = 0
         self._inflight_mutation_ids: set[int] = set()
@@ -1153,6 +1173,8 @@ class PlaywrightFormSurface:
         self._pending_mutation_seqs.clear()
         self._confirmed_page_mutation_seqs.clear()
         self._failed_page_mutation_seqs.clear()
+        self._answered_mutation_seqs.clear()
+        self._body_cut_off_mutation_seqs.clear()
         self._total_mutation_count = 0
 
     def _detach(self) -> None:
@@ -1219,10 +1241,19 @@ class PlaywrightFormSurface:
     def _on_request_failed(self, request: Any) -> None:
         self._inflight_mutation_ids.discard(id(request))
         entry = self._pending_mutation_seqs.pop(id(request), None)
-        if entry is not None:
-            seq, is_own_page, _path = entry
-            if is_own_page:
-                self._failed_page_mutation_seqs.add(seq)
+        if entry is None:
+            return
+        seq, is_own_page, _path = entry
+        if seq in self._answered_mutation_seqs and _is_client_abort(request):
+            # The server already answered with a status, which _on_response
+            # judged; the client then dropped the reply body (typically the
+            # page navigated away before reading it). No save decision reads
+            # the body, so this neither confirms nor fails anything further.
+            self._body_cut_off_mutation_seqs.add(seq)
+            return
+        if is_own_page:
+            # No status arrived, or the connection broke for another reason.
+            self._failed_page_mutation_seqs.add(seq)
 
     def _on_response(self, response: Any) -> None:
         """Count state-changing requests started on this surface that succeeded."""
@@ -1237,6 +1268,7 @@ class PlaywrightFormSurface:
         if entry is None:
             return
         seq, is_own_page, req_path = entry
+        self._answered_mutation_seqs.add(seq)
         if 200 <= status < 400:
             self._confirmed_mutation_count += 1
             if is_own_page:

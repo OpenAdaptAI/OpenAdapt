@@ -13,6 +13,8 @@ _EDITABLE_VALUE_JS = r"""(el) => {
 # placeholder, name attribute, title. Whitespace-collapsed; null when the
 # element is not an editable field or carries no label evidence. PASSIVE
 # record-time metadata only (see openadapt_flow.backend.FieldLabelBackend).
+#: The kinds ``_FIELD_CREDENTIAL_JS`` reports for a credential field.
+_CREDENTIAL_KINDS = ("password", "new-password", "username", "one-time-code")
 #: Whether the focused element takes a sign-in credential. See
 #: :meth:`PlaywrightBackend.focused_field_credential` for the rules.
 _FIELD_CREDENTIAL_JS = r"""(el) => {
@@ -34,6 +36,9 @@ _FIELD_CREDENTIAL_JS = r"""(el) => {
         (i.getAttribute('autocomplete') || '').toLowerCase().split(/\s+/);
     const secret = (i) => kind(i) === 'password' ||
         tokens(i).some((t) => t === 'current-password' || t === 'new-password');
+    // A sign-in's second factor (SMS, email or authenticator code), named
+    // the standard way. Its value comes from a person at run time.
+    if (tokens(el).includes('one-time-code')) return 'one-time-code';
     if (secret(el)) {
         return tokens(el).includes('new-password') ? 'new-password' : 'password';
     }
