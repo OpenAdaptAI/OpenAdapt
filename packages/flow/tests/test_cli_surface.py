@@ -59,6 +59,12 @@ def _type_name(kind: Any) -> str | None:
     return getattr(kind, "__qualname__", None) or type(kind).__name__
 
 
+def _scrub_home(text: str | None) -> str | None:
+    if text is None:
+        return None
+    return text.replace(str(Path.home()), "<HOME>")
+
+
 def _arguments(parser: argparse.ArgumentParser) -> list[dict[str, Any]]:
     rows = []
     for action in parser._actions:
@@ -78,7 +84,7 @@ def _arguments(parser: argparse.ArgumentParser) -> list[dict[str, Any]]:
                 else list(action.metavar),
                 "type": _type_name(action.type),
                 "default": _default(action.default),
-                "help": action.help,
+                "help": _scrub_home(action.help),
             }
         )
     return rows
@@ -112,7 +118,7 @@ def _walk(
         "commands": commands,
         "exclusive": exclusive,
     }
-    helps[path] = parser.format_help()
+    helps[path] = _scrub_home(parser.format_help()) or ""
     for name, sub in children:
         _walk(sub, f"{path} {name}", out, helps)
 
@@ -198,3 +204,22 @@ def test_walker_sees_nested_commands_and_aliases() -> None:
     assert deep["options"] == ["--n"] and deep["choices"] == ["1", "2"]
     assert deep["type"] == "int"
     assert tree["x"]["arguments"][-1]["default"] == 3
+
+
+def test_help_does_not_depend_on_home(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A long HOME (as other tests set) must not change any scrubbed help.
+
+    Help that embeds the expanded home wraps by the home's length before the
+    scrub replaces it, so the snapshot would pass or fail by where it ran.
+    """
+    usual = _current(monkeypatch)
+    long_home = tmp_path / ("h" * 80) / "home"
+    long_home.mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(long_home))
+    assert str(Path.home()) == str(long_home)
+    moved = _current(monkeypatch)
+    assert moved["tree"] == usual["tree"]
+    changed = [p for p in sorted(usual["help"]) if usual["help"][p] != moved["help"][p]]
+    assert changed == [], f"--help text depends on HOME for {changed}"

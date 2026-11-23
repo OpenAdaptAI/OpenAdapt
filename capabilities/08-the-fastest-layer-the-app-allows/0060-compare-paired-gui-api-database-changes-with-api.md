@@ -1,0 +1,1 @@
+| Compare paired GUI/API database changes with `api admit --footprint`: changed rows retain their identity and before/after values, and unexplained field differences refuse. Variation alone does not establish server ownership. | This PR | Synthetic headless Chromium and SQLite; generated insert ID/time differences conservatively refuse | `openadapt_flow/api_footprint.py` |

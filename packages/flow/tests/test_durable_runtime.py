@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from openadapt_flow import sealed_set as _sealed_set
 from openadapt_flow.ir import (
     ActionDeliveryReceipt,
     ActionKind,
@@ -828,7 +829,9 @@ def test_durable_resume_projection_failure_keeps_fail_closed_terminal_evidence(
     assert resumed.success is False
     assert resumed.execution_outcome == "FAILED"
     assert resumed.transaction_outcome == "RECONCILIATION_REQUIRED"
-    persisted = RunReport.model_validate_json((run_dir / "report.json").read_text())
+    persisted = RunReport.model_validate_json(
+        _sealed_set.read_text(run_dir / "report.json")
+    )
     assert persisted.execution_outcome == "FAILED"
     assert persisted.transaction_outcome == "RECONCILIATION_REQUIRED"
     assert persisted.results[-1].step_id == "<idempotency>"
@@ -845,7 +848,7 @@ def test_durable_resume_projection_failure_keeps_fail_closed_terminal_evidence(
     assert (
         record.report_sha256
         == "sha256:"
-        + hashlib.sha256((run_dir / "report.json").read_bytes()).hexdigest()
+        + hashlib.sha256(_sealed_set.read_bytes(run_dir / "report.json")).hexdigest()
     )
     assert authority.prove_executor_outcome(
         manifest,
@@ -933,7 +936,9 @@ def test_indeterminate_durable_state_fails_closed_without_ledger_projection(
     assert "durable terminal state persistence failed" in (
         report.results[-1].error or ""
     )
-    persisted = RunReport.model_validate_json((run_dir / "report.json").read_text())
+    persisted = RunReport.model_validate_json(
+        _sealed_set.read_text(run_dir / "report.json")
+    )
     assert persisted.execution_outcome == "FAILED"
     assert ledger.lookup("indeterminate-durable-state-key")["outcome"] is None
 

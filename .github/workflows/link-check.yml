@@ -44,6 +44,7 @@ env:
     --exclude-path '(^|/)(legacy|node_modules|\.venv|growth-worktrees|\.claude)/'
     --exclude-path 'CHANGELOG\.md$'
     --exclude-path '/\.github/'
+    --exclude-path '(^|/)capabilities/'
     './**/*.md'
 
 jobs:
@@ -70,8 +71,14 @@ jobs:
             exit 0
           fi
           files="$(git diff --name-only --diff-filter=d HEAD^1 HEAD -- '*.md' \
-            | grep -Ev '(^|/)(legacy|node_modules|\.venv|growth-worktrees|\.claude|\.github)/|(^|/)CHANGELOG\.md$' \
+            | grep -Ev '^capabilities/|(^|/)(legacy|node_modules|\.venv|growth-worktrees|\.claude|\.github)/|(^|/)CHANGELOG\.md$' \
             | sed "s/.*/'&'/" | tr '\n' ' ' || true)"
+          # Row files under capabilities/ link relative to CAPABILITIES.md,
+          # where they print: check the page assembled from them instead.
+          if git diff --name-only HEAD^1 HEAD -- capabilities | grep -q .; then
+            python3 scripts/build_capabilities.py
+            files="$files 'CAPABILITIES.md'"
+          fi
           echo "paths=$files" >> "$GITHUB_OUTPUT"
           echo "Checking: ${files:-nothing}"
 

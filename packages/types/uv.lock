@@ -346,7 +346,7 @@ wheels = [
 
 [[package]]
 name = "openadapt-types"
-version = "0.24.0"
+version = "0.24.2"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
