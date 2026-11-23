@@ -346,9 +346,10 @@ def _extract_text_from_content_stream(stream_bytes: bytes) -> list[str]:
     text = stream_bytes.decode("latin-1", errors="ignore")
     lines: list[str] = []
 
-    # Match both single literal `(text) Tj` and array `[(a) -20 (b)] TJ`
+    # Match both single literal `(text) Tj` and array `[(a) -20 (b)] TJ`.
+    # Alternatives inside the TJ array are strictly disjoint (no backtracking).
     token_re = re.compile(
-        r"\(((?:\\.|[^\\()])*)\)\s*Tj|\[((?:[^\[\]]|\((?:\\.|[^\\()])*\))*)\]\s*TJ",
+        r"\(((?:\\.|[^\\()])*)\)\s*Tj|\[((?:[^\[\]()]|\((?:\\.|[^\\()])*\))*)\]\s*TJ",
         re.DOTALL,
     )
     literal_re = re.compile(r"\(((?:\\.|[^\\()])*)\)")
