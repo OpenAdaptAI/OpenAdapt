@@ -38,8 +38,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from openadapt_types import receipt as receipt_lib
 
-CommitStatus = Literal["VERIFIED", "STOPPED"]
-CommitVerdict = Literal["VERIFIED", "VETO", "ABSTAIN"]
+CommitStatus = Literal[
+    "VERIFIED", "SAME_SCREEN", "VISUAL_ONLY", "STOPPED", "UNCONFIRMED_WRITE"
+]
+CommitVerdict = Literal["VERIFIED", "SAME_SCREEN", "VISUAL_ONLY", "VETO", "ABSTAIN"]
 ScreenshotInput = Union[bytes, bytearray, str, Path, None]
 
 
@@ -434,7 +436,7 @@ def _build_signed_receipt(
         "outcome": "VERIFIED",
         "dom_checked": dom_checked,
         "visual_checked": used_visual_verifier,
-        "strength": "same_screen",
+        "strength": "independent_readback",
     }
     report_sha = hashlib.sha256(
         receipt_lib.canonical_json(report_basis).encode("utf-8")
@@ -476,13 +478,9 @@ def _build_signed_receipt(
                     "step": 0,
                     "target_kind": "gui",
                     "operation": "irreversible_write",
-                    "check": "confirmed" if dom_checked else "not_checked",
-                    "strength": "same_screen",
-                    "not_checked": (
-                        ["effect_not_declared"]
-                        if dom_checked
-                        else ["field_values", "effect_not_declared"]
-                    ),
+                    "check": "confirmed",
+                    "strength": "read_back",
+                    "not_checked": ["effect_not_declared"],
                 }
             ],
             "checks": {
@@ -522,6 +520,7 @@ def _write_inbox_item(
     inbox: Optional[Union[str, Path]],
     *,
     intent: str,
+    status: CommitStatus,
     verdict: CommitVerdict,
     reason: str,
     mismatches: tuple[str, ...],
@@ -531,7 +530,7 @@ def _write_inbox_item(
         "schema": "openadapt.commit-inbox/v1",
         "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "intent": intent,
-        "status": "STOPPED",
+        "status": status,
         "verdict": verdict,
         "reason": reason,
         "mismatches": list(mismatches),
@@ -553,6 +552,7 @@ def _finalize_commit(
     record_id: str,
     dom_checked: bool,
     dom_passed: bool,
+    dom_independent: bool,
     mismatches: tuple[str, ...],
     visual_verdict: Optional[CommitVerdict],
     visual_reason: str,
@@ -561,13 +561,20 @@ def _finalize_commit(
     receipt_dir: Optional[Union[str, Path]],
     signing_key: Optional[Ed25519PrivateKey],
     raise_on_block: bool,
+    stage: Literal["pre_commit", "post_commit"] = "post_commit",
 ) -> CommitResult:
     # Strict fail-closed combination rule:
     # 1. Empty `expected` ALWAYS abstains/halts (never VERIFIED on nothing).
     # 2. Visual ABSTAIN ALWAYS halts (clean DOM never overrides occlusion).
     # 3. Visual VETO ALWAYS halts.
     # 4. DOM mismatch ALWAYS halts (passing visual never overrides bad DOM).
-    # 5. If neither DOM nor visual verifier ran, ABSTAIN -> HALT.
+    # 5. Visual-only (no DOM check) NEVER returns VERIFIED -> VISUAL_ONLY (no signed VERIFIED receipt).
+    # 6. Same-screen DOM read (no independent_page) NEVER returns VERIFIED -> SAME_SCREEN (no signed VERIFIED receipt).
+    # 7. Only an independent read-back (dom_independent=True) returns VERIFIED and may mint a signed receipt.
+    # 8. Post-commit failures return UNCONFIRMED_WRITE (not STOPPED) so callers know the write may have landed.
+    fail_status: CommitStatus = (
+        "STOPPED" if stage == "pre_commit" else "UNCONFIRMED_WRITE"
+    )
     final_verdict: CommitVerdict = "VERIFIED"
     reason = ""
 
@@ -586,18 +593,36 @@ def _finalize_commit(
     elif not dom_checked and visual_verdict is None:
         final_verdict = "ABSTAIN"
         reason = "no DOM page or visual verifier available to verify expected fields"
+    elif not dom_checked:
+        # Visual-only path: never VERIFIED and never signs an outcome=VERIFIED receipt.
+        return CommitResult(
+            status="VISUAL_ONLY",
+            verdict="VISUAL_ONLY",
+            intent=intent,
+            reason=visual_reason
+            or "visual-only check passed; DOM read-back did not run (not VERIFIED)",
+        )
+    elif not dom_independent:
+        # Same-screen DOM check: never VERIFIED and never signs an outcome=VERIFIED receipt.
+        return CommitResult(
+            status="SAME_SCREEN",
+            verdict="SAME_SCREEN",
+            intent=intent,
+            reason="same-screen DOM fields matched; independent read-back did not run (not VERIFIED)",
+        )
 
     if final_verdict != "VERIFIED":
         inbox_item, inbox_path = _write_inbox_item(
             inbox,
             intent=intent,
+            status=fail_status,
             verdict=final_verdict,
             reason=reason,
             mismatches=mismatches,
             expected=expected,
         )
         result = CommitResult(
-            status="STOPPED",
+            status=fail_status,
             verdict=final_verdict,
             intent=intent,
             reason=reason,
@@ -615,6 +640,8 @@ def _finalize_commit(
     kid: Optional[str] = None
     pub_b64: Optional[str] = None
     if signing_key is not None:
+        if not str(record_id).strip():
+            raise ValueError("record_id is required when signing_key is provided")
         rid, envelope, receipt_path, kid, pub_b64 = _build_signed_receipt(
             intent=intent,
             expected=expected,
@@ -645,29 +672,41 @@ def verify_commit(
     intent: str,
     expected: Mapping[str, str],
     record_id: str = "",
+    independent_page: Any = None,
     before_screenshot: ScreenshotInput = None,
     verifier: Any = None,
     inbox: Optional[Union[str, Path]] = None,
     receipt_dir: Optional[Union[str, Path]] = None,
     signing_key: Optional[Ed25519PrivateKey] = None,
     raise_on_block: bool = False,
+    stage: Literal["pre_commit", "post_commit"] = "post_commit",
 ) -> CommitResult:
     """Verify UI commit fields (sync) with strict fail-closed semantics.
 
-    Requires non-empty ``expected``. Uses exact field-level reads only (no
-    body-text substring fallback). Emits a signed Ed25519 ``record/run/v1``
-    receipt only when an explicit ``signing_key`` is supplied.
+    - Requires non-empty ``expected``.
+    - Same-screen DOM reads (without ``independent_page``) return at most
+      ``SAME_SCREEN`` (``verified=False``) and never sign ``outcome: VERIFIED``.
+    - Visual-only checks (no DOM page) return at most ``VISUAL_ONLY``
+      (``verified=False``) and never sign ``outcome: VERIFIED``.
+    - Supplying an explicit ``independent_page`` (reloaded page, separate
+      session, or store reader) enables ``VERIFIED`` and signed Ed25519
+      receipts when ``signing_key`` and non-empty ``record_id`` are provided.
     """
     dom_checked = False
     dom_passed = False
+    dom_independent = False
     mismatches: tuple[str, ...] = ()
     after_png: Optional[bytes] = None
     before_png = _coerce_screenshot_bytes(before_screenshot)
 
-    if expected and _is_page_like(page_or_screenshot):
+    read_target = (
+        independent_page if independent_page is not None else page_or_screenshot
+    )
+    if expected and _is_page_like(read_target):
         dom_checked = True
-        dom_passed, mismatches = _check_dom_sync(page_or_screenshot, expected)
-        shot_fn = getattr(page_or_screenshot, "screenshot", None)
+        dom_independent = independent_page is not None
+        dom_passed, mismatches = _check_dom_sync(read_target, expected)
+        shot_fn = getattr(read_target, "screenshot", None)
         if callable(shot_fn):
             try:
                 raw_shot = shot_fn()
@@ -695,6 +734,7 @@ def verify_commit(
         record_id=record_id,
         dom_checked=dom_checked,
         dom_passed=dom_passed,
+        dom_independent=dom_independent,
         mismatches=mismatches,
         visual_verdict=visual_verdict,
         visual_reason=visual_reason,
@@ -703,6 +743,7 @@ def verify_commit(
         receipt_dir=receipt_dir,
         signing_key=signing_key,
         raise_on_block=raise_on_block,
+        stage=stage,
     )
 
 
@@ -712,24 +753,31 @@ async def async_verify_commit(
     intent: str,
     expected: Mapping[str, str],
     record_id: str = "",
+    independent_page: Any = None,
     before_screenshot: ScreenshotInput = None,
     verifier: Any = None,
     inbox: Optional[Union[str, Path]] = None,
     receipt_dir: Optional[Union[str, Path]] = None,
     signing_key: Optional[Ed25519PrivateKey] = None,
     raise_on_block: bool = False,
+    stage: Literal["pre_commit", "post_commit"] = "post_commit",
 ) -> CommitResult:
     """Async counterpart to :func:`verify_commit` for async page objects."""
     dom_checked = False
     dom_passed = False
+    dom_independent = False
     mismatches: tuple[str, ...] = ()
     after_png: Optional[bytes] = None
     before_png = _coerce_screenshot_bytes(before_screenshot)
 
-    if expected and _is_page_like(page_or_screenshot):
+    read_target = (
+        independent_page if independent_page is not None else page_or_screenshot
+    )
+    if expected and _is_page_like(read_target):
         dom_checked = True
-        dom_passed, mismatches = await _check_dom_async(page_or_screenshot, expected)
-        shot_fn = getattr(page_or_screenshot, "screenshot", None)
+        dom_independent = independent_page is not None
+        dom_passed, mismatches = await _check_dom_async(read_target, expected)
+        shot_fn = getattr(read_target, "screenshot", None)
         if callable(shot_fn):
             try:
                 raw_shot = shot_fn()
@@ -759,6 +807,7 @@ async def async_verify_commit(
         record_id=record_id,
         dom_checked=dom_checked,
         dom_passed=dom_passed,
+        dom_independent=dom_independent,
         mismatches=mismatches,
         visual_verdict=visual_verdict,
         visual_reason=visual_reason,
@@ -767,11 +816,18 @@ async def async_verify_commit(
         receipt_dir=receipt_dir,
         signing_key=signing_key,
         raise_on_block=raise_on_block,
+        stage=stage,
     )
 
 
 class UiCommitCheck:
-    """Dual sync/async context manager for pre-commit gating and post-commit UI read-back."""
+    """Dual sync/async context manager for optional pre-commit gating and post-commit UI read-back.
+
+    ``pre_expected`` defaults to ``None`` (nothing gates the write before the
+    body runs unless ``pre_expected`` is supplied). When ``pre_expected`` fails
+    with ``raise_on_block=False``, ``__exit__`` / ``__aexit__`` preserves the
+    ``STOPPED`` pre-check result and skips the post-check.
+    """
 
     def __init__(
         self,
@@ -781,6 +837,7 @@ class UiCommitCheck:
         expected: Mapping[str, str],
         pre_expected: Optional[Mapping[str, str]] = None,
         record_id: str = "",
+        independent_page: Any = None,
         verifier: Any = None,
         inbox: Optional[Union[str, Path]] = None,
         receipt_dir: Optional[Union[str, Path]] = None,
@@ -792,11 +849,13 @@ class UiCommitCheck:
         self._expected = dict(expected)
         self._pre_expected = dict(pre_expected) if pre_expected is not None else None
         self._record_id = record_id
+        self._independent_page = independent_page
         self._verifier = verifier
         self._inbox = inbox
         self._receipt_dir = receipt_dir
         self._signing_key = signing_key
         self._raise_on_block = raise_on_block
+        self._pre_blocked = False
         self.before_screenshot: Optional[bytes] = None
         self.result: Optional[CommitResult] = None
 
@@ -815,24 +874,29 @@ class UiCommitCheck:
                 record_id=self._record_id,
                 inbox=self._inbox,
                 raise_on_block=self._raise_on_block,
+                stage="pre_commit",
             )
-            if not pre_res.verified:
+            if pre_res.status not in ("VERIFIED", "SAME_SCREEN"):
+                self._pre_blocked = True
                 self.result = pre_res
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> Literal[False]:
+        if self._pre_blocked:
+            return False
         if exc_type is not None:
             reason = f"commit body raised {exc_type.__name__}: {exc}"
             inbox_item, inbox_path = _write_inbox_item(
                 self._inbox,
                 intent=self._intent,
+                status="UNCONFIRMED_WRITE",
                 verdict="ABSTAIN",
                 reason=reason,
                 mismatches=(),
                 expected=self._expected,
             )
             self.result = CommitResult(
-                status="STOPPED",
+                status="UNCONFIRMED_WRITE",
                 verdict="ABSTAIN",
                 intent=self._intent,
                 reason=reason,
@@ -845,12 +909,14 @@ class UiCommitCheck:
             intent=self._intent,
             expected=self._expected,
             record_id=self._record_id,
+            independent_page=self._independent_page,
             before_screenshot=self.before_screenshot,
             verifier=self._verifier,
             inbox=self._inbox,
             receipt_dir=self._receipt_dir,
             signing_key=self._signing_key,
             raise_on_block=self._raise_on_block,
+            stage="post_commit",
         )
         return False
 
@@ -872,24 +938,29 @@ class UiCommitCheck:
                 record_id=self._record_id,
                 inbox=self._inbox,
                 raise_on_block=self._raise_on_block,
+                stage="pre_commit",
             )
-            if not pre_res.verified:
+            if pre_res.status not in ("VERIFIED", "SAME_SCREEN"):
+                self._pre_blocked = True
                 self.result = pre_res
         return self
 
     async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> Literal[False]:
+        if self._pre_blocked:
+            return False
         if exc_type is not None:
             reason = f"commit body raised {exc_type.__name__}: {exc}"
             inbox_item, inbox_path = _write_inbox_item(
                 self._inbox,
                 intent=self._intent,
+                status="UNCONFIRMED_WRITE",
                 verdict="ABSTAIN",
                 reason=reason,
                 mismatches=(),
                 expected=self._expected,
             )
             self.result = CommitResult(
-                status="STOPPED",
+                status="UNCONFIRMED_WRITE",
                 verdict="ABSTAIN",
                 intent=self._intent,
                 reason=reason,
@@ -902,12 +973,14 @@ class UiCommitCheck:
             intent=self._intent,
             expected=self._expected,
             record_id=self._record_id,
+            independent_page=self._independent_page,
             before_screenshot=self.before_screenshot,
             verifier=self._verifier,
             inbox=self._inbox,
             receipt_dir=self._receipt_dir,
             signing_key=self._signing_key,
             raise_on_block=self._raise_on_block,
+            stage="post_commit",
         )
         return False
 
@@ -919,19 +992,21 @@ def ui_commit_check(
     expected: Mapping[str, str],
     pre_expected: Optional[Mapping[str, str]] = None,
     record_id: str = "",
+    independent_page: Any = None,
     verifier: Any = None,
     inbox: Optional[Union[str, Path]] = None,
     receipt_dir: Optional[Union[str, Path]] = None,
     signing_key: Optional[Ed25519PrivateKey] = None,
     raise_on_block: bool = True,
 ) -> UiCommitCheck:
-    """Return a sync/async context manager for pre-commit gating and post-commit UI checks."""
+    """Return a sync/async context manager for optional pre-commit gating and post-commit UI checks."""
     return UiCommitCheck(
         page,
         intent=intent,
         expected=expected,
         pre_expected=pre_expected,
         record_id=record_id,
+        independent_page=independent_page,
         verifier=verifier,
         inbox=inbox,
         receipt_dir=receipt_dir,
