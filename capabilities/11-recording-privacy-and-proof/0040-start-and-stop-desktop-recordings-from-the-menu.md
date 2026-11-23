@@ -1,0 +1,1 @@
+| Start and stop Desktop recordings from the menu bar or system tray, and see Desktop's state and how many cloud runs need a person | Released (tray 0.3.7) | Unit tests; CI runs the tray client against Desktop's socket server | [packages/tray](packages/tray/README.md) |

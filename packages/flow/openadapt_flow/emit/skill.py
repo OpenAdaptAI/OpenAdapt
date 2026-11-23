@@ -133,6 +133,10 @@ def _step_line(step: Step, literals: list[str]) -> str:
         return f"scroll by ({step.scroll_dx or 0}, {step.scroll_dy or 0})"
     if action is ActionKind.SWITCH_SURFACE:
         return f"switch to surface '{step.surface}'"
+    if action is ActionKind.SECOND_FACTOR:
+        if step.one_time == "approval":
+            return "wait for a person to approve the sign-in on their device"
+        return "type a one-time sign-in code a person supplies"
     return action.value
 
 
