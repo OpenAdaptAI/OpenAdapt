@@ -2513,7 +2513,7 @@ dependencies = [
 
 [[package]]
 name = "openadapt-desktop"
-version = "0.31.2"
+version = "0.32.0"
 dependencies = [
  "hex",
  "reqwest",
@@ -2525,6 +2525,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-deep-link",
  "tauri-plugin-notification",
+ "tauri-plugin-opener",
  "tauri-plugin-shell",
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
@@ -3988,6 +3989,28 @@ dependencies = [
  "thiserror 2.0.18",
  "time",
  "url",
+ "zbus",
+]
+
+[[package]]
+name = "tauri-plugin-opener"
+version = "2.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54592c6718b42ab198bf11bda6a428a3553ca2f2f8e506df56f6a063ec328331"
+dependencies = [
+ "dunce",
+ "glob",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "open",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.18",
+ "url",
+ "windows 0.62.2",
  "zbus",
 ]
 

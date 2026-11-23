@@ -821,10 +821,20 @@ def test_server_needs_reemit_identifies_pre_2154_server(tmp_path: Path) -> None:
     )
     assert compiler.server_needs_reemit() is True
 
-    # 3. Modern server emitted with mcp_request_scope -> up to date
+    # 3. Request-context scope, but the program runs on the server's event
+    # loop (before run_compiled_tool) -> needs re-emit
     server_path.write_text(
-        '"""Modern server with request-context scope."""\n'
+        '"""Server with request-context scope."""\n'
         "from openadapt_flow.request_binding import mcp_request_scope\n"
+        'mcp = FastMCP("demo")\n'
+    )
+    assert compiler.server_needs_reemit() is True
+
+    # 4. Current template: request scope and the off-loop dispatch -> up to date
+    server_path.write_text(
+        '"""Current server."""\n'
+        "from openadapt_flow.request_binding import mcp_request_scope\n"
+        "from openadapt_flow.compile_agent import run_compiled_tool\n"
         'mcp = FastMCP("demo")\n'
     )
     assert compiler.server_needs_reemit() is False
@@ -881,3 +891,64 @@ def test_cmd_compile_agent_emit_subcommand(
     )
     assert cmd_compile_agent(args) == 0
     assert len(emitted_calls) == 1
+
+
+def test_a_generated_tool_runs_the_program_off_the_servers_event_loop(monkeypatch):
+    """An MCP server calls a sync tool on its loop's thread; Playwright's sync
+    API refuses to start there, so the program must run on another thread."""
+
+    import asyncio
+    import contextvars
+    import threading
+    from types import SimpleNamespace
+
+    from openadapt_flow import compile_agent
+
+    marker: contextvars.ContextVar[str] = contextvars.ContextVar("marker")
+    seen: dict = {}
+
+    def run(task_dir, params):
+        try:
+            asyncio.get_running_loop()
+            seen["loop"] = True
+        except RuntimeError:
+            seen["loop"] = False
+        seen["thread"] = threading.current_thread().name
+        seen["marker"] = marker.get(None)
+        return SimpleNamespace(to_dict=lambda: {"verified": True, "params": params})
+
+    monkeypatch.setattr(compile_agent, "run_compiled_params", run)
+
+    async def tool_call():
+        marker.set("request-context")
+        return compile_agent.run_compiled_tool("task-dir", {"note": "x"})
+
+    assert asyncio.run(tool_call()) == {"verified": True, "params": {"note": "x"}}
+    assert seen == {
+        "loop": False,
+        "thread": "openadapt-compiled-tool",
+        "marker": "request-context",
+    }
+    # With no running loop it runs in place.
+    assert compile_agent.run_compiled_tool("task-dir", {"note": "y"})["params"] == {
+        "note": "y"
+    }
+
+
+def test_a_generated_tool_raises_the_programs_error_unchanged(monkeypatch):
+    import asyncio
+
+    import pytest
+
+    from openadapt_flow import compile_agent
+
+    def run(task_dir, params):
+        raise LookupError("no such task")
+
+    monkeypatch.setattr(compile_agent, "run_compiled_params", run)
+
+    async def tool_call():
+        return compile_agent.run_compiled_tool("task-dir", {})
+
+    with pytest.raises(LookupError, match="no such task"):
+        asyncio.run(tool_call())

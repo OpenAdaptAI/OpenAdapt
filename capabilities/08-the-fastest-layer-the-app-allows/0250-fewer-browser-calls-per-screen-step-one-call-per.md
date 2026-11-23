@@ -1,0 +1,1 @@
+| Fewer browser calls per screen step: one call per frame boundary in every DOM proof | On main | Real app (local OpenEMR 8.0.0.3, synthetic referrals): median 23.2 s to 20.1 s per referral, N = 14 each, interleaved, same checks at every step; about 3,970 to 2,390 Playwright calls per run | [screen_path_speed](packages/flow/benchmark/screen_path_speed/README.md) |

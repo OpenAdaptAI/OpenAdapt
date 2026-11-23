@@ -26,7 +26,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Callable, Final, Literal, Mapping, Optional
+from typing import Annotated, Any, Callable, Final, Literal, Mapping, Optional
 
 from pydantic import (
     BaseModel,
@@ -39,6 +39,7 @@ from pydantic import (
     model_validator,
 )
 
+from openadapt_flow.local_state_sources import LocalStateSource
 from openadapt_flow.lookup_capabilities import (
     DeclaredSurface,
     declared_surface_problem,
@@ -225,6 +226,8 @@ BUILTIN_EFFECT_KINDS = frozenset(
         "email",
         "document",
         "document-hash",
+        "local-state",
+        "local_state",
         "desktop_readback",
         "desktop-readback",
         "deferred_report",
@@ -306,7 +309,7 @@ class EffectsConfig(BaseModel):
 
     #: ``none`` | ``onscreen`` | ``ui_readback`` | ``rest`` | ``graphql`` |
     #: ``fhir`` | ``sql`` | ``file`` | ``email`` | ``document`` |
-    #: ``document-hash``, or a PLUGIN
+    #: ``document-hash`` | ``local-state``, or a PLUGIN
     #: kind registered under the
     #: ``openadapt_flow.effect_verifiers`` entry-point group (the customer
     #: adapter SDK seam -- see docs/EFFECT_KIT.md). ``onscreen`` is the no-API
@@ -538,6 +541,15 @@ class EffectsConfig(BaseModel):
     root: Optional[str] = None
     glob: str = "*"
 
+    # -- local-state (files and OS settings on this computer) ----------------
+    #: The typed, read-only sources ``kind: local-state`` reads: ``file``
+    #: (contents and SHA-256), ``macos_defaults`` (a preference key) and
+    #: ``windows_registry`` (a registry value). There is no free-form command;
+    #: see :mod:`openadapt_flow.runtime.effects.local_state`.
+    local_state: list[Annotated[LocalStateSource, Field(discriminator="type")]] = Field(
+        default_factory=list
+    )
+
     # -- plugin record-check packs (registered kinds only) --------------------
     #: Non-secret settings for a PLUGIN verifier kind: the per-system record
     #: check a private pack implements (which read endpoint, which record
@@ -564,6 +576,16 @@ class EffectsConfig(BaseModel):
     # -- shared --------------------------------------------------------------
     timeout_s: float = 5.0
     poll_interval_s: float = 0.2
+
+    # -- artifact provenance (file, document, document-hash, email) ----------
+    #: Who wrote what ``root`` holds: ``acting_session``, ``separate_session``,
+    #: ``system_of_record`` or ``unknown`` (the default, graded like the acting
+    #: session). Sets the strongest check level; see
+    #: ``runtime/effects/artifact_provenance.py``.
+    artifact_producer: Optional[str] = None
+    #: Folders the acting session writes or downloads into. A ``root`` that
+    #: overlaps one is graded as the acting session's whatever is declared.
+    acting_roots: list[str] = Field(default_factory=list)
 
     @field_validator("options")
     @classmethod
@@ -680,6 +702,8 @@ class EffectsConfig(BaseModel):
         ):
             if data.get(added, "") is None:
                 data.pop(added, None)
+        if not data.get("local_state"):
+            data.pop("local_state", None)
         return data
 
     @model_validator(mode="after")
@@ -2243,6 +2267,11 @@ LEGACY_HASHED_DEFAULTS: Final[dict[str, str]] = {
 }
 
 
+#: Fields added after verifier identities and check digests were first issued.
+#: Left unset they are not hashed, so every earlier digest stays the same.
+_HASHED_ONLY_WHEN_SET: Final[tuple[str, ...]] = ("artifact_producer", "acting_roots")
+
+
 def legacy_hash_dump(dumped: dict[str, Any], *, defaults_excluded: bool) -> None:
     """Make a config dump hash as it did when those fields had defaults.
 
@@ -2251,6 +2280,10 @@ def legacy_hash_dump(dumped: dict[str, Any], *, defaults_excluded: bool) -> None
     takes its old default.
     """
 
+    # Added after digests were first issued: hashed only when set.
+    for name in _HASHED_ONLY_WHEN_SET:
+        if not dumped.get(name):
+            dumped.pop(name, None)
     for name, legacy in LEGACY_HASHED_DEFAULTS.items():
         if defaults_excluded:
             if dumped.get(name) == legacy:
@@ -2342,6 +2375,11 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
         ):
             if isinstance(candidate, dict) and candidate.get(added) is None:
                 candidate.pop(added, None)
+    # ``local_state`` defaults to an empty list; omit it unless configured so
+    # existing verifier identities stay unchanged.
+    for holder in [config, *(config.get("candidates") or [])]:
+        if isinstance(holder, dict) and not holder.get("local_state"):
+            holder.pop("local_state", None)
     # The same rule one level down: ``ui_readback.reference`` came later.
     for holder in [config, *(config.get("candidates") or [])]:
         section = holder.get("ui_readback") if isinstance(holder, dict) else None
@@ -2630,6 +2668,8 @@ def _build_effect_verifier_unredacted(
             min_size=cfg.file_min_size,
             mtime_window_s=cfg.file_mtime_window_s,
             content_probe=cfg.file_content_probe,
+            producer=cfg.artifact_producer,
+            acting_roots=cfg.acting_roots,
         )
 
     if kind in ("document-hash", "document_hash", "doc-hash"):
@@ -2637,7 +2677,24 @@ def _build_effect_verifier_unredacted(
             raise ValueError("effects.kind 'document-hash' requires effects.root")
         from openadapt_flow.runtime.effects import DocumentHashVerifier
 
-        return DocumentHashVerifier(cfg.root, glob=cfg.glob)
+        return DocumentHashVerifier(
+            cfg.root,
+            glob=cfg.glob,
+            producer=cfg.artifact_producer,
+            acting_roots=cfg.acting_roots,
+        )
+
+    if kind in ("local-state", "local_state"):
+        if not cfg.local_state:
+            raise ValueError(
+                "effects.kind 'local-state' requires effects.local_state "
+                "(the files or settings to read)"
+            )
+        from openadapt_flow.runtime import LocalStateVerifier
+
+        return LocalStateVerifier(
+            list(cfg.local_state), poll_interval_s=cfg.poll_interval_s
+        )
 
     if kind == "graphql":
         if not cfg.base_url:
@@ -2676,6 +2733,8 @@ def _build_effect_verifier_unredacted(
             mtime_window_s=cfg.file_mtime_window_s,
             content_probe=cfg.file_content_probe,
             poll_interval_s=cfg.poll_interval_s,
+            producer=cfg.artifact_producer,
+            acting_roots=cfg.acting_roots,
         )
 
     if kind == "document":
@@ -2699,6 +2758,8 @@ def _build_effect_verifier_unredacted(
             text_pattern=cfg.document_text_pattern,
             mtime_window_s=cfg.file_mtime_window_s,
             poll_interval_s=cfg.poll_interval_s,
+            producer=cfg.artifact_producer,
+            acting_roots=cfg.acting_roots,
         )
 
     # Plugin seam: a customer adapter registered programmatically or under the
