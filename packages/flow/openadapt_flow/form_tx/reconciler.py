@@ -197,10 +197,11 @@ class ReconcilerSession:
         # Keyed by field, selector and popup, so a popup input never hides a
         # main-form write of the same dossier key.
         self._writes: dict[tuple[str, str, str, str], FieldWriteRecord] = {}
-        # Every control this run actuated, with the selectors that may stand
-        # for it in the write ledger (a radio option or its group's peers).
-        # Checked against the ledger before signing, independently of it.
-        self._actuations: list[tuple[str, frozenset[str]]] = []
+        # Every control this run actuated: its popup, screen and selector, and
+        # the selectors that may stand for it in the write ledger (a radio
+        # option or its group's peers). Checked against the ledger before
+        # signing, independently of it.
+        self._actuations: list[tuple[str, str, str, frozenset[str]]] = []
 
     def record_write(
         self,
@@ -617,10 +618,23 @@ def _ledger_aliases(ctrl: ObservedControl, snapshot: FormSnapshot) -> frozenset[
 
 
 def _unrecorded_actuations(session: "ReconcilerSession") -> list[str]:
-    """Actuated controls that no write-ledger entry accounts for."""
-    recorded = {w.selector for w in session.writes if w.selector}
+    """Actuated controls that no write-ledger entry accounts for.
+
+    A ledger entry accounts for an actuation only in the same popup and on the
+    same screen, as the ledger keys its subjects: the same selector in a popup
+    or on another screen is another control.
+    """
+    recorded = {
+        (w.in_popup_subroutine or "", w.screen_id or "", w.selector)
+        for w in session.writes
+        if w.selector
+    }
     return sorted(
-        {sel for sel, aliases in session._actuations if not (aliases & recorded)}
+        {
+            f"{popup or 'main'}|{screen}|{sel}"
+            for popup, screen, sel, aliases in session._actuations
+            if not any((popup, screen, a) in recorded for a in aliases)
+        }
     )
 
 
@@ -823,6 +837,7 @@ class FormReconciler:
         intended_value: Any,
         *,
         session: "ReconcilerSession",
+        in_popup_subroutine: Optional[str],
         control_kind: ControlKind,
         codec: FieldCodecSpec,
         placeholder_values: Sequence[str] = _DEFAULT_PLACEHOLDERS,
@@ -846,8 +861,14 @@ class FormReconciler:
             run_id=run_id,
         )
         if halt is None:
+            obs = session._last_observation
             session._actuations.append(
-                (ctrl.dom_selector, _ledger_aliases(ctrl, snapshot))
+                (
+                    in_popup_subroutine or "",
+                    (obs.screen_id if obs is not None else None) or "",
+                    ctrl.dom_selector,
+                    _ledger_aliases(ctrl, snapshot),
+                )
             )
         return halt
 
@@ -1124,6 +1145,7 @@ class FormReconciler:
                         ctrl,
                         fact.value,
                         session=session,
+                        in_popup_subroutine=in_popup_subroutine,
                         control_kind=binding.control_kind,
                         codec=binding.codec,
                         placeholder_values=binding.placeholder_values,
@@ -1497,6 +1519,7 @@ class FormReconciler:
                         matching[0],
                         val,
                         session=session,
+                        in_popup_subroutine=sub_id,
                         control_kind=inferred,
                         codec=FieldCodecSpec(),
                         run_id=session.run_id,
@@ -3080,6 +3103,7 @@ class FormReconciler:
                         live_ctrl,
                         val,
                         session=session,
+                        in_popup_subroutine=None,
                         control_kind=ctrl_kind,
                         codec=codec,
                         placeholder_values=placeholders,
