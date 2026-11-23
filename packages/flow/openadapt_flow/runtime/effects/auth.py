@@ -30,7 +30,7 @@ class AuthRef(BaseModel):
     - ``bearer_env`` -- name of an env var holding a bearer token; resolves to
       ``Authorization: Bearer <token>``.
     - ``header`` + ``value_env`` -- an arbitrary auth header (e.g.
-      ``X-API-Key``) whose VALUE comes from the named env var. Frappe-style
+      ``X-API-Key``) whose VALUE comes from the named env var. Token-pair
       ``Authorization: token <key>:<secret>`` fits here too (put the whole
       value in the env var).
     - ``basic_env`` -- name of an env var holding ``user:password``; resolves

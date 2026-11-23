@@ -113,7 +113,7 @@ def _validated_public_origin(raw: str) -> str:
     ):
         raise IngressError(
             "The portal ingress origin must be a bare https origin such as "
-            "https://openadapt.clinic.example, with no path, query, or credentials."
+            "https://openadapt.runner.example, with no path, query, or credentials."
         )
     if parsed.hostname.endswith("."):
         raise IngressError("The portal ingress origin has an invalid hostname")

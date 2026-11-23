@@ -1,0 +1,2 @@
+{"decision": "held_for_person", "event": "request", "guard_id": "guard-bc505242bd9f9cf1ed434c85fc65e7ad", "kind": "save", "method": "POST", "origin": "http://127.0.0.1:52247", "path_sha256": "a01c22910e2962c5", "resource_type": "XHR", "t": 2.705}
+{"code": "declined", "decision": "blocked", "event": "request", "kind": "save", "method": "POST", "origin": "http://127.0.0.1:52247", "path_sha256": "a01c22910e2962c5", "resource_type": "XHR", "t": 5.909}

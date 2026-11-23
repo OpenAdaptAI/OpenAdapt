@@ -112,8 +112,14 @@ def test_grounder_outage_returns_no_proposal():
 
 
 def test_grounder_proposes_a_point_when_reachable():
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (200, 100), (220, 220, 220)).save(buf, format="PNG")
     g = RemoteGrounder(_StubClient(ground={"point": [120, 44], "confidence": 0.9}))
-    m = g.locate(b"png", "click Save", None)
+    m = g.locate(buf.getvalue(), "click Save", None)
     assert m is not None and m.point == (120, 44)
 
 

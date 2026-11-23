@@ -722,6 +722,11 @@ jobs:
         run: >-
           python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,capture,agent]' --lock packages/capture
           --editable packages/types --editable packages/capture --editable packages/flow --editable packages/agent --editable .
+      - name: Install tesseract for the flight scrubber's OCR tests
+        # pytesseract comes from Flow's dev extra (locked); this is its binary.
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68
+        with:
+          packages: tesseract-ocr tesseract-ocr-eng
       - name: Install Harness² for the integration tests
         # Not on PyPI. Pinned to the commit benchmark.harness.harness2
         # is written against; it has no runtime dependencies.

@@ -6,8 +6,8 @@ coordinates via ``bounding_box()``), but every action is performed through
 be. Replay never uses selectors.
 
 ``record_triage_demo`` records the MockMed triage save that ``openadapt-flow
-demo-record`` uses. The MockLoan disbursement recorder is a benchmark fixture
-in the source checkout (``benchmark/harness/mockloan/demo.py``).
+demo-record`` uses. The lending disbursement recorder is a benchmark fixture
+in the source checkout.
 """
 
 from __future__ import annotations

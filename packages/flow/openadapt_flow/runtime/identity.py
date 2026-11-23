@@ -76,6 +76,7 @@ from typing import (
     NamedTuple,
     Optional,
     Protocol,
+    Sequence,
     runtime_checkable,
 )
 
@@ -102,8 +103,8 @@ MIN_CONTEXT_CHARS = 12
 MIN_PARAM_CHARS = 4
 
 # Fraction of the recorded band's squashed characters that must be covered
-# by matched tokens. Measured with the token matcher on MockMed rows: the
-# true row re-reads at 1.0 (0.97+ under injected OCR jitter); a look-alike
+# by matched tokens. With the token matcher on dense table rows, the true
+# row re-reads at 1.0 (0.97+ under injected OCR jitter) while a look-alike
 # row sharing every column except the name covers ~0.67 — 0.8 splits the
 # populations with margin on both sides.
 COVERAGE_THRESHOLD = 0.8
@@ -267,12 +268,14 @@ GLYPH_AMBIGUOUS_ID_CHARS_CAP = 0
 # tokens (a 3-char label, a status word) do not carry identity on their own.
 ID_CARRY_NAME_MIN = 4
 
-# Low-entropy record-list column words that are NOT patient names: the Sex,
-# Status, and action-button vocabulary of an EMR list. A same-name sibling
-# SHARES these, so they never discriminate identity and must not be mistaken
-# for a name carrier (or a glyph-vulnerable MRN would wrongly verify because
-# 'Active'/'Open' looked like a name). Compared on the OCR-canonical form of
-# the squashed token (see :func:`_is_discriminative_name`).
+# Low-entropy record-list status and UI action words that are NOT entity
+# names. A same-name sibling SHARES these, so they never discriminate identity
+# and must not be mistaken for a name carrier (otherwise a glyph-vulnerable ID
+# would wrongly verify because 'Active'/'Open' looked like a name). Domain-
+# specific repeated row chrome should be derived from sibling rows via
+# :func:`derive_sibling_chrome_words` rather than hardcoded here. Compared on
+# the OCR-canonical form of the squashed token (see
+# :func:`_is_discriminative_name`).
 _GENERIC_IDENTITY_WORDS = frozenset(
     (
         "active",
@@ -301,6 +304,34 @@ _GENERIC_IDENTITY_WORDS = frozenset(
         "appointment",
     )
 )
+
+
+def derive_sibling_chrome_words(
+    rows: Sequence[str], *, min_fraction: float = 0.5
+) -> frozenset[str]:
+    """Derive non-identifying row chrome words from sibling table/list rows.
+
+    Any alphabetic token of length >= :data:`ID_CARRY_NAME_MIN` that appears
+    in at least ``min_fraction`` of ``rows`` (when at least two rows are
+    provided) is shared row chrome rather than an entity-discriminating name.
+    Returns OCR-canonical tokens suitable for combining with
+    :data:`_GENERIC_IDENTITY_CANON`.
+    """
+
+    if len(rows) < 2:
+        return frozenset()
+    counts: dict[str, int] = {}
+    for row in rows:
+        seen_in_row: set[str] = set()
+        for raw in row.split():
+            tok = squash(raw)
+            if len(tok) >= ID_CARRY_NAME_MIN and tok.isalpha():
+                seen_in_row.add(ocr_canonical(tok))
+        for tok in seen_in_row:
+            counts[tok] = counts.get(tok, 0) + 1
+    threshold = max(2, int(len(rows) * min_fraction + 0.999999))
+    return frozenset(tok for tok, n in counts.items() if n >= threshold)
+
 
 # The letter/digit NEAR-HOMOGLYPHS of the O/0 and l/1/I classes — the glyphs
 # RapidOCR collapses onto one another. BOTH sides now carry the SAME evidence
@@ -971,18 +1002,22 @@ def _is_glyph_vulnerable_identifier(token: str) -> bool:
 _is_glyph_ambiguous_identifier = _is_glyph_vulnerable_identifier
 
 
-def _is_discriminative_name(token: str) -> bool:
+def _is_discriminative_name(
+    token: str, *, extra_generic: frozenset[str] = frozenset()
+) -> bool:
     """Whether a squashed token is a discriminative name carrier: a
     name-plausible, alphabetic-dominated token of at least
     ID_CARRY_NAME_MIN chars (a real surname / first name) that is NOT a
-    low-entropy record-list column word ('Active'/'Pending'/'Open'). Short
-    alpha tokens and shared status/column words do not carry identity
-    alone."""
+    low-entropy record-list column word ('Active'/'Pending'/'Open') or a
+    sibling-shared chrome word in ``extra_generic``. Short alpha tokens and
+    shared status/column words do not carry identity alone."""
+    canon = ocr_canonical(token)
     return (
         len(token) >= ID_CARRY_NAME_MIN
         and _alpha_dominated(token)
         and _name_plausible(token)
-        and ocr_canonical(token) not in _GENERIC_IDENTITY_CANON
+        and canon not in _GENERIC_IDENTITY_CANON
+        and canon not in extra_generic
     )
 
 
@@ -1103,34 +1138,50 @@ _LABEL_CANON = (
 )
 
 
-def identity_bearing(raw_token: str, squashed_token: str) -> bool:
+def identity_bearing(
+    raw_token: str,
+    squashed_token: str,
+    *,
+    extra_generic: frozenset[str] = frozenset(),
+) -> bool:
     """Whether a band token can identify a record, from its shape alone.
 
     Digit-bearing tokens (ids, dates, ages, counts) and capitalised
     name-shaped words count. Lowercase words, ``Label:`` tokens and UI
-    vocabulary (field labels, hints, column words) do not: they appear
-    identically beside every record, so they must never pad coverage. The
-    same rule holds in a list, a form or a dialog.
+    vocabulary (field labels, hints, column words, and sibling-shared chrome
+    in ``extra_generic``) do not: they appear identically beside every record,
+    so they must never pad coverage. The same rule holds in a list, a form or
+    a dialog.
     """
     if _has_digit(squashed_token):
         return True
     if raw_token.rstrip().endswith(":"):
         return False
     bare = squashed_token.strip(".,;:()[]")
+    canon = ocr_canonical(bare)
     return (
         _name_shaped(raw_token, squashed_token)
-        and ocr_canonical(bare) not in _LABEL_CANON
+        and canon not in _LABEL_CANON
+        and canon not in extra_generic
     )
 
 
-def generic_label_role(raw_token: str, comparison_token: str) -> bool:
+def generic_label_role(
+    raw_token: str,
+    comparison_token: str,
+    *,
+    extra_generic: frozenset[str] = frozenset(),
+) -> bool:
     """Explicit non-bearing label role, shared by plain and hashed writers."""
     bare = comparison_token.strip(".,;:()[]")
+    canon = ocr_canonical(bare)
     return (
         bool(bare)
-        and not identity_bearing(raw_token, comparison_token)
+        and not identity_bearing(
+            raw_token, comparison_token, extra_generic=extra_generic
+        )
         and not _has_digit(comparison_token)
-        and ocr_canonical(bare) in _LABEL_CANON
+        and (canon in _LABEL_CANON or canon in extra_generic)
     )
 
 
@@ -1318,13 +1369,15 @@ def _has_lookalike(token: str) -> bool:
     )
 
 
-def identity_kind(token: str) -> Optional[IdentityKind]:
+def identity_kind(
+    token: str, *, extra_generic: frozenset[str] = frozenset()
+) -> Optional[IdentityKind]:
     """The identifying-field kind of a squashed band token, or None."""
     if _is_date_like(token):
         return "date"
     if _is_identifier_shaped(token):
         return "id"
-    if _is_discriminative_name(token):
+    if _is_discriminative_name(token, extra_generic=extra_generic):
         return "name"
     return None
 
@@ -1691,6 +1744,7 @@ def _band_match_normalized(
     contradiction_sim: float = CONTRADICTION_SIM,
     normalizer: Callable[[str], str],
     punctuation_witness: bool,
+    extra_generic: frozenset[str] = frozenset(),
 ) -> BandMatch:
     """Match a recorded band against a live band, token-wise.
 
@@ -1840,7 +1894,7 @@ def _band_match_normalized(
     evidence_short = (
         (punctuation_witness and not _punctuation_tokens_agree(exp, obs))
         or identity_evidence_shortfall(
-            [identity_kind(t) for t in exp],
+            [identity_kind(t, extra_generic=extra_generic) for t in exp],
             matched,
             raw_matched,
             [_has_lookalike(t) for t in exp],
@@ -1852,7 +1906,10 @@ def _band_match_normalized(
     coverage, no_bearing = identity_coverage(
         [len(t) for t in exp],
         matched,
-        [identity_bearing(r, t) for r, t in zip(exp_raw, exp)],
+        [
+            identity_bearing(r, t, extra_generic=extra_generic)
+            for r, t in zip(exp_raw, exp)
+        ],
     )
     if no_bearing or not _digit_floor_met([_has_digit(t) for t in exp], raw_matched):
         evidence_short = True
@@ -1873,6 +1930,7 @@ def band_match(
     observed_text: str,
     *,
     contradiction_sim: float = CONTRADICTION_SIM,
+    extra_generic: frozenset[str] = frozenset(),
 ) -> BandMatch:
     """Legacy diagnostic scores with independently strict verdict evidence.
 
@@ -1885,6 +1943,7 @@ def band_match(
         contradiction_sim=contradiction_sim,
         normalizer=comparison_squash,
         punctuation_witness=True,
+        extra_generic=extra_generic,
     )
     diagnostics = _band_match_normalized(
         expected_text,
@@ -1892,6 +1951,7 @@ def band_match(
         contradiction_sim=contradiction_sim,
         normalizer=squash,
         punctuation_witness=False,
+        extra_generic=extra_generic,
     )
     if diagnostics == strict:
         return strict
@@ -1900,12 +1960,18 @@ def band_match(
     return result
 
 
-def _punctuation_noise_match(expected_text: str, observed_text: str) -> BandMatch:
+def _punctuation_noise_match(
+    expected_text: str,
+    observed_text: str,
+    *,
+    extra_generic: frozenset[str] = frozenset(),
+) -> BandMatch:
     return _band_match_normalized(
         expected_text,
         observed_text,
         normalizer=squash,
         punctuation_witness=False,
+        extra_generic=extra_generic,
     )
 
 
@@ -2234,6 +2300,8 @@ def verify_target_identity(
     *,
     params: Optional[dict[str, str]] = None,
     param_examples: Optional[dict[str, str]] = None,
+    sibling_rows: Sequence[str] = (),
+    extra_generic: frozenset[str] = frozenset(),
 ) -> IdentityCheck:
     """Judge whether the live band matches the recorded target's identity.
 
@@ -2244,6 +2312,14 @@ def verify_target_identity(
         params: Effective run parameter values (run values merged over the
             recorded defaults).
         param_examples: The workflow's recorded example values per param.
+        sibling_rows: Optional opt-in sibling row bands from the same list or
+            table. When supplied, tokens shared across sibling rows are
+            excluded from discriminative names and identity-bearing coverage
+            via :func:`derive_sibling_chrome_words`. Standard single-band
+            callers without sibling rows leave this empty and rely on
+            :data:`_GENERIC_IDENTITY_WORDS`.
+        extra_generic: Optional precomputed OCR-canonical non-identifying
+            chrome tokens to exclude alongside :data:`_GENERIC_IDENTITY_CANON`.
 
     Returns:
         An :class:`~openadapt_flow.ir.IdentityCheck`:
@@ -2264,6 +2340,7 @@ def verify_target_identity(
         - ``unreadable`` — OCR produced no usable text in the live band;
           identity cannot be judged either way.
     """
+    merged_generic = extra_generic | derive_sibling_chrome_words(sibling_rows)
     params = params or {}
     param_examples = param_examples or {}
     run_values = {k: str(v) for k, v in (params or {}).items() if isinstance(v, str)}
@@ -2339,7 +2416,7 @@ def verify_target_identity(
                     observed=observed_text,
                     param=name,
                 )
-        match = band_match(substituted, observed_text)
+        match = band_match(substituted, observed_text, extra_generic=merged_generic)
         return IdentityCheck(
             status=band_verdict(match),
             abstain_reason=band_abstain_reason(match),
@@ -2352,11 +2429,13 @@ def verify_target_identity(
 
     if not hay:
         return IdentityCheck(status="unreadable", expected=expected)
-    match = band_match(context_text, observed_text)
+    match = band_match(context_text, observed_text, extra_generic=merged_generic)
     # Minimal scope: no lossy fallback for parameterized calls. Their strict
     # ownership/substitution path remains authoritative and may over-halt.
     noise = (
-        _punctuation_noise_match(context_text, observed_text)
+        _punctuation_noise_match(
+            context_text, observed_text, extra_generic=merged_generic
+        )
         if not params and not param_examples
         else None
     )

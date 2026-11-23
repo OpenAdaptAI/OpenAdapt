@@ -1,0 +1,24 @@
+{
+  "approval": "not_gated",
+  "blocked": [],
+  "ended": "read_back",
+  "hold_ms": [
+    14.5
+  ],
+  "mode": "fail_closed",
+  "model_calls": 0,
+  "notes": [],
+  "readback_ms": 1094.6,
+  "receipt_path": "/tmp/acp-demo-out/2-gated/runs/prod-no-persist-00/guard/guard-0b3b10d4c20d4051103b00eb2fe338c1/effect-receipt.json",
+  "recording": "/tmp/acp-demo-out/2-gated/runs/prod-no-persist-00/recording",
+  "requests": {
+    "save": 1
+  },
+  "saves_held": 1,
+  "schema": "openadapt.agent-guard-run/v1",
+  "scope_blocked": [],
+  "seconds": 5.396,
+  "task_id": "prod-no-persist-00",
+  "verdict": "RECONCILIATION_REQUIRED",
+  "would_block": []
+}

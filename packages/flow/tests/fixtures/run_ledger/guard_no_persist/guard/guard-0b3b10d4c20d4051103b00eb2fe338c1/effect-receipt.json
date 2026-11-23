@@ -1,0 +1,118 @@
+{
+  "evidence": {
+    "authorization": {
+      "approver": null,
+      "evaluated_by_verifier": false,
+      "reference_sha256": "hmac-sha256:fc899f00f4692bc97b79a90d1ef8894eef56cfc2194f6241400b6f87f1e7e67c",
+      "self_approved": null
+    },
+    "checked": {
+      "delta": "refuted",
+      "frame": "held",
+      "source": "instruction"
+    },
+    "contract": {
+      "contract_sha256": "sha256:677870cc4c1fb067c74c55ad355f2277b2635efc1c6c53f00a3ff447ca01572d",
+      "minimum_effect_strength": "independent_system_of_record"
+    },
+    "effect_verdict": "REFUTED",
+    "executor": {
+      "build_sha256": null,
+      "claims_counted_as_evidence": false,
+      "kind": "agent",
+      "ref_sha256": "sha256:14dace72889585b016b485d9d4768a354840d08958491dddbcfbdc8fc0d538f2",
+      "run_record_sha256": "hmac-sha256:0d823b21e50d0390fd279cda1c27a40834a4bc13c0fa135f9f4f5b08fb8e57e0"
+    },
+    "frame": {
+      "attribution": "none",
+      "collateral_count": 0,
+      "collateral_fields": [],
+      "collateral_kinds": [],
+      "concurrent_count": 0,
+      "frame_sha256": "sha256:d61a1174c92e1599fdba954140c5bbe6b26d3918c2eb7523bdd46bca4179c2e0",
+      "records_compared": 0,
+      "status": "held",
+      "target_changed_by_other": 0,
+      "unattributed_count": 0
+    },
+    "readback": {
+      "baseline_read_at": "2026-11-22T02:08:30Z",
+      "baseline_sha256": "hmac-sha256:e4c3864bdc783f5f8be695be2be2ac5cd4c126c1fb8eaf95bc7c7400be88bf1e",
+      "checked_how": "system_of_record",
+      "effects": [
+        {
+          "collateral_change_checked": true,
+          "effect_contract_hash": "sha256:d986dc1c458b4105da6e05534f42ac3007de725c52dcc4474095030082e9220f",
+          "expected_count": 1,
+          "flow_verification_tier": 1,
+          "kind": "record_written",
+          "observed_count": 0,
+          "observed_effect": "absent",
+          "stale": false,
+          "substrate": "rest",
+          "unavailable": false,
+          "verdict": "REFUTED"
+        }
+      ],
+      "max_execution_window_s": 3600,
+      "read_at": "2026-11-22T02:08:30Z",
+      "verification_tier": "independent_readback",
+      "verifier_identity": "sha256:605844092a1ba2e76b6a8527aad9551df8a96edcfa16db4e31186e495346279f"
+    },
+    "salting": {
+      "salt_commitment": "sha256:1168fa63c7fe3519552e273b757a3581fb769d095a8f6a5273829b077f7fecf3",
+      "scheme": "openadapt.run-salt/v1"
+    },
+    "schema_version": "openadapt.effect-evidence/v1",
+    "source": {
+      "status": "instruction"
+    },
+    "verifier": {
+      "model_calls": 0,
+      "name": "openadapt-flow verify-run"
+    },
+    "write_attribution": {
+      "purpose": "observation",
+      "status": "observed"
+    }
+  },
+  "receipt": {
+    "checked": {
+      "delta": "refuted",
+      "frame": "held",
+      "source": "instruction"
+    },
+    "checked_how": "system_of_record",
+    "compensation_effect_verified": false,
+    "contracts": {
+      "authorization_passed": false,
+      "effect_passed": false,
+      "external_network_used": true,
+      "identity_passed": false,
+      "minimum_effect_strength": "independent_system_of_record",
+      "model_used": true,
+      "observed_effect_strength": "independent_system_of_record",
+      "postcondition_passed": false
+    },
+    "correlation_id": "guard-0b3b10d4c20d4051103b00eb2fe338c1",
+    "delivery_uncertain": true,
+    "effect_verdict": "REFUTED",
+    "environment_id": "unnamed-environment",
+    "evidence_digest": "sha256:15c457bfe1fcc15b5f5abe1f91268f2f1a2e3fae2fffe60777890be2955effa2",
+    "execution_id": "verify-7c236e4bca174f80b5bbe197783ad7c8",
+    "executor_kind": "agent",
+    "executor_ref_sha256": "sha256:14dace72889585b016b485d9d4768a354840d08958491dddbcfbdc8fc0d538f2",
+    "issued_at": "2026-11-22T02:08:31Z",
+    "nonce": "nonce-b53591ae151d49bb8174a0a0cb815834",
+    "oracle_tier": 2,
+    "outcome": "reconciliation_required",
+    "qualification_id": "unqualified-verify-run",
+    "receipt_id": "receipt-1c8ba2a34d304b52823014396668a395",
+    "runner_id": "executor-14dace72889585b0",
+    "schema_version": "openadapt.effect-receipt/v1",
+    "verification_tier": "independent_readback",
+    "workflow_digest": "sha256:677870cc4c1fb067c74c55ad355f2277b2635efc1c6c53f00a3ff447ca01572d",
+    "workflow_version": "contract-677870cc4c1fb067"
+  },
+  "schema_version": "openadapt.effect-receipt/v1"
+}

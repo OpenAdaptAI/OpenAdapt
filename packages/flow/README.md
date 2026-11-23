@@ -6,10 +6,23 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/LICENSE)
 
 A person or an agent shows openadapt-flow a task in a web or desktop app. It
-compiles the task into a program that runs on your own machine and repeats the
-same steps with new details. A healthy run makes no calls to a hosted AI model. It's built
-for data entry that repeats every week and has to be right, such as claims,
-referrals, eligibility checks, and invoice posting.
+compiles the task into a program that runs locally on your own machine with zero
+hosted model calls on healthy runs, verifies each save against the system of
+record, and emits an offline-verifiable Ed25519 DSSE receipt (`record/run/v1`).
+It is built for repeatable writes that have to be right, such as claims,
+referrals, eligibility checks, and invoice posting, with a 100% local
+zero-egress option so screenshots and sensitive records stay inside your
+perimeter.
+
+```bash
+# Watch read-back catch a silent save failure locally (no account or API key):
+uvx --python 3.12 openadapt quickstart --break-it
+
+# Expose compiled workflows to Claude Code or any MCP client as one tool:
+claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve
+```
+
+Or record, compile, and rehearse a web task directly:
 
 ```bash
 pip install 'openadapt-flow[browser]'
@@ -45,6 +58,8 @@ their accessibility APIs; and remote desktops (RDP, Citrix) through screen pixel
 Agents can call a compiled workflow as one tool over MCP; see
 [Give your agent a program, not a mouse](#give-your-agent-a-program-not-a-mouse).
 
+[Proof](https://openadapt.ai/proof) ·
+[Pilot](https://openadapt.ai/pilot) ·
 [Docs](https://docs.openadapt.ai) ·
 [Try it in your browser](https://app.openadapt.ai/demo) ·
 [Website](https://openadapt.ai) ·
@@ -445,7 +460,10 @@ browser workflows. Desktop and Citrix runs are self-hosted
   database, FHIR, a report export or a separate signed-in session. The record
   check reads whatever that path covers. In a fault test with injected bad
   writes, a screen-only check passed 54 of the 72 runs that left the record
-  wrong, one API read passed 9, and a read of every table passed none
+  wrong, one API read passed 9, and a read of every table passed none. The
+  test database is SQLite with two record tables. Separately, 9 of the 18
+  correct saves stopped in every arm, when the save's answer timed out and
+  the write step halted before any read-back ran
   ([`EFFECT_E2E.md`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/effect_e2e/EFFECT_E2E.md)).
 - On pixel surfaces, the identity check takes extra looks before it stops on
   a look-alike record ID: false stops on a dense record list fell from 232 to
