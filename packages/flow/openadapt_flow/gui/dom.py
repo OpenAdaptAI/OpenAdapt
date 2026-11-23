@@ -12,6 +12,18 @@ requests whose path matches a pattern the pack declares (an app whose commit
 is a plain link). Nothing else counts, so a page that saves by some other
 route shows no write, and no write means no commit.
 
+A write counts only when it answered 2xx or 3xx, and the actuator keeps what
+each counted write returned (:meth:`PageActuator.write_outcomes`): ``"2xx"``,
+or ``"3xx <path>"`` with the redirect's ``Location`` path, so a replay that
+is bounced to a sign-in page does not pass for one that saved. A 4xx or 5xx,
+a 3xx with no ``Location``, and a request that failed are write errors. The
+page's own origin is read when an action starts, not when a response comes.
+
+Known limit: a page that starts a ``fetch()`` write and then navigates away
+aborts its own request (``net::ERR_ABORTED``). That shows as a write error,
+so such a step is refuted on every run, failing closed, even when the
+server got the write.
+
 Handles are CSS paths (``#id`` when the id is unique, else ``nth-of-type``
 steps), computed without touching the page.
 """
@@ -249,6 +261,17 @@ def _origin_of(url: str) -> str:
     return f"{parts.scheme.lower()}://{parts.netloc.lower()}"
 
 
+def _location_key(request_url: str, target: str) -> str:
+    """A redirect target as the demo and a replay compare it: the path,
+    without a trailing slash, prefixed by the origin when it leaves the
+    request's origin. Query and fragment are dropped."""
+    from urllib.parse import urlsplit
+
+    path = urlsplit(target).path.rstrip("/") or "/"
+    origin = _origin_of(target)
+    return path if origin == _origin_of(request_url) else f"{origin}{path}"
+
+
 class PageActuator:
     """An :class:`~openadapt_flow.gui.model.Actuator` over a Playwright page.
 
@@ -269,6 +292,8 @@ class PageActuator:
         self.page = page
         self._writes = 0
         self._write_errors: list[str] = []
+        self._outcomes: list[str] = []
+        self._step_origin = ""
         self._get_writes = tuple(re.compile(p) for p in write_get_paths)
         self._allowed_origins = frozenset(
             o for o in (_origin_of(raw) for raw in allowed_origins) if o
@@ -279,7 +304,7 @@ class PageActuator:
     def _is_counted_write_request(self, request: Any) -> bool:
         req_url = str(request.url)
         req_origin = _origin_of(req_url)
-        page_origin = _origin_of(str(getattr(self.page, "url", "") or ""))
+        page_origin = self._step_origin or self._page_origin()
         if not req_origin:
             return False
         if req_origin != page_origin and req_origin not in self._allowed_origins:
@@ -295,18 +320,42 @@ class PageActuator:
                 return True
         return False
 
+    def _page_origin(self) -> str:
+        return _origin_of(str(getattr(self.page, "url", "") or ""))
+
+    def _start_action(self) -> None:
+        # The page's origin when the action starts: a response that arrives
+        # mid-navigation must not make the new page's origin "own".
+        self._step_origin = self._page_origin()
+
     def _on_response(self, response: Any) -> None:
+        from urllib.parse import urljoin, urlsplit
+
         request = response.request
         if not self._is_counted_write_request(request):
             return
         status = int(response.status)
-        if 200 <= status < 400:
+        method = str(request.method).upper()
+        req_url = str(request.url)
+        path = urlsplit(req_url).path or "/"
+        if 200 <= status < 300:
             self._writes += 1
+            self._outcomes.append("2xx")
+        elif 300 <= status < 400:
+            headers = getattr(response, "headers", None) or {}
+            location = next(
+                (str(v) for k, v in headers.items() if str(k).lower() == "location"),
+                "",
+            ).strip()
+            target = urljoin(req_url, location) if location else ""
+            if not _origin_of(target):
+                self._write_errors.append(
+                    f"{method} {path} returned HTTP {status} with no usable Location"
+                )
+                return
+            self._writes += 1
+            self._outcomes.append(f"3xx {_location_key(req_url, target)}")
         elif status >= 400:
-            from urllib.parse import urlsplit
-
-            method = str(request.method).upper()
-            path = urlsplit(str(request.url)).path or "/"
             self._write_errors.append(f"{method} {path} returned HTTP {status}")
 
     def _on_request_failed(self, request: Any) -> None:
@@ -318,6 +367,11 @@ class PageActuator:
         path = urlsplit(str(request.url)).path or "/"
         failure = getattr(request, "failure", None) or "request failed"
         self._write_errors.append(f"{method} {path} failed: {failure}")
+
+    def write_outcomes(self) -> tuple[str, ...]:
+        """What each counted write returned, in arrival order: ``"2xx"`` or
+        ``"3xx <redirect path>"``."""
+        return tuple(self._outcomes)
 
     def write_errors(self) -> tuple[str, ...]:
         """Refuting HTTP 4xx/5xx or failed write-request errors observed so far."""
@@ -344,6 +398,7 @@ class PageActuator:
         raise AssertionError("unreachable")
 
     def click(self, handle: str) -> None:
+        self._start_action()
         self.page.locator(handle).click()
         # A click may start a navigation or a request a moment later; give
         # it time to start before waiting for the page to settle.
@@ -351,11 +406,13 @@ class PageActuator:
         self._settle()
 
     def set_text(self, handle: str, value: str) -> None:
+        self._start_action()
         self.page.locator(handle).fill(value)
         self.page.locator(handle).dispatch_event("change")
         self._settle()
 
     def set_checked(self, handle: str, checked: bool) -> None:
+        self._start_action()
         self.page.locator(handle).set_checked(checked)
         self._settle()
 

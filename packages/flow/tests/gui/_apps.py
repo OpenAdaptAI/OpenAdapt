@@ -69,18 +69,33 @@ def page(title: str, body: str) -> str:
 
 
 def registration_app(
-    *, next_writes: bool = False, commit_posts: int = 1, error_after: bool = False
+    *,
+    next_writes: bool = False,
+    commit_posts: int = 1,
+    error_after: bool = False,
+    fetch_writes: bool = False,
+    redirect: str = "",
 ) -> App:
     """Contact details, then a ticket, then Register. "Continue" is a link that
     keeps the values in session storage. ``next_writes`` makes the link also
     post a draft (an app that changed); ``commit_posts`` is how many requests
-    Register sends; ``error_after`` shows an alert after the commit."""
+    Register sends; ``error_after`` shows an alert after the commit.
 
-    draft = (
-        "(function(){var x=new XMLHttpRequest();x.open('POST','/draft',false);x.send('{}');})();"
-        if next_writes
-        else ""
-    )
+    The extra writes are synchronous XHR, which finish before the page
+    navigates; ``fetch_writes`` sends them with ``fetch()`` instead, which the
+    navigation aborts. ``redirect="/done"`` saves and answers 302 to the
+    confirmation page; ``redirect="/login"`` saves nothing and answers 302 to
+    a plain sign-in page (an expired session), with no alert."""
+
+    def _post(path: str, body: str) -> str:
+        if fetch_writes:
+            return f"fetch('{path}',{{method:'POST',body:{body}}});"
+        return (
+            "(function(){var x=new XMLHttpRequest();"
+            f"x.open('POST','{path}',false);x.send({body});}})();"
+        )
+
+    draft = _post("/draft", "'{}'") if next_writes else ""
 
     def contact(app: App, path: str, method: str, form: dict) -> tuple[int, str]:
         return 200, page(
@@ -97,7 +112,7 @@ sessionStorage.setItem('em',em.value);{draft}return true;}}</script></main>""",
 
     def ticket(app: App, path: str, method: str, form: dict) -> tuple[int, str]:
         sends = "".join(
-            "(function(){var x=new XMLHttpRequest();x.open('POST','/register',false);x.send(JSON.stringify(data()));})();"
+            _post("/register", "JSON.stringify(data())")
             for _ in range(commit_posts - 1)
         )
         return 200, page(
@@ -116,10 +131,22 @@ function fill(){{hn.value=sessionStorage.getItem('nm');he.value=sessionStorage.g
         )
 
     def register(app: App, path: str, method: str, form: dict) -> tuple[int, str]:
+        if redirect == "/login":
+            return 302, "/login"
         app.state.setdefault("records", []).append(
             {k: v[0] for k, v in form.items() if v}
         )
+        if redirect:
+            return 302, redirect
         return done(app, path, method, form)
+
+    def login(app: App, path: str, method: str, form: dict) -> tuple[int, str]:
+        return 200, page(
+            "Sign in",
+            """<main><h1>Sign in</h1><p>Your session expired.</p><form>
+<label for="u">Email</label><input id="u" type="email">
+<button type="button">Sign in</button></form></main>""",
+        )
 
     def done(app: App, path: str, method: str, form: dict) -> tuple[int, str]:
         alert = '<p role="alert">Payment could not be taken</p>' if error_after else ""
@@ -135,6 +162,7 @@ function fill(){{hn.value=sessionStorage.getItem('nm');he.value=sessionStorage.g
             ("GET", "/ticket"): ticket,
             ("POST", "/register"): register,
             ("GET", "/done"): done,
+            ("GET", "/login"): login,
             ("POST", "/draft"): draft_ok,
         },
     )

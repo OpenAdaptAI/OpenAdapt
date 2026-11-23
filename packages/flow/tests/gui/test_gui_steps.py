@@ -126,6 +126,74 @@ def test_a_commit_that_differs_from_the_demo_is_refuted(page, variant, reason) -
     assert reason in out.result.reason
 
 
+def test_fetch_then_navigate_is_refuted_as_aborted(page) -> None:
+    """Pins a known limit: a link that fires ``fetch()`` and then navigates
+    aborts its own request, so the step is refuted for ERR_ABORTED (failing
+    closed) rather than for the write it started."""
+    with _apps.serve(page, _apps.registration_app()) as app:
+        nxt = learn_steps(_record_registration(page, app))[0].spec
+    changed = _apps.registration_app(next_writes=True, fetch_writes=True)
+    with _apps.serve(page, changed):
+        act = PageActuator(page)
+        page.goto(f"{changed.origin}/contact")
+        out = take_step(act, nxt)
+    assert out.clicked and out.result.status is Status.REFUTED
+    assert "ERR_ABORTED" in out.result.reason
+
+
+def _replay_commit(page, steps, app, run_id: str):
+    with _apps.serve(page, app):
+        act = PageActuator(page)
+        page.goto(f"{app.origin}/contact")
+        s = act.observe()
+        act.set_text(_handle(s, "textbox", "Full name"), "Bo Sample")
+        act.set_text(_handle(s, "textbox", "Email"), "bo@example.test")
+        assert take_step(act, steps[0], run_id=run_id).held
+        page.select_option(_handle(act.observe(), "combobox", "Ticket type"), "vip")
+        return take_step(act, steps[1], run_id=run_id)
+
+
+def test_a_commit_bounced_to_sign_in_is_not_held(page) -> None:
+    """Demo POST answers 200; replay answers 302 to a plain sign-in page with
+    no alert and saves nothing. The redirect is not the demo's outcome."""
+    with _apps.serve(page, _apps.registration_app()) as app:
+        steps = [s.spec for s in learn_steps(_record_registration(page, app))]
+    assert steps[1].outcomes == ("2xx",)
+    app2 = _apps.registration_app(redirect="/login")
+    out = _replay_commit(page, steps, app2, "r302")
+    assert out.clicked and out.result.status is not Status.HELD
+    assert out.result.status is Status.REFUTED, out.result.reason
+    assert "3xx /login" in out.result.reason
+    assert not app2.state.get("records")
+
+
+def test_a_redirect_to_another_path_than_the_demo_is_not_held(page) -> None:
+    """Demo POST answers 302 to /done; replay answers 302 to /login."""
+    with _apps.serve(page, _apps.registration_app(redirect="/done")) as app:
+        steps = [s.spec for s in learn_steps(_record_registration(page, app))]
+    assert steps[1].outcomes == ("3xx /done",)
+    app2 = _apps.registration_app(redirect="/login")
+    out = _replay_commit(page, steps, app2, "r302b")
+    assert out.clicked and out.result.status is Status.REFUTED, out.result.reason
+    assert not app2.state.get("records")
+    app3 = _apps.registration_app(redirect="/done")
+    out = _replay_commit(page, steps, app3, "r302c")
+    assert out.held, out.result.reason
+    assert app3.state["records"] == [
+        {"name": "Bo Sample", "email": "bo@example.test", "ticket": "vip"}
+    ]
+
+
+def test_a_commit_spec_without_recorded_outcomes_is_never_clicked(page) -> None:
+    with _apps.serve(page, _apps.registration_app()) as app:
+        steps = [s.spec for s in learn_steps(_record_registration(page, app))]
+    old = StepSpec(steps[1].step_id, steps[1].control, StepRole.COMMIT, 1)
+    app2 = _apps.registration_app()
+    out = _replay_commit(page, [steps[0], old], app2, "rold")
+    assert not out.clicked and out.result.status is Status.NOT_CHECKED
+    assert not app2.state.get("records")
+
+
 def test_a_missing_renamed_or_doubled_link_is_never_clicked(page) -> None:
     spec = StepSpec("next", ControlSpec("link", "Continue"), StepRole.NAVIGATE)
     app = _apps.registration_app()
@@ -294,9 +362,17 @@ def test_judge_step_needs_exact_whole_counts() -> None:
         writes_after=4,
         moved=True,
         after_complete=True,
+        expected_outcomes=("2xx",),
+        outcomes=("2xx",),
     )
     assert judge_step(StepEvidence(**base)).status is Status.HELD
     for change in (
+        {"outcomes": ("3xx /login",)},
+        {"outcomes": None},
+        {"outcomes": "2xx"},
+        {"outcomes": ("2xx", "2xx")},
+        {"expected_outcomes": None},
+        {"expected_outcomes": ()},
         {"writes_after": "4"},
         {"writes_after": True},
         {"writes_before": None},
