@@ -21,7 +21,10 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-KEY_DEFAULT = Path.home() / ".openadapt" / "approver" / "desktop-approver.pem"
+
+def _key_default() -> Path:
+    """Current-home default approver key path. Must not be baked at import time."""
+    return Path.home() / ".openadapt" / "approver" / "desktop-approver.pem"
 
 
 def _common(p: argparse.ArgumentParser) -> None:
@@ -128,7 +131,14 @@ def register(sub: argparse._SubParsersAction) -> None:
         metavar="CHOICE",
         choices=["continue", "skip", "decline", "done_by_person", "abort"],
     )
-    a.add_argument("--key", help=f"the encrypted approver key (default: {KEY_DEFAULT})")
+    # Fixed text, not the expanded home: help must not change with HOME (the
+    # CLI snapshot test and anyone diffing --help). The default itself is
+    # still computed when the command runs (_key_default()).
+    a.add_argument(
+        "--key",
+        help="the encrypted approver key "
+        "(default: ~/.openadapt/approver/desktop-approver.pem)",
+    )
     a.add_argument("--json", action="store_true", help="print JSON")
     _roster(a)
     _common(a)
@@ -339,7 +349,7 @@ def cmd_answer(args: argparse.Namespace) -> int:
         return refuse("card_expired", "The card expired.")
     key_dir, root = _pin(args)
     try:
-        key = load_encrypted_key(args.key or KEY_DEFAULT)
+        key = load_encrypted_key(args.key or _key_default())
     except (AuthorityError, OSError, ValueError) as exc:
         return refuse("approver_key_unusable", str(exc))
     signed = {
