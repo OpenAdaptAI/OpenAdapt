@@ -34,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument(
         "--app",
         default="all",
-        help="App ID to run (e.g. openemr, odoo17, twenty_crm, gnucash) or 'all'.",
+        help="App ID to run (e.g. openemr, odoo17) or 'all'.",
     )
     p_run.add_argument(
         "--mode",

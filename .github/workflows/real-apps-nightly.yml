@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       app:
-        description: "App ID to run (all, openemr, odoo17, twenty_crm, gnucash)"
+        description: "App ID to run (all, openemr, odoo17)"
         required: true
         default: "all"
         type: choice
@@ -14,8 +14,6 @@ on:
           - all
           - openemr
           - odoo17
-          - twenty_crm
-          - gnucash
       mode:
         description: "Verification mode"
         required: true
@@ -42,7 +40,7 @@ jobs:
         run: |
           APP="${{ inputs.app || 'all' }}"
           if [ "$APP" = "all" ]; then
-            echo 'apps=["openemr","odoo17","twenty_crm","gnucash"]' >> "$GITHUB_OUTPUT"
+            echo 'apps=["openemr","odoo17"]' >> "$GITHUB_OUTPUT"
           else
             echo "apps=[\"$APP\"]" >> "$GITHUB_OUTPUT"
           fi
@@ -64,8 +62,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Validate Docker Compose manifest (web apps)
-        if: matrix.app != 'gnucash'
+      - name: Validate Docker Compose manifest
         run: |
           docker compose -f "benchmarks/real_apps/apps/${{ matrix.app }}/docker-compose.yml" config -q
 

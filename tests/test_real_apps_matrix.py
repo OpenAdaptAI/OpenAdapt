@@ -1,4 +1,4 @@
-"""Comprehensive unit & contract tests for Wave 1 of the Real-App Verification Matrix."""
+"""Comprehensive unit & contract tests for the Real-App Verification Matrix (OpenEMR + Odoo 17)."""
 
 from __future__ import annotations
 
@@ -22,18 +22,6 @@ from benchmarks.real_apps import (
     render_scoreboard_markdown,
 )
 from benchmarks.real_apps.__main__ import main as cli_main
-from benchmarks.real_apps.apps.gnucash.fault_injectors import (
-    has_active_lock,
-    inject_readonly_lock,
-    simulate_unsaved_buffer_write,
-)
-from benchmarks.real_apps.apps.gnucash.readback import readback_gnucash_transaction
-from benchmarks.real_apps.apps.gnucash.seed import (
-    LedgerEntryFixture,
-    default_ledger_entry,
-    record_balanced_transaction,
-    seed_gnucash_sqlite,
-)
 from benchmarks.real_apps.apps.openemr.fault_injectors import (
     session_expiry_redirect_rule,
 )
@@ -90,18 +78,15 @@ class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def test_registry_exposes_all_wave1_apps() -> None:
+def test_registry_exposes_vertical_wave1_apps() -> None:
     specs = list_app_specs()
     ids = [s.app_id for s in specs]
-    assert ids == ["openemr", "odoo17", "twenty_crm", "gnucash"]
+    assert ids == ["openemr", "odoo17"]
     for spec in specs:
         assert get_app_spec(spec.app_id) == spec
         assert spec.workflows
-        if spec.surface == "web":
-            assert spec.compose_file is not None
-            assert spec.compose_file.is_file()
-        else:
-            assert spec.compose_file is None
+        assert spec.compose_file is not None
+        assert spec.compose_file.is_file()
 
     with pytest.raises(KeyError, match="Unknown app_id"):
         get_app_spec("nonexistent_app")
@@ -170,45 +155,7 @@ def test_fault_proxy_all_modes() -> None:
         assert len(upstream.received_posts) == 2
 
 
-def test_gnucash_sqlite_seed_readback_and_lock_fault(tmp_path: Path) -> None:
-    db_path = seed_gnucash_sqlite(tmp_path / "ledger.gnucash")
-    entry = default_ledger_entry()
-    record_balanced_transaction(db_path, entry)
-
-    rb = readback_gnucash_transaction(
-        db_path,
-        expected_tx_guid=entry.tx_guid,
-        expected_description=entry.description,
-        expected_amount_cents=entry.amount_cents,
-    )
-    assert rb.confirmed is True
-    assert rb.observed_fields["split_count"] == 2
-    assert rb.observed_fields["split_sum"] == 0
-
-    assert has_active_lock(db_path) is False
-    inject_readonly_lock(db_path)
-    assert has_active_lock(db_path) is True
-
-    unsaved = LedgerEntryFixture(
-        tx_guid="tx-unsaved-999",
-        description="Unsaved entry",
-        post_date="2026-11-22 13:00:00",
-        amount_cents=5000,
-    )
-    ui_state = simulate_unsaved_buffer_write(db_path, unsaved)
-    assert ui_state["ui_row_visible"] is True
-    assert ui_state["reason"] == "readonly_gnclock"
-
-    rb_missing = readback_gnucash_transaction(
-        db_path,
-        expected_tx_guid=unsaved.tx_guid,
-        expected_description=unsaved.description,
-        expected_amount_cents=unsaved.amount_cents,
-    )
-    assert rb_missing.confirmed is False
-
-
-@pytest.mark.parametrize("app_id", ["openemr", "odoo17", "twenty_crm", "gnucash"])
+@pytest.mark.parametrize("app_id", ["openemr", "odoo17"])
 def test_wave1_app_contract_verification_passes(app_id: str, tmp_path: Path) -> None:
     adapter = load_adapter(app_id)
     harness = RealAppHarness([adapter])
@@ -248,26 +195,18 @@ def test_cli_runner_emits_json_and_markdown_scoreboard(
 
     doc = json.loads(out_json.read_text(encoding="utf-8"))
     assert doc["schema"] == "openadapt.real-apps-scoreboard/v1"
-    assert doc["total"] == 4
-    assert doc["passed"] == 4
-    assert [r["app_id"] for r in doc["results"]] == [
-        "openemr",
-        "odoo17",
-        "twenty_crm",
-        "gnucash",
-    ]
+    assert doc["total"] == 2
+    assert doc["passed"] == 2
+    assert [r["app_id"] for r in doc["results"]] == ["openemr", "odoo17"]
 
     md = out_md.read_text(encoding="utf-8")
-    assert "4/4 apps passed" in md
+    assert "2/2 apps passed" in md
     assert "OpenEMR 8.0.0.3" in md
     assert "Odoo 17 Community" in md
-    assert "Twenty CRM" in md
-    assert "GnuCash Desktop" in md
     assert "OpenAdapt Real-App Verification Matrix" in capsys.readouterr().out
 
-    # Ensure render_scoreboard_markdown works directly as well.
     assert "PASS" in render_scoreboard_markdown(
-        RealAppHarness([load_adapter("gnucash")]).run_all(
+        RealAppHarness([load_adapter("openemr")]).run_all(
             mode="contract", work_dir=tmp_path / "single"
         ),
         mode="contract",

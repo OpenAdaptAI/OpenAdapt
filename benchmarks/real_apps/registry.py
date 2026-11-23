@@ -4,24 +4,18 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from benchmarks.real_apps.apps.gnucash import GNUCASH_SPEC, GnuCashAdapter
 from benchmarks.real_apps.apps.odoo17 import ODOO17_SPEC, Odoo17Adapter
 from benchmarks.real_apps.apps.openemr import OPENEMR_SPEC, OpenEMRAdapter
-from benchmarks.real_apps.apps.twenty_crm import TWENTY_CRM_SPEC, TwentyCRMAdapter
 from benchmarks.real_apps.harness import RealAppAdapter, RealAppSpec, TierKind
 
 _ADAPTER_FACTORIES: dict[str, Callable[[], RealAppAdapter]] = {
     "openemr": OpenEMRAdapter,
     "odoo17": Odoo17Adapter,
-    "twenty_crm": TwentyCRMAdapter,
-    "gnucash": GnuCashAdapter,
 }
 
 _SPECS: dict[str, RealAppSpec] = {
     "openemr": OPENEMR_SPEC,
     "odoo17": ODOO17_SPEC,
-    "twenty_crm": TWENTY_CRM_SPEC,
-    "gnucash": GNUCASH_SPEC,
 }
 
 
