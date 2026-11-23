@@ -1,0 +1,1 @@
+| Check a save on desktop, RDP or Citrix by looking the record up in a separate read-only session | Released ([#1280](https://github.com/OpenAdaptAI/OpenAdapt/pull/1280)) | Synthetic (WinForms, RDP and Citrix stand-ins) | `runtime/effects/` |

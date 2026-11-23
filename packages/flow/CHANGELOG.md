@@ -67,6 +67,12 @@
 
 ### Fixes
 
+- A FHIR searchset Bundle's `OperationOutcome` entry (`search.mode:
+  outcome`) is no longer read as a marker match. Packs can declare
+  `search_match` on the entry parent (Medplum uses `path: search.mode`,
+  `equals: match`). A non-informational outcome is an error, not a
+  found id, so recovery cannot adopt a write that never landed and an
+  outcome id does not count toward `duplicate_write`.
 - File, document, document-hash and email checks no longer claim
   `system_of_record` (tier 1) for every file. Their strength now follows who
   produced the artifact, set by the new `effects.artifact_producer`:
