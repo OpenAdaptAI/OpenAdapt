@@ -1321,3 +1321,78 @@ function mkInput(attrs) {{
     assert out["tab99Paused"] is True
     assert out["tab99ObserverStarted"] >= 1
     assert out["sidepanelKeepsRecording"] is True
+
+
+def test_smscode_network_redaction_and_mfa_detection() -> None:
+    """P1-C regression: smsCode / userSsn bodies redact and smsCode input triggers MFA pause."""
+    redact_path = str(EXT_DIR / "network_redact.js")
+    content_path = str(EXT_DIR / "content.js")
+    script = f"""
+const fs = require('fs');
+const vm = require('vm');
+
+const rCtx = {{ console, URL, URLSearchParams, TextDecoder, Buffer }};
+rCtx.globalThis = rCtx;
+vm.runInNewContext(fs.readFileSync({json.dumps(redact_path)}, 'utf8'), rCtx);
+const redactor = rCtx.OpenAdaptNetworkRedact;
+
+const bodyStr = JSON.stringify({{
+  smsCode: '482910',
+  userSsn: '123-45-6789',
+  applicant: 'Jane Doe',
+}});
+const redacted = redactor.redactNetworkSave({{
+  method: 'POST',
+  url: 'https://portal.example.com/api/verify',
+  requestHeaders: [{{ name: 'content-type', value: 'application/json' }}],
+  requestBody: {{ raw: [{{ bytes: Buffer.from(bodyStr, 'utf8') }}] }},
+  statusCode: 200,
+  t_ms: 1700000000000,
+}});
+
+const cCtx = {{
+  console,
+  URL,
+  setTimeout,
+  clearTimeout,
+  window: {{ addEventListener: () => {{}}, removeEventListener: () => {{}}, top: null }},
+  location: {{ href: 'https://portal.example.com/mfa', origin: 'https://portal.example.com' }},
+  document: {{
+    readyState: 'complete',
+    querySelectorAll: (sel) => sel === 'input' ? [{{
+      nodeType: 1,
+      tagName: 'INPUT',
+      type: 'text',
+      getAttribute: (k) => (k === 'name' ? 'smsCode' : null),
+    }}] : [],
+    addEventListener: () => {{}},
+    removeEventListener: () => {{}},
+  }},
+  chrome: {{
+    runtime: {{
+      onMessage: {{ addListener: () => {{}} }},
+      sendMessage: () => {{}},
+    }},
+  }},
+}};
+cCtx.window.top = cCtx.window;
+cCtx.globalThis = cCtx;
+vm.runInNewContext(fs.readFileSync({json.dumps(content_path)}, 'utf8'), cCtx);
+const mfaCheck = cCtx.__openadaptExtensionContent.detectAuthInterstitial();
+
+console.log(JSON.stringify({{
+  redacted,
+  mfaCheck,
+}}));
+"""
+    out = _run_node(script)
+    assert out["redacted"] is not None
+    payload = out["redacted"]["request_body"]
+    assert payload["smsCode"] == "<secret>"
+    assert payload["userSsn"] == "<secret>"
+    assert payload["applicant"] == "Jane Doe"
+    assert "482910" not in json.dumps(out["redacted"])
+    assert "123-45-6789" not in json.dumps(out["redacted"])
+    assert out["mfaCheck"]["detected"] is True
+    assert out["mfaCheck"]["kind"] == "mfa"
+    assert "mfa_input" in out["mfaCheck"]["signals"]

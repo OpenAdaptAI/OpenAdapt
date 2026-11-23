@@ -143,16 +143,16 @@ locally redacted workflow evidence to the local desktop runtime.
    runtime on the same computer**. Outside an active recording or co-pilot run,
    no page values or network requests are captured.
 3. **Zero Credential Capture:** OpenAdapt Co-Pilot never reads, logs, stores,
-   or transmits passwords, passkeys, security tokens, cookies, authorization
-   headers, or one-time MFA codes (including `verification_code`, `totp`,
-   `mfa_code`, `2fa`, `one-time-code`, `otp`, and `pin` fields). Secret-looking
-   fields, query parameters, headers, and request keys are redacted locally
-   before leaving the extension, and response bodies are never captured. When a
-   sign-in or multi-factor authentication screen is detected on the active run's
-   tab, the extension pauses browser evidence and network capture on that tab,
-   displays a sign-in notice in the side panel, and sends a structural pause
-   signal (zero credentials) to the local host so the host also stops writing
-   evidence for that tab until the user signs in and clicks Resume.
+   or transmits passwords, passkeys, security tokens, cookies, or authorization
+   headers, and detects and redacts common one-time-code fields (including
+   `verification_code`, `sms_code`, `smsCode`, `totp`, `mfa_code`, `2fa`,
+   `one-time-code`, `otp`, `pin`, and `code`). Secret-looking fields, query
+   parameters, headers, and request keys are redacted locally before leaving
+   the extension, and response bodies are never captured. When a sign-in or
+   multi-factor authentication screen is detected on the active run's tab, the
+   extension pauses browser evidence and network capture on that tab, displays
+   a sign-in notice in the side panel, and sends a structural pause signal (zero
+   credentials) to the local host until the user signs in and clicks Resume.
 4. **No Data Sale or Advertising:** OpenAdapt does not collect, sell, rent, or
    transfer user data to third parties for advertising, analytics, or credit
    decisions.

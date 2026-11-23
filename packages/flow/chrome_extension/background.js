@@ -330,13 +330,30 @@ async function recordAuthInterstitial(msg, sender) {
     .slice(0, 8);
   const origin = sender && typeof sender.origin === 'string' ? sender.origin : '';
 
+  // Zero credential storage: strictly structural metadata only, keyed by tabId.
+  // Set local pause state BEFORE awaiting native-host ack so no network POST or
+  // DOM evidence slips through during the native-host round-trip.
+  const entry = {
+    paused: true,
+    kind,
+    tabId,
+    origin,
+    signals,
+    detectedAt: Date.now(),
+    hostAcked: false,
+    mode: 'capture_paused_local',
+  };
+  authPauseByTab.set(tabId, entry);
+  persistSession(SESSION_AUTH_KEY, serializeAuthPauses());
+  setBadge(recording);
+
   // Pause browser evidence & network capture immediately on this tab.
   notifyTabAuthPaused(tabId, true);
   for (const [reqId, pending] of Array.from(pendingSaves.entries())) {
     if (pending && pending.tabId === tabId) pendingSaves.delete(reqId);
   }
 
-  // Notify local native host so it also stops writing evidence for this tab.
+  // Notify local native host of the structural auth pause.
   let hostAcked = false;
   try {
     const reply = await sendCopilotNative({
@@ -353,20 +370,13 @@ async function recordAuthInterstitial(msg, sender) {
     hostAcked = false;
   }
 
-  // Zero credential storage: strictly structural metadata only, keyed by tabId.
-  const entry = {
-    paused: true,
-    kind,
-    tabId,
-    origin,
-    signals,
-    detectedAt: Date.now(),
-    hostAcked,
-    mode: hostAcked ? 'capture_paused_host_acked' : 'capture_paused_local',
-  };
-  authPauseByTab.set(tabId, entry);
-  persistSession(SESSION_AUTH_KEY, serializeAuthPauses());
-  setBadge(recording);
+  // Only update if this pause entry is still the active one for tabId.
+  if (authPauseByTab.get(tabId) === entry) {
+    entry.hostAcked = hostAcked;
+    entry.mode = hostAcked ? 'capture_paused_host_acked' : 'capture_paused_local';
+    persistSession(SESSION_AUTH_KEY, serializeAuthPauses());
+    setBadge(recording);
+  }
   return entry;
 }
 
@@ -720,6 +730,12 @@ function broadcastRecording(active) {
   });
 }
 
+function clearTrackedPopupsIfIdle() {
+  if (hasActiveRun() || trackedPopups.size === 0) return;
+  trackedPopups.clear();
+  persistSession(SESSION_POPUPS_KEY, serializePopups());
+}
+
 function setRecording(active) {
   recording = Boolean(active);
   setBadge(recording);
@@ -727,6 +743,7 @@ function setRecording(active) {
   if (!recording) {
     queued = [];
     pendingSaves.clear();
+    clearTrackedPopupsIfIdle();
   }
 }
 
@@ -779,7 +796,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       } catch (e) {}
     }
     const senderTabId = sender && sender.tab && Number.isInteger(sender.tab.id) ? sender.tab.id : null;
-    const isTrackedPopup = Number.isInteger(senderTabId) && trackedPopups.has(senderTabId);
+    const isTrackedPopup =
+      hasActiveRun() && Number.isInteger(senderTabId) && trackedPopups.has(senderTabId);
     const runActiveForTab =
       (hasActiveRun() && Number.isInteger(activeRunTabId) && senderTabId === activeRunTabId) ||
       isTrackedPopup;
@@ -874,6 +892,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if (!recording && Number.isInteger(activeRunTabId)) {
           setActiveRunTab(null);
         }
+        clearTrackedPopupsIfIdle();
         sendResponse({
           ok: false,
           error: (reply && reply.error) || 'copilot_sync_failed',
@@ -893,6 +912,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       } else if (!recording && Number.isInteger(activeRunTabId)) {
         setActiveRunTab(null);
       }
+      clearTrackedPopupsIfIdle();
       copilotHaltCount =
         state && Array.isArray(state.halts) ? state.halts.length : 0;
       setBadge(recording);
