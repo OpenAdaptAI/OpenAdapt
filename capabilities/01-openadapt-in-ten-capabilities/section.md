@@ -34,8 +34,18 @@ monorepo and installable from source.
    (`compose`, `process`, released), and one program can switch surfaces, tabs
    and popups mid-run ([#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197)).
 5. **Confirms the right record before every write and reads it back after.**
-   The record check reads the system of record (API, database, FHIR with SMART
-   Backend Services, or a separate signed-in session), never just the screen.
+   A run is `VERIFIED` only when a read outside the acting session confirms the
+   save: the system of record (API, database, FHIR with SMART Backend Services,
+   a log or an export) or a separate session (a fresh sign-in on the web; on
+   desktop, a fresh session or a relaunch of the app, as the deployment
+   declares). A read on the acting screen gets its own level and never
+   verifies a run. The run report names the level for each save with a
+   declared read-back. Where the app's own screens are the only independent
+   read, the check covers at most the target record, plus the same actor's
+   changes in the app's activity log within a stated window where the app
+   shows one and the program is set up to read it; other records, later
+   server-side jobs and outbound messages are not covered. The wire check is
+   evidence of what was sent, not a check level.
    `record --verify` proposes those checks from what the demonstration changed.
    Released.
 6. **Stops instead of improvising, and never retries an uncertain save.** A run
