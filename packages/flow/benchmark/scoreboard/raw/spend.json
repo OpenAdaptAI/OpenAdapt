@@ -1,5 +1,5 @@
 {
-  "total_usd": 12.975542,
+  "total_usd": 19.074663,
   "entries": [
     {
       "usd": 0.577,
@@ -1364,6 +1364,371 @@
       "usd": 0.039766,
       "note": "openemr_referral code_agent 2026-10-25-rb-admit item 6",
       "at": 1792901346.200465
+    },
+    {
+      "usd": 0.086355,
+      "note": "openemr claims 2026-11-20-a item 1101",
+      "at": 1795219948.831179
+    },
+    {
+      "usd": 0.105403,
+      "note": "openemr claims 2026-11-20-a item 1102",
+      "at": 1795220033.747503
+    },
+    {
+      "usd": 0.097059,
+      "note": "openemr claims 2026-11-20-a item 1103",
+      "at": 1795220130.926692
+    },
+    {
+      "usd": 0.076299,
+      "note": "openemr claims 2026-11-20-a item 1104",
+      "at": 1795220207.97743
+    },
+    {
+      "usd": 0.076755,
+      "note": "openemr claims 2026-11-20-a item 1105",
+      "at": 1795220285.761805
+    },
+    {
+      "usd": 0.076486,
+      "note": "openemr claims 2026-11-20-a item 1106",
+      "at": 1795220362.095007
+    },
+    {
+      "usd": 0.087975,
+      "note": "openemr claims 2026-11-20-a item 1107",
+      "at": 1795220458.597631
+    },
+    {
+      "usd": 0.076481,
+      "note": "openemr claims heldout-2026-11-20-a item 1201",
+      "at": 1795220515.3845701
+    },
+    {
+      "usd": 0.078996,
+      "note": "openemr claims 2026-11-20-a item 1108",
+      "at": 1795220548.3880918
+    },
+    {
+      "usd": 0.085812,
+      "note": "openemr claims heldout-2026-11-20-a item 1202",
+      "at": 1795220598.280907
+    },
+    {
+      "usd": 0.070596,
+      "note": "openemr claims 2026-11-20-a item 1109",
+      "at": 1795220630.443338
+    },
+    {
+      "usd": 0.077181,
+      "note": "openemr claims heldout-2026-11-20-a item 1203",
+      "at": 1795220674.210907
+    },
+    {
+      "usd": 0.076919,
+      "note": "openemr claims 2026-11-20-a item 1110",
+      "at": 1795220715.217484
+    },
+    {
+      "usd": 0.076605,
+      "note": "openemr claims heldout-2026-11-20-a item 1204",
+      "at": 1795220753.329771
+    },
+    {
+      "usd": 0.084981,
+      "note": "openemr claims 2026-11-20-a item 1111",
+      "at": 1795220806.0357409
+    },
+    {
+      "usd": 0.127441,
+      "note": "openemr claims heldout-2026-11-20-a item 1205",
+      "at": 1795220870.656399
+    },
+    {
+      "usd": 0.085071,
+      "note": "openemr claims 2026-11-20-a item 1112",
+      "at": 1795220897.656199
+    },
+    {
+      "usd": 0.076581,
+      "note": "openemr claims 2026-11-20-a item 1113",
+      "at": 1795220977.329213
+    },
+    {
+      "usd": 0.12157,
+      "note": "openemr claims heldout-2026-11-20-a item 1206",
+      "at": 1795221027.996039
+    },
+    {
+      "usd": 0.077959,
+      "note": "openemr claims 2026-11-20-a item 1114",
+      "at": 1795221056.932394
+    },
+    {
+      "usd": 0.077446,
+      "note": "openemr claims 2026-11-20-a item 1115",
+      "at": 1795221137.520087
+    },
+    {
+      "usd": 0.076772,
+      "note": "openemr claims heldout-2026-11-20-a item 1207",
+      "at": 1795221165.268049
+    },
+    {
+      "usd": 0.085189,
+      "note": "openemr claims 2026-11-20-a item 1116",
+      "at": 1795221222.050713
+    },
+    {
+      "usd": 0.112466,
+      "note": "openemr claims heldout-2026-11-20-a item 1208",
+      "at": 1795221268.343853
+    },
+    {
+      "usd": 0.075118,
+      "note": "openemr claims 2026-11-20-a item 1117",
+      "at": 1795221358.047332
+    },
+    {
+      "usd": 0.095017,
+      "note": "openemr claims heldout-2026-11-20-a item 1209",
+      "at": 1795221410.388323
+    },
+    {
+      "usd": 0.076245,
+      "note": "openemr claims heldout-2026-11-20-a item 1210",
+      "at": 1795221495.4870799
+    },
+    {
+      "usd": 0.085295,
+      "note": "openemr claims 2026-11-20-a item 1118",
+      "at": 1795221496.249367
+    },
+    {
+      "usd": 0.078222,
+      "note": "openemr claims heldout-2026-11-20-a item 1211",
+      "at": 1795221577.133334
+    },
+    {
+      "usd": 0.077318,
+      "note": "openemr claims 2026-11-20-a item 1119",
+      "at": 1795221627.7737799
+    },
+    {
+      "usd": 0.077977,
+      "note": "openemr claims heldout-2026-11-20-a item 1212",
+      "at": 1795221656.755552
+    },
+    {
+      "usd": 0.087197,
+      "note": "openemr claims heldout-2026-11-20-a item 1213",
+      "at": 1795221744.143054
+    },
+    {
+      "usd": 0.123412,
+      "note": "openemr claims 2026-11-20-a item 1120",
+      "at": 1795221796.589081
+    },
+    {
+      "usd": 0.078009,
+      "note": "openemr claims heldout-2026-11-20-a item 1214",
+      "at": 1795221829.4216478
+    },
+    {
+      "usd": 0.076648,
+      "note": "openemr claims 2026-11-20-a item 1121",
+      "at": 1795221933.444463
+    },
+    {
+      "usd": 0.117382,
+      "note": "openemr claims heldout-2026-11-20-a item 1215",
+      "at": 1795221934.742104
+    },
+    {
+      "usd": 0.076679,
+      "note": "openemr claims 2026-11-20-a item 1122",
+      "at": 1795222071.069998
+    },
+    {
+      "usd": 0.085668,
+      "note": "openemr claims heldout-2026-11-20-a item 1216",
+      "at": 1795222072.984382
+    },
+    {
+      "usd": 0.076411,
+      "note": "openemr claims heldout-2026-11-20-a item 1217",
+      "at": 1795222151.741235
+    },
+    {
+      "usd": 0.086113,
+      "note": "openemr claims 2026-11-20-a item 1123",
+      "at": 1795222206.9752069
+    },
+    {
+      "usd": 0.077749,
+      "note": "openemr claims heldout-2026-11-20-a item 1218",
+      "at": 1795222234.005583
+    },
+    {
+      "usd": 0.076547,
+      "note": "openemr claims heldout-2026-11-20-a item 1219",
+      "at": 1795222310.6130571
+    },
+    {
+      "usd": 0.077152,
+      "note": "openemr claims 2026-11-20-a item 1124",
+      "at": 1795222344.5783849
+    },
+    {
+      "usd": 0.085348,
+      "note": "openemr claims heldout-2026-11-20-a item 1220",
+      "at": 1795222391.667865
+    },
+    {
+      "usd": 0.077393,
+      "note": "openemr claims heldout-2026-11-20-a item 1221",
+      "at": 1795222465.993784
+    },
+    {
+      "usd": 0.076922,
+      "note": "openemr claims 2026-11-20-a item 1125",
+      "at": 1795222479.5264902
+    },
+    {
+      "usd": 0.077642,
+      "note": "openemr claims heldout-2026-11-20-a item 1222",
+      "at": 1795222602.401393
+    },
+    {
+      "usd": 0.076495,
+      "note": "openemr claims 2026-11-20-a item 1126",
+      "at": 1795222614.019698
+    },
+    {
+      "usd": 0.069544,
+      "note": "openemr claims 2026-11-20-a item 1127",
+      "at": 1795222699.737395
+    },
+    {
+      "usd": 0.086207,
+      "note": "openemr claims heldout-2026-11-20-a item 1223",
+      "at": 1795222740.338207
+    },
+    {
+      "usd": 0.076391,
+      "note": "openemr claims 2026-11-20-a item 1128",
+      "at": 1795222783.777575
+    },
+    {
+      "usd": 0.076794,
+      "note": "openemr claims 2026-11-20-a item 1129",
+      "at": 1795222876.684236
+    },
+    {
+      "usd": 0.08633,
+      "note": "openemr claims heldout-2026-11-20-a item 1224",
+      "at": 1795222886.254573
+    },
+    {
+      "usd": 0.075793,
+      "note": "openemr claims 2026-11-20-a item 1130",
+      "at": 1795222955.596459
+    },
+    {
+      "usd": 0.076257,
+      "note": "openemr claims heldout-2026-11-20-a item 1225",
+      "at": 1795223020.130722
+    },
+    {
+      "usd": 0.086924,
+      "note": "openemr claims 2026-11-20-a item 1131",
+      "at": 1795223052.688448
+    },
+    {
+      "usd": 0.06907,
+      "note": "openemr claims 2026-11-20-a item 1132",
+      "at": 1795223127.468967
+    },
+    {
+      "usd": 0.076755,
+      "note": "openemr claims heldout-2026-11-20-a item 1226",
+      "at": 1795223152.982385
+    },
+    {
+      "usd": 0.076119,
+      "note": "openemr claims 2026-11-20-a item 1133",
+      "at": 1795223205.7324128
+    },
+    {
+      "usd": 0.077651,
+      "note": "openemr claims heldout-2026-11-20-a item 1227",
+      "at": 1795223235.9558148
+    },
+    {
+      "usd": 0.076418,
+      "note": "openemr claims 2026-11-20-a item 1134",
+      "at": 1795223287.163871
+    },
+    {
+      "usd": 0.077608,
+      "note": "openemr claims heldout-2026-11-20-a item 1228",
+      "at": 1795223328.532141
+    },
+    {
+      "usd": 0.084997,
+      "note": "openemr claims 2026-11-20-a item 1135",
+      "at": 1795223375.9781709
+    },
+    {
+      "usd": 0.085763,
+      "note": "openemr claims heldout-2026-11-20-a item 1229",
+      "at": 1795223419.7104619
+    },
+    {
+      "usd": 0.086922,
+      "note": "openemr claims 2026-11-20-a item 1136",
+      "at": 1795223504.204229
+    },
+    {
+      "usd": 0.107437,
+      "note": "openemr claims heldout-2026-11-20-a item 1230",
+      "at": 1795223540.5211031
+    },
+    {
+      "usd": 0.08699,
+      "note": "openemr claims heldout-2026-11-20-a item 1231",
+      "at": 1795223688.399075
+    },
+    {
+      "usd": 0.077257,
+      "note": "openemr claims heldout-2026-11-20-a item 1232",
+      "at": 1795223765.429209
+    },
+    {
+      "usd": 0.075933,
+      "note": "openemr claims heldout-2026-11-20-a item 1233",
+      "at": 1795223842.843064
+    },
+    {
+      "usd": 0.07627,
+      "note": "openemr claims heldout-2026-11-20-a item 1234",
+      "at": 1795223921.428024
+    },
+    {
+      "usd": 0.086386,
+      "note": "openemr claims heldout-2026-11-20-a item 1235",
+      "at": 1795224000.947069
+    },
+    {
+      "usd": 0.085125,
+      "note": "openemr claims heldout-2026-11-20-a item 1236",
+      "at": 1795224108.569868
+    },
+    {
+      "usd": 0.085823,
+      "note": "openemr claims heldout-2026-11-20-a item 1237",
+      "at": 1795224206.223525
     }
   ]
 }

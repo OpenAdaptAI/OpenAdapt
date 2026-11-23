@@ -76,7 +76,11 @@ def registration_app(
     post a draft (an app that changed); ``commit_posts`` is how many requests
     Register sends; ``error_after`` shows an alert after the commit."""
 
-    draft = "fetch('/draft',{method:'POST',body:'{}'});" if next_writes else ""
+    draft = (
+        "(function(){var x=new XMLHttpRequest();x.open('POST','/draft',false);x.send('{}');})();"
+        if next_writes
+        else ""
+    )
 
     def contact(app: App, path: str, method: str, form: dict) -> tuple[int, str]:
         return 200, page(
@@ -93,7 +97,7 @@ sessionStorage.setItem('em',em.value);{draft}return true;}}</script></main>""",
 
     def ticket(app: App, path: str, method: str, form: dict) -> tuple[int, str]:
         sends = "".join(
-            "fetch('/register',{method:'POST',body:JSON.stringify(data())});"
+            "(function(){var x=new XMLHttpRequest();x.open('POST','/register',false);x.send(JSON.stringify(data()));})();"
             for _ in range(commit_posts - 1)
         )
         return 200, page(

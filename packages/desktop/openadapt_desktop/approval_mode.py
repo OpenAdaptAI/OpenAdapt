@@ -1,27 +1,28 @@
 """Only ask a person about problems: the Desktop side of the switch.
 
-The switch lets a clinic stop approving routine items one by one. With it on,
-an item saves without a person only when every check before and after the
-save passes, and the record read back from the records system shows exactly
-the values it was given. Everything else goes to a person in Needs you.
+The switch lets an organization stop approving routine items one by one. With
+it on, an item saves without a person only when every check before and after
+the save passes, and the record read back from the records system shows
+exactly the values it was given. Everything else goes to a person in Needs
+you.
 
 Who decides what:
 
-* A clinic owner or admin turns the switch on in OpenAdapt Cloud, and the
-  clinic's privacy contact confirms. Desktop never turns it on. No IPC command
-  writes a switch record; :func:`accept_switch` exists for the Cloud status
-  client and for tests.
+* An organization owner or admin turns the switch on in OpenAdapt Cloud, and
+  the organization's privacy contact confirms. Desktop never turns it on. No
+  IPC command writes a switch record; :func:`accept_switch` exists for the
+  Cloud status client and for tests.
 * Anyone at this computer can turn it off, offline too. The switch-off goes
   into Flow's hash-chained switch log, which Flow's pre-save gate reads before
   every save, so it applies before the next save and Cloud can't undo it.
 * Flow decides each item: the pre-save checks (P1 to P5), the post-run checks
-  (R1 and R2) and the switch-off rules. Desktop reads Flow's PHI-free
-  ``approval`` block from the run report and never upgrades it. An item counts
-  as saved without a person only when that block says so, both post-run checks
-  passed, and the item's transaction outcome is a consistent ``VERIFIED``.
-  Desktop also checks the block against its own records before it lets the
-  item close without a person (:func:`confirm_no_person`); a block it can't
-  confirm needs a person.
+  (R1 and R2) and the switch-off rules. Desktop reads Flow's
+  sensitive-data-free ``approval`` block from the run report and never
+  upgrades it. An item counts as saved without a person only when that block
+  says so, both post-run checks passed, and the item's transaction outcome is
+  a consistent ``VERIFIED``. Desktop also checks the block against its own
+  records before it lets the item close without a person
+  (:func:`confirm_no_person`); a block it can't confirm needs a person.
 
 What is local, per task version (local bundle id)::
 
@@ -30,8 +31,8 @@ What is local, per task version (local bundle id)::
     <data_dir>/approval_mode/<bundle_id>/turned_off.json  a switch-off made here
 
 Nothing here holds an input value, screen content or free text. The names of
-the clinic staff who turned the switch on and confirmed it are kept on this
-computer only, to show who is accountable.
+the staff who turned the switch on and confirmed it are kept on this computer
+only, to show who is accountable.
 
 The switch can't take effect on this computer yet. :func:`blockers` names
 every missing piece, and while any is missing Desktop shows the switch as not
@@ -117,7 +118,7 @@ class SwitchEnvelope(BaseModel):
 
     ``record`` is Flow's switch record, validated with Flow's own model. The
     two people are the accountable admin and the privacy contact. Their names
-    are display names from the clinic's own Cloud organization.
+    are display names from the organization's own Cloud account.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)

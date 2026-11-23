@@ -510,6 +510,29 @@ class SkillCache:
     def run(self, prompt: str, params: Mapping[str, Any], agent: Any) -> SkillRun:
         started = time.monotonic()
         compiler, key = self._compiler(prompt, params)
+        served = self._compiled(compiler, key, params, started)
+        if served is not None:
+            return served
+        return self._first_run(compiler, key, prompt, params, agent, started)
+
+    def replay_only(self, prompt: str, params: Mapping[str, Any]) -> Optional[SkillRun]:
+        """The admitted program, or the hold, and never a first run.
+
+        None when the task has no admitted program (a miss): no agent is
+        involved, so a miss can't start one.
+        """
+
+        started = time.monotonic()
+        compiler, key = self._compiler(prompt, params)
+        return self._compiled(compiler, key, params, started)
+
+    def _compiled(
+        self,
+        compiler: Any,
+        key: dict[str, Any],
+        params: Mapping[str, Any],
+        started: float,
+    ) -> Optional[SkillRun]:
         if (compiler.dir / _STOP_FILE).exists() or (
             compiler.dir / _STOP_FILE
         ).is_symlink():
@@ -539,7 +562,7 @@ class SkillCache:
                     stream.flush()
                     os.fsync(stream.fileno())
             return self._held(compiler, started)
-        return self._first_run(compiler, key, prompt, params, agent, started)
+        return None
 
     def _held(self, compiler: Any, started: float) -> SkillRun:
         try:
@@ -1005,6 +1028,8 @@ class TaskRecordCheck:
     removed: int
     #: Writes to other records during the run (other users, other tasks).
     outside_run: dict[str, int] = field(default_factory=dict)
+    #: False when either read failed: the zero counts then prove nothing.
+    readable: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return dict(self.__dict__)
@@ -1032,7 +1057,7 @@ def task_record_check(
 
     if before is None or after is None:
         return TaskRecordCheck(
-            False, ["the system of record could not be read"], 0, 0, 0
+            False, ["the system of record could not be read"], 0, 0, 0, readable=False
         )
 
     def mine(record: Optional[Mapping[str, Any]]) -> bool:
@@ -1088,10 +1113,18 @@ async def _call_skill(python: str, server: Path, params: dict[str, Any]) -> dict
     """Call the compiled task's one tool over MCP (stdio), as a client would."""
 
     from mcp import ClientSession, StdioServerParameters
-    from mcp.client.stdio import stdio_client
+    from mcp.client.stdio import get_default_environment, stdio_client
 
-    target = StdioServerParameters(command=python, args=[str(server)])
-    async with stdio_client(target) as (read, write):
+    from openadapt_flow.second_factor import source_env
+
+    # The stdio client passes only a minimal environment. A sign-in's second
+    # factor source (and its run token) is what the cached run needs too.
+    env = {**get_default_environment(), **source_env()}
+    target = StdioServerParameters(command=python, args=[str(server)], env=env)
+    # The child's stderr goes to the stderr in use now. The client's default
+    # is the stream bound when mcp was first imported, which a host (or a
+    # test capture) may have closed since; spawning then fails.
+    async with stdio_client(target, errlog=sys.stderr) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
             tools = (await session.list_tools()).tools

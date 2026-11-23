@@ -1,0 +1,1 @@
+| Show why an agent asked for a save: who asked, its own reason (as a quote), the screen text it saw, and any of that text that reads like an instruction to an agent | Released ([#1359](https://github.com/OpenAdaptAI/OpenAdapt/pull/1359)) | Unit tests, synthetic | `ApprovalProvenance` in `approval_mode/item_approval.py`; the phone card in openadapt-desktop `portal/shell` |

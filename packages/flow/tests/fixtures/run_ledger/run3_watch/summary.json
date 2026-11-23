@@ -1,0 +1,26 @@
+{
+  "approval": "not_gated",
+  "blocked": [],
+  "ended": "read_back",
+  "hold_ms": [
+    13.5
+  ],
+  "mode": "fail_closed",
+  "model_calls": 0,
+  "notes": [
+    "run 1 was not recorded: more than one logical browser action arrived before Flow could retain an exact intermediate frame; recording was refused (click, click, click, click)"
+  ],
+  "readback_ms": 44.0,
+  "receipt_path": "/tmp/acp-demo-out/run3/2b-watch/run/guard/guard-bf7bbd34ee162666c4ae61755f3d7ee3/effect-receipt.json",
+  "recording": null,
+  "requests": {
+    "save": 1
+  },
+  "saves_held": 1,
+  "schema": "openadapt.agent-guard-run/v1",
+  "scope_blocked": [],
+  "seconds": 5.268,
+  "task_id": "triage-p1-0001",
+  "verdict": "VERIFIED",
+  "would_block": []
+}

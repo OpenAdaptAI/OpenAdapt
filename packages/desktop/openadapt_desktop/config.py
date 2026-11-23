@@ -223,7 +223,7 @@ class EngineConfig(BaseSettings):
         default="",
         description=(
             "The exact https origin your reverse proxy or VPN publishes for this "
-            "runner, e.g. https://openadapt.clinic.example. Required for "
+            "runner, e.g. https://openadapt.runner.example. Required for "
             "'customer_ingress'; must not be set for 'loopback'."
         ),
     )

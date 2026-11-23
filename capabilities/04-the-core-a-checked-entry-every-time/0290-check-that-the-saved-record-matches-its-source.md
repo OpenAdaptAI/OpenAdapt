@@ -1,0 +1,1 @@
+| Check that the saved record matches its source document, not only the parameters: intake keeps each value's line, a second reading must agree before a guarded save, and a round trip compares the read-back with the document | Released | Synthetic (MockMed, text referral) | `openadapt_flow/provenance.py`, `intake`, `verify-run --provenance`, guarded save |

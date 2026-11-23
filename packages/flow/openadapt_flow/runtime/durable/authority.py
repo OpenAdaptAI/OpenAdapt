@@ -198,7 +198,13 @@ def _default_db_path() -> Path:
         # Keep the final path lexical. Resolving it here would follow an
         # attacker-controlled database symlink before `_connect` can reject it.
         return Path(os.path.abspath(os.fspath(Path(configured).expanduser())))
-    return Path.home() / ".openadapt" / "durable-authority" / "authority.sqlite3"
+    # Canonicalize only the OS home directory (for example macOS /tmp ->
+    # /private/tmp when HOME is under /tmp, or /home -> /var/home). Keep the
+    # OpenAdapt subpaths lexical so symlinks planted inside HOME are still
+    # rejected by `_assert_configured_ancestors_are_not_links` and `_connect`.
+    return (
+        Path.home().resolve() / ".openadapt" / "durable-authority" / "authority.sqlite3"
+    )
 
 
 def _path_key(run_dir: Path) -> str:
