@@ -34,11 +34,15 @@
   const statusLineEl = document.getElementById('status-line');
   const runMetaEl = document.getElementById('run-meta');
   const errorBannerEl = document.getElementById('error-banner');
+  const authPauseContainerEl = document.getElementById('auth-pause-container');
+  const popupBannerContainerEl = document.getElementById('popup-banner-container');
   const receiptContainerEl = document.getElementById('receipt-container');
   const haltsContainerEl = document.getElementById('halts-container');
   const emptyStateEl = document.getElementById('empty-state');
 
   let currentState = null;
+  let currentAuthPause = null;
+  let currentPopupState = null;
   let lastRenderedStateKey = '__uninitialized__';
   let syncInFlight = false;
 
@@ -69,7 +73,10 @@
     });
   }
 
-  function deriveStatusBadge(state) {
+  function deriveStatusBadge(state, authPause) {
+    if (authPause && authPause.paused) {
+      return { text: 'Sign-In Paused', status: 'auth_paused' };
+    }
     if (!state) {
       return { text: 'Idle', status: 'idle' };
     }
@@ -511,15 +518,139 @@
     runMetaEl.hidden = false;
   }
 
-  function renderState(state) {
-    const serialized = JSON.stringify(state || null);
+  function renderAuthPauseCard(authPause) {
+    if (!authPauseContainerEl) return;
+    authPauseContainerEl.textContent = '';
+    if (!authPause || !authPause.paused) {
+      authPauseContainerEl.hidden = true;
+      return;
+    }
+
+    const card = document.createElement('article');
+    card.id = 'auth-pause-card';
+    card.className = 'auth-pause-card';
+    card.setAttribute('data-auth-kind', String(authPause.kind || 'sign_in'));
+
+    const header = document.createElement('div');
+    header.className = 'auth-pause-header';
+    const badge = document.createElement('span');
+    badge.className = 'auth-pause-badge';
+    badge.textContent =
+      authPause.kind === 'mfa' ? 'MFA / Passkey Pause' : 'Operator Sign-In Pause';
+    header.appendChild(badge);
+    card.appendChild(header);
+
+    const title = document.createElement('h2');
+    title.className = 'auth-pause-title';
+    title.textContent = 'Sign in directly in Chrome to continue';
+    card.appendChild(title);
+
+    const body = document.createElement('p');
+    body.className = 'auth-pause-copy';
+    body.textContent =
+      'OpenAdapt paused automatically and never reads or stores passwords, MFA codes, or 1Password fills. Complete sign-in in the active tab, then click Resume.';
+    card.appendChild(body);
+
+    const actions = document.createElement('div');
+    actions.className = 'halt-actions';
+    const resumeBtn = document.createElement('button');
+    resumeBtn.type = 'button';
+    resumeBtn.id = 'auth-resume-btn';
+    resumeBtn.className = 'action-btn btn-primary';
+    resumeBtn.setAttribute('data-action', 'auth_resume');
+    resumeBtn.textContent = 'I Signed In — Resume';
+    resumeBtn.addEventListener('click', async () => {
+      resumeBtn.disabled = true;
+      const resp = await sendRuntimeMessage({ type: 'COPILOT_AUTH_RESUME' });
+      resumeBtn.disabled = false;
+      if (!resp || !resp.ok) {
+        showCardFeedback(
+          card,
+          `Could not resume: ${(resp && resp.error) || 'unknown error'}`,
+          true
+        );
+        return;
+      }
+      lastRenderedStateKey = '__force_rerender__';
+      void syncState({ forceScroll: false });
+    });
+    actions.appendChild(resumeBtn);
+    card.appendChild(actions);
+
+    authPauseContainerEl.appendChild(card);
+    authPauseContainerEl.hidden = false;
+  }
+
+  function renderPopupBanner(popupState) {
+    if (!popupBannerContainerEl) return;
+    popupBannerContainerEl.textContent = '';
+    if (!popupState || !Number.isInteger(popupState.childTabId)) {
+      popupBannerContainerEl.hidden = true;
+      return;
+    }
+
+    const card = document.createElement('article');
+    card.id = 'popup-banner-card';
+    card.className = 'popup-banner-card';
+    card.setAttribute('data-child-tab-id', String(popupState.childTabId));
+    if (Number.isInteger(popupState.parentTabId)) {
+      card.setAttribute('data-parent-tab-id', String(popupState.parentTabId));
+    }
+
+    const title = document.createElement('div');
+    title.className = 'popup-banner-title';
+    title.textContent = 'Estimator / Child Pop-Up Active';
+    card.appendChild(title);
+
+    const copy = document.createElement('p');
+    copy.className = 'popup-banner-copy';
+    const originText = popupState.childOrigin ? ` (${popupState.childOrigin})` : '';
+    copy.textContent =
+      `Tracking child window${originText}. Closing it returns focus to your parent quoting tab automatically.`;
+    card.appendChild(copy);
+
+    const actions = document.createElement('div');
+    actions.className = 'halt-actions';
+    const returnBtn = document.createElement('button');
+    returnBtn.type = 'button';
+    returnBtn.id = 'popup-return-btn';
+    returnBtn.className = 'action-btn';
+    returnBtn.setAttribute('data-action', 'return_to_parent');
+    returnBtn.textContent = 'Return to Parent Tab';
+    returnBtn.addEventListener('click', async () => {
+      returnBtn.disabled = true;
+      await sendRuntimeMessage({
+        type: 'COPILOT_RETURN_TO_PARENT',
+        childTabId: popupState.childTabId,
+      });
+      returnBtn.disabled = false;
+      lastRenderedStateKey = '__force_rerender__';
+      void syncState({ forceScroll: false });
+    });
+    actions.appendChild(returnBtn);
+    card.appendChild(actions);
+
+    popupBannerContainerEl.appendChild(card);
+    popupBannerContainerEl.hidden = false;
+  }
+
+  function renderState(state, extras) {
+    const authPause = extras && extras.authPause ? extras.authPause : null;
+    const popupState = extras && extras.popupState ? extras.popupState : null;
+    const serialized = JSON.stringify({
+      state: state || null,
+      authPause,
+      popupState,
+    });
     if (serialized === lastRenderedStateKey) {
       return;
     }
     lastRenderedStateKey = serialized;
     currentState = state || null;
+    currentAuthPause = authPause;
+    currentPopupState = popupState;
 
-    const badge = deriveStatusBadge(currentState);
+    const badge = deriveStatusBadge(currentState, currentAuthPause);
     statusPillEl.textContent = badge.text;
     statusPillEl.setAttribute('data-status', badge.status);
 
@@ -531,11 +662,16 @@
     const pct = total > 0 ? Math.min(100, Math.round((filled / total) * 100)) : 0;
     progressFillEl.style.width = `${pct}%`;
 
-    statusLineEl.textContent = currentState
-      ? String(currentState.status_line || '')
-      : 'Waiting for an active local form session.';
+    statusLineEl.textContent =
+      currentAuthPause && currentAuthPause.paused
+        ? 'Paused on sign-in / MFA screen. Authenticate in Chrome to resume.'
+        : currentState
+          ? String(currentState.status_line || '')
+          : 'Waiting for an active local form session.';
 
     renderRunMeta(currentState);
+    renderAuthPauseCard(currentAuthPause);
+    renderPopupBanner(currentPopupState);
     renderReceiptCard(currentState);
 
     haltsContainerEl.textContent = '';
@@ -545,8 +681,13 @@
       haltsContainerEl.appendChild(renderHaltCard(halt));
     }
 
+    const hasAuthPause = Boolean(currentAuthPause && currentAuthPause.paused);
+    const hasPopup = Boolean(currentPopupState && Number.isInteger(currentPopupState.childTabId));
     const showEmpty =
-      halts.length === 0 && (!currentState || currentState.outcome !== 'verified_done');
+      halts.length === 0 &&
+      !hasAuthPause &&
+      !hasPopup &&
+      (!currentState || currentState.outcome !== 'verified_done');
     emptyStateEl.hidden = !showEmpty;
   }
 
@@ -569,18 +710,22 @@
         type: 'COPILOT_SYNC_STATE',
         forceScroll,
       });
+      const extras = {
+        authPause: resp && resp.authPause ? resp.authPause : null,
+        popupState: resp && resp.popupState ? resp.popupState : null,
+      };
       if (!resp || !resp.ok) {
         if (resp && resp.error === 'no_recording_dir') {
           setErrorBanner('');
-          renderState(null);
+          renderState(null, extras);
         } else {
           setErrorBanner((resp && resp.error) || 'unavailable');
-          if (!currentState) renderState(null);
+          renderState(currentState, extras);
         }
         return;
       }
       setErrorBanner('');
-      renderState(resp.state || null);
+      renderState(resp.state || null, extras);
     } finally {
       syncInFlight = false;
     }

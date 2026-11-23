@@ -21,6 +21,206 @@ let copilotPort = null;
 let copilotQueue = [];
 let copilotHaltCount = 0;
 let lastCopilotHighlights = [];
+// Ephemeral MV3 service worker state is mirrored into chrome.storage.session
+// whenever available so popup tracking & auth pauses survive worker sleep.
+let trackedPopups = new Map(); // childTabId -> { childTabId, childWindowId, parentTabId, parentWindowId, focused, openedAt }
+let authPauseState = null; // { paused: true, kind, tabId, origin, signals, detectedAt }
+
+const SESSION_POPUPS_KEY = 'openadapt_copilot_popups';
+const SESSION_AUTH_KEY = 'openadapt_copilot_auth_pause';
+const VALID_AUTH_KINDS = new Set(['mfa', 'signin', 'sso']);
+
+function persistSession(key, value) {
+  try {
+    if (chrome && chrome.storage && chrome.storage.session && typeof chrome.storage.session.set === 'function') {
+      const p = chrome.storage.session.set({ [key]: value });
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    }
+  } catch (e) {}
+}
+
+function hydrateSessionState() {
+  try {
+    if (chrome && chrome.storage && chrome.storage.session && typeof chrome.storage.session.get === 'function') {
+      const p = chrome.storage.session.get([SESSION_POPUPS_KEY, SESSION_AUTH_KEY]);
+      if (p && typeof p.then === 'function') {
+        p.then((data) => {
+          if (data && Array.isArray(data[SESSION_POPUPS_KEY])) {
+            trackedPopups = new Map(
+              data[SESSION_POPUPS_KEY]
+                .filter((e) => e && Number.isInteger(e.childTabId))
+                .map((e) => [e.childTabId, e])
+            );
+          }
+          if (data && data[SESSION_AUTH_KEY] && data[SESSION_AUTH_KEY].paused) {
+            authPauseState = data[SESSION_AUTH_KEY];
+            setBadge(recording);
+          }
+        }).catch(() => {});
+      }
+    }
+  } catch (e) {}
+}
+
+function serializePopups() {
+  return Array.from(trackedPopups.values());
+}
+
+function getActivePopupSummary() {
+  const list = serializePopups();
+  return list.length ? list[list.length - 1] : null;
+}
+
+async function focusParentTab(entry) {
+  if (!entry || !Number.isInteger(entry.parentTabId)) return false;
+  try {
+    if (chrome && chrome.tabs && typeof chrome.tabs.update === 'function') {
+      await chrome.tabs.update(entry.parentTabId, { active: true });
+    }
+    if (
+      Number.isInteger(entry.parentWindowId) &&
+      chrome &&
+      chrome.windows &&
+      typeof chrome.windows.update === 'function'
+    ) {
+      await chrome.windows.update(entry.parentWindowId, { focused: true });
+    }
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function trackOpenedChildTab(tab) {
+  if (!tab || !Number.isInteger(tab.id) || !Number.isInteger(tab.openerTabId)) return null;
+  let parentWindowId = tab.windowId;
+  try {
+    if (chrome && chrome.tabs && typeof chrome.tabs.get === 'function') {
+      const parent = await chrome.tabs.get(tab.openerTabId);
+      if (parent && Number.isInteger(parent.windowId)) {
+        parentWindowId = parent.windowId;
+      }
+    }
+  } catch (e) {}
+  let childOrigin = null;
+  const rawUrl = typeof tab.url === 'string' && tab.url ? tab.url : tab.pendingUrl;
+  if (typeof rawUrl === 'string' && rawUrl) {
+    try {
+      const parsed = new URL(rawUrl);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        childOrigin = parsed.origin;
+      }
+    } catch (e) {}
+  }
+  const entry = {
+    childTabId: tab.id,
+    childWindowId: Number.isInteger(tab.windowId) ? tab.windowId : null,
+    childOrigin,
+    parentTabId: tab.openerTabId,
+    parentWindowId: Number.isInteger(parentWindowId) ? parentWindowId : null,
+    focused: Boolean(tab.active),
+    openedAt: Date.now(),
+  };
+  trackedPopups.set(tab.id, entry);
+  persistSession(SESSION_POPUPS_KEY, serializePopups());
+  return entry;
+}
+
+async function handleClosedChildTab(tabId) {
+  if (!trackedPopups.has(tabId)) return false;
+  const entry = trackedPopups.get(tabId);
+  trackedPopups.delete(tabId);
+  persistSession(SESSION_POPUPS_KEY, serializePopups());
+  return await focusParentTab(entry);
+}
+
+async function handleClosedChildWindow(windowId) {
+  let returned = false;
+  for (const [childTabId, entry] of Array.from(trackedPopups.entries())) {
+    if (entry.childWindowId === windowId) {
+      trackedPopups.delete(childTabId);
+      if (await focusParentTab(entry)) returned = true;
+    }
+  }
+  persistSession(SESSION_POPUPS_KEY, serializePopups());
+  return returned;
+}
+
+function handleWindowFocusChanged(windowId) {
+  if (!Number.isInteger(windowId)) return;
+  let changed = false;
+  for (const entry of trackedPopups.values()) {
+    const nextFocused = entry.childWindowId === windowId;
+    if (entry.focused !== nextFocused) {
+      entry.focused = nextFocused;
+      changed = true;
+    }
+  }
+  if (changed) persistSession(SESSION_POPUPS_KEY, serializePopups());
+}
+
+function recordAuthInterstitial(msg, sender) {
+  const kind = VALID_AUTH_KINDS.has(msg && msg.kind) ? msg.kind : 'signin';
+  const rawSignals = Array.isArray(msg && msg.signals) ? msg.signals : [];
+  const signals = rawSignals
+    .filter((s) => typeof s === 'string' && /^[a-z0-9_]{1,32}$/.test(s))
+    .slice(0, 8);
+  const tabId = sender && sender.tab && Number.isInteger(sender.tab.id) ? sender.tab.id : null;
+  const origin = sender && typeof sender.origin === 'string' ? sender.origin : '';
+  // Zero credential storage: strictly structural metadata only.
+  authPauseState = {
+    paused: true,
+    kind,
+    tabId,
+    origin,
+    signals,
+    detectedAt: Date.now(),
+  };
+  persistSession(SESSION_AUTH_KEY, authPauseState);
+  setBadge(recording);
+  return authPauseState;
+}
+
+async function resumeAfterAuth() {
+  const prev = authPauseState;
+  authPauseState = null;
+  persistSession(SESSION_AUTH_KEY, null);
+  setBadge(recording);
+  if (prev && Number.isInteger(prev.tabId)) {
+    try {
+      await sendCopilotNative({
+        type: 'COPILOT_AUTH_RESUMED',
+        tab_id: prev.tabId,
+        kind: prev.kind,
+      });
+    } catch (e) {}
+  }
+  return { ok: true, resumed: Boolean(prev) };
+}
+
+if (typeof chrome !== 'undefined') {
+  hydrateSessionState();
+  try {
+    if (chrome.tabs && chrome.tabs.onCreated && typeof chrome.tabs.onCreated.addListener === 'function') {
+      chrome.tabs.onCreated.addListener((tab) => {
+        void trackOpenedChildTab(tab);
+      });
+    }
+    if (chrome.tabs && chrome.tabs.onRemoved && typeof chrome.tabs.onRemoved.addListener === 'function') {
+      chrome.tabs.onRemoved.addListener((tabId) => {
+        void handleClosedChildTab(tabId);
+      });
+    }
+    if (chrome.windows && chrome.windows.onRemoved && typeof chrome.windows.onRemoved.addListener === 'function') {
+      chrome.windows.onRemoved.addListener((windowId) => {
+        void handleClosedChildWindow(windowId);
+      });
+    }
+    if (chrome.windows && chrome.windows.onFocusChanged && typeof chrome.windows.onFocusChanged.addListener === 'function') {
+      chrome.windows.onFocusChanged.addListener(handleWindowFocusChanged);
+    }
+  } catch (e) {}
+}
 
 const scheduleTimer = typeof setTimeout === 'function' ? setTimeout : null;
 const cancelTimer = typeof clearTimeout === 'function' ? clearTimeout : null;
@@ -47,7 +247,11 @@ function setBadge(active) {
   if (active) {
     text = 'REC';
     color = '#b00020';
-    title = 'OpenAdapt extension evidence (recording)';
+    title = 'OpenAdapt Co-Pilot (recording)';
+  } else if (authPauseState && authPauseState.paused) {
+    text = 'AUTH';
+    color = '#7c3aed';
+    title = 'OpenAdapt Co-Pilot (sign-in / MFA pause)';
   } else if (copilotHaltCount > 0) {
     text = 'HALT';
     color = '#d97706';
@@ -322,9 +526,50 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ active: recording, queued: queued.length });
     return true;
   }
-  if ((msg.type === 'COPILOT_SYNC_STATE' || msg.type === 'COPILOT_DECISION') &&
-      sender.url !== chrome.runtime.getURL('sidepanel.html')) {
+  if (msg.type === 'AUTH_INTERSTITIAL_DETECTED') {
+    const pause = recordAuthInterstitial(msg, sender);
+    sendResponse({ ok: true, authPause: pause });
+    return true;
+  }
+  const sidePanelOnlyTypes = new Set([
+    'COPILOT_SYNC_STATE',
+    'COPILOT_DECISION',
+    'COPILOT_GET_POPUP_STATE',
+    'COPILOT_RETURN_TO_PARENT',
+    'COPILOT_GET_AUTH_STATE',
+    'COPILOT_AUTH_RESUME',
+  ]);
+  if (
+    sidePanelOnlyTypes.has(msg.type) &&
+    sender.url !== chrome.runtime.getURL('sidepanel.html')
+  ) {
     sendResponse({ ok: false, error: 'copilot_requires_sidepanel' });
+    return true;
+  }
+  if (msg.type === 'COPILOT_GET_POPUP_STATE') {
+    sendResponse({ ok: true, popup: getActivePopupSummary(), popups: serializePopups() });
+    return true;
+  }
+  if (msg.type === 'COPILOT_RETURN_TO_PARENT') {
+    (async () => {
+      const target =
+        Number.isInteger(msg.childTabId) && trackedPopups.has(msg.childTabId)
+          ? trackedPopups.get(msg.childTabId)
+          : getActivePopupSummary();
+      const returned = target ? await focusParentTab(target) : false;
+      sendResponse({ ok: returned, popup: target });
+    })();
+    return true;
+  }
+  if (msg.type === 'COPILOT_GET_AUTH_STATE') {
+    sendResponse({ ok: true, authPause: authPauseState });
+    return true;
+  }
+  if (msg.type === 'COPILOT_AUTH_RESUME') {
+    (async () => {
+      const res = await resumeAfterAuth();
+      sendResponse(res);
+    })();
     return true;
   }
   if (msg.type === 'COPILOT_SYNC_STATE') {
@@ -335,6 +580,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           ok: false,
           error: (reply && reply.error) || 'copilot_sync_failed',
           state: null,
+          popupState: getActivePopupSummary(),
+          authPause: authPauseState,
         });
         return;
       }
@@ -348,6 +595,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         ok: true,
         type: 'COPILOT_STATE',
         state,
+        popupState: getActivePopupSummary(),
+        authPause: authPauseState,
       });
     })();
     return true;
@@ -452,6 +701,13 @@ if (typeof globalThis !== 'undefined') {
     setRecording,
     deliver,
     stampSender,
+    trackOpenedChildTab,
+    handleClosedChildTab,
+    handleClosedChildWindow,
+    handleWindowFocusChanged,
+    recordAuthInterstitial,
+    resumeAfterAuth,
+    getActivePopupSummary,
     get recording() {
       return recording;
     },
@@ -467,6 +723,12 @@ if (typeof globalThis !== 'undefined') {
     get copilotHaltCount() {
       return copilotHaltCount;
     },
+    get authPauseState() {
+      return authPauseState;
+    },
+    get trackedPopups() {
+      return serializePopups();
+    },
     _reset() {
       recording = false;
       queued = [];
@@ -474,6 +736,10 @@ if (typeof globalThis !== 'undefined') {
       port = null;
       copilotHaltCount = 0;
       lastCopilotHighlights = [];
+      trackedPopups = new Map();
+      authPauseState = null;
+      persistSession(SESSION_POPUPS_KEY, []);
+      persistSession(SESSION_AUTH_KEY, null);
       if (copilotPort) {
         try {
           copilotPort.disconnect();

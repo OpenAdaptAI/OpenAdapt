@@ -460,6 +460,83 @@
     return applied;
   }
 
+  // --- Operator-owned sign-in / 1Password / MFA interstitial detection ------
+  // Strictly structural: NEVER reads `.value` or `.defaultValue` of any input.
+  const MFA_ATTR_RE = /(one-time-code|otp|mfa|2fa|totp|authenticator|passkey|webauthn|duo|verification[-_ ]?code)/i;
+  const AUTH_ACTION_RE = /(\/login|\/signin|\/sign-in|\/sso|\/oauth|\/mfa|\/2fa|\/verify)/i;
+
+  function detectAuthInterstitial(doc) {
+    const targetDoc = doc || (typeof document !== 'undefined' ? document : null);
+    if (!targetDoc || typeof targetDoc.querySelectorAll !== 'function') {
+      return { detected: false, kind: null, signals: [] };
+    }
+    const signals = [];
+    let hasMfa = false;
+    let hasPassword = false;
+    let hasSsoForm = false;
+
+    let inputs = [];
+    try {
+      inputs = targetDoc.querySelectorAll('input');
+    } catch (e) {
+      inputs = [];
+    }
+    for (const input of inputs) {
+      if (!input || typeof input.getAttribute !== 'function') continue;
+      const type = String(input.getAttribute('type') || '').toLowerCase();
+      if (type === 'hidden') continue;
+      const ac = String(input.getAttribute('autocomplete') || '').toLowerCase();
+      const name = String(input.getAttribute('name') || '');
+      const id = String(input.getAttribute('id') || '');
+      const aria = String(input.getAttribute('aria-label') || '');
+      const meta = `${ac} ${name} ${id} ${aria}`;
+
+      if (ac === 'one-time-code' || MFA_ATTR_RE.test(meta)) {
+        hasMfa = true;
+        if (signals.indexOf('mfa_input') === -1) signals.push('mfa_input');
+      } else if (type === 'password') {
+        hasPassword = true;
+        if (signals.indexOf('password_input') === -1) signals.push('password_input');
+      }
+    }
+
+    let forms = [];
+    try {
+      forms = targetDoc.querySelectorAll('form');
+    } catch (e) {
+      forms = [];
+    }
+    for (const form of forms) {
+      if (!form || typeof form.getAttribute !== 'function') continue;
+      const action = String(form.getAttribute('action') || '');
+      if (AUTH_ACTION_RE.test(action)) {
+        hasSsoForm = true;
+        if (signals.indexOf('auth_form_action') === -1) signals.push('auth_form_action');
+      }
+    }
+
+    if (hasMfa) {
+      return { detected: true, kind: 'mfa', signals };
+    }
+    if (hasPassword) {
+      return { detected: true, kind: hasSsoForm ? 'sso' : 'signin', signals };
+    }
+    return { detected: false, kind: null, signals };
+  }
+
+  function reportAuthInterstitialIfPresent(doc) {
+    const check = detectAuthInterstitial(doc);
+    if (!check.detected) return check;
+    try {
+      chrome.runtime.sendMessage({
+        type: 'AUTH_INTERSTITIAL_DETECTED',
+        kind: check.kind,
+        signals: check.signals,
+      });
+    } catch (e) {}
+    return check;
+  }
+
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!msg || typeof msg !== 'object') return;
     if (msg.type === 'SET_RECORDING') {
@@ -473,6 +550,13 @@
       if (typeof sendResponse === 'function') {
         sendResponse({ ok: true, applied });
       }
+      return;
+    }
+    if (msg.type === 'COPILOT_CHECK_AUTH') {
+      const check = detectAuthInterstitial();
+      if (typeof sendResponse === 'function') {
+        sendResponse({ ok: true, auth: check });
+      }
     }
   });
 
@@ -483,11 +567,27 @@
     });
   } catch (e) {}
 
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    if (document.readyState === 'loading') {
+      document.addEventListener(
+        'DOMContentLoaded',
+        () => {
+          reportAuthInterstitialIfPresent();
+        },
+        { once: true }
+      );
+    } else {
+      reportAuthInterstitialIfPresent();
+    }
+  }
+
   // Expose for the Node harness (no Chrome).
   if (typeof globalThis !== 'undefined') {
     globalThis.__openadaptExtensionContent = {
       setRecording,
       applyCopilotHighlights,
+      detectAuthInterstitial,
+      reportAuthInterstitialIfPresent,
       shadowPiercingPath,
       targetEvidence,
       isSecretField,
