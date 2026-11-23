@@ -112,7 +112,7 @@ class BackendConfig(BaseModel):
     deployment_surface: Optional[DeclaredSurface] = None
 
     #: The GUI URL to drive (the app under automation). None => the caller's
-    #: own default (e.g. ``replay`` serves the bundled MockMed demo).
+    #: own default (e.g. ``replay --demo-app`` serves the bundled demo).
     #: ``web`` only.
     url: Optional[str] = None
     #: Run the browser headed (visible). Default headless. ``web`` only.
@@ -144,7 +144,7 @@ class BackendConfig(BaseModel):
     agent_tls_pin: Optional[str] = None
 
     # -- native macOS --------------------------------------------------------
-    #: Owner application name/substring (e.g. ``"TextEdit"``). REQUIRED for
+    #: Owner application name/substring (e.g. ``"MyApp"``). REQUIRED for
     #: ``kind: macos``.
     macos_app: Optional[str] = None
     #: Window-title substring. The backend refuses ambiguous matches rather
@@ -564,6 +564,16 @@ class EffectsConfig(BaseModel):
     # -- shared --------------------------------------------------------------
     timeout_s: float = 5.0
     poll_interval_s: float = 0.2
+
+    # -- artifact provenance (file, document, document-hash, email) ----------
+    #: Who wrote what ``root`` holds: ``acting_session``, ``separate_session``,
+    #: ``system_of_record`` or ``unknown`` (the default, graded like the acting
+    #: session). Sets the strongest check level; see
+    #: ``runtime/effects/artifact_provenance.py``.
+    artifact_producer: Optional[str] = None
+    #: Folders the acting session writes or downloads into. A ``root`` that
+    #: overlaps one is graded as the acting session's whatever is declared.
+    acting_roots: list[str] = Field(default_factory=list)
 
     @field_validator("options")
     @classmethod
@@ -1119,7 +1129,7 @@ class RollbackSection(BaseModel):
     #: Many record systems forbid deleting a chart for audit or legal reasons:
     #: prefer a ``void`` compensation there.
     allow_delete: bool = False
-    #: The app's versioned bookkeeping profile, by name (``openemr``;
+    #: The app's versioned bookkeeping profile, by name (e.g. an app profile;
     #: ``openadapt_flow.app_profiles``), shared with the verifier's frame and
     #: the RL grader: which tables move on their own and how (append-only,
     #: session state, named columns). Never patient data. Applies to
@@ -2001,6 +2011,40 @@ def _resolve_config_exprs(
     return resolved
 
 
+def _resolve_sql_query_params(
+    exprs: Mapping[str, ValueExpr],
+    params: Optional[Mapping[str, object]],
+) -> dict[str, Optional[str]]:
+    """Resolve ``sql_query_params`` against the run's params, preserving explicit ``None``.
+
+    Missing parameters and unmapped ``map`` values still fail loud. Explicit
+    ``None`` (or ``ValueExpr(null=True)``) is passed through to
+    :class:`~openadapt_flow.runtime.effects.SqlRecordVerifier`, which rewrites
+    provably null-safe column equalities to ``IS NULL`` and refuses all other
+    uses.
+    """
+    values = dict(params or {})
+    resolved: dict[str, Optional[str]] = {}
+    for key, expr in exprs.items():
+        if expr.null or (
+            expr.param is not None
+            and expr.param in values
+            and values[expr.param] is None
+        ):
+            resolved[key] = None
+            continue
+        value = expr.resolve(values)
+        if value is None:
+            raise ValueError(
+                f"effects.sql_query_params[{key!r}] references run parameter "
+                f"{expr.param!r}, which was not supplied — pass it via "
+                "--param / --params-file (a verifier is never wired against "
+                "an unresolved selector)"
+            )
+        resolved[key] = value
+    return resolved
+
+
 def _require_env(name: str, what: str) -> str:
     """Read a secret env var named by the config; fail loud when absent."""
     import os
@@ -2209,6 +2253,11 @@ LEGACY_HASHED_DEFAULTS: Final[dict[str, str]] = {
 }
 
 
+#: Fields added after verifier identities and check digests were first issued.
+#: Left unset they are not hashed, so every earlier digest stays the same.
+_HASHED_ONLY_WHEN_SET: Final[tuple[str, ...]] = ("artifact_producer", "acting_roots")
+
+
 def legacy_hash_dump(dumped: dict[str, Any], *, defaults_excluded: bool) -> None:
     """Make a config dump hash as it did when those fields had defaults.
 
@@ -2217,6 +2266,10 @@ def legacy_hash_dump(dumped: dict[str, Any], *, defaults_excluded: bool) -> None
     takes its old default.
     """
 
+    # Added after digests were first issued: hashed only when set.
+    for name in _HASHED_ONLY_WHEN_SET:
+        if not dumped.get(name):
+            dumped.pop(name, None)
     for name, legacy in LEGACY_HASHED_DEFAULTS.items():
         if defaults_excluded:
             if dumped.get(name) == legacy:
@@ -2575,8 +2628,7 @@ def _build_effect_verifier_unredacted(
             connect,
             cfg.sql_query,
             query_params=(
-                _resolve_config_exprs("sql_query_params", cfg.sql_query_params, params)
-                or None
+                _resolve_sql_query_params(cfg.sql_query_params, params) or None
             ),
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,
@@ -2597,6 +2649,8 @@ def _build_effect_verifier_unredacted(
             min_size=cfg.file_min_size,
             mtime_window_s=cfg.file_mtime_window_s,
             content_probe=cfg.file_content_probe,
+            producer=cfg.artifact_producer,
+            acting_roots=cfg.acting_roots,
         )
 
     if kind in ("document-hash", "document_hash", "doc-hash"):
@@ -2604,7 +2658,12 @@ def _build_effect_verifier_unredacted(
             raise ValueError("effects.kind 'document-hash' requires effects.root")
         from openadapt_flow.runtime.effects import DocumentHashVerifier
 
-        return DocumentHashVerifier(cfg.root, glob=cfg.glob)
+        return DocumentHashVerifier(
+            cfg.root,
+            glob=cfg.glob,
+            producer=cfg.artifact_producer,
+            acting_roots=cfg.acting_roots,
+        )
 
     if kind == "graphql":
         if not cfg.base_url:
@@ -2643,6 +2702,8 @@ def _build_effect_verifier_unredacted(
             mtime_window_s=cfg.file_mtime_window_s,
             content_probe=cfg.file_content_probe,
             poll_interval_s=cfg.poll_interval_s,
+            producer=cfg.artifact_producer,
+            acting_roots=cfg.acting_roots,
         )
 
     if kind == "document":
@@ -2666,6 +2727,8 @@ def _build_effect_verifier_unredacted(
             text_pattern=cfg.document_text_pattern,
             mtime_window_s=cfg.file_mtime_window_s,
             poll_interval_s=cfg.poll_interval_s,
+            producer=cfg.artifact_producer,
+            acting_roots=cfg.acting_roots,
         )
 
     # Plugin seam: a customer adapter registered programmatically or under the

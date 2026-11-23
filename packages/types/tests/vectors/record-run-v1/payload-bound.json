@@ -1,0 +1,49 @@
+{
+  "description": "A handoff receipt bound to the bytes the receiver got, with a person's approval.",
+  "document": {
+    "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCJwcmVkaWNhdGUiOnsiYXBwcm92YWwiOnsiYXBwcm92ZXJfa2luZCI6InBlcnNvbiIsImNvbW1pdG1lbnRzIjp7ImFwcHJvdmVkX2F0IjoiMDIyZjJhZmUyZGJmYmNlZGM1ODE0NTBjOWI5ZTRlOWUwYzdlZmI5MDVjYjg4OTY2ZjdiMjhhYTZlM2NiNWIzOSIsInByaW5jaXBhbCI6IjBmNDlmZjIxNzAxNWUxNWYwYzkwOWQwYTlmMzJlZDIzZjQ2ZmM4ZTUwYzllMWFmYzEzODBlZGY0ZjcyMDFlNmQiLCJzY29wZSI6Ijk1MzEwYjhkMTc1Nzk2NDNkNjkzNmZkMjBkMjZjMjBmODQ3MjZhMjYwNTIzMDA2NzNkNzg0YzM2OGVhZGEyY2UifSwibW9kZSI6ImVhY2hfaXRlbSJ9LCJjaGVja3MiOnsiYXV0aG9yaXphdGlvbiI6eyJjb25maXJtZWQiOjAsInJlcXVpcmVkIjowfSwiZWZmZWN0cyI6eyJjb25maXJtZWQiOjIsInJlcXVpcmVkIjoyfSwiaWRlbnRpdHkiOnsiY29uZmlybWVkIjo1LCJyZXF1aXJlZCI6NX0sImxpbmVzX2NvbmZpcm1lZCI6MiwibGluZXNfbm90X2NoZWNrZWQiOjAsImxpbmVzX3JlZnV0ZWQiOjAsInBvc3Rjb25kaXRpb25zIjp7ImNvbmZpcm1lZCI6MywicmVxdWlyZWQiOjN9fSwiZGlzY2xvc3VyZSI6eyJjb21taXRtZW50cyI6e30sInZlcnNpb24iOiJvcGVuYWRhcHQucHVibGljLWRpc2Nsb3N1cmUvdjEifSwibGluZXMiOlt7ImNoZWNrIjoiY29uZmlybWVkIiwibm90X2NoZWNrZWQiOltdLCJvcGVyYXRpb24iOiJ3cml0ZSIsInN0ZXAiOjIsInN0cmVuZ3RoIjoicmVhZF9iYWNrIiwidGFyZ2V0X2tpbmQiOiJndWkifSx7ImNoZWNrIjoiY29uZmlybWVkIiwibm90X2NoZWNrZWQiOlsiZmllbGRfdmFsdWVzIl0sIm9wZXJhdGlvbiI6ImlycmV2ZXJzaWJsZV93cml0ZSIsInN0ZXAiOjQsInN0cmVuZ3RoIjoicmVhZF9iYWNrIiwidGFyZ2V0X2tpbmQiOiJndWkifV0sIm1vZGVsX2NhbGxzIjowLCJvdXRjb21lIjoiVkVSSUZJRUQiLCJwcm9ncmFtIjp7ImlkIjoicHJvZy01YmIyMWFhMGYyZTZhYzMyIiwidmVyc2lvbl9zaGEyNTYiOiIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyIn0sInJlYXNvbl9jb2RlIjoidmVyaWZpZWQiLCJzdGFydGVkX2hvdXIiOiIyMDI2LTExLTIwVDIzOjAwOjAwWiIsInN0ZXBzIjp7Im9rIjo1LCJ0b3RhbCI6NX19LCJwcmVkaWNhdGVUeXBlIjoiaHR0cHM6Ly9vcGVuYWRhcHQuYWkvcmVjb3JkL3J1bi92MSIsInN1YmplY3QiOlt7ImRpZ2VzdCI6eyJzaGEyNTYiOiIxMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExIn0sIm5hbWUiOiJyZXBvcnQuanNvbiJ9LHsiZGlnZXN0Ijp7InNoYTI1NiI6IjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIifSwibmFtZSI6ImJ1bmRsZSJ9LHsiZGlnZXN0Ijp7InNoYTI1NiI6Ijk3NjgzYjU3NjZlYTAwOGM0NGFhZDcxMzhlNDVlMzE3MDFiODQ0ZjcxZDg5ZmFhZjY0MzA4YmU2YTFmZjk5NDQifSwibWVkaWFfdHlwZSI6ImFwcGxpY2F0aW9uL2pzb24iLCJuYW1lIjoicGF5bG9hZCJ9XX0=",
+    "payloadType": "application/vnd.in-toto+json",
+    "signatures": [
+      {
+        "keyid": "seal-ed25519-b7a5ba90250d87f2",
+        "sig": "OitvE2kh7EaF1mvAJseA6p7Wc76c7LSL/mkUsRXvmIcfj1BoM4ShvL3g5PDhRhT6BZ8uwQ81tgE8XheRY54eAw=="
+      }
+    ]
+  },
+  "expected": {
+    "approval_line": "Approved by a person: each item",
+    "demo": false,
+    "disclosed": {
+      "approval.approved_at": "2026-11-20T23:30:00Z",
+      "approval.principal": "person:pr-cdcdcdcdcdcdcdcd",
+      "approval.scope": "db6603d574c802b6330e55e4457a3f3c307c16a6fecaa2efc436da4f8706b482"
+    },
+    "ok": true,
+    "outcome": "VERIFIED",
+    "payload_bound": true,
+    "reason": null,
+    "signer_lines": [
+      "Signed by this computer"
+    ]
+  },
+  "openings": {
+    "openings": {
+      "approval.approved_at": {
+        "salt": "24fbd94029ecbd16abad2875b500a848ea6491fb9719196818087e40dfb36fa8",
+        "value": "2026-11-20T23:30:00Z"
+      },
+      "approval.principal": {
+        "salt": "b67beccc7c33b4ef471b7bdcad9e4bb52c0b98099499fa6876c8c22e93858846",
+        "value": "person:pr-cdcdcdcdcdcdcdcd"
+      },
+      "approval.scope": {
+        "salt": "d0009956fa678f84cebae9e38f33695e1e22ed53bdd31af8da11b37f7425f5d4",
+        "value": "db6603d574c802b6330e55e4457a3f3c307c16a6fecaa2efc436da4f8706b482"
+      }
+    },
+    "payload_sha256": "d726b67c667b54001f4b1954c2715b686bffaf1f8bbb97ecda297f33bf50f169",
+    "schema": "openadapt.receipt-openings/v1"
+  },
+  "received": "eyJyZWZlcnJhbCI6InN5bnRoZXRpYyIsInN0YXR1cyI6InNlbnQifQ==",
+  "registry": "registry.json"
+}

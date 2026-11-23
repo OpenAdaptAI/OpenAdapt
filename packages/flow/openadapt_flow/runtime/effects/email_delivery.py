@@ -36,6 +36,11 @@ honest boundary -- what left the system, to whom, with what content.
 Fail-safe: a missing/unscannable store or an unreadable message file reads as
 *unreadable* -> INDETERMINATE (UNAVAILABLE) -> HALT (a vanished outbox is
 never "no mail expected").
+
+Strength follows who wrote the store (:mod:`.artifact_provenance`): only a declared
+``system_of_record`` producer (the mail server or SMTP-capture sink writing
+what it delivered) reaches ``system_of_record``. A store the acting session
+wrote, or one with no declared producer, is at most ``same_screen``.
 """
 
 from __future__ import annotations
@@ -47,7 +52,7 @@ from email import policy as email_policy
 from email.message import Message
 from email.parser import BytesParser
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
 from openadapt_flow.runtime.effects.adapter import (
     CollateralHook,
@@ -108,6 +113,11 @@ class MaildirDeliveryVerifier(VerifierAdapterBase):
             message to any OTHER recipient").
         poll_interval_s: Settlement poll gap within ``Effect.timeout_s``.
         clock: Injectable epoch-seconds source (tests).
+        producer: Who wrote the store (an
+            :class:`.artifact_provenance.ArtifactProducer` or its name). ``None`` is ``unknown``, graded like the acting
+            session.
+        acting_roots: Folders the acting session writes into; a store
+            overlapping one is graded as the acting session's.
     """
 
     substrate = "email"
@@ -124,7 +134,11 @@ class MaildirDeliveryVerifier(VerifierAdapterBase):
         collateral_hooks: tuple[CollateralHook, ...] = (),
         poll_interval_s: float = 0.2,
         clock: Any = time.time,
+        producer: Any = None,
+        acting_roots: Optional[Iterable[Path | str]] = None,
     ) -> None:
+        from openadapt_flow.runtime.effects.artifact_provenance import grade_artifact
+
         self.root = Path(root)
         self.pattern = pattern
         self.mtime_window_s = mtime_window_s
@@ -133,6 +147,16 @@ class MaildirDeliveryVerifier(VerifierAdapterBase):
         self.collateral_hooks = collateral_hooks
         self.poll_interval_s = poll_interval_s
         self._clock = clock
+        self.provenance = grade_artifact(
+            producer, root=self.root, acting_roots=acting_roots
+        )
+        self.verification_tier = self.provenance.verification_tier
+        self.independent_system_of_record = (
+            self.verification_tier is VerificationTier.INDEPENDENT_SYSTEM
+        )
+        #: Why the last scan was refused (an acting-session artifact under a
+        #: strong declared producer); empty when it was not.
+        self._refused = ""
 
     # -- scanning -----------------------------------------------------------
 
@@ -186,8 +210,12 @@ class MaildirDeliveryVerifier(VerifierAdapterBase):
         """Every message in the store; ``None`` when the store or ANY message
         is unreadable (a partially readable outbox is never judged -- the
         unreadable message might be the one that matters)."""
+        self._refused = ""
         files = self._candidate_files()
         if files is None:
+            return None
+        self._refused = self.provenance.acting_artifact(files)
+        if self._refused:
             return None
         records: list[dict[str, Any]] = []
         for path in files:
@@ -205,7 +233,11 @@ class MaildirDeliveryVerifier(VerifierAdapterBase):
             substrate=self.substrate,
             reachable=records is not None,
             records=records or [],
-            detail={"root": str(self.root), "pattern": self.pattern},
+            detail={
+                "root": str(self.root),
+                "pattern": self.pattern,
+                "provenance": self.provenance.evidence(),
+            },
         )
 
     def verify(
@@ -222,4 +254,7 @@ class MaildirDeliveryVerifier(VerifierAdapterBase):
             verdict = apply_collateral_hooks(
                 verdict, before, self.capture_post_state(context), self.collateral_hooks
             )
+        from openadapt_flow.runtime.effects.artifact_provenance import with_provenance
+
+        verdict = with_provenance(verdict, self.provenance, self._refused)
         return redact_verdict(verdict, self.redaction, field=expected.field)
