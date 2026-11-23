@@ -921,12 +921,21 @@ def _quickstart_own(root: Path, url: Optional[str], watch: bool) -> None:
     help="With --task calendar-block: recurrence cadence (default: weekly).",
 )
 @click.option(
+    "--event-uid",
+    default=None,
+    help=(
+        "With --task calendar-block: optional EventKit eventIdentifier to bind "
+        "forward and revert checks to one specific event (without --event-uid, "
+        "the check matches any event with the same calendar, title, time, and recurrence)."
+    ),
+)
+@click.option(
     "--revert/--no-revert",
     default=True,
     show_default=True,
     help=(
         "With --task: write a revert_verify.yaml check file to run after undoing "
-        "the change (withheld if Night Shift baseline is unreadable)."
+        "the change (withheld when baseline is not confirmed or Night Shift baseline is unreadable)."
     ),
 )
 @click.option(
@@ -959,6 +968,7 @@ def quickstart(
     start_iso: Optional[str],
     duration_minutes: Optional[int],
     recurrence: Optional[str],
+    event_uid: Optional[str],
     revert: bool,
     probe_baseline: bool,
     headed: bool,
@@ -991,12 +1001,19 @@ def quickstart(
         raise click.UsageError("--url works with --own.")
     calendar_opts_used = any(
         opt is not None
-        for opt in (title, calendar_name, start_iso, duration_minutes, recurrence)
+        for opt in (
+            title,
+            calendar_name,
+            start_iso,
+            duration_minutes,
+            recurrence,
+            event_uid,
+        )
     )
     if (calendar_opts_used or probe_baseline) and task != "calendar-block":
         raise click.UsageError(
-            "--title, --calendar, --start, --duration, --recurrence, and "
-            "--probe-baseline require --task calendar-block."
+            "--title, --calendar, --start, --duration, --recurrence, --event-uid, "
+            "and --probe-baseline require --task calendar-block."
         )
     if task is not None:
         if own:
@@ -1030,6 +1047,7 @@ def quickstart(
                 recurrence=(
                     recurrence if recurrence is not None else DEFAULT_RECURRENCE
                 ),
+                event_uid=event_uid,
                 revert=revert,
                 probe_baseline=probe_baseline,
                 say=click.echo,
@@ -1455,8 +1473,9 @@ _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]
 # public_seal module, and the quickstart's encrypted checkpoints rely on its
 # key derivation once per store. Launcher 1.23 requires Flow 3.3: the OpenEMR
 # quickstart's referral program checks its date picker against the run's
-# clock (`Postcondition.text_clock`), which Flow 3.2 ignores.
-_SUPPORTED_FLOW_RANGE = ">=3.3.0,<4.0.0"
+# clock (`Postcondition.text_clock`), which Flow 3.2 ignores. Flow 4.0
+# removes and renames APIs the launcher doesn't use, so it is accepted too.
+_SUPPORTED_FLOW_RANGE = ">=3.3.0,<5.0.0"
 _RDP_INSTALL_COMMAND = _pip_install("openadapt[rdp]")
 _CHROMIUM_SYSTEM_LIBS_COMMAND = (
     f"{shlex.quote(sys.executable)} -m playwright install-deps chromium"
@@ -1466,7 +1485,7 @@ _CHROMIUM_SYSTEM_LIBS_COMMAND = (
 def _supported_flow_version(value: str) -> bool:
     """Return whether a stable Flow version is in the launcher's supported range."""
     parsed = _release_tuple(value)
-    return parsed is not None and (3, 3, 0) <= parsed < (4, 0, 0)
+    return parsed is not None and (3, 3, 0) <= parsed < (5, 0, 0)
 
 
 # The Python modules each native or remote Flow backend imports when its

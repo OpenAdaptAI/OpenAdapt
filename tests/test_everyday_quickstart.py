@@ -146,9 +146,33 @@ def test_run_everyday_task_calendar_block_opt_in_probe_and_refuses_preexisting(
     assert params["title"] == "Focus Sprint"
     assert params["end_iso"] == "2026-11-24T12:00:00"
     assert params["recurrence"] == "weekdays"
-    assert bundle_default.revert_verify_path is not None
+    assert params["revert_withheld_reason"] == "baseline_not_probed"
+    assert bundle_default.revert_verify_path is None
+    assert not (tmp_path / "cal-default" / "revert_verify.yaml").exists()
 
-    # 2. Opt-in probe_baseline=True with NOT_FOUND succeeds
+    # 1b. Explicit event_uid binds revert_verify.yaml even without --probe-baseline
+    bundle_uid = run_everyday_task(
+        "calendar-block",
+        tmp_path / "cal-uid",
+        title="Focus Sprint",
+        calendar_name="Work",
+        start_iso="2026-11-24T11:00:00",
+        duration_minutes=60,
+        recurrence="weekdays",
+        event_uid="EV-UID-123",
+        revert=True,
+        platform="darwin",
+        say=lambda _msg: None,
+        verifier_factory=_should_not_run,
+    )
+    assert bundle_uid.revert_verify_path is not None
+    assert bundle_uid.revert_verify_path.is_file()
+    rev_uid_doc = yaml.safe_load(
+        bundle_uid.revert_verify_path.read_text(encoding="utf-8")
+    )
+    assert rev_uid_doc["verifier"]["local_state"][0]["event_uid"] == "EV-UID-123"
+
+    # 2. Opt-in probe_baseline=True with NOT_FOUND succeeds and writes revert_verify.yaml
     bundle_probed = run_everyday_task(
         "calendar-block",
         tmp_path / "cal-probed",
@@ -171,6 +195,34 @@ def test_run_everyday_task_calendar_block_opt_in_probe_and_refuses_preexisting(
     )
     assert bundle_probed.baseline_state is not None
     assert bundle_probed.baseline_state["exists"] is False
+    assert bundle_probed.revert_verify_path is not None
+    assert bundle_probed.revert_verify_path.is_file()
+
+    # 2b. Opt-in probe_baseline=True returning INDETERMINATE (UNAUTHORIZED) withholds revert_verify.yaml
+    bundle_unauth = run_everyday_task(
+        "calendar-block",
+        tmp_path / "cal-unauth",
+        title="Focus Sprint",
+        calendar_name="Work",
+        start_iso="2026-11-24T11:00:00",
+        duration_minutes=60,
+        recurrence="weekdays",
+        revert=True,
+        probe_baseline=True,
+        platform="darwin",
+        say=lambda _msg: None,
+        verifier_factory=lambda sources, platform: LocalStateVerifier(
+            sources,
+            platform=platform,
+            runner=lambda argv: subprocess.CompletedProcess(
+                argv, 0, b'{"status":"UNAUTHORIZED"}\n', b""
+            ),
+        ),
+    )
+    assert bundle_unauth.baseline_state is None
+    assert bundle_unauth.revert_verify_path is None
+    unauth_params = json.loads(bundle_unauth.params_path.read_text(encoding="utf-8"))
+    assert unauth_params["revert_withheld_reason"] == "baseline_indeterminate"
 
     # 3. Opt-in probe_baseline=True when matching event ALREADY EXISTS refuses!
     with pytest.raises(EverydayTaskError, match="already exists in the baseline"):
@@ -236,6 +288,7 @@ def test_cli_quickstart_task_validation_and_invocation(
             "daily",
             "--start",
             "2026-11-24T15:00:00",
+            "--probe-baseline",
             "--out",
             str(out_dir),
         ],

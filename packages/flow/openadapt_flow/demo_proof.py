@@ -222,7 +222,9 @@ class DemoEvidence:
 
 
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    from openadapt_flow import sealed_set
+
+    return hashlib.sha256(sealed_set.read_bytes(path)).hexdigest()
 
 
 def png_size(path: Optional[Path]) -> Optional[tuple[int, int]]:
@@ -245,13 +247,14 @@ def png_size(path: Optional[Path]) -> Optional[tuple[int, int]]:
 
 
 def _load_report(run_dir: Path) -> Any:
+    from openadapt_flow import sealed_set
     from openadapt_flow.ir import RunReport
 
     path = run_dir / "report.json"
-    if not path.is_file():
-        return None
     try:
-        return RunReport.model_validate_json(path.read_text(encoding="utf-8"))
+        if not sealed_set.is_file(path):
+            return None
+        return RunReport.model_validate_json(sealed_set.read_text(path))
     except (OSError, ValueError):
         return None
 
@@ -265,6 +268,11 @@ def _safe_child(run_dir: Path, relative: Optional[str]) -> Optional[Path]:
     if rel.is_absolute() or ".." in rel.parts:
         return None
     candidate = run_dir / rel
+    from openadapt_flow import sealed_set
+
+    if sealed_set.is_sealed_path(run_dir):
+        # Encrypted run: the frame is a file of the verified set.
+        return candidate if sealed_set.is_file(candidate) else None
     return candidate if candidate.is_file() and not candidate.is_symlink() else None
 
 
@@ -771,6 +779,16 @@ def _frame_figure(run: RunEvidence, alt: str, root: Path) -> str:
     same pixels the identical-screens check hashed.
     """
 
+    from openadapt_flow import sealed_set
+
+    if run.final_screenshot is not None and sealed_set.is_sealed_path(
+        run.final_screenshot
+    ):
+        # The page is plaintext; the run's screenshots stay encrypted.
+        return (
+            '<figure class="shot"><figcaption>The final screen is encrypted on '
+            "disk with this run.</figcaption></figure>"
+        )
     image = _data_uri(run.final_screenshot)
     if image is None:
         return (

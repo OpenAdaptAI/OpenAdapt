@@ -252,6 +252,7 @@ def run_everyday_task(
     start_iso: Optional[str] = None,
     duration_minutes: int = DEFAULT_DURATION_MINUTES,
     recurrence: str = DEFAULT_RECURRENCE,
+    event_uid: Optional[str] = None,
     revert: bool = True,
     probe_baseline: bool = False,
     platform: Optional[str] = None,
@@ -289,12 +290,14 @@ def run_everyday_task(
             revert=revert,
         )
     else:
+        bound_uid = event_uid.strip() if event_uid and event_uid.strip() else None
         forward, revert_doc, params = build_calendar_block_contracts(
             title=title,
             calendar_name=calendar_name,
             start_iso=start_iso,
             duration_minutes=duration_minutes,
             recurrence=recurrence,
+            event_uid=bound_uid,
             platform=active_platform,
             revert=revert,
         )
@@ -311,6 +314,23 @@ def run_everyday_task(
                 )
         else:
             probe_skipped = True
+
+        # Fail closed on calendar revert: only write revert_verify.yaml when an
+        # explicit event_uid is bound OR the baseline was explicitly probed and
+        # confirmed NOT_FOUND, so we never tell a user to delete an unverified
+        # pre-existing event.
+        baseline_confirmed_absent = (
+            baseline_state is not None and baseline_state.get("exists") is False
+        )
+        if (
+            revert
+            and revert_doc is not None
+            and not (bound_uid or baseline_confirmed_absent)
+        ):
+            revert_doc = None
+            params["revert_withheld_reason"] = (
+                "baseline_not_probed" if probe_skipped else "baseline_indeterminate"
+            )
 
     root.mkdir(parents=True, exist_ok=True)
     verify_path = root / "verify.yaml"
@@ -353,6 +373,12 @@ def run_everyday_task(
         say(
             "  Revert contract withheld: baseline was INDETERMINATE "
             "(will not invent a prior Night Shift state)"
+        )
+    elif revert and task == "calendar-block":
+        reason = params.get("revert_withheld_reason", "baseline_not_probed")
+        say(
+            f"  Revert contract withheld ({reason}): pass --probe-baseline "
+            "(confirmed NOT_FOUND) or --event-uid to generate revert_verify.yaml"
         )
     say(f"  Task parameters: {params_path}")
 

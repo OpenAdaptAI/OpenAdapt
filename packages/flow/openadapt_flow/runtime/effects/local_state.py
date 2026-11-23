@@ -141,7 +141,8 @@ function run(argv) {
   var targetUid = argv[13] || '';
 
   var auth = $.EKEventStore.authorizationStatusForEntityType(0);
-  if (auth !== 3 && auth !== 4) {
+  // Require EKAuthorizationStatusFullAccess (3); write-only (4) cannot read events.
+  if (auth !== 3) {
     return JSON.stringify({status: 'UNAUTHORIZED'});
   }
   var store = $.EKEventStore.alloc.init;

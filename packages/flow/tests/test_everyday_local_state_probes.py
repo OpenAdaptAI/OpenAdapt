@@ -438,6 +438,14 @@ def test_macos_calendar_event_fails_closed_on_errors_and_wrong_os() -> None:
     )
     assert v_weird.read() is None
 
+    # EventKit JXA probe must require FullAccess (3) only — write-only (4) cannot read events
+    from openadapt_flow.runtime.effects.local_state import (
+        _MACOS_EVENTKIT_READ_SCRIPT,
+    )
+
+    assert "if (auth !== 3)" in _MACOS_EVENTKIT_READ_SCRIPT
+    assert "auth !== 4" not in _MACOS_EVENTKIT_READ_SCRIPT
+
 
 def test_macos_calendar_event_validation_rejects_bad_inputs() -> None:
     with pytest.raises(ValueError, match="control characters"):
