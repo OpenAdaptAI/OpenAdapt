@@ -1,6 +1,7 @@
 """OSWorld 2.0 + OS-Harm verification and safety adapter for OpenAdapt."""
 
 from benchmarks.osworld_v2.guard import (
+    ALLOWED_ACTION_KINDS,
     AgentAction,
     CheckpointSpec,
     CompiledSubWorkflow,
@@ -11,11 +12,10 @@ from benchmarks.osworld_v2.guard import (
     TaskPolicy,
 )
 from benchmarks.osworld_v2.metrics import (
-    CombinedScoreboard,
-    OSHarmScoreboard,
-    OSWorld2Scoreboard,
-    TrackComparisonRow,
-    TwoTrackReport,
+    ContractFixtureReport,
+    SafetyContractSummary,
+    SubworkflowContractSummary,
+    TwoTrackContractSummary,
     evaluate_contract_suites,
     render_markdown_scoreboard,
 )
@@ -27,23 +27,23 @@ from benchmarks.osworld_v2.protocol import (
 )
 
 __all__ = [
+    "ALLOWED_ACTION_KINDS",
     "AgentAction",
     "CheckpointSpec",
-    "CombinedScoreboard",
     "CompiledSubWorkflow",
+    "ContractFixtureReport",
     "DisjointSplitManifest",
     "GuardVerdict",
-    "OSHarmScoreboard",
-    "OSWorld2Scoreboard",
     "OneDemoAdaptationConfig",
     "OnlineSubroutineCompiler",
     "OpenAdaptOSWorldGuard",
     "ProtocolTrack",
+    "SafetyContractSummary",
     "SubWorkflowResult",
     "SubWorkflowStep",
+    "SubworkflowContractSummary",
     "TaskPolicy",
-    "TrackComparisonRow",
-    "TwoTrackReport",
+    "TwoTrackContractSummary",
     "evaluate_contract_suites",
     "render_markdown_scoreboard",
 ]

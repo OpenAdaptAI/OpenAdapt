@@ -1,18 +1,24 @@
 """OSWorld 2.0 + OS-Harm Verification & Safety Adapter (`OpenAdaptOSWorldGuard`).
 
-Provides two orthogonal, domain-agnostic primitives for desktop agent loops:
-1. OS-Harm Safety Firewall (fail-closed ABSTAIN -> HALT across all 3 vectors):
-   - Indirect prompt injection defense (untrusted screen/email/web provenance)
-   - Data exfiltration guard (sensitive local files & unauthorized egress)
-   - Destructive action gate (irreversible OS/file/email/system mutations)
-2. OSWorld 2.0 Long-Horizon Compiled Sub-Workflow Engine:
-   - Deterministic replay of compiled desktop sub-workflows (0 VLM calls/step)
-   - Independent checkpoint read-back (file, SQLite read-only, or custom probe)
-   - Bounded mid-horizon drift recovery before stochastic error compounds.
+Standalone adapter kept separate from `openadapt_flow`'s governed runtime so it
+can wrap external OSWorld / OS-Harm VM step loops without requiring heavy VM or
+engine dependencies during offline contract tests.
+
+Fail-closed invariants:
+1. Deny by default on unknown `AgentAction.kind` (strict runtime allowlist).
+2. Missing provenance (`source_trust`) defaults to `"untrusted"` (never trusted).
+3. Actions cannot vouch for themselves: grants come ONLY from `TaskPolicy` or
+   an explicit operator `consent_callback`, never from a field on `AgentAction`.
+4. `TaskPolicy.allowed_write_roots` is enforced via `os.path.realpath` on every
+   `file_write` and `file_delete` (blocking path traversal and out-of-root writes).
+5. Checkpointed sub-workflow replay requires a real independent read-back probe
+   (`file_exists`, `file_contains`, read-only SQLite, or custom probe); missing
+   probes fail closed (`False`).
 """
 
 from __future__ import annotations
 
+import os
 import re
 import sqlite3
 from collections.abc import Callable
@@ -34,7 +40,23 @@ ActionKind = Literal[
     "clipboard_paste",
 ]
 
+ALLOWED_ACTION_KINDS: frozenset[str] = frozenset(
+    {
+        "click",
+        "type",
+        "hotkey",
+        "shell",
+        "file_read",
+        "file_write",
+        "file_delete",
+        "http_upload",
+        "email_send",
+        "clipboard_paste",
+    }
+)
+
 SourceTrust = Literal[
+    "untrusted",
     "user_instruction",
     "compiled_subflow",
     "untrusted_screen",
@@ -42,21 +64,25 @@ SourceTrust = Literal[
     "untrusted_web",
 ]
 
+_TRUSTED_SOURCES: frozenset[str] = frozenset({"user_instruction", "compiled_subflow"})
+
 SafetyVector = Literal[
     "none",
+    "unknown_action",
     "indirect_prompt_injection",
     "data_exfiltration",
     "destructive_action",
     "mid_horizon_drift",
 ]
 
-_PRIVILEGED_KINDS: frozenset[ActionKind] = frozenset(
-    {"shell", "file_delete", "http_upload", "email_send"}
+_PRIVILEGED_KINDS: frozenset[str] = frozenset(
+    {"shell", "file_write", "file_delete", "http_upload", "email_send"}
 )
 
 _SENSITIVE_PATH_PATTERN = re.compile(
-    r"(^|[/\\])(\.ssh|\.aws|\.gnupg|\.env(\.|$)|id_rsa|id_ed25519|credentials|"
-    r"keychain|shadow|passwd|secrets?|token|api[_-]?key|.*\.pem$|.*\.key$)",
+    r"(^|[/\\])(\.ssh|\.aws|\.gnupg|\.env(\.|$)|\.bashrc|\.zshrc|\.profile|"
+    r"id_rsa|id_ed25519|credentials|keychain|shadow|passwd|secrets?|token|"
+    r"api[_-]?key|.*\.pem$|.*\.key$)",
     re.IGNORECASE,
 )
 
@@ -68,8 +94,9 @@ _INJECTION_DIRECTIVE_PATTERN = re.compile(
 )
 
 _DESTRUCTIVE_SHELL_PATTERN = re.compile(
-    r"(\brm\s+-[a-z]*r[a-z]*f|\brm\s+-[a-z]*f[a-z]*r|\bmkfs\b|\bshred\b|"
-    r"\bdd\s+if=|\bchmod\s+(-R\s+)?777\b|\bsudo\b|\bshutdown\b|\breboot\b|"
+    r"(\brm\s+-[a-z]*[rf]|\bmkfs\b|\bshred\b|\bdd\s+if=|"
+    r"\bchmod\s+(-R\s+)?777\b|\bsudo\b|\bshutdown\b|\breboot\b|"
+    r"\bfind\b.*\s-delete\b|\bshutil\.rmtree\b|\bos\.(remove|unlink)\b|"
     r">\s*/etc/|>\s*/System/)",
     re.IGNORECASE,
 )
@@ -79,17 +106,10 @@ _EGRESS_SHELL_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-_SYSTEM_CONFIG_PREFIXES: tuple[str, ...] = (
-    "/etc/",
-    "/System/",
-    "/usr/bin/",
-    "C:\\Windows\\",
-)
-
 
 @dataclass(frozen=True)
 class TaskPolicy:
-    """Declarative safety boundary for a single desktop benchmark task."""
+    """Declarative safety boundary for a single desktop task (operator-controlled)."""
 
     task_id: str
     allowed_domains: tuple[str, ...] = ()
@@ -102,14 +122,19 @@ class TaskPolicy:
 
 @dataclass(frozen=True)
 class AgentAction:
-    """Normalized action emitted by an OSWorld / OS-Harm agent step."""
+    """Normalized action emitted by an agent step.
 
-    kind: ActionKind
+    Note: `source_trust` defaults to `"untrusted"` (fail-closed) so unlabeled
+    actions from live environments never bypass provenance checks. Actions carry
+    no self-grant fields; permissions come strictly from `TaskPolicy` or an
+    operator consent callback.
+    """
+
+    kind: str
     target: str = ""
     payload: str = ""
-    source_trust: SourceTrust = "user_instruction"
+    source_trust: SourceTrust = "untrusted"
     observed_context: str = ""
-    explicit_grant: bool = False
     referenced_paths: tuple[str, ...] = ()
 
 
@@ -125,12 +150,10 @@ class GuardVerdict:
 
 @dataclass(frozen=True)
 class SubWorkflowStep:
-    """Deterministic step inside a compiled OSWorld 2.0 sub-workflow."""
+    """Deterministic step inside a compiled sub-workflow."""
 
     step_id: str
     action: AgentAction
-    estimated_vlm_latency_ms: float = 1200.0
-    compiled_latency_ms: float = 45.0
 
 
 @dataclass(frozen=True)
@@ -164,23 +187,30 @@ class SubWorkflowResult:
     drift_detected: bool
     drift_recovered: bool
     steps_executed: int
-    vlm_calls_used: int
-    vlm_calls_saved: int
-    estimated_vlm_latency_ms: float
-    actual_latency_ms: float
+    recovery_calls_used: int
     halted_reason: str | None = None
     verdicts: tuple[GuardVerdict, ...] = field(default_factory=tuple)
 
 
-class OpenAdaptOSWorldGuard:
-    """OSWorld 2.0 + OS-Harm safety firewall and compiled sub-workflow engine."""
+def _realpath_norm(raw_path: str) -> str:
+    return os.path.realpath(os.path.expanduser(raw_path))
 
-    def __init__(self, policy: TaskPolicy) -> None:
+
+class OpenAdaptOSWorldGuard:
+    """Fail-closed safety firewall and checkpointed sub-workflow engine."""
+
+    def __init__(
+        self,
+        policy: TaskPolicy,
+        *,
+        consent_callback: Callable[[AgentAction, str], bool] | None = None,
+    ) -> None:
         self.policy = policy
+        self._consent_callback = consent_callback
         self._compiled_registry: dict[str, CompiledSubWorkflow] = {}
 
     def register_subworkflow(self, subworkflow: CompiledSubWorkflow) -> None:
-        """Cache a compiled sub-workflow for zero-VLM deterministic replay."""
+        """Cache a compiled sub-workflow for deterministic replay."""
         self._compiled_registry[subworkflow.workflow_id] = subworkflow
 
     def get_subworkflow(self, workflow_id: str) -> CompiledSubWorkflow | None:
@@ -188,6 +218,22 @@ class OpenAdaptOSWorldGuard:
 
     def _is_sensitive_path(self, raw_path: str) -> bool:
         return bool(raw_path and _SENSITIVE_PATH_PATTERN.search(raw_path))
+
+    def _is_within_allowed_write_roots(self, target_path: str) -> bool:
+        if not target_path.strip() or not self.policy.allowed_write_roots:
+            return False
+        resolved_target = _realpath_norm(target_path)
+        for root in self.policy.allowed_write_roots:
+            resolved_root = _realpath_norm(root)
+            try:
+                if (
+                    os.path.commonpath([resolved_target, resolved_root])
+                    == resolved_root
+                ):
+                    return True
+            except ValueError:
+                continue
+        return False
 
     def _extract_host(self, url_or_target: str) -> str:
         parsed = urlparse(url_or_target)
@@ -201,12 +247,23 @@ class OpenAdaptOSWorldGuard:
             return True
         return host in {d.lower() for d in self.policy.allowed_domains}
 
+    def _operator_consents(self, action: AgentAction, reason: str) -> bool:
+        if self._consent_callback is None:
+            return False
+        return bool(self._consent_callback(action, reason))
+
     def check_action(self, action: AgentAction) -> GuardVerdict:
-        """Evaluate one proposed agent action against all 3 OS-Harm safety vectors."""
-        untrusted_source = action.source_trust not in {
-            "user_instruction",
-            "compiled_subflow",
-        }
+        """Evaluate one proposed agent action fail-closed."""
+        # 0. Strict runtime allowlist on ActionKind (deny by default)
+        if action.kind not in ALLOWED_ACTION_KINDS:
+            return GuardVerdict(
+                decision="HALT",
+                vector="unknown_action",
+                reason=f"Blocked unknown action kind {action.kind!r} (deny by default)",
+                abstained=True,
+            )
+
+        untrusted_source = action.source_trust not in _TRUSTED_SOURCES
         injection_in_context = bool(
             action.observed_context
             and _INJECTION_DIRECTIVE_PATTERN.search(action.observed_context)
@@ -216,13 +273,13 @@ class OpenAdaptOSWorldGuard:
             action.payload and _SENSITIVE_PATH_PATTERN.search(action.payload)
         )
 
-        # Vector 1: Indirect prompt injection defense (ABSTAIN -> HALT)
+        # 1. Indirect prompt injection / untrusted provenance defense (ABSTAIN -> HALT)
         if untrusted_source and (action.kind in _PRIVILEGED_KINDS or touches_sensitive):
             return GuardVerdict(
                 decision="HALT",
                 vector="indirect_prompt_injection",
                 reason=(
-                    f"Blocked {action.kind} triggered from untrusted source "
+                    f"Blocked {action.kind} with untrusted/missing provenance "
                     f"{action.source_trust!r} (ABSTAIN -> HALT)"
                 ),
                 abstained=True,
@@ -235,12 +292,12 @@ class OpenAdaptOSWorldGuard:
                 vector="indirect_prompt_injection",
                 reason=(
                     f"Blocked privileged {action.kind} following indirect prompt injection "
-                    "directive in observed screen/document context (ABSTAIN -> HALT)"
+                    "directive in observed context (ABSTAIN -> HALT)"
                 ),
                 abstained=True,
             )
 
-        # Vector 2: Data exfiltration guard
+        # 2. Data exfiltration guard
         if action.kind == "http_upload":
             if touches_sensitive and not self.policy.allow_external_egress:
                 return GuardVerdict(
@@ -256,6 +313,9 @@ class OpenAdaptOSWorldGuard:
                     vector="data_exfiltration",
                     reason=f"Blocked unauthorized outbound upload to {action.target!r}",
                 )
+            return GuardVerdict(
+                decision="ALLOW", vector="none", reason="Authorized upload target"
+            )
 
         if action.kind == "clipboard_paste":
             if touches_sensitive and not self._is_allowed_domain(action.target):
@@ -264,6 +324,9 @@ class OpenAdaptOSWorldGuard:
                     vector="data_exfiltration",
                     reason="Blocked pasting sensitive local data to external destination",
                 )
+            return GuardVerdict(
+                decision="ALLOW", vector="none", reason="Benign clipboard paste"
+            )
 
         if action.kind == "email_send":
             recipient = action.target.strip().lower()
@@ -274,7 +337,61 @@ class OpenAdaptOSWorldGuard:
                     vector="data_exfiltration",
                     reason=f"Blocked emailing sensitive content to unauthorized recipient {recipient!r}",
                 )
+            if recipient not in allowed_recips:
+                if not self._operator_consents(
+                    action, f"external email to {recipient}"
+                ):
+                    return GuardVerdict(
+                        decision="HALT",
+                        vector="destructive_action",
+                        reason=f"Blocked external email to unauthorized recipient {recipient!r}",
+                    )
+            return GuardVerdict(
+                decision="ALLOW", vector="none", reason="Authorized email recipient"
+            )
 
+        # 3. File write / delete boundary enforcement (strictly inside allowed_write_roots)
+        if action.kind == "file_write":
+            if touches_sensitive:
+                return GuardVerdict(
+                    decision="HALT",
+                    vector="destructive_action",
+                    reason=f"Blocked write to sensitive file path {action.target!r}",
+                )
+            if not self._is_within_allowed_write_roots(action.target):
+                return GuardVerdict(
+                    decision="HALT",
+                    vector="destructive_action",
+                    reason=f"Blocked file_write outside allowed_write_roots: {action.target!r}",
+                )
+            return GuardVerdict(
+                decision="ALLOW",
+                vector="none",
+                reason="file_write within allowed_write_roots",
+            )
+
+        if action.kind == "file_delete":
+            if not self._is_within_allowed_write_roots(action.target):
+                return GuardVerdict(
+                    decision="HALT",
+                    vector="destructive_action",
+                    reason=f"Blocked file_delete outside allowed_write_roots: {action.target!r}",
+                )
+            if not self.policy.allow_destructive and not self._operator_consents(
+                action, f"file_delete {action.target}"
+            ):
+                return GuardVerdict(
+                    decision="HALT",
+                    vector="destructive_action",
+                    reason=f"Blocked file_delete on {action.target!r} without policy/operator grant",
+                )
+            return GuardVerdict(
+                decision="ALLOW",
+                vector="none",
+                reason="Authorized file_delete within root",
+            )
+
+        # 4. Shell execution gate
         if action.kind == "shell":
             cmd = f"{action.target} {action.payload}".strip()
             if _EGRESS_SHELL_PATTERN.search(cmd) and (
@@ -285,57 +402,57 @@ class OpenAdaptOSWorldGuard:
                     vector="data_exfiltration",
                     reason="Blocked shell network egress command without external egress grant",
                 )
-
-        # Vector 3: Destructive / irreversible action gate
-        if action.kind == "file_delete":
-            if not (action.explicit_grant and self.policy.allow_destructive):
-                return GuardVerdict(
-                    decision="HALT",
-                    vector="destructive_action",
-                    reason=f"Blocked irreversible file_delete on {action.target!r} without explicit grant",
-                )
-
-        if action.kind == "file_write":
-            if any(action.target.startswith(pfx) for pfx in _SYSTEM_CONFIG_PREFIXES):
-                if not (action.explicit_grant and self.policy.allow_destructive):
-                    return GuardVerdict(
-                        decision="HALT",
-                        vector="destructive_action",
-                        reason=f"Blocked system config overwrite on {action.target!r}",
-                    )
-
-        if action.kind == "email_send":
-            recipient = action.target.strip().lower()
-            allowed_recips = {r.lower() for r in self.policy.authorized_recipients}
-            if recipient not in allowed_recips and not action.explicit_grant:
-                return GuardVerdict(
-                    decision="HALT",
-                    vector="destructive_action",
-                    reason=f"Blocked irreversible external email to {recipient!r} without explicit grant",
-                )
-
-        if action.kind == "shell":
-            cmd = f"{action.target} {action.payload}".strip()
             if _DESTRUCTIVE_SHELL_PATTERN.search(cmd):
-                if not (action.explicit_grant and self.policy.allow_destructive):
+                if not (
+                    self.policy.allow_destructive
+                    and self.policy.allow_shell_exec
+                    and self._operator_consents(action, f"destructive shell: {cmd}")
+                ):
                     return GuardVerdict(
                         decision="HALT",
                         vector="destructive_action",
-                        reason="Blocked destructive shell command without explicit grant",
+                        reason="Blocked destructive shell command",
                     )
-            elif not self.policy.allow_shell_exec and not action.explicit_grant:
+            if not self.policy.allow_shell_exec:
                 return GuardVerdict(
                     decision="HALT",
                     vector="destructive_action",
-                    reason="Blocked ungranted shell execution under task policy",
+                    reason="Blocked shell execution (policy.allow_shell_exec is False)",
                 )
+            return GuardVerdict(
+                decision="ALLOW", vector="none", reason="Policy-permitted shell"
+            )
 
+        # 5. Explicitly allowlisted benign non-destructive UI & read actions
+        if action.kind == "file_read":
+            if touches_sensitive and untrusted_source:
+                return GuardVerdict(
+                    decision="HALT",
+                    vector="data_exfiltration",
+                    reason=f"Blocked sensitive file_read {action.target!r} from untrusted source",
+                )
+            return GuardVerdict(
+                decision="ALLOW", vector="none", reason="Benign file_read"
+            )
+
+        if action.kind in {"click", "type", "hotkey"}:
+            return GuardVerdict(
+                decision="ALLOW", vector="none", reason="Benign UI action"
+            )
+
+        # Unreachable due to allowlist check above; fail closed defensively.
         return GuardVerdict(
-            decision="ALLOW", vector="none", reason="Action permitted by policy"
+            decision="HALT",
+            vector="unknown_action",
+            reason=f"Unhandled action kind {action.kind!r} (fail closed)",
+            abstained=True,
         )
 
     def verify_checkpoint(self, checkpoint: CheckpointSpec) -> bool:
-        """Run an independent read-back check (file, read-only SQLite, or custom probe)."""
+        """Run an independent read-back check (file, read-only SQLite, or custom probe).
+
+        Fails closed (returns False) if custom_probe is None or any error occurs.
+        """
         try:
             if checkpoint.kind == "custom":
                 return bool(
@@ -377,8 +494,6 @@ class OpenAdaptOSWorldGuard:
 
         verdicts: list[GuardVerdict] = []
         steps_executed = 0
-        est_vlm_ms = sum(s.estimated_vlm_latency_ms for s in subflow.steps)
-        actual_ms = 0.0
 
         for step in subflow.steps:
             verdict = self.check_action(step.action)
@@ -390,16 +505,12 @@ class OpenAdaptOSWorldGuard:
                     drift_detected=False,
                     drift_recovered=False,
                     steps_executed=steps_executed,
-                    vlm_calls_used=0,
-                    vlm_calls_saved=steps_executed,
-                    estimated_vlm_latency_ms=est_vlm_ms,
-                    actual_latency_ms=actual_ms,
+                    recovery_calls_used=0,
                     halted_reason=verdict.reason,
                     verdicts=tuple(verdicts),
                 )
             executor(step)
             steps_executed += 1
-            actual_ms += step.compiled_latency_ms
 
         # Independent post-subworkflow checkpoint read-back
         if self.verify_checkpoint(subflow.checkpoint):
@@ -409,20 +520,16 @@ class OpenAdaptOSWorldGuard:
                 drift_detected=False,
                 drift_recovered=False,
                 steps_executed=steps_executed,
-                vlm_calls_used=0,
-                vlm_calls_saved=steps_executed,
-                estimated_vlm_latency_ms=est_vlm_ms,
-                actual_latency_ms=actual_ms,
+                recovery_calls_used=0,
                 verdicts=tuple(verdicts),
             )
 
         # Mid-horizon drift detected -> bounded recovery + re-verification
-        vlm_calls_used = 0
+        recovery_calls_used = 0
         for _ in range(max_recovery_attempts):
             if recover is None:
                 break
-            vlm_calls_used += 1
-            actual_ms += 900.0
+            recovery_calls_used += 1
             if recover(subflow) and self.verify_checkpoint(subflow.checkpoint):
                 return SubWorkflowResult(
                     workflow_id=workflow_id,
@@ -430,10 +537,7 @@ class OpenAdaptOSWorldGuard:
                     drift_detected=True,
                     drift_recovered=True,
                     steps_executed=steps_executed,
-                    vlm_calls_used=vlm_calls_used,
-                    vlm_calls_saved=max(0, steps_executed - vlm_calls_used),
-                    estimated_vlm_latency_ms=est_vlm_ms,
-                    actual_latency_ms=actual_ms,
+                    recovery_calls_used=recovery_calls_used,
                     verdicts=tuple(verdicts),
                 )
 
@@ -450,10 +554,7 @@ class OpenAdaptOSWorldGuard:
             drift_detected=True,
             drift_recovered=False,
             steps_executed=steps_executed,
-            vlm_calls_used=vlm_calls_used,
-            vlm_calls_saved=max(0, steps_executed - vlm_calls_used),
-            estimated_vlm_latency_ms=est_vlm_ms,
-            actual_latency_ms=actual_ms,
+            recovery_calls_used=recovery_calls_used,
             halted_reason=drift_verdict.reason,
             verdicts=tuple(verdicts),
         )
