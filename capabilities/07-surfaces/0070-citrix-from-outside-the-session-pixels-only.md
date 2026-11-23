@@ -1,0 +1,1 @@
+| Citrix from outside the session, pixels only (`remote_display`), the fallback when nothing can be installed inside | Exploratory | A Citrix stand-in with no DOM: 3 healthy runs, 3 stops on drift | [LIMITS.md](packages/flow/docs/LIMITS.md) |

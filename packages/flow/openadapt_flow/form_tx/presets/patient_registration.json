@@ -1,0 +1,530 @@
+{
+  "schema": "openadapt.form-domain-preset/v1",
+  "preset": {
+    "schema_id": "patient_registration.v1",
+    "fields": [
+      {
+        "dossier_key": "first_name",
+        "synonyms": [
+          "first name",
+          "given name",
+          "patient first name",
+          "legal first name",
+          "fname",
+          "first_name",
+          "given_name"
+        ],
+        "expected_codec": {
+          "kind": "whitespace_collapse",
+          "date_order": "YMD",
+          "currency_symbol": null,
+          "enum_aliases": {}
+        },
+        "section_hints": [
+          "patient",
+          "demographics",
+          "personal",
+          "identity"
+        ],
+        "required": true,
+        "triggers_re_render_hint": false
+      },
+      {
+        "dossier_key": "middle_name",
+        "synonyms": [
+          "middle name",
+          "middle initial",
+          "mname",
+          "middle_name"
+        ],
+        "expected_codec": {
+          "kind": "whitespace_collapse",
+          "date_order": "YMD",
+          "currency_symbol": null,
+          "enum_aliases": {}
+        },
+        "section_hints": [
+          "patient",
+          "demographics",
+          "personal"
+        ],
+        "required": false,
+        "triggers_re_render_hint": false
+      },
+      {
+        "dossier_key": "last_name",
+        "synonyms": [
+          "last name",
+          "surname",
+          "family name",
+          "patient last name",
+          "legal last name",
+          "lname",
+          "last_name",
+          "family_name"
+        ],
+        "expected_codec": {
+          "kind": "whitespace_collapse",
+          "date_order": "YMD",
+          "currency_symbol": null,
+          "enum_aliases": {}
+        },
+        "section_hints": [
+          "patient",
+          "demographics",
+          "personal",
+          "identity"
+        ],
+        "required": true,
+        "triggers_re_render_hint": false
+      },
+      {
+        "dossier_key": "date_of_birth",
+        "synonyms": [
+          "date of birth",
+          "birth date",
+          "birthdate",
+          "dob",
+          "patient dob",
+          "born on",
+          "date_of_birth",
+          "birth_date"
+        ],
+        "expected_codec": {
+          "kind": "iso_date",
+          "date_order": "MDY",
+          "currency_symbol": null,
+          "enum_aliases": {}
+        },
+        "section_hints": [
+          "patient",
+          "demographics",
+          "personal"
+        ],
+        "required": true,
+        "triggers_re_render_hint": false
+      },
+      {
+        "dossier_key": "administrative_sex",
+        "synonyms": [
+          "administrative sex",
+          "sex at birth",
+          "biological sex",
+          "legal sex",
+          "sex",
+          "gender",
+          "sex_at_birth",
+          "administrative_sex"
+        ],
+        "expected_codec": {
+          "kind": "enum_map",
+          "date_order": "YMD",
+          "currency_symbol": null,
+          "enum_aliases": {
+            "F": [
+              "female",
+              "f"
+            ],
+            "M": [
+              "male",
+              "m"
+            ],
+            "X": [
+              "non-binary",
+              "other",
+              "unknown",
+              "x",
+              "u"
+            ]
+          }
+        },
+        "section_hints": [
+          "patient",
+          "demographics",
+          "personal"
+        ],
+        "required": false,
+        "triggers_re_render_hint": false
+      },
+      {
+        "dossier_key": "phone_number",
+        "synonyms": [
+          "phone number",
+          "mobile phone",
+          "primary phone",
+          "contact phone",
+          "cell phone",
+          "telephone",
+          "phone",
+          "mobile",
+          "tel"
+        ],
+        "expected_codec": {
+          "kind": "phone_digits",
+          "date_order": "YMD",
+          "currency_symbol": null,
+          "enum_aliases": {}
+        },
+        "section_hints": [
+          "contact",
+          "patient",
+          "demographics"
+        ],
+        "required": true,
+        "triggers_re_render_hint": false
+      },
+      {
+        "dossier_key": "email_address",
+        "synonyms": [
+          "email address",
+          "email",
+          "patient email",
+          "electronic mail",
+          "email_address"
+        ],
+        "expected_codec": {
+          "kind": "casefold",
+          "date_order": "YMD",
+          "currency_symbol": null,
+          "enum_aliases": {}
+        },
+        "section_hints": [
+          "contact",
+          "patient",
+          "demographics"
+        ],
+        "required": false,
+        "triggers_re_render_hint": false
+      },
+      {
+        "dossier_key": "street_address",
+        "synonyms": [
+          "street address",
+          "home address",
+          "address line 1",
+          "residential address",
+          "street",
+          "address1",
+          "addr_line1",
+          "street_address"
+        ],
+        "expected_codec": {
+          "kind": "whitespace_collapse",
+          "date_order": "YMD",
+          "currency_symbol": null,
+          "enum_aliases": {}
+        },
+        "section_hints": [
+          "address",
+          "contact",
+          "residence",
+          "demographics"
+        ],
+        "required": false,
+        "triggers_re_render_hint": false
+      },
+      {
+        "dossier_key": "city",
+        "synonyms": [
+          "city",
+          "town",
+          "municipality",
+          "patient_city"
+        ],
+        "expected_codec": {
+          "kind": "whitespace_collapse",
+          "date_order": "YMD",
+          "currency_symbol": null,
+          "enum_aliases": {}
+        },
+        "section_hints": [
+          "address",
+          "contact",
+          "residence"
+        ],
+        "required": false,
+        "triggers_re_render_hint": false
+      },
+      {
+        "dossier_key": "state_code",
+        "synonyms": [
+          "state",
+          "province",
+          "state code",
+          "region",
+          "state_code"
+        ],
+        "expected_codec": {
+          "kind": "upper",
+          "date_order": "YMD",
+          "currency_symbol": null,
+          "enum_aliases": {}
+        },
+        "section_hints": [
+          "address",
+          "contact",
+          "residence"
+        ],
+        "required": false,
+        "triggers_re_render_hint": true
+      },
+      {
+        "dossier_key": "postal_code",
+        "synonyms": [
+          "postal code",
+          "zip code",
+          "zip",
+          "postcode",
+          "postal_code",
+          "zip_code"
+        ],
+        "expected_codec": {
+          "kind": "whitespace_collapse",
+          "date_order": "YMD",
+          "currency_symbol": null,
+          "enum_aliases": {}
+        },
+        "section_hints": [
+          "address",
+          "contact",
+          "residence"
+        ],
+        "required": false,
+        "triggers_re_render_hint": false
+      },
+      {
+        "dossier_key": "insurance_plan_name",
+        "synonyms": [
+          "insurance plan",
+          "payer name",
+          "coverage plan",
+          "health plan",
+          "insurance carrier",
+          "payer",
+          "insurance_plan"
+        ],
+        "expected_codec": {
+          "kind": "whitespace_collapse",
+          "date_order": "YMD",
+          "currency_symbol": null,
+          "enum_aliases": {}
+        },
+        "section_hints": [
+          "insurance",
+          "coverage",
+          "billing",
+          "payer"
+        ],
+        "required": false,
+        "triggers_re_render_hint": true
+      },
+      {
+        "dossier_key": "insurance_member_id",
+        "synonyms": [
+          "member id",
+          "subscriber id",
+          "insurance member id",
+          "policy member number",
+          "member number",
+          "member_id",
+          "subscriber_id"
+        ],
+        "expected_codec": {
+          "kind": "upper",
+          "date_order": "YMD",
+          "currency_symbol": null,
+          "enum_aliases": {}
+        },
+        "section_hints": [
+          "insurance",
+          "coverage",
+          "billing",
+          "payer"
+        ],
+        "required": false,
+        "triggers_re_render_hint": false
+      },
+      {
+        "dossier_key": "emergency_contact_name",
+        "synonyms": [
+          "emergency contact name",
+          "emergency contact",
+          "next of kin name",
+          "emergency_contact_name",
+          "emerg_name"
+        ],
+        "expected_codec": {
+          "kind": "whitespace_collapse",
+          "date_order": "YMD",
+          "currency_symbol": null,
+          "enum_aliases": {}
+        },
+        "section_hints": [
+          "emergency",
+          "next of kin"
+        ],
+        "required": false,
+        "triggers_re_render_hint": false
+      },
+      {
+        "dossier_key": "emergency_contact_phone",
+        "synonyms": [
+          "emergency contact phone",
+          "emergency phone",
+          "next of kin phone",
+          "emergency_contact_phone",
+          "emerg_phone"
+        ],
+        "expected_codec": {
+          "kind": "phone_digits",
+          "date_order": "YMD",
+          "currency_symbol": null,
+          "enum_aliases": {}
+        },
+        "section_hints": [
+          "emergency",
+          "next of kin"
+        ],
+        "required": false,
+        "triggers_re_render_hint": false
+      },
+      {
+        "dossier_key": "consent_to_treat",
+        "synonyms": [
+          "consent to treat",
+          "treatment consent",
+          "hipaa consent",
+          "patient consent",
+          "consent_to_treat"
+        ],
+        "expected_codec": {
+          "kind": "boolean_yes_no",
+          "date_order": "YMD",
+          "currency_symbol": null,
+          "enum_aliases": {}
+        },
+        "section_hints": [
+          "consent",
+          "authorization",
+          "agreement"
+        ],
+        "required": false,
+        "triggers_re_render_hint": false
+      },
+      {
+        "dossier_key": "full_name",
+        "synonyms": [
+          "patient full name",
+          "full name",
+          "legal full name",
+          "complete name"
+        ],
+        "expected_codec": {
+          "kind": "title_case",
+          "date_order": "YMD",
+          "currency_symbol": null,
+          "enum_aliases": {}
+        },
+        "section_hints": [
+          "patient",
+          "demographics",
+          "personal"
+        ],
+        "required": false,
+        "triggers_re_render_hint": false
+      },
+      {
+        "dossier_key": "visit_type",
+        "synonyms": [
+          "visit category",
+          "visit type",
+          "appointment type",
+          "visit_type"
+        ],
+        "expected_codec": {
+          "kind": "casefold",
+          "date_order": "YMD",
+          "currency_symbol": null,
+          "enum_aliases": {}
+        },
+        "section_hints": [
+          "queue",
+          "visit",
+          "routing",
+          "appointment"
+        ],
+        "required": false,
+        "triggers_re_render_hint": false
+      },
+      {
+        "dossier_key": "clinical_department",
+        "synonyms": [
+          "clinical department",
+          "department",
+          "specialty",
+          "clinic department"
+        ],
+        "expected_codec": {
+          "kind": "casefold",
+          "date_order": "YMD",
+          "currency_symbol": null,
+          "enum_aliases": {}
+        },
+        "section_hints": [
+          "queue",
+          "department",
+          "routing"
+        ],
+        "required": false,
+        "triggers_re_render_hint": true
+      },
+      {
+        "dossier_key": "consulting_provider",
+        "synonyms": [
+          "consulting doctor",
+          "attending physician",
+          "consulting provider",
+          "attending doctor",
+          "consulting_doctor"
+        ],
+        "expected_codec": {
+          "kind": "casefold",
+          "date_order": "YMD",
+          "currency_symbol": null,
+          "enum_aliases": {}
+        },
+        "section_hints": [
+          "queue",
+          "department",
+          "routing",
+          "provider"
+        ],
+        "required": false,
+        "triggers_re_render_hint": false
+      }
+    ],
+    "expected_outputs": [
+      {
+        "dossier_key": "medical_record_number",
+        "synonyms": [
+          "medical record number",
+          "mrn",
+          "patient id",
+          "chart number",
+          "registration number",
+          "record number",
+          "mrn_output"
+        ],
+        "expected_codec": {
+          "kind": "whitespace_collapse",
+          "date_order": "YMD",
+          "currency_symbol": null,
+          "enum_aliases": {}
+        },
+        "section_hints": [],
+        "required": true,
+        "triggers_re_render_hint": false
+      }
+    ]
+  }
+}
