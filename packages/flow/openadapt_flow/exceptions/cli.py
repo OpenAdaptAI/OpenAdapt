@@ -131,8 +131,13 @@ def register(sub: argparse._SubParsersAction) -> None:
         metavar="CHOICE",
         choices=["continue", "skip", "decline", "done_by_person", "abort"],
     )
+    # Fixed text, not the expanded home: help must not change with HOME (the
+    # CLI snapshot test and anyone diffing --help). The default itself is
+    # still computed when the command runs (_key_default()).
     a.add_argument(
-        "--key", help=f"the encrypted approver key (default: {_key_default()})"
+        "--key",
+        help="the encrypted approver key "
+        "(default: ~/.openadapt/approver/desktop-approver.pem)",
     )
     a.add_argument("--json", action="store_true", help="print JSON")
     _roster(a)
