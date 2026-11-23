@@ -18,7 +18,11 @@
 - **Fault test.** We injected 8 kinds of bad save, 9 runs each, alongside
   clean runs: 72 runs left a wrong record behind. A check that trusts the screen's "Saved" banner reported 54 of those
   as success; reading the record back over the app's REST API missed 9; the
-  complete database read path caught all 72. The fault set and method are in
+  complete database read path caught all 72. The test app's database is
+  SQLite with two record tables, so "every table" there is two tables.
+  Separately, 9 of the 18 correct saves stopped in every arm: the server
+  committed the save but its answer timed out, so the write step halted before
+  any read-back ran. The count is of end-to-end run outcomes. The fault set and method are in
   [EFFECT_E2E.md](packages/flow/benchmark/effect_e2e/EFFECT_E2E.md).
 - **OpenEMR referral: agent, screen program and API step.** Median wall time
   per referral, from a fresh browser through sign-in, the entry and the read-back:
@@ -43,7 +47,9 @@
 - **openIMIS claims.** On a test copy of openIMIS, the open-source insurance
   and claims system that runs Nepal's national health insurance scheme, the
   compiled program entered 149 synthetic claims with no model calls: 148 read
-  back correct and none were saved wrong:
+  back correct and none were saved wrong. Each saved claim was read back by
+  SQL through a read-only database role on the test copy; the 149th stopped
+  before saving:
   [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#openimis).
 
 The systems each result ran on are listed in
