@@ -1,0 +1,31 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${WOO_DB_ROOT_PASSWORD:-bench_local_only_not_secret}
+      MYSQL_DATABASE: woo_bench
+      MYSQL_USER: woo_bench
+      MYSQL_PASSWORD: ${WOO_DB_PASSWORD:-bench_local_only_not_secret}
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  wordpress:
+    image: wordpress:6.7-php8.2-apache
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: mysql:3306
+      WORDPRESS_DB_NAME: woo_bench
+      WORDPRESS_DB_USER: woo_bench
+      WORDPRESS_DB_PASSWORD: ${WOO_DB_PASSWORD:-bench_local_only_not_secret}
+    ports:
+      - "127.0.0.1:8086:80"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost/wp-json/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20

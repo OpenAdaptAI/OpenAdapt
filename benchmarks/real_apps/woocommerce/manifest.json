@@ -1,0 +1,19 @@
+{
+  "app_id": "woocommerce",
+  "display_name": "WooCommerce Order & Refund Admin",
+  "domain": "ecommerce_orders_refunds",
+  "surface": "web",
+  "runtime": "docker-compose",
+  "compose_file": "docker-compose.yml",
+  "readback_channel": "woocommerce_rest_v3",
+  "base_url": "http://127.0.0.1:8086",
+  "seed_entities": ["order", "refund"],
+  "fault_classes": [
+    "dropped_write",
+    "truncated_value",
+    "wrong_target",
+    "duplicate_record",
+    "silent_refund_mismatch"
+  ],
+  "healthcheck_url": "http://127.0.0.1:8086/wp-json/"
+}

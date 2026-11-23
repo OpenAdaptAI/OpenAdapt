@@ -1,0 +1,17 @@
+{
+  "app_id": "libreoffice_calc",
+  "display_name": "LibreOffice Calc (Desktop Spreadsheet)",
+  "domain": "desktop_finance_spreadsheet",
+  "surface": "desktop",
+  "runtime": "desktop_xvfb",
+  "desktop_spec": "desktop_spec.json",
+  "readback_channel": "zip_xml_cell_formula",
+  "seed_entities": ["xlsx_workbook", "ods_workbook"],
+  "fault_classes": [
+    "dropped_write",
+    "truncated_value",
+    "wrong_cell_target",
+    "formula_overwritten_with_literal",
+    "corrupt_archive"
+  ]
+}

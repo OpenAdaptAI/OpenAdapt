@@ -1,0 +1,5 @@
+{
+  "launch_cmd": ["joplin-desktop", "--profile", "{profile_dir}"],
+  "sqlite_relative_path": "database.sqlite",
+  "notes": "Read-back queries Joplin's local database.sqlite directly in read-only mode (URI mode=ro), catching dropped saves, truncated bodies, wrong-folder writes, duplicate notes, and stale sync conflicts."
+}

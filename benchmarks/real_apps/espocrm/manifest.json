@@ -1,0 +1,19 @@
+{
+  "app_id": "espocrm",
+  "display_name": "EspoCRM Brokerage AMS",
+  "domain": "insurance_brokerage_crm",
+  "surface": "web",
+  "runtime": "docker-compose",
+  "compose_file": "docker-compose.yml",
+  "readback_channel": "espocrm_rest_api",
+  "base_url": "http://127.0.0.1:8085",
+  "seed_entities": ["Account", "Opportunity"],
+  "fault_classes": [
+    "dropped_write",
+    "truncated_value",
+    "wrong_target",
+    "duplicate_record",
+    "stage_reverted"
+  ],
+  "healthcheck_url": "http://127.0.0.1:8085/api/v1/App/user"
+}

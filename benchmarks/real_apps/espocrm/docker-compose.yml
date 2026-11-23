@@ -1,0 +1,35 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${ESPOCRM_DB_ROOT_PASSWORD:-bench_local_only_not_secret}
+      MYSQL_DATABASE: espocrm_bench
+      MYSQL_USER: espocrm_bench
+      MYSQL_PASSWORD: ${ESPOCRM_DB_PASSWORD:-bench_local_only_not_secret}
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  espocrm:
+    image: espocrm/espocrm:8.4.2
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      ESPOCRM_DATABASE_PLATFORM: Mysql
+      ESPOCRM_DATABASE_HOST: mysql
+      ESPOCRM_DATABASE_NAME: espocrm_bench
+      ESPOCRM_DATABASE_USER: espocrm_bench
+      ESPOCRM_DATABASE_PASSWORD: ${ESPOCRM_DB_PASSWORD:-bench_local_only_not_secret}
+      ESPOCRM_ADMIN_USERNAME: admin
+      ESPOCRM_ADMIN_PASSWORD: ${ESPOCRM_ADMIN_PASSWORD:-bench_local_only_not_secret}
+      ESPOCRM_SITE_URL: "http://127.0.0.1:8085"
+    ports:
+      - "127.0.0.1:8085:80"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost/api/v1/App/user || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20

@@ -1,0 +1,20 @@
+{
+  "app_id": "medplum",
+  "display_name": "Medplum FHIR EHR",
+  "domain": "healthcare_ehr",
+  "surface": "web",
+  "runtime": "docker-compose",
+  "compose_file": "docker-compose.yml",
+  "readback_channel": "fhir_r4_rest",
+  "base_url": "http://127.0.0.1:8103",
+  "ui_url": "http://127.0.0.1:3000",
+  "seed_entities": ["Patient", "Observation"],
+  "fault_classes": [
+    "dropped_write",
+    "truncated_value",
+    "wrong_target",
+    "duplicate_record",
+    "operation_outcome_masked"
+  ],
+  "healthcheck_url": "http://127.0.0.1:8103/healthcheck"
+}

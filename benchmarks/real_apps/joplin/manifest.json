@@ -1,0 +1,17 @@
+{
+  "app_id": "joplin",
+  "display_name": "Joplin Electron Desktop Notes",
+  "domain": "desktop_knowledge_base",
+  "surface": "desktop",
+  "runtime": "electron_local",
+  "desktop_spec": "desktop_spec.json",
+  "readback_channel": "local_sqlite_ro",
+  "seed_entities": ["folders", "notes"],
+  "fault_classes": [
+    "dropped_write",
+    "truncated_value",
+    "wrong_target",
+    "duplicate_record",
+    "stale_sync_conflict"
+  ]
+}

@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: openkoda_bench
+      POSTGRES_USER: openkoda_bench
+      POSTGRES_PASSWORD: ${OPENKODA_DB_PASSWORD:-bench_local_only_not_secret}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openkoda_bench -d openkoda_bench"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  openkoda:
+    image: openkoda/openkoda:1.6.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/openkoda_bench
+      SPRING_DATASOURCE_USERNAME: openkoda_bench
+      SPRING_DATASOURCE_PASSWORD: ${OPENKODA_DB_PASSWORD:-bench_local_only_not_secret}
+      SERVER_PORT: "8080"
+    ports:
+      - "127.0.0.1:8084:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 25

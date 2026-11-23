@@ -1,0 +1,7 @@
+{
+  "launch_cmd": ["libreoffice", "--calc", "--norestore", "--nofirststartwizard", "{workbook_path}"],
+  "headless_wrapper": ["xvfb-run", "-a", "--server-args=-screen 0 1280x800x24"],
+  "supported_formats": [".xlsx", ".ods"],
+  "save_shortcut": "Ctrl+S",
+  "notes": "Read-back inspects the saved .xlsx or .ods archive directly via stdlib zipfile + XML, catching unsaved buffers, literal overwrites of formulas, and wrong-cell edits."
+}

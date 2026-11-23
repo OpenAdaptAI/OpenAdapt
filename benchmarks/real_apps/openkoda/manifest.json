@@ -1,0 +1,19 @@
+{
+  "app_id": "openkoda",
+  "display_name": "Openkoda P&C Insurance Platform",
+  "domain": "insurance_policy_claims",
+  "surface": "web",
+  "runtime": "docker-compose",
+  "compose_file": "docker-compose.yml",
+  "readback_channel": "openkoda_rest_api",
+  "base_url": "http://127.0.0.1:8084",
+  "seed_entities": ["policy", "claim"],
+  "fault_classes": [
+    "dropped_write",
+    "truncated_value",
+    "wrong_target",
+    "duplicate_record",
+    "stale_deductible"
+  ],
+  "healthcheck_url": "http://127.0.0.1:8084/actuator/health"
+}

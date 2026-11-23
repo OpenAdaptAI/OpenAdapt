@@ -1,0 +1,60 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: medplum_bench
+      POSTGRES_USER: medplum_bench
+      POSTGRES_PASSWORD: ${MEDPLUM_DB_PASSWORD:-bench_local_only_not_secret}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medplum_bench -d medplum_bench"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  medplum-server:
+    image: medplum/medplum-server:3.3.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      MEDPLUM_PORT: "8103"
+      MEDPLUM_BASE_URL: "http://localhost:8103/"
+      MEDPLUM_APP_BASE_URL: "http://localhost:3000/"
+      MEDPLUM_DATABASE_HOST: postgres
+      MEDPLUM_DATABASE_PORT: "5432"
+      MEDPLUM_DATABASE_NAME: medplum_bench
+      MEDPLUM_DATABASE_USERNAME: medplum_bench
+      MEDPLUM_DATABASE_PASSWORD: ${MEDPLUM_DB_PASSWORD:-bench_local_only_not_secret}
+      MEDPLUM_REDIS_HOST: redis
+    ports:
+      - "127.0.0.1:8103:8103"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8103/healthcheck || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  medplum-app:
+    image: medplum/medplum-app:3.3.0
+    depends_on:
+      medplum-server:
+        condition: service_healthy
+    environment:
+      MEDPLUM_BASE_URL: "http://localhost:8103/"
+    ports:
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
