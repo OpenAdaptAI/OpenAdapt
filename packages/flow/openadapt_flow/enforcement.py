@@ -73,7 +73,9 @@ def _append(digest: str, entry: dict[str, Any]) -> None:
     os.chmod(path.parent, 0o700)
     line = json.dumps({"schema": SCHEMA, "contract": digest, **entry}, sort_keys=True)
     # One short line per append: O_APPEND keeps concurrent writers whole.
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    from openadapt_flow.private_file import open_binary
+
+    fd = open_binary(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     try:
         os.write(fd, (line + "\n").encode("utf-8"))
     finally:

@@ -13177,8 +13177,6 @@ def build_parser() -> argparse.ArgumentParser:
     from openadapt_flow.cli_fleet import register_fleet_parser
     from openadapt_flow.cli_receipt import register as _register_receipt
     from openadapt_flow.cli_reconcile import register as _register_reconcile
-    from openadapt_flow.cli_rollback import register as _register_rollback
-    from openadapt_flow.cli_shadow import register as _register_shadow
     from openadapt_flow.compile_agent.cli import add_parser as _add_compile_agent_parser
     from openadapt_flow.flight.cli import add_parser as _add_flight_parser
     from openadapt_flow.hooks.cli import add_parser as _add_hooks_parser
@@ -13187,11 +13185,9 @@ def build_parser() -> argparse.ArgumentParser:
     from openadapt_flow.txplan.cli import add_parser as _add_plan_parser
     from openadapt_flow.txplan.proxy_cli import add_parser as _add_proxy_parser
 
-    _register_rollback(sub)
-    _register_shadow(sub)
-    from openadapt_flow.cli_gate import register as _register_gate
-
-    _register_gate(sub)
+    __import__("openadapt_flow.cli_rollback", fromlist=["_"]).register(sub)
+    __import__("openadapt_flow.cli_shadow", fromlist=["_"]).register(sub)
+    __import__("openadapt_flow.cli_gate", fromlist=["_"]).register(sub)
     __import__("openadapt_flow.readiness.cli", fromlist=["cli"]).register(sub)
     _register_receipt(sub)
     _register_learn(sub)
