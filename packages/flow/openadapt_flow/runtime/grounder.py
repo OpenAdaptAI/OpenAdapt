@@ -601,7 +601,13 @@ class AnthropicGrounder:
                 "Install it with: pip install 'openadapt-flow[grounder]'"
             ) from exc
         self._model = model
-        self._client = client if client is not None else anthropic.Anthropic()
+        # One locate is one send: the SDK's own retries (two by default) would
+        # resend the frame behind one egress-ledger line and one counted call.
+        if client is None:
+            client = anthropic.Anthropic(max_retries=0)
+        elif callable(getattr(client, "with_options", None)):
+            client = client.with_options(max_retries=0)
+        self._client = client
         self._outbound = _OutboundScreen(None)
 
     def locate(

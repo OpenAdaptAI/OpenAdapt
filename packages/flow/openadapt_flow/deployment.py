@@ -1699,7 +1699,7 @@ def build_model_grounder(cfg: GroundingModelConfig) -> Optional[Any]:
             if api_key:
                 import anthropic
 
-                client = anthropic.Anthropic(api_key=api_key)
+                client = anthropic.Anthropic(api_key=api_key, max_retries=0)
             return AnthropicGrounder(model=model, client=client)
         except ImportError:
             print(

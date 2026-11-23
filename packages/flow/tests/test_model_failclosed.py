@@ -576,3 +576,84 @@ def test_model_grounder_checked_at_the_url_its_client_uses(wiring, monkeypatch):
     )
     _build(runtime_config=runtime, phi_mode=False)
     assert wiring.get("fallback") is None
+
+
+def test_each_model_send_is_one_ledgered_counted_call(tmp_path, monkeypatch):
+    # The Anthropic SDK retries twice by default, so one ledgered, counted call
+    # could send the same frame three times. The grounder turns retries off:
+    # three sends must be three ledger lines and three counted calls.
+    anthropic = pytest.importorskip("anthropic")
+    import httpx
+
+    from openadapt_flow.runtime.grounder import AnthropicGrounder
+    from openadapt_flow.runtime.model_egress import LEDGER_ENV, EgressRecorder
+
+    sends = []
+
+    def overloaded(request):
+        sends.append(request)
+        return httpx.Response(
+            529, json={"type": "error", "error": {"type": "overloaded_error"}}
+        )
+
+    client = anthropic.Anthropic(
+        api_key="test-not-a-key",
+        base_url="https://model.example.test",
+        http_client=httpx.Client(transport=httpx.MockTransport(overloaded)),
+    )
+    assert client.max_retries > 0  # the SDK default this guards against
+    monkeypatch.setenv("OPENADAPT_FLOW_SEND_UNSCRUBBED", "retry count unit test")
+    ledger = tmp_path / "egress-ledger.jsonl"
+    monkeypatch.setenv(LEDGER_ENV, str(ledger))
+    recorder = EgressRecorder()
+    grounder = recorder.wrap(
+        "grounder", AnthropicGrounder(model="pinned-m", client=client)
+    )
+    for _ in range(3):
+        with pytest.raises(anthropic.APIStatusError):
+            grounder.locate(_png(), "click Save")
+    assert len(sends) == 3
+    result = StepResult(step_id="s1", intent="click Save", ok=False)
+    recorder.drain(result)
+    assert result.grounder_calls == 3
+    lines = _ledger_lines(ledger)
+    assert len(lines) == 3
+    assert {line["destination"] for line in lines} == {"model.example.test"}
+
+
+def test_ledger_names_the_openai_compatible_host(tmp_path, monkeypatch):
+    from openadapt_flow.runtime.grounder import OpenAICompatibleGrounder
+    from openadapt_flow.runtime.model_egress import LEDGER_ENV, EgressRecorder
+
+    class _Refusing:
+        def post(self, url, **kwargs):
+            return SimpleNamespace(status_code=503)
+
+    monkeypatch.setenv("OPENADAPT_FLOW_SEND_UNSCRUBBED", "host unit test")
+    ledger = tmp_path / "egress-ledger.jsonl"
+    monkeypatch.setenv(LEDGER_ENV, str(ledger))
+    grounder = EgressRecorder().wrap(
+        "grounder",
+        OpenAICompatibleGrounder(
+            base_url="https://vlm.example.test/v1", model="m", client=_Refusing()
+        ),
+    )
+    assert grounder.locate(_png(), "click Save") is None
+    (line,) = _ledger_lines(ledger)
+    assert line["destination"] == "vlm.example.test"
+
+
+def test_replayer_built_without_init_still_ledgers_off_box_calls(monkeypatch):
+    # A Replayer made with __new__ gets its recorder on first use, and the
+    # components already set are wrapped, so nothing is sent unrecorded.
+    from openadapt_flow.runtime.model_egress import LEDGER_ENV
+
+    monkeypatch.delenv(LEDGER_ENV, raising=False)
+    rp = Replayer.__new__(Replayer)
+    inner = _OffBoxGrounder()
+    rp.grounder = inner
+    recorder = rp._egress
+    assert rp._egress is recorder
+    assert rp.grounder is not inner
+    assert rp.grounder.locate(b"frame", "click Save") is None  # no ledger bound
+    assert inner.calls == 0

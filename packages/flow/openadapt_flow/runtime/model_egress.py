@@ -61,15 +61,23 @@ def append_ledger_line(path: Path, entry: dict[str, Any]) -> None:
 
 
 def _destination(component: Any) -> str:
-    """The host a component sends to, or ``"unknown"``."""
+    """The host a component sends to, or ``"unknown"``.
 
-    for holder in (component, getattr(component, "_client", None)):
-        for name in ("base_url", "_base_url"):
-            url = getattr(holder, name, None)
-            if isinstance(url, str) and url:
-                host = urlsplit(url if "//" in url else f"//{url}").hostname
-                if host:
-                    return host
+    Reads the built client the same way the regulated-transport check does
+    (:func:`openadapt_flow.model_transport.built_endpoint`), so a ``_url`` or an
+    ``httpx.URL`` base is recorded too.
+    """
+
+    from openadapt_flow.model_transport import built_endpoint
+
+    url = built_endpoint(component)
+    if url:
+        try:
+            host = urlsplit(url if "//" in url else f"//{url}").hostname
+        except ValueError:
+            host = None
+        if host:
+            return host
     return "unknown"
 
 

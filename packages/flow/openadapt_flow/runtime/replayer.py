@@ -469,6 +469,29 @@ class Replayer(QualificationFaultInjection, AssetsHealingAndEvidence):
             None uses ``$OPENADAPT_JIT_KEY_DIR`` or ``~/.openadapt/jit``.
     """
 
+    @property
+    def _egress(self) -> EgressRecorder:
+        """The egress recorder, created on first use when ``__init__`` didn't run.
+
+        A replayer built without ``__init__`` (``Replayer.__new__``, a stubbed
+        constructor) never wrapped its model components. Here they are wrapped
+        before the recorder is returned, so a frame still can't leave the box
+        unledgered, and an off-box call made outside ``run`` is refused (an
+        unbound recorder admits nothing unless ``OPENADAPT_FLOW_EGRESS_LEDGER``
+        names a ledger).
+        """
+
+        recorder = self.__dict__.get("_egress_recorder")
+        if recorder is None:
+            recorder = EgressRecorder()
+            self.__dict__["_egress_recorder"] = recorder
+            for kind in ("grounder", "identity_vlm", "state_verifier"):
+                component = self.__dict__.get(kind)
+                if component is not None:
+                    self.__dict__[kind] = recorder.wrap(kind, component)
+        return recorder
+
+
     # Display-scale state (see __init__); class defaults keep partially
     # constructed replayers, as some tests build them, on recorded geometry.
     _render_scale_attempted: bool = False
@@ -614,7 +637,7 @@ class Replayer(QualificationFaultInjection, AssetsHealingAndEvidence):
         # facade exposing find_template/ocr/wait_settled/...).
         self.vision: Any = vision
         # Frames sent off the box are ledgered and counted by placement.
-        self._egress = EgressRecorder()
+        self.__dict__["_egress_recorder"] = EgressRecorder()
         self.grounder = self._egress.wrap("grounder", grounder)
         # Whether the deterministic structural ACTION rung (top of the ladder)
         # may run. True (default) = product behavior: on a structure-bearing
