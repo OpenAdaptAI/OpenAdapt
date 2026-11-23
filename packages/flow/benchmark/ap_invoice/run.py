@@ -142,6 +142,11 @@ def _build_verifier(
                 mailer.outbox / "new",
                 pattern="*.eml",
                 content_probe=r"X-OpenAdapt-Invoice: ",
+                # The mail gateway's maildir is the system of record for
+                # delivery. Leaving producer undeclared grades the check as
+                # immediate-screen (unknown == acting session), and the
+                # standard profile then refuses send_confirmation / send_hold_notice.
+                producer="system_of_record",
             ),
         },
         default_surface="invoices",
