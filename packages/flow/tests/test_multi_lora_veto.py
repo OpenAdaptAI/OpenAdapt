@@ -221,7 +221,9 @@ def test_router_hot_swaps_temperature_calibration_and_abstain_halt() -> None:
     backend = _MockHotSwapBackend(
         {
             # logit=0.2, temp=0.5 -> sigmoid(0.4)=0.5987 >= threshold 0.35 -> VETO
-            "req-1": RawVetoScore(fault_logit=0.2, rationale="Field blanked after submit."),
+            "req-1": RawVetoScore(
+                fault_logit=0.2, rationale="Field blanked after submit."
+            ),
             # Same adapter (no swap!), logit=-1.5 -> sigmoid(-3.0)=0.0474 < 0.35 -> ALLOW
             "req-2": RawVetoScore(fault_logit=-1.5, rationale="All fields persisted."),
             # Different adapter (swap!), abstain=True while dom_claims_success=True -> HALT_ESCALATE
@@ -366,10 +368,14 @@ def test_export_inbox_training_jsonl_dedup_and_tenant_isolation(tmp_path: Path) 
     ]
 
     out_path = tmp_path / "byoc" / "tenant-1-train.jsonl"
-    count = export_inbox_training_jsonl(items, out_path, tenant_id="tenant-1", app_id="app-alpha")
+    count = export_inbox_training_jsonl(
+        items, out_path, tenant_id="tenant-1", app_id="app-alpha"
+    )
     assert count == 2
 
-    lines = [json.loads(line) for line in out_path.read_text(encoding="utf-8").splitlines()]
+    lines = [
+        json.loads(line) for line in out_path.read_text(encoding="utf-8").splitlines()
+    ]
     assert len(lines) == 2
     assert all(rec["metadata"]["tenant_id"] == "tenant-1" for rec in lines)
     assert all(rec["metadata"]["app_id"] == "app-alpha" for rec in lines)

@@ -81,7 +81,9 @@ class AdapterSpec(BaseModel):
     def _validate_sha256(cls, value: str) -> str:
         normalized = value.strip().lower()
         if not _SHA256_RE.match(normalized):
-            raise ValueError(f"sha256 must be 64 lowercase hex characters (got {value!r})")
+            raise ValueError(
+                f"sha256 must be 64 lowercase hex characters (got {value!r})"
+            )
         return normalized
 
     @model_validator(mode="after")
@@ -289,7 +291,9 @@ class AppAdapterRegistry:
                     if (
                         spec.tenant_scope is scope
                         and spec.domain_pattern
-                        and fnmatch.fnmatch(normalized_domain, spec.domain_pattern.lower())
+                        and fnmatch.fnmatch(
+                            normalized_domain, spec.domain_pattern.lower()
+                        )
                     ):
                         return spec
 
@@ -555,7 +559,9 @@ def export_inbox_training_jsonl(
 
     dest = Path(output_path).resolve()
     dest.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(dir=dest.parent, prefix=".lora-train-", suffix=".tmp")
+    fd, tmp_name = tempfile.mkstemp(
+        dir=dest.parent, prefix=".lora-train-", suffix=".tmp"
+    )
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             for rec in records:
