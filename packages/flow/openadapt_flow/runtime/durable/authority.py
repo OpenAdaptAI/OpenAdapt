@@ -3104,9 +3104,7 @@ class DurableAuthority:
             if record.phase == "completed":
                 report_path = self.run_dir / "report.json"
                 try:
-                    report_sha256 = (
-                        "sha256:" + hashlib.sha256(report_path.read_bytes()).hexdigest()
-                    )
+                    report_sha256 = "sha256:" + _report_digest(report_path)
                 except OSError:
                     return None
                 base_proof = (
@@ -3170,9 +3168,7 @@ class DurableAuthority:
                 return False
             report_path = self.run_dir / "report.json"
             try:
-                report_sha256 = (
-                    "sha256:" + hashlib.sha256(report_path.read_bytes()).hexdigest()
-                )
+                report_sha256 = "sha256:" + _report_digest(report_path)
             except OSError:
                 return False
             return bool(
@@ -3423,3 +3419,17 @@ class DurableAuthority:
                 "the external continuation authority is no longer owned by this attempt"
             )
         return record
+
+
+def _report_digest(report_path: Path) -> str:
+    """SHA-256 of the report's plaintext, the bytes the continuation fenced:
+    read through the run's sealed set when the run is encrypted (the
+    default), else from disk. A report that can't be read raises ``OSError``,
+    so no proof is given for it."""
+    from openadapt_flow import sealed_set
+
+    try:
+        data = sealed_set.read_bytes(report_path)
+    except ValueError as exc:  # a SealedSetError: changed, shredded, no key
+        raise OSError(str(exc)) from exc
+    return hashlib.sha256(data).hexdigest()

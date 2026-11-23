@@ -1,0 +1,27 @@
+{
+  "schema": "openadapt.wrap-example/v1",
+  "name": "clinic-note",
+  "summary": "Save a note on one patient's encounter in the bundled synthetic clinic app (MockMed). All data is fake.",
+  "server": "openadapt_flow.mockmed.fault_server:serve",
+  "app_label": "a synthetic clinic app (MockMed)",
+  "path": "?fault=ok&idempotency=demo#tasks",
+  "reset_path": "api/reset",
+  "instruction": "Open the referral for Jane Sample, start a Triage encounter, and save this note: {note}",
+  "parameters": ["note"],
+  "expect": {"patient_id": "p1", "type": "Triage"},
+  "on_screen": ["Jane Sample", "MRN P1"],
+  "drop_fields": ["key", "source"],
+  "verifier": {
+    "kind": "rest",
+    "records_path": "/api/db",
+    "records_key": "records",
+    "records_complete": true,
+    "timeout_s": 2.0,
+    "poll_interval_s": 0.05
+  },
+  "runs": [
+    {"note": "Synthetic follow-up in two weeks"},
+    {"note": "Recheck knee in ten days"}
+  ],
+  "canary_params": [{"note": "Synthetic canary note"}]
+}
