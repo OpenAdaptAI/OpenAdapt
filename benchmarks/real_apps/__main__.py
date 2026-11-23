@@ -38,9 +38,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_run.add_argument(
         "--mode",
-        choices=("contract", "live"),
+        choices=("contract",),
         default="contract",
-        help="Verification mode: 'contract' (in-process) or 'live' (Docker/desktop).",
+        help="Verification mode: 'contract' (in-process stub verification; live container mode not yet enabled).",
     )
     p_run.add_argument(
         "--work-dir",
@@ -71,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         return 0
 
-    mode = cast(RunMode, cast(Literal["contract", "live"], args.mode))
+    mode = cast(RunMode, cast(Literal["contract"], args.mode))
     adapters = load_adapters(args.app)
     harness = RealAppHarness(adapters)
 

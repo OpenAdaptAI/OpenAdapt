@@ -53,7 +53,9 @@ class _EchoUpstream:
                 length = int(self.headers.get("Content-Length", "0") or "0")
                 body = self.rfile.read(length) if length > 0 else b""
                 posts.append((self.path, body))
-                raw = json.dumps({"upstream_received": True, "path": self.path}).encode("utf-8")
+                raw = json.dumps({"upstream_received": True, "path": self.path}).encode(
+                    "utf-8"
+                )
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(raw)))
@@ -195,19 +197,40 @@ def test_cli_runner_emits_json_and_markdown_scoreboard(
 
     doc = json.loads(out_json.read_text(encoding="utf-8"))
     assert doc["schema"] == "openadapt.real-apps-scoreboard/v1"
+    assert doc["execution_target"] == "in-process contract stub"
+    assert doc["is_live_app"] is False
     assert doc["total"] == 2
     assert doc["passed"] == 2
     assert [r["app_id"] for r in doc["results"]] == ["openemr", "odoo17"]
+    assert all(r["is_live_app"] is False for r in doc["results"])
+    assert all(
+        r["execution_target"] == "in-process contract stub" for r in doc["results"]
+    )
 
     md = out_md.read_text(encoding="utf-8")
-    assert "2/2 apps passed" in md
+    assert "2/2 in-process contract stubs passed" in md
+    assert "NOT live app verification" in md
+    assert "in-process contract stub" in md
     assert "OpenEMR 8.0.0.3" in md
     assert "Odoo 17 Community" in md
-    assert "OpenAdapt Real-App Verification Matrix" in capsys.readouterr().out
+    assert "OpenAdapt Real-App Contract Matrix" in capsys.readouterr().out
 
-    assert "PASS" in render_scoreboard_markdown(
+    assert "PASS (stub)" in render_scoreboard_markdown(
         RealAppHarness([load_adapter("openemr")]).run_all(
             mode="contract", work_dir=tmp_path / "single"
         ),
         mode="contract",
     )
+
+    with pytest.raises(NotImplementedError):
+        RealAppHarness([load_adapter("openemr")]).run_all(
+            mode="live",  # type: ignore[arg-type]
+            work_dir=tmp_path / "live",
+        )
+
+    wf_text = Path(".github/workflows/real-apps-nightly.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in wf_text
+    assert "actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0" in wf_text
+    assert "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9" in wf_text

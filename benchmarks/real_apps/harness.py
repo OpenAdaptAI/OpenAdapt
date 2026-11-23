@@ -12,7 +12,7 @@ from typing import Any, Literal, Protocol
 
 SurfaceKind = Literal["web", "desktop", "electron"]
 TierKind = Literal["pr", "nightly"]
-RunMode = Literal["contract", "live"]
+RunMode = Literal["contract"]
 
 
 @dataclass(frozen=True)
@@ -103,6 +103,8 @@ class AppRunResult:
             "surface": self.surface,
             "tier": self.tier,
             "mode": self.mode,
+            "execution_target": "in-process contract stub",
+            "is_live_app": False,
             "passed": self.passed,
             "happy_path_verified": self.happy_path_verified,
             "silent_fault_caught": self.silent_fault_caught,
@@ -145,16 +147,17 @@ class RealAppHarness:
         self._adapters = list(adapters)
 
     def run_all(self, *, mode: RunMode, work_dir: Path) -> list[AppRunResult]:
+        if mode != "contract":
+            raise NotImplementedError(
+                f"Unsupported mode {mode!r}: only 'contract' (in-process stub) verification is implemented."
+            )
         work_dir.mkdir(parents=True, exist_ok=True)
         results: list[AppRunResult] = []
         for adapter in self._adapters:
             app_dir = work_dir / adapter.spec.app_id
             app_dir.mkdir(parents=True, exist_ok=True)
             t0 = time.monotonic()
-            if mode == "contract":
-                res = adapter.run_contract_verification(app_dir)
-            else:
-                res = adapter.run_live_verification(app_dir)
+            res = adapter.run_contract_verification(app_dir)
             if res.elapsed_s <= 0.0:
                 dt = time.monotonic() - t0
                 res = AppRunResult(
@@ -182,6 +185,8 @@ def render_scoreboard_json(results: Sequence[AppRunResult], *, mode: RunMode) ->
         "schema": "openadapt.real-apps-scoreboard/v1",
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "mode": mode,
+        "execution_target": "in-process contract stub",
+        "is_live_app": False,
         "total": len(results),
         "passed": sum(1 for r in results if r.passed),
         "results": [r.to_dict() for r in results],
@@ -189,22 +194,24 @@ def render_scoreboard_json(results: Sequence[AppRunResult], *, mode: RunMode) ->
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
 
-def render_scoreboard_markdown(results: Sequence[AppRunResult], *, mode: RunMode) -> str:
+def render_scoreboard_markdown(
+    results: Sequence[AppRunResult], *, mode: RunMode
+) -> str:
     """Render a concise GitHub-flavored Markdown scoreboard table."""
     passed_count = sum(1 for r in results if r.passed)
     lines = [
-        f"# OpenAdapt Real-App Verification Matrix ({mode} mode)",
+        f"# OpenAdapt Real-App Contract Matrix ({mode} mode — in-process stub, NOT live app verification)",
         "",
-        f"**Summary:** {passed_count}/{len(results)} apps passed both happy-path `VERIFIED` and silent-fault `HALT`.",
+        f"**Summary:** {passed_count}/{len(results)} in-process contract stubs passed happy-path contract check and silent-fault `HALT` (no live container app was executed).",
         "",
-        "| App | Vertical | Surface | Tier | Happy Path (`VERIFIED`) | Silent Fault (`HALT`) | Fault Mode | Time |",
-        "|---|---|---|---|---|---|---|---|",
+        "| App Contract | Execution Target | Vertical | Surface | Tier | Happy Path (Stub) | Silent Fault (`HALT`) | Fault Mode | Time |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for r in results:
-        happy = "PASS" if r.happy_path_verified else "FAIL"
-        fault = "PASS" if r.silent_fault_caught else "FAIL"
+        happy = "PASS (stub)" if r.happy_path_verified else "FAIL (stub)"
+        fault = "PASS (stub)" if r.silent_fault_caught else "FAIL (stub)"
         lines.append(
-            f"| {r.display_name} (`{r.app_id}`) | {r.vertical} | {r.surface} | "
+            f"| {r.display_name} (`{r.app_id}`) | in-process contract stub | {r.vertical} | {r.surface} | "
             f"{r.tier} | {happy} | {fault} | `{r.fault_mode_tested}` | {r.elapsed_s:.2f}s |"
         )
     lines.append("")
