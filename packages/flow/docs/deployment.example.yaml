@@ -198,6 +198,16 @@ effects:
   # root: /var/lib/exports
   # glob: "**/*.pdf"
 
+  # artifact provenance (file, email, document, document-hash): who wrote what
+  # `root` holds. Unset is `unknown`, graded like the acting session
+  # (at most same_screen). Under a strong producer, a file read from a browser
+  # download folder beneath `root`, or a symlink out of it, makes the check
+  # INDETERMINATE.
+  # A root overlapping acting_roots, ~/Downloads or a Playwright download
+  # folder is graded as the acting session's whatever is declared.
+  # artifact_producer: system_of_record    # acting_session | separate_session
+  # acting_roots: [/home/agent/Downloads]
+
   # evidence minimization (any kind): field-level redaction of emitted
   # evidence (matched records + observed/expected values). Values are replaced
   # by opaque markers; the VERDICT itself is never altered.
