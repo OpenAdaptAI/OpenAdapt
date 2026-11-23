@@ -834,7 +834,10 @@ jobs:
           set -uo pipefail
           mkdir -p runs
           mapfile -t files < "$RUNNER_TEMP/shard.txt"
+          # The wall-clock bound needs an uncontended worker; flow core unit
+          # runs it alone, so it is not repeated here.
           pytest -n logical --dist loadfile -q -rfE --timeout 300 \
+            --deselect=tests/test_tx_acid_servers.py::test_50k_seed_speed_and_8_worker_background_concurrency \
             --basetemp=runs/ci-default \
             --junitxml=runs/flow-default-at-rest-${{ matrix.shard }}.xml "${files[@]}"
       - name: Upload the default-mode results
