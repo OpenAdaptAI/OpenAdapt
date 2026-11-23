@@ -4,8 +4,73 @@
 
 ## Unreleased
 
+### Requirements
+
+- Accepts openadapt-flow 4: the launcher's Flow requirement and `openadapt
+  doctor`'s supported range are now `>=3.3.0,<5.0.0` (was `<4.0.0`).
+
+### Features
+
+- **Agent-to-agent handoffs.**
+  - `openadapt handoff send` attaches a run's receipt to a result for
+    another agent: inline, detached beside a file, or POSTed to a webhook.
+    `openadapt handoff verify` checks one on arrival against your pinned keys
+    and says who signed it, what was checked, and that a valid signature
+    proves who signed, not that the claim is true. Also available as
+    `openadapt verify handoff`.
+  - `openadapt agent serve --handoffs` adds the same over MCP.
+  - `openadapt agent serve --a2a` serves workflows over the A2A (Agent2Agent)
+    protocol with an Agent Card. It needs the new `openadapt[a2a]` extra.
+
+- **Receipts replace Seals.** A receipt is a signed, itemized record of one run:
+  what it changed, how each change was checked, and who signed it. It doesn't
+  grade the run. Every run, with any outcome, now writes `receipt.json` (a DSSE
+  envelope over an in-toto `record/run/v1` statement) and a private
+  `receipt.private.json`. `openadapt verify <file|folder|link>` checks any
+  receipt, prints who signed it ("Signed by this computer", "Countersigned by
+  OpenAdapt Cloud", "Demo key: checks only in this demo"), fails closed on an
+  unknown key, schema or role, and still verifies every older format, labelled
+  "older format". `openadapt receipt verify|view|publish|unpublish` replaces
+  `openadapt seal`, which stays as a hidden alias. A receipt never holds
+  screenshots, typed values, URLs or page text.
+- `openadapt flow encrypt` replaces `flow seal` (a hidden alias for one release).
+  Desktop's "Seal and encrypt version" is now "Encrypt version".
+- Each run also writes `receipt.card.json`, its public card. Transaction and
+  write receipts in a run folder become lines of the run's receipt, by digest.
+  `local-seal anchor` logs the receipt in Rekor too, and `openadapt verify`
+  then says "Logged publicly at <time>". The offline receipt page checks
+  `receipt.json` first.
+- The run summary (`run-receipt/v2`) moves from `receipt.json` to
+  `run-summary.json`, `.md` and `.png`. Older run folders still read.
+
 ### Fixes
 
+- `openadapt quickstart` keeps the browser hidden and shows each step in the
+  terminal, so it no longer opens a window over your work. `--watch` shows
+  the window, and the older `--headed` still does too. `--headless` is now the
+  default and changes nothing. The Seal page is no longer opened at the end:
+  the finale prints a link to it (an OSC 8 hyperlink where the terminal
+  supports one, the `file://` address elsewhere, Terminal.app included), and
+  `--open` opens it.
+- A run whose starting screen never finishes drawing (it stopped before its
+  first click and wrote nothing) runs once more in a new folder. When the
+  second try stops the same way, the quickstart says why in plain words and
+  skips the break-it act instead of printing that OpenAdapt "stopped, but not
+  at the check this act sets off".
+- The quickstart's output is at most 100 columns wide, and each step's timing
+  follows its text instead of sitting at the window's right edge.
+- The screen and the database are shown as text side by side in every
+  terminal, with the saved message read from the screen. The screenshot is
+  drawn under them only where the terminal answers an image-protocol query
+  (iTerm2, Kitty, Ghostty). WezTerm drew blank rows for it and gets the text
+  unless `OPENADAPT_INLINE_IMAGES=iterm2` is set.
+- `openadapt quickstart` no longer prints that it is also available as
+  `openadapt demo quickstart`.
+- The documented first command is `uvx --python 3.12 openadapt@latest
+  quickstart`, and the printed next steps under `uvx` use `openadapt@latest`.
+  Under `uvx` on Python 3.13 or newer, the launcher reruns the same command
+  with Python 3.12 (`uvx --python 3.12 openadapt@<this version> ...`) instead of
+  stopping. Elsewhere on those Pythons it prints that one-line command first.
 - Before publishing a Seal, the quickstart and `openadapt seal publish` list
   each public field and explain how readers can link Seals signed by the same
   key. The quickstart shows the checked and stopped Seals, with both file

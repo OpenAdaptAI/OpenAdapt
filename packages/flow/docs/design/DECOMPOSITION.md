@@ -592,9 +592,11 @@ that:
 
 - A pull request that shrinks a file lowers its budget in the same pull
   request; the check prints the new number.
-- A pull request that adds net lines to a listed file raises the budget in
-  its own diff, with a one-line reason in the pull request description. The
-  ratchet makes growth visible in review; it does not block feature work.
+- Budgets never rise (founder decision, 2026-11-21). A pull request that
+  needs new code next to a listed file puts it in a new module and adds only
+  the call site, within the budget. The check fails a pull request that raises
+  a budget or drops the row of a file that still exists. The notes below about
+  earlier raises are history.
 
 PR #2239 raised `__main__.py` and `terminal_verification_v2.py`: its review fixes added authority scoping and `authority_basis`.
 
@@ -602,19 +604,21 @@ PR #2280 raised `replayer.py` by 12 lines: the call sites of the clock-text chec
 
 PR #2295 raised `replayer.py`, `ir.py`, `interactive_recorder.py` and `playwright_backend.py`: the dropdown choice contract, its dispatch and read-back, unexpected-dialog stops, and the recorder's choice and dialog hooks; the page-side capture code and the actuator live in `choice_capture.py` and `backends/choice.py`. The pinned dialog methods delegate to `runtime/dialog_delivery.py`, preserving the original document arm without rearming after input.
 
+The encryption-at-rest default lowered `__main__.py`: the `at-rest` command, `--no-encrypt`, the desktop recording key, the version 3 key precheck and their command-table entries live in `cli_at_rest.py`.
+
 <!-- size-ratchet:begin -->
 | File | Line budget |
 |---|---:|
-| `packages/flow/openadapt_flow/runtime/replayer.py` | 20090 |
-| `packages/flow/openadapt_flow/__main__.py` | 14331 |
-| `packages/flow/openadapt_flow/qualification.py` | 5963 |
+| `packages/flow/openadapt_flow/runtime/replayer.py` | 18693 |
+| `packages/flow/openadapt_flow/__main__.py` | 14237 |
+| `packages/flow/openadapt_flow/qualification/__init__.py` | 4891 |
 | `packages/flow/openadapt_flow/ir.py` | 6830 |
 | `packages/desktop/openadapt_desktop/dispatch.py` | 6524 |
 | `packages/capture/openadapt_capture/recorder.py` | 4836 |
 | `packages/flow/openadapt_flow/interactive_recorder.py` | 4808 |
 | `packages/flow/openadapt_flow/runtime/durable/attended.py` | 4368 |
 | `packages/flow/openadapt_flow/terminal_verification_v2.py` | 3661 |
-| `packages/flow/openadapt_flow/backends/playwright_backend.py` | 6820 |
+| `packages/flow/openadapt_flow/backends/playwright_backend.py` | 6818 |
 <!-- size-ratchet:end -->
 
 ## 7. Coordination with work in flight

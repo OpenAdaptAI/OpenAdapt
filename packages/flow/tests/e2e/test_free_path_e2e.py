@@ -216,9 +216,9 @@ def test_report_run_emits_the_receipt_locally_for_a_verified_run(
     )
     captured = capsys.readouterr().out
     assert "LOCAL ONLY" in captured
-    assert (out / "receipt.json").is_file()
-    assert (out / "receipt.png").is_file()
-    payload = json.loads((out / "receipt.json").read_text(encoding="utf-8"))
+    assert (out / "run-summary.json").is_file()
+    assert (out / "run-summary.png").is_file()
+    payload = json.loads((out / "run-summary.json").read_text(encoding="utf-8"))
     assert payload["outcome"] == "VERIFIED"
     assert payload["transaction_outcome"] == "VERIFIED"
     assert payload["provenance"] == "production"
@@ -364,4 +364,4 @@ def test_tutorial_emits_no_receipt_when_the_run_does_not_verify(
 
     assert result.execution_outcome == "HALTED"
     assert result.receipt_paths == {}
-    assert not (result.run_dir / "receipt.json").exists()
+    assert not (result.run_dir / "run-summary.json").exists()

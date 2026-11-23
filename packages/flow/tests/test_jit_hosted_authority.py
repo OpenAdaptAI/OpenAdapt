@@ -94,7 +94,6 @@ def _matches(shape: dict[str, Any], authorization: Any) -> bool:
 
 @pytest.fixture
 def program(tmp_path: Path) -> dict[str, Any]:
-    bundle = tmp_path / "bundle"
     steps = [
         Step(id="step_000", intent="type", action=ActionKind.TYPE, text="x"),
         Step(
@@ -108,6 +107,13 @@ def program(tmp_path: Path) -> dict[str, Any]:
             ],
         ),
     ]
+    return _signed_program(tmp_path, steps)
+
+
+def _signed_program(
+    tmp_path: Path, steps: list[Step], *, policy: str = "clinical-write"
+) -> dict[str, Any]:
+    bundle = tmp_path / "bundle"
     Workflow(name="t", steps=steps).save(bundle)
     (bundle / ha.READBACK_PATH).parent.mkdir(parents=True)
     (bundle / ha.READBACK_PATH).write_text(CHECKS)
@@ -115,7 +121,7 @@ def program(tmp_path: Path) -> dict[str, Any]:
     _admit(bundle, keys)
     _host(bundle, keys)
     workflow = Workflow.load(bundle)
-    shape = ha.run_shape(bundle, workflow, policy_source="clinical-write")
+    shape = ha.run_shape(bundle, workflow, policy_source=policy)
     return {"bundle": bundle, "keys": keys, "workflow": workflow, "shape": shape}
 
 
@@ -332,6 +338,12 @@ def runner(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
             update={"gates": [g for g in report.gates if g.passed]}
         )
 
+    monkeypatch.setattr(run_gate, "evaluate_run_gate", gate)
+    return _capture_replay_handoff(monkeypatch)
+
+
+def _capture_replay_handoff(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """Capture the verified binding at the CLI replay boundary."""
     seen: dict[str, Any] = {}
 
     def replay(args: argparse.Namespace) -> int:
@@ -347,13 +359,18 @@ def runner(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         "OPENADAPT_DURABLE_AUTHORITY_URL",
         "https://cloud.test/api/internal/managed-delivery-permit",
     )
-    monkeypatch.setattr(run_gate, "evaluate_run_gate", gate)
     monkeypatch.setattr(cli, "_cmd_replay", replay)
     monkeypatch.setattr(cli, "_attach_cloud_seal", lambda _args: None)
     return seen
 
 
-def _run(tmp_path: Path, program: dict[str, Any], dispatch: Path, profile: str) -> int:
+def _run(
+    tmp_path: Path,
+    program: dict[str, Any],
+    dispatch: Path,
+    profile: str,
+    policy_args: tuple[str, ...] = ("--policy", "clinical-write"),
+) -> int:
     params = tmp_path / "params.json"
     params.write_text("{}")
     return cli.main(
@@ -362,8 +379,7 @@ def _run(tmp_path: Path, program: dict[str, Any], dispatch: Path, profile: str) 
             str(program["bundle"]),
             "--profile",
             profile,
-            "--policy",
-            "clinical-write",
+            *policy_args,
             "--params-file",
             str(params),
             "--allow-unencrypted",
@@ -375,6 +391,79 @@ def _run(tmp_path: Path, program: dict[str, Any], dispatch: Path, profile: str) 
             "https://app.example.com/",
         ]
     )
+
+
+@pytest.mark.parametrize("setting", ["default", "cli_override", "deployment_file"])
+def test_run_and_resume_recheck_the_locally_admitted_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    setting: str,
+) -> None:
+    from openadapt_flow.cli_program_dispatch import restore_verified_program_dispatch
+    from openadapt_flow.policy import load_policy, policy_contract_sha256
+
+    replay_handoff = _capture_replay_handoff(monkeypatch)
+    policy = "clinical-write"
+    options = ()
+    if setting != "default":
+        file = tmp_path / "site.yaml"
+        file.write_text("name: local-site-policy\nprohibit_unarmed_clicks: true\n")
+        config = tmp_path / "deployment.json"
+        config.write_text(json.dumps({"policy": {"policy": str(file)}}))
+        options = ("--config", str(config))
+        policy = str(file)
+        if setting == "cli_override":
+            policy = "permissive"
+            options += ("--policy", policy)
+    # This signed program passes the real Standard gate.
+    program = _signed_program(
+        tmp_path,
+        [Step(id="type", intent="type", action=ActionKind.TYPE, text="x")],
+        policy=policy,
+    )
+    monkeypatch.setenv(lifecycle.KEY_DIR_ENV, str(program["keys"]))
+    assert (
+        _run(tmp_path, program, _dispatch(tmp_path, program), "standard", options) == 0
+    )
+    binding = replay_handoff["binding"]
+    assert binding.authorization.admitted_policy_name == policy
+    assert (
+        binding.authorization.admitted_policy_contract_sha256
+        == policy_contract_sha256(load_policy(policy))
+    )
+    workflow = program["workflow"]
+    manifest = SimpleNamespace(
+        governed_authorization=binding.authorization,
+        bundle_dir=program["bundle"],
+        params={},
+        worklists={},
+    )
+    # Resume receives the current deployment's policy. An explicit run-time
+    # override must be selected on the resuming deployment too.
+    resumed, _ = restore_verified_program_dispatch(
+        binding,
+        manifest,
+        workflow,
+        policy_source=None if setting == "default" else policy,
+        effect_verifier=None,
+        api_actuator=None,
+    )
+    for current in (binding, resumed):
+        assert (
+            ha.program_admission_edge_refusal(
+                current.authorization, workflow, managed_dispatch_binding=current
+            )
+            is None
+        )
+    if setting == "deployment_file":
+        file.write_text("name: local-site-policy\nprohibit_unarmed_clicks: false\n")
+        for current in (binding, resumed):
+            assert (
+                ha.program_admission_edge_refusal(
+                    current.authorization, workflow, managed_dispatch_binding=current
+                )
+                == "the managed program policy changed after verification"
+            )
 
 
 def test_cli_admits_the_published_shape_through_the_managed_gate(

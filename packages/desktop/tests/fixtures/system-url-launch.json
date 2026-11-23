@@ -1,0 +1,55 @@
+{
+  "contract": "Validated URL, one OS-default-handler dispatch, no shell interpretation; dispatch is not login success. Caller allowlists remain distinct.",
+  "cases": [
+    {
+      "url": "https://example.test/path?q=%22%26%3B",
+      "web": true,
+      "native": true
+    },
+    {
+      "url": "http://localhost:8765/callback",
+      "web": true,
+      "native": true
+    },
+    {
+      "url": "openadapt://pair",
+      "web": false,
+      "native": true
+    },
+    {
+      "url": "x-apple.systempreferences:com.apple.preference.security",
+      "web": false,
+      "native": "macos"
+    },
+    {
+      "url": "file:///etc/passwd",
+      "web": false,
+      "native": false
+    },
+    {
+      "url": "javascript:alert(1)",
+      "web": false,
+      "native": false
+    },
+    {
+      "url": "https://u:p@example.test/",
+      "web": false,
+      "native": false
+    },
+    {
+      "url": "https://example.test/\nnext",
+      "web": false,
+      "native": false
+    },
+    {
+      "url": "https://",
+      "web": false,
+      "native": false
+    },
+    {
+      "url": "--help",
+      "web": false,
+      "native": false
+    }
+  ]
+}

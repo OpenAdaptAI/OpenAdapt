@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urlsplit
 
-from .base import DriverError, Source, fmt_date, option_matches
+from .base import DriverError, Source, digits, fmt_date, option_matches
 
 NAIVE_LABELS: dict[str, Any] = {
     "First Name": "applicant.first_name",
@@ -112,6 +112,17 @@ def fill_rows(page: Any, src: Source) -> None:
                 cell.locator("input[type=text]").fill(want)
 
 
+# The portal hands figures of $500,000 or more back rounded to the nearest
+# $10,000, so a value that really arrived is at most $5,000 off the display.
+HANDOFF_TOLERANCE = 5000
+
+
+def handed_back(displayed: int, current: str) -> bool:
+    """Whether the parent box holds the value the estimator handed back."""
+    got = digits(current)
+    return bool(got) and abs(int(got) - displayed) <= HANDOFF_TOLERANCE
+
+
 def run_estimator(page: Any, cell: Any, label: str, src: Source) -> None:
     with page.expect_popup() as info:
         cell.locator("input[value='Estimate RC']").click()
@@ -124,14 +135,21 @@ def run_estimator(page: Any, cell: Any, label: str, src: Source) -> None:
     displayed = int(shown.replace("$", "").replace(",", ""))
     with pop.expect_event("close"):
         # The button closes its own window; a click that loses that race
-        # raises after the click went through, so a closed popup is success.
+        # raises after the click went through, so a closed popup is not an
+        # error by itself. Whether the value arrived is checked below.
         try:
             pop.locator("input[value='Use This Value']").click(no_wait_after=True)
         except Exception:
             if not pop.is_closed():
                 raise
     box = cell.locator("input[type=text]")
-    final = src.estimator(label, displayed, box.input_value())
+    current = box.input_value()
+    if src.kind == "reference" and not handed_back(displayed, current):
+        raise DriverError(
+            f"{label}: the estimator closed without handing ${displayed:,} "
+            f"to the form (the box holds {current!r})"
+        )
+    final = src.estimator(label, displayed, current)
     if final is not None:
         box.fill(final)
 

@@ -40,5 +40,96 @@
       "openadapt_flow.teach_authorization_fixture"
     ]
   },
-  "exceptions": []
+  "exceptions": [],
+  "layers_about": "Dependency direction, checked by tests/test_import_direction.py. Layers are listed lowest first. A module in one layer may import its own layer or a lower one, never a higher one, at module level or inside a function. A pattern ending in * matches every module whose name starts with the rest; the longest matching pattern decides a module's layer. Modules that match no pattern are not checked yet. Known upward edges are listed in import_direction_debt.json, which only shrinks. import_time_budgets caps how many openadapt_flow modules importing a module loads; a change may lower a budget, never raise it. See openadapt-internal docs/design/monorepo-refactor-2026-11/PLAN.md, section 3.",
+  "layers": [
+    {
+      "name": "foundations",
+      "modules": [
+        "openadapt_flow.at_rest",
+        "openadapt_flow.check_level",
+        "openadapt_flow.crypto",
+        "openadapt_flow.ed25519ph",
+        "openadapt_flow.ir",
+        "openadapt_flow.private_file",
+        "openadapt_flow.runtime.effects.effect",
+        "openadapt_flow.verification"
+      ]
+    },
+    {
+      "name": "policy and formats",
+      "modules": [
+        "openadapt_flow.approval_mode",
+        "openadapt_flow.bundle_sealing",
+        "openadapt_flow.cloud_seal",
+        "openadapt_flow.countersign",
+        "openadapt_flow.deployment",
+        "openadapt_flow.form_tx.receipt",
+        "openadapt_flow.key_rotation",
+        "openadapt_flow.local_state_sources",
+        "openadapt_flow.offline_seal",
+        "openadapt_flow.policy",
+        "openadapt_flow.production_qualification",
+        "openadapt_flow.public_seal",
+        "openadapt_flow.qualification*",
+        "openadapt_flow.receipt",
+        "openadapt_flow.receipt_log",
+        "openadapt_flow.run_gate",
+        "openadapt_flow.runtime.authorization",
+        "openadapt_flow.seal_*",
+        "openadapt_flow.sealed_maintenance",
+        "openadapt_flow.sealed_set",
+        "openadapt_flow.tx.receipt",
+        "openadapt_flow.write_receipt"
+      ]
+    },
+    {
+      "name": "runtime",
+      "modules": [
+        "openadapt_flow.backend",
+        "openadapt_flow.backends",
+        "openadapt_flow.runtime",
+        "openadapt_flow.verification",
+        "openadapt_flow.verifier",
+        "openadapt_flow.verify",
+        "openadapt_flow.verify_run"
+      ]
+    },
+    {
+      "name": "products",
+      "modules": [
+        "openadapt_flow.agent",
+        "openadapt_flow.compiler",
+        "openadapt_flow.connector",
+        "openadapt_flow.fleet",
+        "openadapt_flow.form_tx",
+        "openadapt_flow.generate",
+        "openadapt_flow.jit",
+        "openadapt_flow.qualify",
+        "openadapt_flow.repair",
+        "openadapt_flow.runner",
+        "openadapt_flow.tx",
+        "openadapt_flow.wrap"
+      ]
+    },
+    {
+      "name": "surfaces",
+      "modules": [
+        "openadapt_flow.__main__",
+        "openadapt_flow.cli_*",
+        "openadapt_flow.console",
+        "openadapt_flow.services"
+      ]
+    }
+  ],
+  "import_time_budgets": {
+    "openadapt_flow": 3,
+    "openadapt_flow.crypto": 4,
+    "openadapt_flow.ir": 44,
+    "openadapt_flow.offline_seal": 4,
+    "openadapt_flow.public_seal": 5,
+    "openadapt_flow.receipt": 45,
+    "openadapt_flow.verification": 5,
+    "openadapt_flow.write_receipt": 6
+  }
 }

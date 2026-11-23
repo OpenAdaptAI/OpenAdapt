@@ -375,6 +375,136 @@ describe("the card shows what will be saved", () => {
     expect(q("#evidence")!.classList).toContain("big");
   });
 
+  // The shapes Flow 2.4.1's console sends (Desktop 0.31.0 pins it): no
+  // values_checked, no sources, and its own "exactly" explanation.
+  const OLD_EXPLANATION =
+    "This is exactly what OpenAdapt will save. Before it saves, it reads the form again; if anything changed, it stops and asks again.";
+
+  it("an older Flow's compiled-program save keeps its wording", async () => {
+    onlySave(saveDetail({ presentation: { explanation: OLD_EXPLANATION } }));
+    await boot();
+    const card = q("#card")!.textContent!;
+    expect(card).toContain("This is exactly what OpenAdapt will save");
+    expect(card).toContain("Exactly what will be saved");
+    expect(card).not.toContain("The screen when the agent asked");
+    expect(card).not.toContain("were not checked before saving");
+  });
+
+  it("an older Flow's guarded save never gets an exactly", async () => {
+    // 2.4.1 guarded saves carry the agent's provenance and unread values.
+    onlySave(
+      saveDetail({
+        presentation: {
+          explanation: OLD_EXPLANATION,
+          fields: [{ label: "note", before: null, after: "not read" }],
+          provenance: {
+            actor: "agent:attached-agent",
+            reason: null,
+            screen_text: "Chart: patient p1",
+            instruction_like: [],
+            task_scope: "record patient_id; fields note",
+          },
+        },
+      }),
+    );
+    await boot();
+    const card = q("#card")!.textContent!;
+    expect(card).not.toMatch(/exactly/i);
+    expect(card).toContain("were not checked before saving");
+    expect(card).toContain("The screen when the agent asked");
+  });
+
+  it("a ledger question never gets the agent-asked title", async () => {
+    onlySave(
+      saveDetail({
+        presentation: {
+          kind: "question",
+          question: "Is this the right patient?",
+          explanation: "Your agent asks you this. Save means yes, Don't save means no.",
+          provenance: {
+            actor: "agent:attached-agent",
+            reason: null,
+            screen_text: "",
+            instruction_like: [],
+            task_scope: "",
+          },
+        },
+      }),
+    );
+    await boot();
+    const card = q("#card")!.textContent!;
+    expect(card).not.toContain("The screen when the agent asked");
+    expect(card).not.toContain("were not checked before saving");
+    expect(card).toContain("Your agent asks you this.");
+  });
+
+  it("an agent's save whose values Flow couldn't read never says exactly", async () => {
+    onlySave(
+      saveDetail({
+        presentation: {
+          fields: [{ label: "note", before: null, after: "not read" }],
+          sources: [
+            { label: "note", source: null, status: "no_source", differs: false, intended: "Triage note", held_differs: false },
+          ],
+          values_checked: false,
+          explanation: "OpenAdapt could not read the values this save will send, so they were not checked before saving.",
+        },
+      }),
+    );
+    await boot();
+    const card = q("#card")!.textContent!;
+    expect(card).not.toMatch(/exactly/i);
+    expect(card).toContain("Task says: Triage note");
+    expect(card).toContain("were not checked before saving");
+  });
+
+  it("shows the value on screen at the save beside the task's, flagged", async () => {
+    onlySave(
+      saveDetail({
+        presentation: {
+          fields: [{ label: "note", before: null, after: "not read" }],
+          sources: [
+            {
+              label: "note",
+              source: null,
+              status: "no_source",
+              differs: false,
+              intended: "Triage note",
+              held_differs: false,
+              screen: "Another note",
+              screen_differs: true,
+            },
+          ],
+          values_checked: false,
+        },
+      }),
+    );
+    await boot();
+    const dd = q(".fields dd")!.textContent!;
+    expect(dd).toContain("On screen at the save: Another note");
+    expect(dd).toContain("Differs");
+    expect(dd).toContain("Task says: Triage note");
+  });
+
+  it("flags a held value that differs from the task's", async () => {
+    onlySave(
+      saveDetail({
+        presentation: {
+          fields: [{ label: "note", before: null, after: "Another note" }],
+          sources: [
+            { label: "note", source: null, status: "no_source", differs: false, intended: "Triage note", held_differs: true },
+          ],
+          values_checked: true,
+        },
+      }),
+    );
+    await boot();
+    const dd = q(".fields dd")!.textContent!;
+    expect(dd).toContain("Another note");
+    expect(dd).toContain("Differs");
+    expect(dd).toContain("Task says: Triage note");
+  });
+
   it("drops a malformed field list as a whole rather than show part of it", async () => {
     onlySave(saveDetail({ presentation: { fields: [...FIELDS, { label: "Amount", after: 142 }] } }));
     await boot();

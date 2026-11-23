@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-types"
-version = "0.24.0"
+version = "0.24.2"
 description = "Pydantic models for computer-use agents: screen state (ComputerState, UINode), actions (Action), and results (ActionResult)"
 readme = "README.md"
 license = "MIT"
@@ -44,6 +44,7 @@ Changelog = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/types/C
 
 [project.optional-dependencies]
 dev = [
+    "cryptography>=50.0.0",
     "pytest>=7.0",
     "pytest-cov",
 ]

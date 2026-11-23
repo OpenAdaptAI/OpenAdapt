@@ -285,7 +285,7 @@ describe("Qualification lifecycle", () => {
     [
       "the version is not sealed",
       { encrypted: false },
-      "Seal and encrypt this version before you deploy it.",
+      "Encrypt this version before you deploy it.",
     ],
     [
       "required capabilities are not covered",

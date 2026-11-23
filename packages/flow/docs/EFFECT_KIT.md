@@ -151,6 +151,7 @@ environment-assigned surrogate key is the right choice for it.
 | `email` | `MaildirDeliveryVerifier` | maildir / SMTP-capture directory → one record per message (`to`, `subject`, `message_id`, body probe, freshness); verifies delivery TO THE CAPTURE POINT, not end-to-end receipt | **contract-proven in CI against maildir/tmp-dir fixtures** (wrong recipient, duplicate send, leak-to-other-recipient collateral hook) -- not live-proven against a production MTA |
 | `document` | `DocumentArrivalVerifier` | report arrival + **parseable-content assertion**: each candidate parses (JSON dotted paths or named-regex groups) into judgeable fields; a corrupt report REFUTEs a `parseable: True` contract | **contract-proven in CI against temp-dir fixtures** (corrupt report, wrong entity, duplicates, stale mtime) |
 | `document-hash` | `DocumentHashVerifier` | SHA-256 of each document in a store | live in CI (no external service) |
+| `local-state` | `LocalStateVerifier` | typed, read-only sources on this computer: a file (contents, SHA-256), a macOS preference key, a Windows registry value; one record per source ([LOCAL_STATE_CHECKS.md](LOCAL_STATE_CHECKS.md)) | unit tests with stand-ins in CI; lab-proven on Windows 11 (Notepad file save, registry reads); macOS source unit-tested only |
 
 All substrates share one judge (`runtime/effects/_common.py`), so
 at-most-once counting, idempotency-key de-duplication, field read-back,
@@ -1233,6 +1234,7 @@ Per-kind required fields:
 | `email` | `root` | `mail_pattern`, `file_mtime_window_s` (freshness), `file_content_probe` (body regex) |
 | `document` | `root` | `file_pattern`, `document_format` (`json` \| `text`), `document_field_paths`, `document_text_pattern`, `file_mtime_window_s` |
 | `document-hash` | `root` | `glob` |
+| `local-state` | `local_state`: a list of `file`, `macos_defaults` or `windows_registry` sources | `poll_interval_s` |
 | `surfaces` | `surfaces`: name -> one plain verifier config (any kind above) | each effect's `probe` names its surface (`surface=<name>`); an effect naming none, or an unknown one, halts |
 
 A paged list is read whole or not at all. `fhir` follows the Bundle's `next`
@@ -1382,6 +1384,7 @@ effects:
       root: /secure/exports
       file_pattern: "confirmation-*.json"
       document_format: json
+      artifact_producer: system_of_record   # the export job wrote it
     - kind: onscreen             # persisted-state read-back
 ```
 
@@ -1473,10 +1476,35 @@ profiles gate on the tier, never on prose:
 
 | Tier | Label | What it proves | Adapters |
 |---|---|---|---|
-| 1 | `independent-system` | a read through the SoR's own API/DB/store -- independent proof | `rest`, `graphql`, `fhir`, `sql`, `file`, `email`, `document`, `document-hash` |
-| 2 | `independent-session` | same app, read through its record page in a separate, separately signed-in, read-only session. **Not a system-of-record read** | `ui_readback`; `desktop_readback` with its own sign-in; a plugin may also declare it |
+| 1 | `independent-system` | a read through the SoR's own API/DB/store -- independent proof | `rest`, `graphql`, `fhir`, `sql`, `local-state`; `file`, `email`, `document`, `document-hash` with `artifact_producer: system_of_record` |
+| 2 | `independent-session` | same app, read through its record page in a separate, separately signed-in, read-only session. **Not a system-of-record read** | `ui_readback`; `desktop_readback` with its own sign-in; file kinds with `artifact_producer: separate_session`; a plugin may also declare it |
 | 3 | `reacquired-state` | the app's own UI re-navigated to re-fetch persisted state | `onscreen` with a different-path read-back; `desktop_readback` without its own sign-in |
-| 4 | `screen-consistency` | the same surface the write drove still shows the value | `onscreen` same-surface |
+| 4 | `screen-consistency` | the same surface the write drove still shows the value | `onscreen` same-surface; file kinds with `artifact_producer` `acting_session` or unset |
+
+The file kinds (`file`, `email`, `document`, `document-hash`) are graded by
+who produced what `root` holds, not by being files
+(`runtime/effects/artifact_provenance.py`). A PDF the acting browser
+downloaded is the acting session's own copy, so a matching hash is still
+tier 4. Declare `artifact_producer: separate_session` when a separately
+signed-in session fetched the file, and `system_of_record` when the system
+wrote it without the acting session (an export job, an SFTP drop, the mail
+server's capture store). List the acting session's download and output
+folders in `acting_roots`: a `root` overlapping one, the user's Downloads
+folder or a Playwright download folder is graded tier 4 whatever is declared.
+Each verdict's `read_evidence.provenance` records the declared producer, the
+producer it was graded by, the check level, and `producer_source`:
+`declared` when the level rests on the configuration, `observed` when Flow
+lowered it.
+
+Under a declared `separate_session` or `system_of_record` producer, each scan
+is also checked file by file. If it lists a file inside a
+`playwright-artifacts-*` folder beneath `root` ("a file the check read is in
+a browser download folder") or a file whose real path leaves `root`, such as
+a symlink ("a file the check read resolves outside the store"), the read is
+refused and the verdict is INDETERMINATE with that reason. Playwright saves a
+download under a random name with no extension, so only a glob that matches
+every file lists it. A file the acting session saves into an undeclared
+folder under an ordinary name cannot be told apart and is graded as declared.
 
 **Same-application screen read-back is a LOWER-CONFIDENCE consistency check,
 never independent system-of-record proof** -- an optimistic UI can paint

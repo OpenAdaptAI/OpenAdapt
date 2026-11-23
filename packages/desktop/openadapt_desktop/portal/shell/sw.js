@@ -32,6 +32,8 @@ const SHELL_ASSETS = Object.freeze([
   "/",
   "/app.js",
   "/styles.css",
+  "/fonts/PublicSans-Variable.woff2",
+  "/fonts/OFL-PublicSans.txt",
   "/manifest.webmanifest",
 ]);
 

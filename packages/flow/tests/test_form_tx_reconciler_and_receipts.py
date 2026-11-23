@@ -35,6 +35,7 @@ from openadapt_flow.form_tx.types import (
     FieldAnchorSpec,
     FieldBindingSpec,
     FieldCodecSpec,
+    FieldWriteRecord,
     FormCodecKind,
     FormHaltKind,
     FormPack,
@@ -53,8 +54,10 @@ from openadapt_flow.form_tx.types import (
     PopupSubroutineSpec,
     PrefillPolicy,
     ProvenanceKind,
+    ReadbackFieldVerdict,
     ReadbackStatus,
     SummaryCheckSpec,
+    SummaryVerdict,
     UIProfileSpec,
     WizardScreenSpec,
     canonical_sha256,
@@ -105,6 +108,15 @@ class FakePopupFormSurface:
     # badly built widget might. The parent form never shows the input.
     truncate_living_area: bool = False
     mutation_count: int = 0
+
+    @property
+    def confirmed_mutation_count(self) -> int:
+        return self.mutation_count
+
+    def has_confirmed_mutation_since(
+        self, since_mutation_count: int, *, url_patterns: Sequence[str] = ()
+    ) -> bool:
+        return self.mutation_count > since_mutation_count
 
     def reset_mutation_counter(self) -> None:
         self.mutation_count = 0
@@ -320,6 +332,15 @@ class FakeStatefulFormSurface:
     @property
     def mutation_count(self) -> int:
         return self._mutation_count
+
+    @property
+    def confirmed_mutation_count(self) -> int:
+        return self._mutation_count
+
+    def has_confirmed_mutation_since(
+        self, since_mutation_count: int, *, url_patterns: Sequence[str] = ()
+    ) -> bool:
+        return self._mutation_count > since_mutation_count
 
     def reset_mutation_counter(self) -> None:
         self._mutation_count = 0
@@ -1247,6 +1268,7 @@ def _build_pack(
             ),
         ),
         summary_check=summary_check,
+        commit_url_patterns=("/api/submit",),
         max_commit_mutations=1,
     )
 
@@ -1443,7 +1465,11 @@ def test_entity_table_prefill_conflict_dismiss_accept_and_broken_dismiss() -> No
             idempotency_key="idem_accept_spouse",
         ),
     )
-    assert done_b.outcome == FormTxOutcome.VERIFIED_DONE
+    # The kept entity row has no read-back, so it is not_checked: the run
+    # cannot end verified_done with a receipt (absent-evidence-as-success).
+    assert done_b.outcome == FormTxOutcome.READBACK_INCOMPLETE
+    assert done_b.receipt is None
+    assert any(k.startswith("entity:") for k in done_b.summary_verdict.not_checked_keys)
     assert len(surface_b.household_rows) == 2
 
     # Path C: Fail-closed when dismiss click fails to remove row
@@ -1861,6 +1887,27 @@ def test_summary_judge_catches_silent_server_corruption_dropped_field_and_lookup
     )
 
 
+def _all_bound_passed(pack: FormPack, dossier: InputDossier) -> SummaryVerdict:
+    """A passing verdict for every bound field the dossier has a value for."""
+    keys = sorted(
+        {b.dossier_key for b in pack.bindings if dossier.facts.get(b.dossier_key)}
+    )
+    return SummaryVerdict(
+        passed=True,
+        checked_count=len(keys),
+        field_verdicts=tuple(
+            ReadbackFieldVerdict(
+                dossier_key=k,
+                codec_kind=FormCodecKind.WHITESPACE_COLLAPSE,
+                passed=True,
+                status=ReadbackStatus.PASSED,
+                provenance=ProvenanceKind.INTAKE_DOCUMENT,
+            )
+            for k in keys
+        ),
+    )
+
+
 def test_ed25519_key_persistence_and_single_bit_receipt_tamper_detection(
     tmp_path: Path,
 ) -> None:
@@ -1873,16 +1920,31 @@ def test_ed25519_key_persistence_and_single_bit_receipt_tamper_detection(
     reloaded_key = load_or_create_ed25519_key(key_file)
     assert ed25519_public_key_hex(created_key) == ed25519_public_key_hex(reloaded_key)
 
+    from openadapt_flow.form_tx.types import read_subjects, subjects_digest
+
     pack = _build_pack()
     dossier = _build_dossier(has_pool="No")
+    bound_writes = tuple(
+        FieldWriteRecord(
+            field_key=b.dossier_key,
+            dossier_key=b.dossier_key,
+            source="auto_fill",
+            selector=f"#{b.dossier_key}",
+        )
+        for b in pack.bindings
+        if dossier.facts.get(b.dossier_key) is not None
+    )
+    verdict = _all_bound_passed(pack, dossier).model_copy(
+        update={"ledger_digest": subjects_digest(read_subjects(bound_writes, ()))}
+    )
     receipt = issue_form_tx_receipt(
         run_id="run_tamper_test",
-        readback_passed=True,
-        readback_checked_count=10,
+        summary_verdict=verdict,
+        writes=bound_writes,
         pack=pack,
         dossier=dossier,
         signing_key=created_key,
-        fields_filled_auto=10,
+        fields_filled_auto=len(bound_writes),
         commit_mutations_observed=1,
         outputs={"confirmation_code": "CONF-777"},
     )
@@ -2228,13 +2290,17 @@ def test_receipt_raw_seed_loading_and_strict_validation_edges(tmp_path: Path) ->
     with pytest.raises(ValueError):
         load_or_create_ed25519_key(bad_path)
 
+    from openadapt_flow.form_tx.types import read_subjects, subjects_digest
+
     pack = _build_pack()
     dossier = _build_dossier(has_pool="No")
     # Passing (priv, pub) keypair tuple directly
     rcpt = issue_form_tx_receipt(
         run_id="r_tuple",
-        readback_passed=True,
-        readback_checked_count=1,
+        summary_verdict=_all_bound_passed(pack, dossier).model_copy(
+            update={"ledger_digest": subjects_digest(read_subjects((), ()))}
+        ),
+        writes=(),
         pack=pack,
         dossier=dossier,
         signing_key=(priv, pub),
@@ -2804,3 +2870,314 @@ def test_pre_apply_reread_halts_when_a_popup_value_changed_after_typing() -> Non
     )
     (write,) = [w for w in session.writes if w.field_key == "living_area_sqft"]
     assert write.checked_before_apply
+
+
+def test_public_signer_rejects_inconsistent_write_ledger_and_duplicate_verdict_coverage() -> (
+    None
+):
+    from openadapt_flow.form_tx.types import read_subjects, subjects_digest
+
+    pack = _build_pack()
+    dossier = _build_dossier(has_pool="No")
+    private, _ = generate_ed25519_keypair()
+
+    # Missing ledger_digest on SummaryVerdict is refused for newly issued receipts.
+    with pytest.raises(ValueError, match="ledger_digest"):
+        issue_form_tx_receipt(
+            run_id="run_no_digest",
+            summary_verdict=_all_bound_passed(pack, dossier),
+            writes=(),
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=0,
+            commit_mutations_observed=1,
+        )
+
+    # Empty write ledger contradicting a nonzero fields_filled_auto must fail.
+    with pytest.raises(ValueError, match="auto-fill count does not match"):
+        issue_form_tx_receipt(
+            run_id="run_incomplete_ledger",
+            summary_verdict=_all_bound_passed(pack, dossier).model_copy(
+                update={"ledger_digest": subjects_digest(read_subjects((), ()))}
+            ),
+            writes=(),
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=3,
+            commit_mutations_observed=1,
+        )
+
+    # Ledger with only kept_matching controls cannot back fields_filled_auto > 0.
+    kept_only = (
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="kept_matching",
+            selector="#first-name",
+            screen_id="applicant",
+        ),
+    )
+    kept_digest = subjects_digest(read_subjects(kept_only, ()))
+    with pytest.raises(ValueError, match="auto-fill count does not match"):
+        issue_form_tx_receipt(
+            run_id="run_kept_only",
+            summary_verdict=_all_bound_passed(pack, dossier).model_copy(
+                update={"ledger_digest": kept_digest}
+            ),
+            writes=kept_only,
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=1,
+            commit_mutations_observed=1,
+        )
+
+    # Flipping a kept_matching subject to auto_fill between judge and signer
+    # invalidates ledger_digest because source is bound in the subject digest.
+    flipped_to_auto = (
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="auto_fill",
+            selector="#first-name",
+            screen_id="applicant",
+        ),
+    )
+    with pytest.raises(ValueError, match="does not match the run ledger"):
+        issue_form_tx_receipt(
+            run_id="run_source_flip",
+            summary_verdict=_all_bound_passed(pack, dossier).model_copy(
+                update={"ledger_digest": kept_digest}
+            ),
+            writes=flipped_to_auto,
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=1,
+            commit_mutations_observed=1,
+        )
+
+    # Under-claiming fields_filled_auto below recorded auto_fill subjects is also refused.
+    with pytest.raises(ValueError, match="auto-fill count does not match"):
+        issue_form_tx_receipt(
+            run_id="run_underclaim",
+            summary_verdict=_all_bound_passed(pack, dossier).model_copy(
+                update={
+                    "ledger_digest": subjects_digest(read_subjects(flipped_to_auto, ()))
+                }
+            ),
+            writes=flipped_to_auto,
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=0,
+            commit_mutations_observed=1,
+        )
+
+    # Duplicate auto_fill entries for the same control count as one subject.
+    dup_auto = (
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="auto_fill",
+            selector="#first-name",
+            screen_id="applicant",
+        ),
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="auto_fill",
+            selector="#first-name",
+            screen_id="applicant",
+        ),
+    )
+    with pytest.raises(ValueError, match="auto-fill count does not match"):
+        issue_form_tx_receipt(
+            run_id="run_dup_auto",
+            summary_verdict=_all_bound_passed(pack, dossier).model_copy(
+                update={"ledger_digest": subjects_digest(read_subjects(dup_auto, ()))}
+            ),
+            writes=dup_auto,
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=2,
+            commit_mutations_observed=1,
+        )
+
+    # Omitting a popup subject recorded in SummaryVerdict.ledger_digest is refused.
+    full_writes = (
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="auto_fill",
+            selector="#first-name",
+            screen_id="applicant",
+        ),
+        FieldWriteRecord(
+            field_key="living_area_sqft",
+            dossier_key="living_area_sqft",
+            source="auto_fill",
+            selector="#popup-living-area",
+            in_popup_subroutine="calc",
+        ),
+    )
+
+    judge_verdict = _all_bound_passed(pack, dossier).model_copy(
+        update={"ledger_digest": subjects_digest(read_subjects(full_writes, ()))}
+    )
+    with pytest.raises(ValueError, match="does not match the run ledger"):
+        issue_form_tx_receipt(
+            run_id="run_omitted_popup",
+            summary_verdict=judge_verdict,
+            writes=full_writes[:1],
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=1,
+            commit_mutations_observed=1,
+        )
+
+    # Two subjects sharing one key cannot be covered by two verdicts without
+    # distinct observation evidence.
+    two_writes = (
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="auto_fill",
+            selector="#first-name",
+            screen_id="applicant",
+        ),
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="auto_fill",
+            selector="#popup-first-name",
+            in_popup_subroutine="calc",
+        ),
+    )
+    base_verdict = _all_bound_passed(pack, dossier)
+    dup_verdict = base_verdict.model_copy(
+        update={
+            "field_verdicts": (
+                *base_verdict.field_verdicts,
+                ReadbackFieldVerdict(
+                    dossier_key="first_name",
+                    codec_kind=FormCodecKind.WHITESPACE_COLLAPSE,
+                    passed=True,
+                    status=ReadbackStatus.PASSED,
+                    provenance=ProvenanceKind.INTAKE_DOCUMENT,
+                ),
+            ),
+            "observations_per_key": None,
+            "ledger_digest": subjects_digest(read_subjects(two_writes, ())),
+        }
+    )
+    with pytest.raises(ValueError, match="uncovered"):
+        issue_form_tx_receipt(
+            run_id="run_dup_verdict_no_obs",
+            summary_verdict=dup_verdict,
+            writes=two_writes,
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=2,
+            commit_mutations_observed=1,
+        )
+
+
+def test_commit_confirmation_requires_response_for_request_started_by_commit_click() -> (
+    None
+):
+    from types import SimpleNamespace
+
+    from openadapt_flow.form_tx.playwright_surface import PlaywrightFormSurface
+
+    listeners: dict[str, list[Any]] = {}
+
+    class _FakeContext:
+        def on(self, event: str, cb: Any) -> None:
+            listeners.setdefault(event, []).append(cb)
+
+        def remove_listener(self, event: str, cb: Any) -> None:
+            pass
+
+    class _FakePage:
+        context = _FakeContext()
+
+        def evaluate(self, *_a: Any, **_kw: Any) -> None:
+            return None
+
+    page = _FakePage()
+    other_page = _FakePage()
+    own_frame = SimpleNamespace(page=page)
+    other_frame = SimpleNamespace(page=other_page)
+    surface = PlaywrightFormSurface(page, UIProfileSpec(profile_id="generic_web_ui"))
+
+    # Request 1 started BEFORE commit click.
+    req1 = SimpleNamespace(
+        method="POST", url="https://example.test/draft", frame=own_frame
+    )
+    surface._on_request(req1)
+    pre_commit = surface.mutation_count
+    assert pre_commit == 1
+
+    # Request from ANOTHER page in the browser context succeeding does NOT confirm.
+    req_other = SimpleNamespace(
+        method="POST", url="https://example.test/other-tab", frame=other_frame
+    )
+    surface._on_request(req_other)
+    surface._on_response(SimpleNamespace(request=req_other, status=200))
+    assert surface.has_confirmed_mutation_since(pre_commit) is False
+
+    # Request 2 started BY commit click on own page fails with 500;
+    # a late 200 for pre-commit req1 AND a background autosave 200 on own page
+    # STILL do not confirm because an own-page mutation after commit failed.
+    req2 = SimpleNamespace(
+        method="POST", url="https://example.test/submit", frame=own_frame
+    )
+    surface._on_request(req2)
+    surface._on_response(SimpleNamespace(request=req2, status=500))
+    surface._on_response(SimpleNamespace(request=req1, status=200))
+    req_bg = SimpleNamespace(
+        method="POST", url="https://example.test/autosave", frame=own_frame
+    )
+    surface._on_request(req_bg)
+    surface._on_response(SimpleNamespace(request=req_bg, status=200))
+    assert surface.has_confirmed_mutation_since(pre_commit) is False
+
+    # A same-page draft autosave succeeding does NOT satisfy a declared commit endpoint pattern.
+    autosave_pre = surface.mutation_count
+    req_autosave = SimpleNamespace(
+        method="POST", url="https://example.test/draft/autosave", frame=own_frame
+    )
+    surface._on_request(req_autosave)
+    surface._on_response(SimpleNamespace(request=req_autosave, status=200))
+    assert (
+        surface.has_confirmed_mutation_since(autosave_pre, url_patterns=("/submit",))
+        is False
+    )
+
+    # A clean commit window on own page where the commit endpoint succeeds with 201 -> confirmed.
+    clean_pre = surface.mutation_count
+    req3 = SimpleNamespace(
+        method="POST", url="https://example.test/submit", frame=own_frame
+    )
+    surface._on_request(req3)
+    surface._on_response(SimpleNamespace(request=req3, status=201))
+    assert (
+        surface.has_confirmed_mutation_since(clean_pre, url_patterns=("/submit",))
+        is True
+    )
+
+    # A pack declaring neither commit_url_patterns nor a record-specific lookup
+    # stays DELIVERY_UNCERTAIN rather than trusting an unattributed mutation.
+    unattributed_pack = _build_pack(use_lookup_search=False).model_copy(
+        update={"commit_url_patterns": ()}
+    )
+    unattributed_res = FormReconciler(FakeStatefulFormSurface()).run_until_halt_or_done(
+        ReconcilerSession(unattributed_pack, _build_dossier(has_pool="No"))
+    )
+    assert unattributed_res.outcome == FormTxOutcome.DELIVERY_UNCERTAIN
