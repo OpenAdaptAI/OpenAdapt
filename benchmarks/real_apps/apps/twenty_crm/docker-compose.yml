@@ -1,0 +1,45 @@
+# Official Twenty CRM + Postgres 16 + Redis 7 for Real-App Verification Matrix
+# Synthetic CRM contact/opportunity test data only.
+services:
+  db:
+    image: postgres:16
+    restart: "no"
+    environment:
+      POSTGRES_DB: ${TWENTY_DB_NAME:-twenty_synthetic}
+      POSTGRES_USER: ${TWENTY_DB_USER:-twenty}
+      POSTGRES_PASSWORD: ${TWENTY_DB_PW:-twenty_synthetic_pw}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TWENTY_DB_USER:-twenty} -d ${TWENTY_DB_NAME:-twenty_synthetic}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  redis:
+    image: redis:7-alpine
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    image: twentycrm/twenty:v0.55.0
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${TWENTY_HTTP_PORT:-13000}:3000"
+    environment:
+      PG_DATABASE_URL: postgres://${TWENTY_DB_USER:-twenty}:${TWENTY_DB_PW:-twenty_synthetic_pw}@db:5432/${TWENTY_DB_NAME:-twenty_synthetic}
+      REDIS_URL: redis://redis:6379
+      SERVER_URL: http://127.0.0.1:${TWENTY_HTTP_PORT:-13000}
+      APP_SECRET: ${TWENTY_APP_SECRET:-synthetic_local_dev_app_secret_only}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 20

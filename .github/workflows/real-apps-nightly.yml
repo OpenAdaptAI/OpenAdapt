@@ -1,0 +1,94 @@
+name: Real-App Verification Matrix (Nightly)
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      app:
+        description: "App ID to run (all, openemr, odoo17, twenty_crm, gnucash)"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - openemr
+          - odoo17
+          - twenty_crm
+          - gnucash
+      mode:
+        description: "Verification mode"
+        required: true
+        default: "contract"
+        type: choice
+        options:
+          - contract
+          - live
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-apps-nightly-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  select-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.set-matrix.outputs.apps }}
+    steps:
+      - id: set-matrix
+        run: |
+          APP="${{ inputs.app || 'all' }}"
+          if [ "$APP" = "all" ]; then
+            echo 'apps=["openemr","odoo17","twenty_crm","gnucash"]' >> "$GITHUB_OUTPUT"
+          else
+            echo "apps=[\"$APP\"]" >> "$GITHUB_OUTPUT"
+          fi
+
+  verify-app:
+    needs: select-matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.select-matrix.outputs.apps) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate Docker Compose manifest (web apps)
+        if: matrix.app != 'gnucash'
+        run: |
+          docker compose -f "benchmarks/real_apps/apps/${{ matrix.app }}/docker-compose.yml" config -q
+
+      - name: Run Real-App Verification Matrix
+        run: |
+          mkdir -p artifacts/real-apps
+          python -m benchmarks.real_apps run \
+            --app "${{ matrix.app }}" \
+            --mode "${{ inputs.mode || 'contract' }}" \
+            --output-json "artifacts/real-apps/${{ matrix.app }}-scoreboard.json" \
+            --output-md "artifacts/real-apps/${{ matrix.app }}-scoreboard.md"
+
+      - name: Append scoreboard to step summary
+        if: always()
+        run: |
+          if [ -f "artifacts/real-apps/${{ matrix.app }}-scoreboard.md" ]; then
+            cat "artifacts/real-apps/${{ matrix.app }}-scoreboard.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload Real-App Scoreboard artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-apps-scoreboard-${{ matrix.app }}
+          path: artifacts/real-apps/
+          retention-days: 14
