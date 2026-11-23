@@ -26,9 +26,41 @@ from tests.repo_tree_guard import (  # noqa: E402 - needs the sys.path line abov
 def pytest_collection_modifyitems(
     config: pytest.Config, items: list[pytest.Item]
 ) -> None:
-    """In the fast and main lanes, leave out tests in tests/nightly_only.txt."""
+    """In the fast and main lanes, leave out tests in tests/nightly_only.txt.
+    Under OPENADAPT_TEST_DEFAULT_AT_REST=1, skip the tests listed in
+    tests/default_at_rest_skips.txt, each with its stated reason."""
 
     lanes.deselect(config, items)
+    if os.environ.get("OPENADAPT_TEST_DEFAULT_AT_REST") == "1":
+        _skip_default_at_rest(items)
+
+
+_DEFAULT_AT_REST_SKIPS = Path(__file__).parent / "default_at_rest_skips.txt"
+
+
+def _skip_default_at_rest(items: list[pytest.Item]) -> None:
+    """Tests that read or plant a run, recording or bundle file directly as
+    plaintext. Under the default (everything encrypted) the product refuses
+    that file, correctly, so the test can't observe what it checks. Each line
+    is ``<node id prefix> | <reason>``; a prefix may name a whole file."""
+    if not _DEFAULT_AT_REST_SKIPS.is_file():
+        return
+    rules: list[tuple[str, str]] = []
+    for line in _DEFAULT_AT_REST_SKIPS.read_text(encoding="utf-8").splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        prefix, _, reason = line.partition(" | ")
+        rules.append((prefix.strip(), reason.strip()))
+    for item in items:
+        nodeid = item.nodeid.removeprefix("packages/flow/")
+        for prefix, reason in rules:
+            if (
+                nodeid == prefix
+                or nodeid.startswith(prefix + "::")
+                or (prefix.endswith(".py") and nodeid.startswith(prefix))
+            ):
+                item.add_marker(pytest.mark.skip(reason=f"default at rest: {reason}"))
+                break
 
 
 _SESSION_ENV: dict[str, str | None] = {}
@@ -98,7 +130,13 @@ def _isolation_env(root: Path) -> dict[str, str | None]:
 
     return {
         # Offline Seals must not create keys or a batch queue in the real home.
-        "OPENADAPT_SEALED_LOCK_DIR": str(root / ".sealed-locks"),
+        # Under the default mode, outside the test's own directories too: a
+        # lock file inside a directory a test seals is a stray file there.
+        "OPENADAPT_SEALED_LOCK_DIR": str(
+            Path(_SESSION_AT_REST_HOME) / "sealed-locks"
+            if _SESSION_AT_REST_HOME
+            else root / ".sealed-locks"
+        ),
         "OPENADAPT_SEAL_HOME": str(root / ".seal-home"),
         # Never create or read the real ~/.config/openadapt/frame.key.
         "OPENADAPT_FRAME_SECRET": "11" * 32,

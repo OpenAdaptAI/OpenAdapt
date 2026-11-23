@@ -133,8 +133,10 @@ def _finish_candidate(
     candidate.taught_steps = taught
     candidate.provenance = provenance
     path = detached_candidate_path(out)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(candidate.model_dump_json(indent=2), encoding="utf-8")
+    if not sealed_set.is_sealed_path(out):
+        path.parent.mkdir(parents=True, exist_ok=True)
+    # Encrypted when the proposed bundle is (it names anchor text).
+    sealed_set.write_text(path, candidate.model_dump_json(indent=2))
     return candidate
 
 
