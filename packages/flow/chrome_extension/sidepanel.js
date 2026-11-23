@@ -27,6 +27,7 @@
   };
 
   const statusPillEl = document.getElementById('status-pill');
+  const recordBtnEl = document.getElementById('record-btn');
   const refreshBtnEl = document.getElementById('refresh-btn');
   const progressCounterEl = document.getElementById('progress-counter');
   const progressTrackEl = document.getElementById('progress-track');
@@ -43,6 +44,7 @@
   let currentState = null;
   let currentAuthPause = null;
   let currentPopupState = null;
+  let isRecording = false;
   let lastRenderedStateKey = '__uninitialized__';
   let syncInFlight = false;
 
@@ -739,12 +741,45 @@
     }
   }
 
+  function updateRecordingUi(active) {
+    isRecording = Boolean(active);
+    if (recordBtnEl) {
+      recordBtnEl.textContent = isRecording ? 'Stop Recording' : 'Start Recording';
+      recordBtnEl.setAttribute('aria-pressed', isRecording ? 'true' : 'false');
+    }
+    if (!currentState && !(currentAuthPause && currentAuthPause.paused) && statusPillEl) {
+      statusPillEl.textContent = isRecording ? 'Recording' : 'Idle';
+      statusPillEl.dataset.status = isRecording ? 'running' : 'idle';
+    }
+  }
+
+  async function syncRecordingState() {
+    const resp = await sendRuntimeMessage({ type: 'GET_RECORDING' });
+    if (resp && resp.ok) {
+      updateRecordingUi(Boolean(resp.active));
+    }
+  }
+
+  if (recordBtnEl) {
+    recordBtnEl.addEventListener('click', async () => {
+      const next = !isRecording;
+      const resp = await sendRuntimeMessage({ type: 'SET_RECORDING', active: next });
+      if (resp && resp.ok) {
+        updateRecordingUi(Boolean(resp.active));
+      } else {
+        setErrorBanner((resp && resp.error) || 'recording_toggle_failed');
+      }
+    });
+  }
+
   refreshBtnEl.addEventListener('click', () => {
     lastRenderedStateKey = '__force_rerender__';
+    void syncRecordingState();
     void syncState({ forceScroll: true });
   });
 
   document.addEventListener('DOMContentLoaded', () => {
+    void syncRecordingState();
     void syncState({ forceScroll: true });
     setInterval(() => {
       if (document.visibilityState === 'visible') {

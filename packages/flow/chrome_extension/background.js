@@ -305,8 +305,10 @@ async function recordAuthInterstitial(msg, sender) {
   if (Number.isInteger(sender.frameId) && sender.frameId !== 0) {
     return { ok: true, ignored: true, reason: 'subframe_ignored' };
   }
-  // Do not pause or alert on unrelated browsing tabs outside an active run tab.
-  if (!Number.isInteger(activeRunTabId) || tabId !== activeRunTabId) {
+  // Pause on active run tab, during user-started recording, or in a tracked SSO/child popup tab.
+  const onActiveRunTab = Number.isInteger(activeRunTabId) && tabId === activeRunTabId;
+  const onTrackedPopup = trackedPopups.has(tabId);
+  if (!onActiveRunTab && !recording && !onTrackedPopup) {
     return { ok: true, ignored: true, reason: 'no_active_run_on_tab' };
   }
 
@@ -405,8 +407,11 @@ if (typeof chrome !== 'undefined') {
     }
     if (chrome.tabs && chrome.tabs.onUpdated && typeof chrome.tabs.onUpdated.addListener === 'function') {
       chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-        if (changeInfo && (changeInfo.url || changeInfo.status === 'loading')) {
-          clearAuthStateForTab(tabId);
+        // Keep sign-in/MFA pause active across password -> MFA redirects until
+        // the operator explicitly clicks Resume (COPILOT_RESUME_AUTH) or closes
+        // the tab; re-notify the new document once navigation completes.
+        if (changeInfo && changeInfo.status === 'complete' && isTabAuthPaused(tabId)) {
+          notifyTabAuthPaused(tabId, true);
         }
       });
     }
@@ -716,6 +721,18 @@ function setRecording(active) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || typeof msg !== 'object') return;
+  if (msg.type === 'GET_RECORDING') {
+    const isSidePanel =
+      sender &&
+      !sender.tab &&
+      sender.url === chrome.runtime.getURL('sidepanel.html');
+    if (!isSidePanel) {
+      sendResponse({ ok: false, error: 'recording_requires_sidepanel' });
+      return true;
+    }
+    sendResponse({ ok: true, active: recording });
+    return true;
+  }
   if (msg.type === 'SET_RECORDING') {
     const isSidePanel =
       sender &&

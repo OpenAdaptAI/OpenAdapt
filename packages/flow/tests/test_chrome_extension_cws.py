@@ -488,17 +488,11 @@ function sendBg(msg, sender) {{
 }}
 
 (async () => {{
-  // 0. SET_RECORDING rejects content-script/tab senders, allows sidepanel
+  // 0. SET_RECORDING rejects content-script/tab senders; idle-tab detection is ignored when recording=false and no active run
   const badSetRec = await sendBg(
     {{ type: 'SET_RECORDING', active: true }},
     {{ tab: {{ id: 42 }}, url: 'https://portal.example.com/quote' }}
   );
-  const okSetRec = await sendBg(
-    {{ type: 'SET_RECORDING', active: true }},
-    {{ url: 'chrome-extension://testext/sidepanel.html' }}
-  );
-
-  // 1. Missing tab sender is rejected; subframe & idle-tab detections are ignored
   const missingTabResp = await sendBg(
     {{ type: 'AUTH_INTERSTITIAL_DETECTED', kind: 'mfa', signals: ['mfa_input'] }},
     {{ origin: 'https://portal.example.com' }}
@@ -506,6 +500,10 @@ function sendBg(msg, sender) {{
   const idleResp = await sendBg(
     {{ type: 'AUTH_INTERSTITIAL_DETECTED', kind: 'mfa', signals: ['mfa_input'] }},
     {{ tab: {{ id: 42 }}, frameId: 0, origin: 'https://portal.example.com' }}
+  );
+  const okSetRec = await sendBg(
+    {{ type: 'SET_RECORDING', active: true }},
+    {{ url: 'chrome-extension://testext/sidepanel.html' }}
   );
 
   // 2. Real COPILOT_SYNC_STATE wires activeRunTabId=42 from active tab and broadcasts SET_RUN_ACTIVE
@@ -570,19 +568,22 @@ function sendBg(msg, sender) {{
     {{ url: 'chrome-extension://testext/sidepanel.html' }}
   );
 
-  // 6. Per-tab auth state clears on navigation (tabs.onUpdated) AND notifies native host
+  // 6. Per-tab auth state PERSISTS across navigation (password -> MFA redirect) and clears on tab close
   await sendBg(
     {{ type: 'AUTH_INTERSTITIAL_DETECTED', kind: 'signin', signals: ['password_input'] }},
     {{ tab: {{ id: 42 }}, frameId: 0, origin: 'https://portal.example.com' }}
   );
   const resumedCountBeforeNav = nativeMessages.filter((m) => m.type === 'COPILOT_AUTH_RESUMED').length;
-  tabUpdatedListeners[0](42, {{ status: 'loading', url: 'https://portal.example.com/dashboard' }});
+  tabUpdatedListeners[0](42, {{ status: 'loading', url: 'https://portal.example.com/mfa' }});
+  tabUpdatedListeners[0](42, {{ status: 'complete' }});
   await new Promise((r) => setTimeout(r, 20));
-  const resumedCountAfterNav = nativeMessages.filter((m) => m.type === 'COPILOT_AUTH_RESUMED').length;
   const afterNavClear = await sendBg(
     {{ type: 'COPILOT_GET_AUTH_STATE', tabId: 42 }},
     {{ url: 'chrome-extension://testext/sidepanel.html' }}
   );
+  tabRemovedListeners[0](42);
+  await new Promise((r) => setTimeout(r, 20));
+  const resumedCountAfterNav = nativeMessages.filter((m) => m.type === 'COPILOT_AUTH_RESUMED').length;
 
   console.log(JSON.stringify({{
     valueReadCount,
@@ -646,7 +647,7 @@ function sendBg(msg, sender) {{
     assert out["acceptedResume"]["ok"] is True
     assert out["acceptedResume"]["resumed"] is True
     assert out["afterAcceptedResume"] is None
-    assert out["afterNavClear"] is None
+    assert out["afterNavClear"]["paused"] is True
     assert out["navNotifiedHost"] is True
     assert out["allHaveRequestId"] is True
     assert "COPILOT_AUTH_PAUSED" in out["nativeTypes"]
@@ -924,9 +925,185 @@ def test_sidepanel_wires_auth_pause_and_popup_return_controls() -> None:
     html = (EXT_DIR / "sidepanel.html").read_text(encoding="utf-8")
     js = (EXT_DIR / "sidepanel.js").read_text(encoding="utf-8")
 
+    assert 'id="record-btn"' in html
     assert 'id="auth-pause-container"' in html
     assert 'id="popup-banner-container"' in html
+    assert "SET_RECORDING" in js
+    assert "GET_RECORDING" in js
     assert "COPILOT_AUTH_RESUME" in js
     assert "COPILOT_RETURN_TO_PARENT" in js
     assert "I Signed In" in js
     assert "Return to Parent Tab" in js
+
+
+def test_secret_redaction_covers_api_keys_tokens_cards_ssn_cvv_across_all_three_layers() -> None:
+    from openadapt_flow.extension_evidence import is_secret_field
+
+    content_path = str(EXT_DIR / "content.js")
+    redact_path = str(EXT_DIR / "network_redact.js")
+    sensitive_names = [
+        "api_key",
+        "access_token",
+        "card_number",
+        "cc-number",
+        "cc_number",
+        "ccnum",
+        "ssn",
+        "cvv",
+        "cc-csc",
+        "cc-exp",
+        "mfa_code",
+        "totp",
+        "verification_code",
+    ]
+    for name in sensitive_names:
+        assert is_secret_field(name=name) is True, f"engine missed {name}"
+
+    script = f"""
+const fs = require('fs');
+const vm = require('vm');
+
+const redactCtx = vm.createContext({{
+  globalThis: {{}},
+  URL,
+  URLSearchParams,
+  TextDecoder,
+  TextEncoder,
+  Uint8Array,
+  Date,
+  Set,
+  Map,
+  atob: (s) => Buffer.from(s, 'base64').toString('binary'),
+}});
+redactCtx.globalThis = redactCtx;
+vm.runInContext(fs.readFileSync({json.dumps(redact_path)}, 'utf8'), redactCtx);
+const {{ redactNetworkSave }} = redactCtx.OpenAdaptNetworkRedact;
+
+const contentSrc = fs.readFileSync({json.dumps(content_path)}, 'utf8');
+const secretNameMatch = contentSrc.match(/const SECRET_NAME =\\s*([\\s\\S]*?);/);
+const autoMatch = contentSrc.match(/const SECRET_AUTOCOMPLETE =\\s*([\\s\\S]*?);/);
+const SECRET_NAME = eval(secretNameMatch[1]);
+const SECRET_AUTOCOMPLETE = eval(autoMatch[1]);
+
+const names = {json.dumps(sensitive_names)};
+const contentMatches = Object.fromEntries(names.map((n) => [n, SECRET_NAME.test(n)]));
+const autoMatches = Object.fromEntries(['cc-number', 'cc-csc', 'cc-exp'].map((a) => [a, SECRET_AUTOCOMPLETE.test(a)]));
+
+const bodyObj = {{ applicant: 'Jane Doe' }};
+for (const n of names) bodyObj[n] = 'sensitive-val-' + n;
+const rawBytes = new TextEncoder().encode(JSON.stringify(bodyObj));
+const redacted = redactNetworkSave({{
+  method: 'POST',
+  url: 'https://portal.example.com/api/submit',
+  type: 'xmlhttprequest',
+  tabId: 11,
+  frameId: 0,
+  timeStamp: Date.now(),
+  statusCode: 200,
+  requestHeaders: [{{ name: 'Content-Type', value: 'application/json' }}],
+  responseHeaders: [],
+  requestBody: {{ raw: [{{ bytes: rawBytes }}] }},
+}});
+
+console.log(JSON.stringify({{ contentMatches, autoMatches, redactedBody: redacted && redacted.request_body }}));
+"""
+    out = _run_node(script)
+    for name in sensitive_names:
+        assert out["contentMatches"][name] is True, f"content.js missed {name}"
+        assert out["redactedBody"][name] == "<secret>", f"network_redact.js missed {name}"
+    for ac in ("cc-number", "cc-csc", "cc-exp"):
+        assert out["autoMatches"][ac] is True, f"content.js autocomplete missed {ac}"
+    assert out["redactedBody"]["applicant"] == "Jane Doe"
+
+
+def test_auth_pause_works_in_recording_mode_and_persists_across_password_to_mfa_navigation() -> None:
+    bg_path = str(EXT_DIR / "background.js")
+    script = f"""
+const fs = require('fs');
+const vm = require('vm');
+
+const listeners = {{ onMessage: [], tabsUpdated: [], tabsCreated: [] }};
+const tabMessages = [];
+const sessionStore = {{}};
+const chromeMock = {{
+  runtime: {{
+    lastError: null,
+    getURL: (p) => 'chrome-extension://testext/' + p,
+    onMessage: {{ addListener: (fn) => listeners.onMessage.push(fn) }},
+    onInstalled: {{ addListener: () => {{}} }},
+    connectNative: () => {{ throw new Error('offline'); }},
+  }},
+  action: {{
+    onClicked: {{ addListener: () => {{}} }},
+    setBadgeText: () => {{}},
+    setBadgeBackgroundColor: () => {{}},
+    setTitle: () => {{}},
+  }},
+  sidePanel: {{ setPanelBehavior: () => Promise.resolve() }},
+  storage: {{
+    session: {{
+      get: (k, cb) => cb && cb(Object.assign({{}}, sessionStore)),
+      set: (o, cb) => {{ Object.assign(sessionStore, o); if (cb) cb(); }},
+      remove: (k, cb) => {{ delete sessionStore[k]; if (cb) cb(); }},
+    }},
+  }},
+  tabs: {{
+    onCreated: {{ addListener: (fn) => listeners.tabsCreated.push(fn) }},
+    onUpdated: {{ addListener: (fn) => listeners.tabsUpdated.push(fn) }},
+    onRemoved: {{ addListener: () => {{}} }},
+    query: (q, cb) => cb([{{ id: 77, windowId: 1 }}]),
+    sendMessage: (tabId, msg, cb) => {{ tabMessages.push({{ tabId, msg }}); if (cb) cb(); }},
+  }},
+  windows: {{
+    onRemoved: {{ addListener: () => {{}} }},
+    onFocusChanged: {{ addListener: () => {{}} }},
+  }},
+  webRequest: {{
+    onBeforeRequest: {{ addListener: () => {{}} }},
+    onBeforeSendHeaders: {{ addListener: () => {{}} }},
+    onCompleted: {{ addListener: () => {{}} }},
+    onErrorOccurred: {{ addListener: () => {{}} }},
+  }},
+}};
+const ctx = vm.createContext({{
+  chrome: chromeMock, globalThis: {{}}, importScripts: () => {{}},
+  URL, Date, Map, Set, Promise, setTimeout, clearTimeout,
+}});
+ctx.globalThis = ctx;
+vm.runInContext(fs.readFileSync({json.dumps(bg_path)}, 'utf8'), ctx);
+
+function send(msg, sender) {{
+  return new Promise((resolve) => listeners.onMessage[0](msg, sender, resolve));
+}}
+
+(async () => {{
+  const sp = {{ url: 'chrome-extension://testext/sidepanel.html' }};
+  // Enable recording via sidepanel (no active co-pilot run!)
+  const recOn = await send({{ type: 'SET_RECORDING', active: true }}, sp);
+  const recGet = await send({{ type: 'GET_RECORDING' }}, sp);
+
+  // Content script detects sign-in wall during recording-only mode
+  const paused = await send(
+    {{ type: 'AUTH_INTERSTITIAL_DETECTED', kind: 'signin', signals: ['password_input'], origin: 'https://sso.example.com' }},
+    {{ tab: {{ id: 77 }}, frameId: 0 }}
+  );
+
+  // Password -> MFA navigation updates URL & loading -> complete; pause MUST stay active
+  listeners.tabsUpdated[0](77, {{ url: 'https://sso.example.com/mfa', status: 'loading' }});
+  listeners.tabsUpdated[0](77, {{ status: 'complete' }});
+  const afterNav = await send({{ type: 'COPILOT_GET_AUTH_STATE', tabId: 77 }}, sp);
+
+  // Explicit resume clears pause
+  const resumed = await send({{ type: 'COPILOT_AUTH_RESUME', tabId: 77 }}, sp);
+  const afterResume = await send({{ type: 'COPILOT_GET_AUTH_STATE', tabId: 77 }}, sp);
+
+  console.log(JSON.stringify({{ recOn, recGet, paused, afterNav, resumed, afterResume, tabMessages }}));
+}})();
+"""
+    out = _run_node(script)
+    assert out["recOn"]["ok"] is True and out["recOn"]["active"] is True
+    assert out["recGet"]["active"] is True
+    assert out["paused"]["authPause"]["paused"] is True
+    assert out["afterNav"]["authPause"]["paused"] is True
+    assert out["resumed"]["resumed"] is True
+    assert out["afterResume"]["authPause"] is None
