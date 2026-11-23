@@ -377,3 +377,56 @@ def test_desktop_replay_link_check_and_protected_safety_phase2_invariants() -> N
     assert "github.event.pull_request.number" in conc["group"]
     assert "github.event.issue.number" in conc["group"]
     assert conc["cancel-in-progress"] is False
+
+    pkg_jobs = _load("packages.yml")["jobs"]
+    assert "fast-checks" in pkg_jobs
+    for removed in (
+        "capture-contract",
+        "privacy-contract",
+        "tray-contract",
+        "desktop-release-intent",
+    ):
+        assert removed not in pkg_jobs
+    assert "fast-checks" in pkg_jobs["packages-gate"]["needs"]
+
+    pm_jobs = _load("platform-manifest.yml")["jobs"]
+    assert "check-source-boundary" not in pm_jobs
+    step_names = [s.get("name") for s in pm_jobs["validate-platform-manifest"]["steps"]]
+    assert "Check open-core source boundary" in step_names
+
+
+def test_fast_checks_classifier_selection(tmp_path: Path) -> None:
+    assert (
+        _run_classifier(["packages/capture/README.md"], "pull_request", tmp_path)[
+            "fast_checks"
+        ]
+        == "true"
+    )
+    assert (
+        _run_classifier(["packages/privacy/README.md"], "pull_request", tmp_path)[
+            "fast_checks"
+        ]
+        == "true"
+    )
+    assert (
+        _run_classifier(["packages/tray/README.md"], "pull_request", tmp_path)[
+            "fast_checks"
+        ]
+        == "true"
+    )
+    assert (
+        _run_classifier(["packages/desktop/README.md"], "pull_request", tmp_path)[
+            "fast_checks"
+        ]
+        == "true"
+    )
+    assert (
+        _run_classifier(
+            ["packages/flow/openadapt_flow/api.py"], "pull_request", tmp_path
+        )["fast_checks"]
+        == "false"
+    )
+    assert (
+        _run_classifier(["README.md"], "pull_request", tmp_path)["fast_checks"]
+        == "false"
+    )
