@@ -2328,16 +2328,8 @@ def _terminate_rejected_run(
     report.transaction_outcome = outcome.value
     report.transaction_billable = outcome.is_billable
     report.transaction_platform_fault = outcome.is_platform_fault
-    # Atomic, because a torn report.json would lose the only machine-readable
-    # record that this run is over.
-    target = run_dir / "report.json"
-    if _sealed.is_sealed_path(target):
-        # An encrypted run (the default): its writer replaces it atomically.
-        _sealed.write_bytes(target, report.report_bytes())
-        return outcome.value
-    tmp = target.with_suffix(".json.rejecting")
-    tmp.write_bytes(report.report_bytes())
-    os.replace(tmp, target)
+    # Atomic: a torn report.json would lose the only record this run is over.
+    _sealed.replace_bytes(run_dir / "report.json", report.report_bytes())
     return outcome.value
 
 

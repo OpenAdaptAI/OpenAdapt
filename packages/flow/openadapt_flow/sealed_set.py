@@ -1544,6 +1544,18 @@ def write_bytes(path: Path | str, data: bytes, *, key: Optional[str] = None) -> 
     resumed.finalize()
 
 
+def replace_bytes(path: Path | str, data: bytes) -> None:
+    """Replace ``path`` atomically: through its sealed set when it lies in
+    one (whose writer replaces files atomically), else by a rename."""
+    if is_sealed_path(path):
+        write_bytes(path, data)
+        return
+    target = Path(path)
+    tmp = target.with_name(f".{target.name}.{secrets.token_hex(4)}.tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, target)
+
+
 def write_text(
     path: Path | str, text: str, *, encoding: str = "utf-8", key: Optional[str] = None
 ) -> None:
