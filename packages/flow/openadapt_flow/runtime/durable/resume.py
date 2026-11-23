@@ -1090,13 +1090,13 @@ def was_compensated(run_dir: Path | str) -> bool:
     from openadapt_flow.rollback import COMPENSATED_MARKER
 
     marker = Path(run_dir) / COMPENSATED_MARKER
-    if marker.exists():
-        return True
-    try:
-        # An encrypted run keeps the marker in its sealed set.
-        return sealed_set.exists(marker)
-    except (OSError, ValueError):  # a SealedSetError is a ValueError
-        return True  # can't tell: never resume a run that may be undone
+    # In either form: plaintext, or its ciphertext in an encrypted run (the
+    # default). Its presence is the fact; nothing needs opening, so a run cut
+    # off before it was finalized still answers.
+    return (
+        marker.exists()
+        or marker.with_name(marker.name + sealed_set.SEALED_SUFFIX).exists()
+    )
 
 
 def resume(

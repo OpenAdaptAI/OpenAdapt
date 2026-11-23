@@ -891,11 +891,24 @@ jobs:
         if: matrix.shard == 1
         env:
           OPENADAPT_TEST_DEFAULT_AT_REST: "1"
+        # The durable and authority files whose tests read files directly
+        # as plaintext are not listed yet (#2423 lists them).
         run: >-
           pytest -n logical --dist loadfile -q --basetemp=runs/ci-default-at-rest
           tests/test_rollback.py tests/test_rollback_qualify.py
           tests/test_checkpoint_key_derivations.py tests/test_key_hierarchy.py
           tests/test_at_rest_review_round3.py
+          tests/test_api_step_durable.py tests/test_attended_executor_fence_v13.py
+          tests/test_authoring_authority.py tests/test_continuation_receiver_clock.py
+          tests/test_default_ledger_authority.py tests/test_durable_authority_create.py
+          tests/test_durable_authority_edges_v13.py
+          tests/test_durable_authority_isolation_policy.py
+          tests/test_durable_first_local_delivery.py
+          tests/test_durable_first_local_program_delivery.py
+          tests/test_durable_pipelined_readback.py
+          tests/test_durable_resume_state_binding.py tests/test_durable_runtime.py
+          tests/test_module_durable_authority.py tests/test_realism_durable_resume.py
+          tests/test_tx_atomic_authority.py
       - name: Upload coverage data
         if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -1030,6 +1030,8 @@ class SealedSetWriter:
 
     def _initialize(self, passphrase: Optional[str], *, resume: bool) -> None:
         kind = self.kind
+        if resume and is_sealed(self.root) and self._resume_unfinished():
+            return
         if resume and is_sealed(self.root):
             opened = SealedSet.open(self.root, passphrase, expect=kind)
             self._header: dict[str, object] = dict(opened._header)
@@ -1062,6 +1064,57 @@ class SealedSetWriter:
         }
         self._key = _derive(self._header, passphrase)
         self._write_header()
+
+    def _resume_unfinished(self) -> bool:
+        """Reopen a version 3 run whose writer stopped before finalizing it
+        (a leg cut off mid-run: a crash, or a process killed during an
+        unknown delivery), so a durable resume can carry it on. The header is
+        authenticated first. Each file the earlier leg sealed is adopted only
+        if it authenticates under this set's key at its own path; a
+        structural file the inventory names and another store's ciphertext
+        are adopted as on open. Anything else refuses. False for a finalized
+        set (the ordinary path) or any other kind."""
+        header = read_header(self.root)
+        if (
+            self.kind != "run"
+            or header.get("kind") != "run"
+            or header.get("version") != ENVELOPE_VERSION
+            or isinstance(header.get("index"), str)
+        ):
+            return False
+        key = _open_v3(header)
+        files: dict[str, Codec] = {}
+        hashes: dict[str, str] = {}
+        for physical in _disk_files(self.root):
+            raw = (self.root / physical).read_bytes()
+            if physical.endswith(SEALED_SUFFIX) and raw.startswith(
+                crypto.SET3_FILE_MAGIC
+            ):
+                rel = _check_rel(physical[: -len(SEALED_SUFFIX)])
+                try:
+                    key.open(raw, aad=_file_aad("run", rel))
+                except (crypto.CryptoError, SealedSetError) as exc:
+                    raise SealedSetError(
+                        f"{self.root} was not finalized, and {physical} does not "
+                        "authenticate under its key; refusing to carry it on"
+                    ) from exc
+                files[rel] = "set"
+            else:
+                codec = _adoptable(self.root, "run", physical)
+                if codec is None:
+                    raise SealedSetError(
+                        f"{self.root} holds {physical} in plaintext, outside its "
+                        "sealed writer"
+                    )
+                files[physical] = codec
+                rel = physical
+            hashes[rel] = _sha256(raw)
+        self._header = dict(header)
+        self._key = key
+        self._header_revision = _sha256((self.root / HEADER).read_bytes())
+        self._codecs.update(files)
+        self._hashes.update(hashes)
+        return True
 
     def _write_header(self) -> None:
         if isinstance(self._key, V3Key):

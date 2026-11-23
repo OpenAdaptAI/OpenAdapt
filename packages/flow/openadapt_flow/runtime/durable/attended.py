@@ -2319,7 +2319,7 @@ def _terminate_rejected_run(
     # must not acquire a dependency on it to end a run.
     try:
         report = RunReport.model_validate_json(
-            (run_dir / "report.json").read_text(encoding="utf-8")
+            _sealed.read_text(run_dir / "report.json")
         )
     except (OSError, ValueError):
         return None
@@ -2331,6 +2331,10 @@ def _terminate_rejected_run(
     # Atomic, because a torn report.json would lose the only machine-readable
     # record that this run is over.
     target = run_dir / "report.json"
+    if _sealed.is_sealed_path(target):
+        # An encrypted run (the default): its writer replaces it atomically.
+        _sealed.write_bytes(target, report.report_bytes())
+        return outcome.value
     tmp = target.with_suffix(".json.rejecting")
     tmp.write_bytes(report.report_bytes())
     os.replace(tmp, target)

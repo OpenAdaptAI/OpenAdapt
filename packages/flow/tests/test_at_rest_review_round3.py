@@ -240,6 +240,39 @@ def test_a_rollback_in_an_encrypted_run_keeps_its_marker_sealed(
             assert TYPED not in path.read_bytes(), path
     sealed_set.SealedSet.open(run).verify_all()
     assert was_compensated(run) is True
-    # A run whose state can't be read is never treated as resumable.
+    # A shredded run still answers (nothing needs opening).
     sealed_set.shred(run)
     assert was_compensated(run) is True
+    # A run that was never compensated is not.
+    other = _run(tmp_path / "other", {"report.json": b"{}"})
+    assert was_compensated(other) is False
+
+
+def test_a_run_cut_off_before_finalizing_resumes_into_the_same_set(
+    default_mode: Path, tmp_path: Path
+) -> None:
+    """A durable leg killed mid-run leaves an unfinalized encrypted run. The
+    next leg carries it on: files the earlier leg sealed are adopted only
+    when they authenticate under the set's key at their own path."""
+    run = tmp_path / "run"
+    first = sealed_set.SealedSetWriter(run, "run", sealed_set.passphrase_for("run"))
+    first.write("steps/a.png", TYPED)
+    # The process dies here: no finalize, no index.
+    with pytest.raises(sealed_set.SealedSetError, match="never finalized"):
+        sealed_set.SealedSet.open(run)
+    second = sealed_set.SealedSetWriter(
+        run, "run", sealed_set.passphrase_for("run"), resume=True
+    )
+    second.write("report.json", b"{}")
+    second.finalize()
+    assert sealed_set.read_bytes(run / "steps" / "a.png") == TYPED
+    # A file that doesn't authenticate at its path is never carried on.
+    cut = tmp_path / "cut"
+    w = sealed_set.SealedSetWriter(cut, "run", sealed_set.passphrase_for("run"))
+    w.write("steps/a.png", TYPED)
+    w.write("steps/b.png", b"other")
+    (cut / "steps" / "b.png.enc").write_bytes(
+        (cut / "steps" / "a.png.enc").read_bytes()
+    )
+    with pytest.raises(sealed_set.SealedSetError, match="does not authenticate"):
+        sealed_set.SealedSetWriter(cut, "run", None, resume=True)
