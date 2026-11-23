@@ -970,6 +970,10 @@ class PlaywrightFormSurface:
         self._pending_mutation_seqs: dict[int, tuple[int, bool, str]] = {}
         self._confirmed_page_mutation_seqs: dict[int, str] = {}
         self._failed_page_mutation_seqs: set[int] = set()
+        # Requests whose status and headers arrived. The answer is the status:
+        # a body cut off afterwards (the page navigated away) does not undo it.
+        self._answered_mutation_ids: set[int] = set()
+        self._body_cut_off_mutation_seqs: set[int] = set()
         self._total_mutation_count = 0
         self._all_time_raw_mutations = 0
         self._inflight_mutation_ids: set[int] = set()
@@ -1109,15 +1113,27 @@ class PlaywrightFormSurface:
 
     def _on_request_done(self, request: Any) -> None:
         self._inflight_mutation_ids.discard(id(request))
+        self._answered_mutation_ids.discard(id(request))
         self._pending_mutation_seqs.pop(id(request), None)
 
     def _on_request_failed(self, request: Any) -> None:
         self._inflight_mutation_ids.discard(id(request))
+        answered = id(request) in self._answered_mutation_ids
+        self._answered_mutation_ids.discard(id(request))
         entry = self._pending_mutation_seqs.pop(id(request), None)
-        if entry is not None:
-            seq, is_own_page, _path = entry
-            if is_own_page:
-                self._failed_page_mutation_seqs.add(seq)
+        if entry is None:
+            return
+        seq, is_own_page, _path = entry
+        if answered:
+            # The server already answered with a status, which _on_response
+            # judged. Only the body was not delivered (typically the page
+            # navigated away before reading it); no save decision reads the
+            # body, so this neither confirms nor fails anything further.
+            self._body_cut_off_mutation_seqs.add(seq)
+            return
+        if is_own_page:
+            # No status ever arrived: the request failed.
+            self._failed_page_mutation_seqs.add(seq)
 
     def _on_response(self, response: Any) -> None:
         """Count state-changing requests started on this surface that succeeded."""
@@ -1132,6 +1148,7 @@ class PlaywrightFormSurface:
         if entry is None:
             return
         seq, is_own_page, req_path = entry
+        self._answered_mutation_ids.add(id(request))
         if 200 <= status < 400:
             self._confirmed_mutation_count += 1
             if is_own_page:
