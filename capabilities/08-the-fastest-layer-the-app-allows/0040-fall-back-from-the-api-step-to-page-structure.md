@@ -1,0 +1,1 @@
+| Fall back from the API step to page structure when the API is unavailable, before anything is sent | Released ([#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269)) | Synthetic | [#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269) |

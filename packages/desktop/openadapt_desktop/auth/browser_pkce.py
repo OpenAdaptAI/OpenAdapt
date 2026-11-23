@@ -47,6 +47,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from loguru import logger
 
+from openadapt_desktop import system_browser
 from openadapt_desktop.auth.pairing import (
     PAIRING_SECRET_RE,
     PairingError,
@@ -251,10 +252,7 @@ class BrowserPkceProvider:
 
     @staticmethod
     def _default_open_browser(url: str) -> None:
-        import webbrowser
-
-        if not webbrowser.open(url):
-            raise RuntimeError("OpenAdapt could not open the system browser.")
+        system_browser.open_url(url)
 
     def is_available(self) -> bool:
         """False on a headless box, and False without a usable OS keychain.
@@ -269,13 +267,8 @@ class BrowserPkceProvider:
             return False
         if not secure_store_available():
             return False
-        if self._uses_system_browser:
-            import webbrowser
-
-            try:
-                webbrowser.get()
-            except webbrowser.Error:
-                return False
+        if self._uses_system_browser and not system_browser.is_available():
+            return False
         if sys.platform.startswith("linux"):
             # No X11 / Wayland display -> no system browser to drive.
             return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))

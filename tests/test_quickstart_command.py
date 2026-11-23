@@ -9,6 +9,7 @@ llms-full.txt and the launcher's own Python fix all use it.
 from __future__ import annotations
 
 import re
+import runpy
 from pathlib import Path
 
 from openadapt import cli
@@ -22,9 +23,18 @@ def test_the_launcher_names_the_documented_command():
     assert f"  {COMMAND}\n" in cli._python_fix()
 
 
+def _texts() -> dict[str, str]:
+    # llms-full.txt as its generator writes it: a pull request does not
+    # regenerate the committed copy (the refresh workflow does).
+    generator = runpy.run_path(str(ROOT / "scripts/build_llms_full.py"))
+    return {
+        "README.md": (ROOT / "README.md").read_text(encoding="utf-8"),
+        "llms-full.txt": generator["build"](),
+    }
+
+
 def test_readme_and_llms_full_use_the_documented_command():
-    for name in ("README.md", "llms-full.txt"):
-        text = (ROOT / name).read_text(encoding="utf-8")
+    for name, text in _texts().items():
         assert f"{COMMAND} --break-it" in text, name
         # No other uvx spelling of the quickstart.
         for match in re.finditer(r"uvx [^\n`]*?quickstart", text):

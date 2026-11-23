@@ -998,6 +998,7 @@ def _search_packs():
         {
             **base,
             "search_items": "entry.*.resource",
+            "search_match": {"path": "search.mode", "equals": "match"},
             "search_empty": {
                 "equals": {"resourceType": "Bundle", "type": "searchset"},
                 "absent": ["link[relation=next]"],
@@ -1021,8 +1022,22 @@ def _run_search(body, pack):
 
 
 _BUNDLE = {"resourceType": "Bundle", "type": "searchset"}
-_P1 = {"resource": {"resourceType": "Patient", "id": "p1"}}
-_P2 = {"resource": {"resourceType": "Patient", "id": "p2"}}
+_P1 = {
+    "search": {"mode": "match"},
+    "resource": {"resourceType": "Patient", "id": "p1"},
+}
+_P2 = {
+    "search": {"mode": "match"},
+    "resource": {"resourceType": "Patient", "id": "p2"},
+}
+_OUTCOME = {
+    "search": {"mode": "outcome"},
+    "resource": {
+        "resourceType": "OperationOutcome",
+        "id": "oo1",
+        "issue": [{"severity": "error"}],
+    },
+}
 
 #: One probe per clause of the strict parser: refused with that clause's
 #: message, and accepted once only that clause is removed (no other check
@@ -1049,21 +1064,29 @@ SEARCH_REFUSALS = {
     "items-field": ({"error": "busy"}, "items", "has no items"),
     "fan-out-list": ({**_BUNDLE, "entry": {}}, "fhir", "fan-out is not a list"),
     "step-present": (
-        {**_BUNDLE, "entry": [{"fullUrl": "x"}]},
+        {**_BUNDLE, "entry": [{"search": {"mode": "match"}, "fullUrl": "x"}]},
         "fhir",
         "has no resource",
     ),
     "no-flatten-after-fanout": (
-        {**_BUNDLE, "entry": [{"resource": []}]},
+        {**_BUNDLE, "entry": [{"search": {"mode": "match"}, "resource": []}]},
         "fhir",
         "usable id",
     ),
     "usable-id": (
-        {**_BUNDLE, "entry": [{"resource": {"id": False}}]},
+        {
+            **_BUNDLE,
+            "entry": [{"search": {"mode": "match"}, "resource": {"id": False}}],
+        },
         "fhir",
         "usable id",
     ),
     "total-equals": ({**_BUNDLE, "total": 2, "entry": [_P1]}, "fhir", "doesn't match"),
+    "outcome-severity": (
+        {**_BUNDLE, "entry": [_OUTCOME]},
+        "fhir",
+        "non-informational OperationOutcome",
+    ),
 }
 
 #: How a clause is removed: a raise becomes ``pass``; the flatten guard loses
@@ -1140,21 +1163,41 @@ def test_a_marker_search_parses_strictly_and_closed_by_default() -> None:
             _run_search(body, packs[pack])
     # Shapes the earlier guards let through, each refused.
     for body in (
-        {**_BUNDLE, "entry": [{"resource": None}]},
+        {**_BUNDLE, "entry": [{"search": {"mode": "match"}, "resource": None}]},
         {**_BUNDLE, "entry": [None]},
         {**_BUNDLE, "entry": {}},
-        {**_BUNDLE, "entry": [_P1, {"fullUrl": "x"}]},  # undercounted duplicate
+        {**_BUNDLE, "entry": [_P1, {"search": {"mode": "match"}, "fullUrl": "x"}]},
         {**_BUNDLE, "entry": None},
-        {**_BUNDLE, "entry": [{"resource": {"id": {}}}]},
-        {**_BUNDLE, "entry": [{"resource": {"resourceType": "Patient"}}]},
+        {**_BUNDLE, "entry": [{"search": {"mode": "match"}, "resource": {"id": {}}}]},
+        {
+            **_BUNDLE,
+            "entry": [
+                {
+                    "search": {"mode": "match"},
+                    "resource": {"resourceType": "Patient"},
+                }
+            ],
+        },
         {**_BUNDLE, "total": 1},
         {**_BUNDLE, "total": 1, "entry": []},
         {**_BUNDLE, "total": 1.0, "entry": [_P1]},
         {"resourceType": "OperationOutcome", "total": 0},
         {"resourceType": "Bundle", "type": "batch-response"},
-        {**_BUNDLE, "entry": [{"resource": []}]},  # one entry never reads empty
-        {**_BUNDLE, "total": 0, "entry": [{"resource": []}]},
-        {**_BUNDLE, "entry": [{"resource": [{"id": "a"}, {"id": "b"}]}]},
+        {**_BUNDLE, "entry": [{"search": {"mode": "match"}, "resource": []}]},
+        {
+            **_BUNDLE,
+            "total": 0,
+            "entry": [{"search": {"mode": "match"}, "resource": []}],
+        },
+        {
+            **_BUNDLE,
+            "entry": [
+                {
+                    "search": {"mode": "match"},
+                    "resource": [{"id": "a"}, {"id": "b"}],
+                }
+            ],
+        },
         {**_BUNDLE, "link": [{"relation": "Next", "url": "u"}]},  # any case
         {**_BUNDLE, "link": [{"relation": 1}]},
         {**_BUNDLE, "link": "next"},
@@ -1173,6 +1216,23 @@ def test_a_marker_search_parses_strictly_and_closed_by_default() -> None:
         "p1",
         "p2",
     ]
+    # An informational OperationOutcome is not a match, even when it has an id.
+    note = {
+        "search": {"mode": "outcome"},
+        "resource": {
+            "resourceType": "OperationOutcome",
+            "id": "oo-note",
+            "issue": [{"severity": "information"}],
+        },
+    }
+    assert _run_search({**_BUNDLE, "entry": [note]}, fhir) == []
+    assert _run_search({**_BUNDLE, "total": 1, "entry": [_P1, note]}, fhir) == ["p1"]
+    with pytest.raises(AdapterError, match="non-informational OperationOutcome"):
+        _run_search({**_BUNDLE, "entry": [_P1, _OUTCOME]}, fhir)
+    with pytest.raises(ValueError, match="search_match needs search_items"):
+        ScopedCollection.model_validate(
+            {**base, "search_match": {"path": "mode", "equals": "match"}}
+        )
     assert _run_search({"total": 0}, items) == []
     assert _run_search({"items": [{"id": 3}]}, items) == ["3"]
     assert _run_search([{"id": "a"}], root) == ["a"]
