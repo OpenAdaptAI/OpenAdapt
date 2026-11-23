@@ -65,10 +65,10 @@ def test_manifest_and_extension_pass_cws_validation() -> None:
     assert manifest["side_panel"]["default_path"] == "sidepanel.html"
     assert "sidePanel" in manifest["permissions"]
     assert "storage" in manifest["permissions"]
-    assert "tabs" in manifest["permissions"]
-    # Least privilege: unused scripting and redundant activeTab must not be declared.
+    # Least privilege: unused scripting, redundant activeTab, and redundant tabs must not be declared.
     assert "scripting" not in manifest["permissions"]
     assert "activeTab" not in manifest["permissions"]
+    assert "tabs" not in manifest["permissions"]
 
 
 def test_store_listing_covers_every_permission_and_zero_egress() -> None:
@@ -90,11 +90,12 @@ def test_store_listing_covers_every_permission_and_zero_egress() -> None:
     assert "Single Purpose Statement" in text
     assert "Privacy Policy" in text
     assert "Zero Credential Capture" in text
-    assert "https://openadapt.ai/privacy" in text
-    assert "richard@openadapt.ai" in text
+    assert "https://openadapt.ai/privacy-policy" in text
+    assert "hello@openadapt.ai" in text
     assert "non-secret form values" in text
     assert "### `scripting`" not in text
     assert "### `activeTab`" not in text
+    assert "### `tabs`" not in text
 
     # Ensure user-facing Store Listing Copy section avoids implementation jargon
     section1 = text.split("## 1. Store Listing Copy")[1].split("## 2. Single Purpose")[
@@ -399,18 +400,25 @@ function makeMockNativePort() {{
     onDisconnect: {{ addListener: (fn) => disconnectListeners.push(fn) }},
     postMessage: (payload) => {{
       nativeMessages.push(payload);
-      let reply = {{ ok: true }};
+      let reply = {{ ok: true, request_id: payload.request_id }};
       if (payload.type === 'COPILOT_AUTH_PAUSED') {{
-        reply = {{ ok: true, type: 'COPILOT_AUTH_PAUSED_ACK', paused: true, tab_id: payload.tab_id }};
+        reply = {{ ok: true, type: 'COPILOT_AUTH_PAUSED_ACK', paused: true, tab_id: payload.tab_id, request_id: payload.request_id }};
       }} else if (payload.type === 'COPILOT_AUTH_RESUMED') {{
         if (rejectNextResume) {{
           rejectNextResume = false;
-          reply = {{ ok: false, error: 'copilot_auth_resume_rejected' }};
+          reply = {{ ok: false, error: 'copilot_auth_resume_rejected', request_id: payload.request_id }};
         }} else {{
-          reply = {{ ok: true, type: 'COPILOT_AUTH_RESUMED_ACK', paused: false, resumed: true }};
+          // Inject a stale late COPILOT_STATE reply before the real ack to prove
+          // request_id matching ignores mismatched/late replies.
+          setTimeout(() => {{
+            for (const fn of msgListeners) {{
+              fn({{ ok: true, type: 'COPILOT_STATE', state: null, request_id: 'req_stale_999' }});
+            }}
+          }}, 1);
+          reply = {{ ok: true, type: 'COPILOT_AUTH_RESUMED_ACK', paused: false, resumed: true, request_id: payload.request_id }};
         }}
       }} else if (payload.type === 'COPILOT_GET_STATE') {{
-        reply = {{ ok: true, state: {{ run_id: 'run_1', outcome: 'halted_needs_human', halts: [] }} }};
+        reply = {{ ok: true, type: 'COPILOT_STATE', state: {{ run_id: 'run_1', outcome: 'halted_needs_human', halts: [] }}, request_id: payload.request_id }};
       }}
       setTimeout(() => {{
         for (const fn of msgListeners) fn(reply);
@@ -420,6 +428,8 @@ function makeMockNativePort() {{
   }};
 }}
 
+const tabMessages = [];
+const webReqListeners = {{}};
 const bgCtx = vm.createContext({{
   chrome: {{
     runtime: {{
@@ -447,18 +457,18 @@ const bgCtx = vm.createContext({{
       onCreated: {{ addListener: () => {{}} }},
       onUpdated: {{ addListener: (fn) => tabUpdatedListeners.push(fn) }},
       onRemoved: {{ addListener: (fn) => tabRemovedListeners.push(fn) }},
-      query: (q, cb) => cb([]),
-      sendMessage: (id, m, cb) => {{ if (cb) cb(); }},
+      query: (q, cb) => cb([{{ id: 42, active: true, url: 'https://portal.example.com/quote' }}]),
+      sendMessage: (id, m, cb) => {{ tabMessages.push({{ tabId: id, msg: m }}); if (cb) cb(); }},
     }},
     windows: {{
       onRemoved: {{ addListener: () => {{}} }},
       onFocusChanged: {{ addListener: () => {{}} }},
     }},
     webRequest: {{
-      onBeforeRequest: {{ addListener: () => {{}} }},
-      onBeforeSendHeaders: {{ addListener: () => {{}} }},
-      onCompleted: {{ addListener: () => {{}} }},
-      onErrorOccurred: {{ addListener: () => {{}} }},
+      onBeforeRequest: {{ addListener: (fn) => {{ webReqListeners.before = fn; }} }},
+      onBeforeSendHeaders: {{ addListener: (fn) => {{ webReqListeners.headers = fn; }} }},
+      onCompleted: {{ addListener: (fn) => {{ webReqListeners.completed = fn; }} }},
+      onErrorOccurred: {{ addListener: (fn) => {{ webReqListeners.error = fn; }} }},
     }},
   }},
   importScripts: () => {{}},
@@ -478,6 +488,16 @@ function sendBg(msg, sender) {{
 }}
 
 (async () => {{
+  // 0. SET_RECORDING rejects content-script/tab senders, allows sidepanel
+  const badSetRec = await sendBg(
+    {{ type: 'SET_RECORDING', active: true }},
+    {{ tab: {{ id: 42 }}, url: 'https://portal.example.com/quote' }}
+  );
+  const okSetRec = await sendBg(
+    {{ type: 'SET_RECORDING', active: true }},
+    {{ url: 'chrome-extension://testext/sidepanel.html' }}
+  );
+
   // 1. Missing tab sender is rejected; subframe & idle-tab detections are ignored
   const missingTabResp = await sendBg(
     {{ type: 'AUTH_INTERSTITIAL_DETECTED', kind: 'mfa', signals: ['mfa_input'] }},
@@ -488,14 +508,19 @@ function sendBg(msg, sender) {{
     {{ tab: {{ id: 42 }}, frameId: 0, origin: 'https://portal.example.com' }}
   );
 
-  // Activate run on tab 42
-  bgCtx.__openadaptExtensionBackground.setActiveRunTab(42);
+  // 2. Real COPILOT_SYNC_STATE wires activeRunTabId=42 from active tab and broadcasts SET_RUN_ACTIVE
+  const initialSync = await sendBg(
+    {{ type: 'COPILOT_SYNC_STATE' }},
+    {{ url: 'chrome-extension://testext/sidepanel.html' }}
+  );
+  const wiredRunTabId = bgCtx.__openadaptExtensionBackground.activeRunTabId;
   const subframeResp = await sendBg(
     {{ type: 'AUTH_INTERSTITIAL_DETECTED', kind: 'mfa', signals: ['mfa_input'] }},
     {{ tab: {{ id: 42 }}, frameId: 2, origin: 'https://ad.example.com' }}
   );
 
-  // 2. Top-frame detection on active run tab 42 sends COPILOT_AUTH_PAUSED and records hostAcked=true
+  // 3. Top-frame detection on active run tab 42 sends COPILOT_AUTH_PAUSED,
+  //    notifies content script SET_AUTH_PAUSED(true), and pauses capture
   const detectResp = await sendBg(
     {{
       type: 'AUTH_INTERSTITIAL_DETECTED',
@@ -505,12 +530,27 @@ function sendBg(msg, sender) {{
     {{ tab: {{ id: 42 }}, frameId: 0, origin: 'https://portal.example.com' }}
   );
 
+  // Evidence and webRequest capture for paused tab 42 MUST be dropped
+  const pausedEvResp = await sendBg(
+    {{ type: 'EXTENSION_EVIDENCE', evidence: {{ kind: 'target', event: 'input' }} }},
+    {{ tab: {{ id: 42 }}, frameId: 0, origin: 'https://portal.example.com' }}
+  );
+  webReqListeners.before({{
+    requestId: 'r_paused',
+    method: 'POST',
+    url: 'https://portal.example.com/login',
+    tabId: 42,
+    frameId: 0,
+    timeStamp: Date.now(),
+  }});
+  const pendingWhilePaused = bgCtx.__openadaptExtensionBackground.pendingSaves;
+
   const syncResp = await sendBg(
     {{ type: 'COPILOT_SYNC_STATE' }},
     {{ url: 'chrome-extension://testext/sidepanel.html' }}
   );
 
-  // 3. Host rejects first resume -> fail closed, authPause MUST remain active
+  // 4. Host rejects first resume -> fail closed, authPause MUST remain active
   const rejectedResume = await sendBg(
     {{ type: 'COPILOT_AUTH_RESUME', tabId: 42 }},
     {{ url: 'chrome-extension://testext/sidepanel.html' }}
@@ -520,7 +560,7 @@ function sendBg(msg, sender) {{
     {{ url: 'chrome-extension://testext/sidepanel.html' }}
   );
 
-  // 4. Host acks second resume -> clears authPause for tab 42
+  // 5. Host acks second resume (with stale COPILOT_STATE injected) -> clears authPause
   const acceptedResume = await sendBg(
     {{ type: 'COPILOT_AUTH_RESUME', tabId: 42 }},
     {{ url: 'chrome-extension://testext/sidepanel.html' }}
@@ -530,12 +570,15 @@ function sendBg(msg, sender) {{
     {{ url: 'chrome-extension://testext/sidepanel.html' }}
   );
 
-  // 5. Per-tab auth state clears automatically on navigation (tabs.onUpdated)
+  // 6. Per-tab auth state clears on navigation (tabs.onUpdated) AND notifies native host
   await sendBg(
     {{ type: 'AUTH_INTERSTITIAL_DETECTED', kind: 'signin', signals: ['password_input'] }},
     {{ tab: {{ id: 42 }}, frameId: 0, origin: 'https://portal.example.com' }}
   );
+  const resumedCountBeforeNav = nativeMessages.filter((m) => m.type === 'COPILOT_AUTH_RESUMED').length;
   tabUpdatedListeners[0](42, {{ status: 'loading', url: 'https://portal.example.com/dashboard' }});
+  await new Promise((r) => setTimeout(r, 20));
+  const resumedCountAfterNav = nativeMessages.filter((m) => m.type === 'COPILOT_AUTH_RESUMED').length;
   const afterNavClear = await sendBg(
     {{ type: 'COPILOT_GET_AUTH_STATE', tabId: 42 }},
     {{ url: 'chrome-extension://testext/sidepanel.html' }}
@@ -546,6 +589,14 @@ function sendBg(msg, sender) {{
     mfaResult,
     pwdResult,
     normalResult,
+    badSetRec,
+    okSetRec,
+    initialSyncOk: initialSync.ok,
+    wiredRunTabId,
+    sentRunActiveToTab42: tabMessages.some((m) => m.tabId === 42 && m.msg.type === 'SET_RUN_ACTIVE' && m.msg.active === true),
+    sentAuthPausedToTab42: tabMessages.some((m) => m.tabId === 42 && m.msg.type === 'SET_AUTH_PAUSED' && m.msg.paused === true),
+    pausedEvResp,
+    pendingWhilePaused,
     missingTabResp,
     idleResp,
     subframeResp,
@@ -557,7 +608,9 @@ function sendBg(msg, sender) {{
     acceptedResume,
     afterAcceptedResume: afterAcceptedResume.authPause,
     afterNavClear: afterNavClear.authPause,
+    navNotifiedHost: resumedCountAfterNav === resumedCountBeforeNav + 1,
     nativeTypes: nativeMessages.map((m) => m.type),
+    allHaveRequestId: nativeMessages.every((m) => typeof m.request_id === 'string' && m.request_id.startsWith('req_')),
   }}));
 }})();
 """
@@ -569,14 +622,23 @@ function sendBg(msg, sender) {{
     assert out["pwdResult"]["kind"] == "signin"
     assert out["normalResult"]["detected"] is False
 
+    assert out["badSetRec"]["ok"] is False
+    assert out["badSetRec"]["error"] == "recording_requires_sidepanel"
+    assert out["okSetRec"]["ok"] is True
+    assert out["initialSyncOk"] is True
+    assert out["wiredRunTabId"] == 42
+    assert out["sentRunActiveToTab42"] is True
+    assert out["sentAuthPausedToTab42"] is True
+    assert out["pausedEvResp"]["paused"] is True
+    assert out["pendingWhilePaused"] == 0
     assert out["missingTabResp"]["ok"] is False
     assert out["idleResp"]["ignored"] is True
     assert out["subframeResp"]["ignored"] is True
     assert out["detectAuthPause"]["paused"] is True
     assert out["detectAuthPause"]["hostAcked"] is True
-    assert out["detectAuthPause"]["mode"] == "run_paused"
+    assert out["detectAuthPause"]["mode"] == "capture_paused_host_acked"
     assert out["syncAuthPause"]["paused"] is True
-    assert "AUTH" in out["badgeHistory"]
+    assert "REC" in out["badgeHistory"]
     # Fail-closed resume: host rejection must NOT clear pause state
     assert out["rejectedResume"]["ok"] is False
     assert out["stillPausedAfterReject"] is True
@@ -585,6 +647,8 @@ function sendBg(msg, sender) {{
     assert out["acceptedResume"]["resumed"] is True
     assert out["afterAcceptedResume"] is None
     assert out["afterNavClear"] is None
+    assert out["navNotifiedHost"] is True
+    assert out["allHaveRequestId"] is True
     assert "COPILOT_AUTH_PAUSED" in out["nativeTypes"]
     assert "COPILOT_AUTH_RESUMED" in out["nativeTypes"]
 
@@ -611,6 +675,25 @@ def test_native_host_handles_auth_pause_and_resume_real_handler(tmp_path: Path) 
             pos += length
         return out_msgs
 
+    sample_evidence = {
+        "schema": "openadapt.extension-evidence/1",
+        "kind": "target",
+        "event": "input",
+        "tag": "input",
+        "path": "input#applicant",
+        "in_shadow": False,
+        "closed_shadow": False,
+        "frame_url": "https://portal.example.com/quote",
+        "frame_origin": "https://portal.example.com",
+        "is_iframe": False,
+        "cross_origin_parent": False,
+        "frame": {"tab_id": 42, "frame_id": 0, "origin": "https://portal.example.com"},
+        "secret_field": False,
+        "value": "Jane Doe",
+        "seq": 1,
+        "t_ms": 1700000000000,
+    }
+
     stdin_bytes = b"".join(
         [
             encode(
@@ -620,6 +703,15 @@ def test_native_host_handles_auth_pause_and_resume_real_handler(tmp_path: Path) 
                     "kind": "mfa",
                     "signals": ["mfa_input"],
                     "origin": "https://portal.example.com",
+                    "request_id": "req_1",
+                }
+            ),
+            encode(
+                {
+                    "type": "EXTENSION_EVIDENCE",
+                    "schema": "openadapt.extension-evidence/1",
+                    "evidence": sample_evidence,
+                    "request_id": "req_2",
                 }
             ),
             encode(
@@ -627,6 +719,7 @@ def test_native_host_handles_auth_pause_and_resume_real_handler(tmp_path: Path) 
                     "type": "COPILOT_AUTH_PAUSED",
                     "tab_id": -1,
                     "kind": "mfa",
+                    "request_id": "req_3",
                 }
             ),
             encode(
@@ -634,6 +727,15 @@ def test_native_host_handles_auth_pause_and_resume_real_handler(tmp_path: Path) 
                     "type": "COPILOT_AUTH_RESUMED",
                     "tab_id": 42,
                     "kind": "mfa",
+                    "request_id": "req_4",
+                }
+            ),
+            encode(
+                {
+                    "type": "EXTENSION_EVIDENCE",
+                    "schema": "openadapt.extension-evidence/1",
+                    "evidence": sample_evidence,
+                    "request_id": "req_5",
                 }
             ),
         ]
@@ -649,15 +751,28 @@ def test_native_host_handles_auth_pause_and_resume_real_handler(tmp_path: Path) 
         f"native host failed: {proc.stderr.decode('utf-8', 'replace')}"
     )
     replies = decode_all(proc.stdout)
-    assert len(replies) == 3
+    assert len(replies) == 5
     assert replies[0]["ok"] is True
     assert replies[0]["type"] == "COPILOT_AUTH_PAUSED_ACK"
     assert replies[0]["paused"] is True
-    assert replies[1]["ok"] is False
-    assert replies[1]["error"] == "copilot_auth_pause_rejected"
-    assert replies[2]["ok"] is True
-    assert replies[2]["type"] == "COPILOT_AUTH_RESUMED_ACK"
-    assert replies[2]["resumed"] is True
+    assert replies[0]["request_id"] == "req_1"
+    # Evidence for paused tab 42 MUST be dropped and NOT written to disk
+    assert replies[1]["ok"] is True
+    assert replies[1]["paused"] is True
+    assert replies[1]["dropped"] is True
+    assert replies[1]["count"] == 0
+    assert replies[1]["request_id"] == "req_2"
+    assert replies[2]["ok"] is False
+    assert replies[2]["error"] == "copilot_auth_pause_rejected"
+    assert replies[2]["request_id"] == "req_3"
+    assert replies[3]["ok"] is True
+    assert replies[3]["type"] == "COPILOT_AUTH_RESUMED_ACK"
+    assert replies[3]["resumed"] is True
+    assert replies[3]["request_id"] == "req_4"
+    # After resume, evidence for tab 42 is accepted and persisted
+    assert replies[4]["ok"] is True
+    assert replies[4]["count"] == 1
+    assert replies[4]["request_id"] == "req_5"
 
     auth_state = json.loads(
         (tmp_path / "copilot_auth_state.json").read_text(encoding="utf-8")
@@ -665,6 +780,144 @@ def test_native_host_handles_auth_pause_and_resume_real_handler(tmp_path: Path) 
     assert auth_state["paused"] is False
     assert auth_state["tab_id"] == 42
     assert auth_state["kind"] == "mfa"
+    evidence_lines = (
+        (tmp_path / "extension_evidence.jsonl")
+        .read_text(encoding="utf-8")
+        .strip()
+        .splitlines()
+    )
+    # 1 header line + 1 resumed event (the paused event was dropped)
+    assert len(evidence_lines) == 2
+
+
+def test_mfa_secret_redaction_covers_verification_code_and_totp() -> None:
+    """Every MFA field pattern (verification_code, totp, mfa_code, 2fa, otp, pin) is redacted."""
+    content_path = str(EXT_DIR / "content.js")
+    redact_path = str(EXT_DIR / "network_redact.js")
+    script = f"""
+const fs = require('fs');
+const vm = require('vm');
+
+const contentCtx = vm.createContext({{
+  chrome: {{
+    runtime: {{
+      onMessage: {{ addListener: () => {{}} }},
+      sendMessage: (m, cb) => {{ if (cb) cb({{ ok: true }}); }},
+    }},
+  }},
+  window: {{ addEventListener: () => {{}}, removeEventListener: () => {{}} }},
+  document: {{
+    addEventListener: () => {{}},
+    removeEventListener: () => {{}},
+    readyState: 'complete',
+    querySelectorAll: () => [],
+  }},
+  location: {{ href: 'https://portal.example.com/verify', origin: 'https://portal.example.com' }},
+  URL,
+  Date,
+  Map,
+  Set,
+}});
+contentCtx.globalThis = contentCtx;
+vm.runInContext(fs.readFileSync({json.dumps(content_path)}, 'utf8'), contentCtx);
+
+const {{ targetEvidence, isSecretField, setRecording, setAuthPaused }} = contentCtx.__openadaptExtensionContent;
+
+const mfaFieldNames = ['verification_code', 'totp', 'mfa_code', '2fa', 'one-time-code', 'otp', 'pin'];
+const contentResults = {{}};
+for (const fieldName of mfaFieldNames) {{
+  const el = {{
+    nodeType: 1,
+    tagName: 'INPUT',
+    id: fieldName,
+    value: '839201',
+    getAttribute: (k) => (k === 'name' || k === 'id' ? fieldName : k === 'type' ? 'text' : null),
+    getRootNode: () => contentCtx.document,
+    parentElement: null,
+  }};
+  const ev = targetEvidence(el, 'input');
+  contentResults[fieldName] = {{
+    isSecret: isSecretField(el),
+    secret_field: ev.secret_field,
+    value: ev.value,
+  }};
+}}
+
+// Verify setAuthPaused detaches content listeners while recording is active
+setRecording(true);
+const attachedWhenRecording = contentCtx.__openadaptExtensionContent.attached.document;
+setAuthPaused(true);
+const attachedWhenPaused = contentCtx.__openadaptExtensionContent.attached.document;
+setAuthPaused(false);
+const attachedWhenResumed = contentCtx.__openadaptExtensionContent.attached.document;
+
+// Verify network_redact.js redacts verification_code, totp, mfa_code, 2fa, one-time-code, otp, pin
+const redactCtx = vm.createContext({{
+  URL,
+  URLSearchParams,
+  TextDecoder,
+  TextEncoder,
+  Uint8Array,
+  Date,
+  Set,
+  Map,
+  atob: (s) => Buffer.from(s, 'base64').toString('binary'),
+}});
+redactCtx.globalThis = redactCtx;
+vm.runInContext(fs.readFileSync({json.dumps(redact_path)}, 'utf8'), redactCtx);
+const {{ redactNetworkSave }} = redactCtx.OpenAdaptNetworkRedact;
+
+const bodyObj = {{
+  applicant: 'Jane Doe',
+  verification_code: '741852',
+  totp: '963258',
+  mfa_code: '159753',
+  '2fa': '456123',
+  'one-time-code': '321654',
+  otp: '654987',
+  pin: '4321',
+}};
+const rawBytes = new TextEncoder().encode(JSON.stringify(bodyObj));
+const redacted = redactNetworkSave({{
+  method: 'POST',
+  url: 'https://portal.example.com/api/verify',
+  type: 'xmlhttprequest',
+  tabId: 42,
+  frameId: 0,
+  timeStamp: Date.now(),
+  statusCode: 200,
+  requestHeaders: [{{ name: 'Content-Type', value: 'application/json' }}],
+  responseHeaders: [],
+  requestBody: {{ raw: [{{ bytes: rawBytes }}] }},
+}});
+
+console.log(JSON.stringify({{
+  contentResults,
+  attachedWhenRecording,
+  attachedWhenPaused,
+  attachedWhenResumed,
+  redactedBody: redacted && redacted.request_body,
+}}));
+"""
+    out = _run_node(script)
+    for field_name in (
+        "verification_code",
+        "totp",
+        "mfa_code",
+        "2fa",
+        "one-time-code",
+        "otp",
+        "pin",
+    ):
+        assert out["contentResults"][field_name]["isSecret"] is True, field_name
+        assert out["contentResults"][field_name]["secret_field"] is True, field_name
+        assert out["contentResults"][field_name]["value"] == "<secret>", field_name
+        assert out["redactedBody"][field_name] == "<secret>", field_name
+
+    assert out["redactedBody"]["applicant"] == "Jane Doe"
+    assert out["attachedWhenRecording"] == 3
+    assert out["attachedWhenPaused"] == 0
+    assert out["attachedWhenResumed"] == 3
 
 
 def test_sidepanel_wires_auth_pause_and_popup_return_controls() -> None:

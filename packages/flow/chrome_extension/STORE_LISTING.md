@@ -18,10 +18,10 @@ python3 scripts/package_chrome_extension.py --out dist/openadapt-copilot-cws.zip
 
 `OpenAdapt Co-Pilot`
 
-### Short Description (128 / 132 characters)
+### Short Description (129 / 132 characters)
 
 ```text
-Local browser co-pilot for OpenAdapt: side-panel run control, popup return, MFA pause, and verified receipts. Zero cloud egress.
+Local browser co-pilot for OpenAdapt: side-panel control, popup return, sign-in capture pause, and verified receipts. Local-only.
 ```
 
 ### Detailed Description
@@ -43,8 +43,10 @@ What it helps you do:
   estimator or calculator window, OpenAdapt tracks the child window and returns
   focus cleanly to your parent tab when you finish or click Return.
 - **Keep sign-in and 2FA completely yours:** Whenever a site asks for a
-  password, passkey, or one-time code, OpenAdapt pauses automatically and never
-  reads or stores credentials. Sign in normally with your password manager or
+  password, passkey, or one-time code on the active run tab, OpenAdapt Co-Pilot
+  pauses browser evidence and network capture on that tab, shows a sign-in
+  notice in the side panel, and signals the local host. It never reads or
+  stores credentials—sign in normally with your password manager or
   authenticator, then click Resume.
 - **Verify every finished run:** View a tamper-evident local receipt summarizing
   extracted outputs once a workflow completes.
@@ -77,14 +79,7 @@ Built for local-first privacy:
 
 Required to render the OpenAdapt Co-Pilot side panel alongside the user's active
 tab so the user can monitor workflow progress, resolve prefill conflicts, resume
-after manual sign-in, and inspect verified receipts.
-
-### `tabs`
-
-Required to track parent/child pop-up windows opened from an active workflow
-tab (such as external estimators opened during a quoting run), return focus to
-the parent tab when that child pop-up closes, clear per-tab auth pause state on
-navigation or tab close, and synchronize field highlights with open web tabs.
+capture after manual sign-in, and inspect verified receipts.
 
 ### `storage`
 
@@ -132,7 +127,7 @@ locally redacted workflow evidence to the local desktop runtime.
 
 ## 4. Privacy Policy (Zero Cloud Egress)
 
-**Hosted Privacy Policy URL:** `https://openadapt.ai/privacy`
+**Hosted Privacy Policy URL:** `https://openadapt.ai/privacy-policy`
 **Effective Date:** 2026-11-22
 
 1. **Local-Only Architecture:** OpenAdapt Co-Pilot operates exclusively on the
@@ -149,17 +144,20 @@ locally redacted workflow evidence to the local desktop runtime.
    no page values or network requests are captured.
 3. **Zero Credential Capture:** OpenAdapt Co-Pilot never reads, logs, stores,
    or transmits passwords, passkeys, security tokens, cookies, authorization
-   headers, or one-time MFA codes. Secret-looking fields, query parameters,
-   headers, and request keys are redacted locally before leaving the extension,
-   and response bodies are never captured. When a sign-in or multi-factor
-   authentication screen is detected on an active run's tab, the co-pilot sends
-   a structural pause signal (zero credentials) to the local runtime so the user
-   can authenticate directly in Chrome and resume once acknowledged.
+   headers, or one-time MFA codes (including `verification_code`, `totp`,
+   `mfa_code`, `2fa`, `one-time-code`, `otp`, and `pin` fields). Secret-looking
+   fields, query parameters, headers, and request keys are redacted locally
+   before leaving the extension, and response bodies are never captured. When a
+   sign-in or multi-factor authentication screen is detected on the active run's
+   tab, the extension pauses browser evidence and network capture on that tab,
+   displays a sign-in notice in the side panel, and sends a structural pause
+   signal (zero credentials) to the local host so the host also stops writing
+   evidence for that tab until the user signs in and clicks Resume.
 4. **No Data Sale or Advertising:** OpenAdapt does not collect, sell, rent, or
    transfer user data to third parties for advertising, analytics, or credit
    decisions.
-5. **Support & Privacy Contact:** `richard@openadapt.ai` (Hosted policy:
-   `https://openadapt.ai/privacy`).
+5. **Support & Privacy Contact:** `hello@openadapt.ai` (Hosted policy:
+   `https://openadapt.ai/privacy-policy`).
 
 ---
 

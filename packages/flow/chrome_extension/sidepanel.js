@@ -538,8 +538,8 @@
     const hostAcked = Boolean(authPause.hostAcked);
     badge.textContent = hostAcked
       ? authPause.kind === 'mfa'
-        ? 'MFA / Passkey Pause'
-        : 'Operator Sign-In Pause'
+        ? 'MFA Capture Paused'
+        : 'Sign-In Capture Paused'
       : 'Sign-In Notice (Local Only)';
     header.appendChild(badge);
     card.appendChild(header);
@@ -552,8 +552,8 @@
     const body = document.createElement('p');
     body.className = 'auth-pause-copy';
     body.textContent = hostAcked
-      ? 'The local OpenAdapt runtime acknowledged the pause and never reads or stores passwords or MFA codes. Complete sign-in in the active tab, then click Resume.'
-      : 'A sign-in or MFA screen was detected on this tab, but the local OpenAdapt runtime is not attached. Sign in normally in Chrome, then dismiss or reconnect the runtime.';
+      ? 'Browser evidence and network capture are paused on this tab, and the local OpenAdapt host recorded the sign-in pause. Complete sign-in in Chrome, then click Resume.'
+      : 'Browser evidence and network capture are paused locally on this tab (the local OpenAdapt host is not attached). Sign in normally in Chrome, then dismiss or reconnect.';
     card.appendChild(body);
 
     const actions = document.createElement('div');
@@ -672,7 +672,7 @@
 
     statusLineEl.textContent =
       currentAuthPause && currentAuthPause.paused
-        ? 'Paused on sign-in / MFA screen. Authenticate in Chrome to resume.'
+        ? 'Capture paused on sign-in / MFA screen. Sign in in Chrome, then click Resume.'
         : currentState
           ? String(currentState.status_line || '')
           : 'Waiting for an active local form session.';

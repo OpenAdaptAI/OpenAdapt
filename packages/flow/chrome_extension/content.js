@@ -7,10 +7,14 @@
 (function () {
   const SCHEMA = 'openadapt.extension-evidence/1';
   const REDACTED_VALUE = '<secret>';
-  const SECRET_NAME = /pass(word|wd|phrase)?\b|passwd|pwd|secret|private[_-]?key|^pin$|^otp$/i;
+  const MFA_ATTR_RE =
+    /(one[-_ ]?time[-_ ]?code|\botp\b|otp|mfa|2fa|totp|authenticator|passkey|webauthn|duo|verification[-_ ]?code)/i;
+  const SECRET_NAME =
+    /pass(word|wd|phrase)?\b|passwd|pwd|secret|private[_-]?key|^pin$|(^|[_-])pin($|[_-])|^otp$|(^|[_-])otp($|[_-])|one[-_ ]?time[-_ ]?code|mfa|2fa|totp|authenticator|passkey|webauthn|duo|verification[-_ ]?code/i;
   const SECRET_AUTOCOMPLETE = /(^|\s)(current-password|new-password|one-time-code)(\s|$)/;
 
   let recording = false;
+  let authPaused = false;
   let seq = 0;
   const attached = { document: 0, window: 0 };
 
@@ -20,10 +24,13 @@
     if (String(type).toLowerCase() === 'password') return true;
     if (el.getAttribute && el.getAttribute('data-openadapt-secret') != null) return true;
     if (!el.getAttribute) return false;
-    // Check name and id independently: a benign name must not hide a secret id.
-    for (const attr of ['name', 'id']) {
+    // Check name, id, and aria-label independently: a benign name must not hide
+    // a secret or MFA attribute, and every field MFA_ATTR_RE flags is secret.
+    for (const attr of ['name', 'id', 'aria-label']) {
       const candidate = el.getAttribute(attr);
-      if (candidate && SECRET_NAME.test(String(candidate))) return true;
+      if (candidate && (SECRET_NAME.test(String(candidate)) || MFA_ATTR_RE.test(String(candidate)))) {
+        return true;
+      }
     }
     const autocomplete = String(el.getAttribute('autocomplete') || '').toLowerCase();
     if (SECRET_AUTOCOMPLETE.test(autocomplete)) return true;
@@ -252,7 +259,7 @@
   }
 
   function emit(evidence) {
-    if (!recording || !evidence) return;
+    if (!recording || authPaused || !evidence) return;
     try {
       chrome.runtime.sendMessage({ type: 'EXTENSION_EVIDENCE', evidence });
     } catch (e) {
@@ -296,10 +303,19 @@
     attached.window = 0;
   }
 
+  function syncCaptureListeners() {
+    if (recording && !authPaused) attach();
+    else detach();
+  }
+
   function setRecording(active) {
     recording = Boolean(active);
-    if (recording) attach();
-    else detach();
+    syncCaptureListeners();
+  }
+
+  function setAuthPaused(paused) {
+    authPaused = Boolean(paused);
+    syncCaptureListeners();
   }
 
   // --- Side-panel Co-Pilot field highlights (cosmetic data-openadapt-* only) ---
@@ -462,7 +478,7 @@
 
   // --- Operator-owned sign-in / 1Password / MFA interstitial detection ------
   // Strictly structural: NEVER reads `.value` or `.defaultValue` of any input.
-  const MFA_ATTR_RE = /(one-time-code|otp|mfa|2fa|totp|authenticator|passkey|webauthn|duo|verification[-_ ]?code)/i;
+  // MFA_ATTR_RE is shared with isSecretField above so every detected MFA field is redacted.
   const AUTH_ACTION_RE = /(\/login|\/signin|\/sign-in|\/sso|\/oauth|\/mfa|\/2fa|\/verify)/i;
 
   function detectAuthInterstitial(doc) {
@@ -592,6 +608,10 @@
       setRecording(Boolean(msg.active));
       return;
     }
+    if (msg.type === 'SET_AUTH_PAUSED') {
+      setAuthPaused(Boolean(msg.paused));
+      return;
+    }
     if (msg.type === 'SET_RUN_ACTIVE') {
       setRunActive(Boolean(msg.active));
       return;
@@ -617,6 +637,7 @@
   // Outside an active run, do zero background DOM scanning or mutation observing.
   try {
     chrome.runtime.sendMessage({ type: 'CONTENT_READY' }, (resp) => {
+      if (resp && typeof resp.authPaused === 'boolean') setAuthPaused(resp.authPaused);
       if (resp && typeof resp.active === 'boolean') setRecording(resp.active);
       if (resp && resp.runActive) setRunActive(true);
     });
@@ -626,6 +647,7 @@
   if (typeof globalThis !== 'undefined') {
     globalThis.__openadaptExtensionContent = {
       setRecording,
+      setAuthPaused,
       setRunActive,
       applyCopilotHighlights,
       detectAuthInterstitial,
@@ -642,6 +664,9 @@
       },
       get recording() {
         return recording;
+      },
+      get authPaused() {
+        return authPaused;
       },
     };
   }

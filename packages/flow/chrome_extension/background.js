@@ -18,7 +18,8 @@ let recording = false;
 let port = null;
 let queued = [];
 let copilotPort = null;
-let copilotQueue = [];
+let copilotPending = new Map(); // requestId -> { resolve, timer, expectedType }
+let nextCopilotRequestId = 1;
 let copilotHaltCount = 0;
 let lastCopilotHighlights = [];
 let copilotRunActive = false;
@@ -32,12 +33,49 @@ const SESSION_POPUPS_KEY = 'openadapt_copilot_popups';
 const SESSION_AUTH_KEY = 'openadapt_copilot_auth_pause';
 const VALID_AUTH_KINDS = new Set(['mfa', 'signin', 'sso']);
 
+const EXPECTED_REPLY_TYPES = {
+  COPILOT_GET_STATE: 'COPILOT_STATE',
+  COPILOT_SUBMIT_DECISION: 'COPILOT_DECISION_ACK',
+  COPILOT_AUTH_PAUSED: 'COPILOT_AUTH_PAUSED_ACK',
+  COPILOT_AUTH_RESUMED: 'COPILOT_AUTH_RESUMED_ACK',
+};
+
 function hasActiveRun() {
   return Boolean(recording || copilotRunActive || Number.isInteger(activeRunTabId));
 }
 
+function isTabAuthPaused(tabId) {
+  return Boolean(Number.isInteger(tabId) && authPauseByTab.has(tabId));
+}
+
+function notifyTabAuthPaused(tabId, paused) {
+  if (!Number.isInteger(tabId)) return;
+  try {
+    chrome.tabs.sendMessage(
+      tabId,
+      { type: 'SET_AUTH_PAUSED', paused: Boolean(paused) },
+      () => {
+        void (chrome.runtime && chrome.runtime.lastError);
+      }
+    );
+  } catch (e) {}
+}
+
 function setActiveRunTab(tabId) {
-  activeRunTabId = Number.isInteger(tabId) ? tabId : null;
+  const prevTabId = activeRunTabId;
+  const nextTabId = Number.isInteger(tabId) ? tabId : null;
+  activeRunTabId = nextTabId;
+  if (Number.isInteger(prevTabId) && prevTabId !== nextTabId) {
+    try {
+      chrome.tabs.sendMessage(
+        prevTabId,
+        { type: 'SET_RUN_ACTIVE', active: false },
+        () => {
+          void (chrome.runtime && chrome.runtime.lastError);
+        }
+      );
+    } catch (e) {}
+  }
   if (Number.isInteger(activeRunTabId)) {
     try {
       chrome.tabs.sendMessage(
@@ -49,6 +87,41 @@ function setActiveRunTab(tabId) {
       );
     } catch (e) {}
   }
+}
+
+function resolveAndSetActiveRunTab(explicitTabId) {
+  if (Number.isInteger(explicitTabId)) {
+    setActiveRunTab(explicitTabId);
+    return Promise.resolve(explicitTabId);
+  }
+  if (Number.isInteger(activeRunTabId)) {
+    // Re-assert SET_RUN_ACTIVE in case the tab was already open before run start.
+    setActiveRunTab(activeRunTabId);
+    return Promise.resolve(activeRunTabId);
+  }
+  return new Promise((resolve) => {
+    try {
+      chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+        const match = (tabs || []).find(isHighlightableTab);
+        if (match && Number.isInteger(match.id)) {
+          setActiveRunTab(match.id);
+          resolve(match.id);
+          return;
+        }
+        chrome.tabs.query({ active: true }, (fallbackTabs) => {
+          const fallback = (fallbackTabs || []).find(isHighlightableTab);
+          if (fallback && Number.isInteger(fallback.id)) {
+            setActiveRunTab(fallback.id);
+            resolve(fallback.id);
+            return;
+          }
+          resolve(null);
+        });
+      });
+    } catch (e) {
+      resolve(null);
+    }
+  });
 }
 
 function serializeAuthPauses() {
@@ -132,10 +205,10 @@ async function focusParentTab(entry) {
 }
 
 async function trackOpenedChildTab(tab) {
-  // Never track popups or steal focus outside an active OpenAdapt run.
-  if (!hasActiveRun()) return null;
+  // Never track popups or steal focus outside an active OpenAdapt run tab.
+  if (!hasActiveRun() || !Number.isInteger(activeRunTabId)) return null;
   if (!tab || !Number.isInteger(tab.id) || !Number.isInteger(tab.openerTabId)) return null;
-  if (Number.isInteger(activeRunTabId) && tab.openerTabId !== activeRunTabId) {
+  if (tab.openerTabId !== activeRunTabId) {
     return null;
   }
   let parentWindowId = tab.windowId;
@@ -173,9 +246,18 @@ async function trackOpenedChildTab(tab) {
 
 function clearAuthStateForTab(tabId) {
   if (!Number.isInteger(tabId) || !authPauseByTab.has(tabId)) return false;
+  const entry = authPauseByTab.get(tabId);
   authPauseByTab.delete(tabId);
   persistSession(SESSION_AUTH_KEY, serializeAuthPauses());
+  notifyTabAuthPaused(tabId, false);
   setBadge(recording);
+  if (entry && entry.hostAcked) {
+    void sendCopilotNative({
+      type: 'COPILOT_AUTH_RESUMED',
+      tab_id: entry.tabId,
+      kind: entry.kind,
+    });
+  }
   return true;
 }
 
@@ -223,9 +305,8 @@ async function recordAuthInterstitial(msg, sender) {
   if (Number.isInteger(sender.frameId) && sender.frameId !== 0) {
     return { ok: true, ignored: true, reason: 'subframe_ignored' };
   }
-  // Do not pause or alert on unrelated browsing tabs outside an active co-pilot run.
-  const copilotActive = Boolean(copilotRunActive || Number.isInteger(activeRunTabId));
-  if (!copilotActive || (Number.isInteger(activeRunTabId) && tabId !== activeRunTabId)) {
+  // Do not pause or alert on unrelated browsing tabs outside an active run tab.
+  if (!Number.isInteger(activeRunTabId) || tabId !== activeRunTabId) {
     return { ok: true, ignored: true, reason: 'no_active_run_on_tab' };
   }
 
@@ -236,7 +317,13 @@ async function recordAuthInterstitial(msg, sender) {
     .slice(0, 8);
   const origin = sender && typeof sender.origin === 'string' ? sender.origin : '';
 
-  // Notify local native host so the runtime acknowledges the pause (no self-vouching).
+  // Pause browser evidence & network capture immediately on this tab.
+  notifyTabAuthPaused(tabId, true);
+  for (const [reqId, pending] of Array.from(pendingSaves.entries())) {
+    if (pending && pending.tabId === tabId) pendingSaves.delete(reqId);
+  }
+
+  // Notify local native host so it also stops writing evidence for this tab.
   let hostAcked = false;
   try {
     const reply = await sendCopilotNative({
@@ -246,7 +333,9 @@ async function recordAuthInterstitial(msg, sender) {
       signals,
       origin,
     });
-    hostAcked = Boolean(reply && reply.ok === true);
+    hostAcked = Boolean(
+      reply && reply.ok === true && reply.type === 'COPILOT_AUTH_PAUSED_ACK'
+    );
   } catch (e) {
     hostAcked = false;
   }
@@ -260,7 +349,7 @@ async function recordAuthInterstitial(msg, sender) {
     signals,
     detectedAt: Date.now(),
     hostAcked,
-    mode: hostAcked ? 'run_paused' : 'local_notice',
+    mode: hostAcked ? 'capture_paused_host_acked' : 'capture_paused_local',
   };
   authPauseByTab.set(tabId, entry);
   persistSession(SESSION_AUTH_KEY, serializeAuthPauses());
@@ -273,8 +362,8 @@ async function resumeAfterAuth(tabId) {
   if (!entry) {
     return { ok: true, resumed: false };
   }
-  // If the native host acknowledged a real pause, require an explicit ok:true ack
-  // from the native host before clearing the pause state (no self-vouching).
+  // If the native host acknowledged the pause, require an explicit matched
+  // COPILOT_AUTH_RESUMED_ACK (ok:true) before clearing the pause state.
   if (entry.hostAcked) {
     let reply = null;
     try {
@@ -286,7 +375,7 @@ async function resumeAfterAuth(tabId) {
     } catch (e) {
       reply = { ok: false, error: 'native_host_error' };
     }
-    if (!reply || reply.ok !== true) {
+    if (!reply || reply.ok !== true || reply.type !== 'COPILOT_AUTH_RESUMED_ACK') {
       return {
         ok: false,
         resumed: false,
@@ -296,6 +385,7 @@ async function resumeAfterAuth(tabId) {
   }
   authPauseByTab.delete(entry.tabId);
   persistSession(SESSION_AUTH_KEY, serializeAuthPauses());
+  notifyTabAuthPaused(entry.tabId, false);
   setBadge(recording);
   return {
     ok: true,
@@ -392,7 +482,8 @@ function ensurePort() {
 }
 
 function failCopilotQueue(errorMessage) {
-  const pending = copilotQueue.splice(0, copilotQueue.length);
+  const pending = Array.from(copilotPending.values());
+  copilotPending.clear();
   for (const entry of pending) {
     if (entry.timer && cancelTimer) cancelTimer(entry.timer);
     entry.resolve({ ok: false, error: errorMessage });
@@ -407,10 +498,29 @@ function ensureCopilotPort() {
   try {
     const p = chrome.runtime.connectNative(NATIVE_HOST);
     p.onMessage.addListener((reply) => {
-      const next = copilotQueue.shift();
-      if (next) {
-        if (next.timer && cancelTimer) cancelTimer(next.timer);
-        next.resolve(reply);
+      if (!reply || typeof reply !== 'object') return;
+      if (typeof reply.request_id === 'string' && reply.request_id) {
+        const matched = copilotPending.get(reply.request_id);
+        if (!matched) {
+          // Late or unsolicited reply for a timed-out/unknown request_id: drop it.
+          return;
+        }
+        copilotPending.delete(reply.request_id);
+        if (matched.timer && cancelTimer) cancelTimer(matched.timer);
+        matched.resolve(reply);
+        return;
+      }
+      // Fallback for legacy/mock hosts that omit request_id: only match by exact
+      // expected reply type so a late COPILOT_STATE can never resolve resumeAfterAuth.
+      if (typeof reply.type === 'string' && reply.type) {
+        for (const [reqId, entry] of copilotPending.entries()) {
+          if (entry.expectedType === reply.type) {
+            copilotPending.delete(reqId);
+            if (entry.timer && cancelTimer) cancelTimer(entry.timer);
+            entry.resolve(reply);
+            return;
+          }
+        }
       }
     });
     p.onDisconnect.addListener(() => {
@@ -438,20 +548,24 @@ function sendCopilotNative(payload) {
       resolve({ ok: false, error: 'native_host_unavailable' });
       return;
     }
-    const entry = { resolve, timer: null };
+    const requestId = `req_${nextCopilotRequestId++}`;
+    const expectedType =
+      payload && typeof payload.type === 'string'
+        ? EXPECTED_REPLY_TYPES[payload.type] || null
+        : null;
+    const entry = { resolve, timer: null, expectedType };
     if (scheduleTimer) {
       entry.timer = scheduleTimer(() => {
-        const idx = copilotQueue.indexOf(entry);
-        if (idx !== -1) copilotQueue.splice(idx, 1);
-        resolve({ ok: false, error: 'native_host_timeout' });
+        if (copilotPending.delete(requestId)) {
+          resolve({ ok: false, error: 'native_host_timeout' });
+        }
       }, 5000);
     }
-    copilotQueue.push(entry);
+    copilotPending.set(requestId, entry);
     try {
-      p.postMessage(payload);
+      p.postMessage(Object.assign({}, payload, { request_id: requestId }));
     } catch (e) {
-      const idx = copilotQueue.indexOf(entry);
-      if (idx !== -1) copilotQueue.splice(idx, 1);
+      copilotPending.delete(requestId);
       if (entry.timer && cancelTimer) cancelTimer(entry.timer);
       copilotPort = null;
       resolve({
@@ -603,6 +717,14 @@ function setRecording(active) {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || typeof msg !== 'object') return;
   if (msg.type === 'SET_RECORDING') {
+    const isSidePanel =
+      sender &&
+      !sender.tab &&
+      sender.url === chrome.runtime.getURL('sidepanel.html');
+    if (!isSidePanel) {
+      sendResponse({ ok: false, error: 'recording_requires_sidepanel' });
+      return true;
+    }
     setRecording(Boolean(msg.active));
     sendResponse({ ok: true, active: recording });
     return true;
@@ -630,11 +752,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
     const senderTabId = sender && sender.tab && Number.isInteger(sender.tab.id) ? sender.tab.id : null;
     const runActiveForTab =
-      hasActiveRun() && (!Number.isInteger(activeRunTabId) || senderTabId === activeRunTabId);
-    sendResponse({ active: recording, runActive: runActiveForTab });
+      hasActiveRun() && Number.isInteger(activeRunTabId) && senderTabId === activeRunTabId;
+    sendResponse({
+      active: recording,
+      runActive: runActiveForTab,
+      authPaused: isTabAuthPaused(senderTabId),
+    });
     return true;
   }
   if (msg.type === 'EXTENSION_EVIDENCE') {
+    const senderTabId = sender && sender.tab && Number.isInteger(sender.tab.id) ? sender.tab.id : null;
+    if (isTabAuthPaused(senderTabId)) {
+      sendResponse({ ok: true, active: recording, paused: true });
+      return true;
+    }
     if (recording && msg.evidence) deliver(stampSender(msg.evidence, sender));
     sendResponse({ ok: true, active: recording });
     return true;
@@ -710,6 +841,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const reply = await sendCopilotNative({ type: 'COPILOT_GET_STATE' });
       if (!reply || !reply.ok) {
         copilotRunActive = false;
+        if (!recording && Number.isInteger(activeRunTabId)) {
+          setActiveRunTab(null);
+        }
         sendResponse({
           ok: false,
           error: (reply && reply.error) || 'copilot_sync_failed',
@@ -723,6 +857,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       copilotRunActive = Boolean(
         state && state.run_id && state.outcome !== 'verified_done'
       );
+      if (copilotRunActive) {
+        const explicitTabId = Number.isInteger(msg.tabId) ? msg.tabId : undefined;
+        await resolveAndSetActiveRunTab(explicitTabId);
+      } else if (!recording && Number.isInteger(activeRunTabId)) {
+        setActiveRunTab(null);
+      }
       copilotHaltCount =
         state && Array.isArray(state.halts) ? state.halts.length : 0;
       setBadge(recording);
@@ -774,7 +914,9 @@ function isTrackedSave(details) {
   if (!recording || !details) return false;
   if (!SAVE_METHODS.has(String(details.method || '').toUpperCase())) return false;
   // tabId -1: the extension's own or browser-internal traffic.
-  return Number.isInteger(details.tabId) && details.tabId >= 0;
+  if (!Number.isInteger(details.tabId) || details.tabId < 0) return false;
+  if (isTabAuthPaused(details.tabId)) return false;
+  return true;
 }
 
 function onSaveRequest(details) {
@@ -801,7 +943,7 @@ function onSaveCompleted(details) {
   if (!pending) return;
   pendingSaves.delete(details.requestId);
   const redactor = networkRedactor();
-  if (!recording || !redactor) return;
+  if (!recording || !redactor || isTabAuthPaused(pending.tabId)) return;
   const record = redactor.redactNetworkSave(
     Object.assign({}, pending, {
       statusCode: details.statusCode,

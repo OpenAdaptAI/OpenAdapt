@@ -75,14 +75,30 @@ def write_message(message: dict[str, Any]) -> None:
     sys.stdout.buffer.flush()
 
 
+def _extract_request_id(msg: Mapping[str, Any]) -> str | None:
+    req_id = msg.get("request_id")
+    if req_id is None:
+        return None
+    if not isinstance(req_id, str) or not req_id or len(req_id) > 64:
+        raise ValueError("request_id must be a short non-empty string")
+    return req_id
+
+
+def _with_request_id(reply: dict[str, Any], request_id: str | None) -> dict[str, Any]:
+    if request_id is not None:
+        reply["request_id"] = request_id
+    return reply
+
+
 def _handle_copilot_get_state(
     msg: Mapping[str, Any], bridge: CopilotSessionBridge
 ) -> dict[str, Any]:
-    extra = set(msg.keys()) - {"type", "schema"}
+    extra = set(msg.keys()) - {"type", "schema", "request_id"}
     if extra:
         raise ValueError(f"unexpected fields in COPILOT_GET_STATE: {sorted(extra)}")
     if msg.get("schema") not in (None, COPILOT_STATE_SCHEMA):
         raise ValueError(f"schema must be {COPILOT_STATE_SCHEMA}")
+    _extract_request_id(msg)
     state = bridge.read_state()
     return {
         "ok": True,
@@ -94,13 +110,14 @@ def _handle_copilot_get_state(
 def _handle_copilot_submit_decision(
     msg: Mapping[str, Any], bridge: CopilotSessionBridge
 ) -> dict[str, Any]:
-    extra = set(msg.keys()) - {"type", "decision", "binding", "schema"}
+    extra = set(msg.keys()) - {"type", "decision", "binding", "schema", "request_id"}
     if extra:
         raise ValueError(
             f"unexpected fields in COPILOT_SUBMIT_DECISION: {sorted(extra)}"
         )
     if msg.get("schema") not in (None, COPILOT_STATE_SCHEMA):
         raise ValueError(f"schema must be {COPILOT_STATE_SCHEMA}")
+    _extract_request_id(msg)
     raw_decision = msg.get("decision")
     if not isinstance(raw_decision, Mapping):
         raise ValueError("decision object required")
@@ -131,6 +148,37 @@ def _write_auth_state(recording: Path, payload: dict[str, Any]) -> None:
     tmp.replace(target)
 
 
+def _load_paused_tabs(recording: Path) -> set[int]:
+    target = recording / COPILOT_AUTH_STATE_FILE
+    if not target.is_file():
+        return set()
+    try:
+        data = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+    if (
+        isinstance(data, Mapping)
+        and data.get("paused") is True
+        and isinstance(data.get("tab_id"), int)
+        and not isinstance(data.get("tab_id"), bool)
+        and data["tab_id"] >= 0
+    ):
+        return {int(data["tab_id"])}
+    return set()
+
+
+def _evidence_tab_id(evidence: Mapping[str, Any]) -> int | None:
+    frame = evidence.get("frame")
+    if isinstance(frame, Mapping):
+        tid = frame.get("tab_id")
+        if isinstance(tid, int) and not isinstance(tid, bool) and tid >= 0:
+            return tid
+    tid = evidence.get("tab_id")
+    if isinstance(tid, int) and not isinstance(tid, bool) and tid >= 0:
+        return tid
+    return None
+
+
 def _validate_tab_id(value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError("tab_id must be a non-negative integer")
@@ -140,11 +188,20 @@ def _validate_tab_id(value: Any) -> int:
 def _handle_copilot_auth_paused(
     msg: Mapping[str, Any], recording: Path
 ) -> dict[str, Any]:
-    extra = set(msg.keys()) - {"type", "tab_id", "kind", "signals", "origin", "schema"}
+    extra = set(msg.keys()) - {
+        "type",
+        "tab_id",
+        "kind",
+        "signals",
+        "origin",
+        "schema",
+        "request_id",
+    }
     if extra:
         raise ValueError(f"unexpected fields in COPILOT_AUTH_PAUSED: {sorted(extra)}")
     if msg.get("schema") not in (None, COPILOT_STATE_SCHEMA):
         raise ValueError(f"schema must be {COPILOT_STATE_SCHEMA}")
+    _extract_request_id(msg)
     tab_id = _validate_tab_id(msg.get("tab_id"))
     kind = msg.get("kind")
     if kind not in _VALID_AUTH_KINDS:
@@ -180,11 +237,12 @@ def _handle_copilot_auth_paused(
 def _handle_copilot_auth_resumed(
     msg: Mapping[str, Any], recording: Path
 ) -> dict[str, Any]:
-    extra = set(msg.keys()) - {"type", "tab_id", "kind", "schema"}
+    extra = set(msg.keys()) - {"type", "tab_id", "kind", "schema", "request_id"}
     if extra:
         raise ValueError(f"unexpected fields in COPILOT_AUTH_RESUMED: {sorted(extra)}")
     if msg.get("schema") not in (None, COPILOT_STATE_SCHEMA):
         raise ValueError(f"schema must be {COPILOT_STATE_SCHEMA}")
+    _extract_request_id(msg)
     tab_id = _validate_tab_id(msg.get("tab_id"))
     kind = msg.get("kind")
     if kind not in _VALID_AUTH_KINDS:
@@ -223,6 +281,7 @@ def main(argv: list[str] | None = None) -> int:
     recording = Path(args.recording)
     bridge = CopilotSessionBridge(recording)
     buf = ExtensionEvidenceBuffer()
+    paused_tabs = _load_paused_tabs(recording)
     # Reload any existing lines so reconnects append.
     existing = recording / "extension_evidence.jsonl"
     if existing.is_file():
@@ -243,55 +302,106 @@ def main(argv: list[str] | None = None) -> int:
             write_message({"ok": False, "error": "native message must be an object"})
             continue
 
+        try:
+            req_id = _extract_request_id(msg)
+        except ValueError:
+            write_message({"ok": False, "error": "invalid_request_id"})
+            continue
+
         msg_type = msg.get("type")
         if msg_type == "COPILOT_GET_STATE":
             try:
-                write_message(_handle_copilot_get_state(msg, bridge))
+                write_message(
+                    _with_request_id(_handle_copilot_get_state(msg, bridge), req_id)
+                )
             except (ValidationError, ValueError, OSError):
-                write_message({"ok": False, "error": "copilot_message_rejected"})
+                write_message(
+                    _with_request_id(
+                        {"ok": False, "error": "copilot_message_rejected"}, req_id
+                    )
+                )
             continue
 
         if msg_type == "COPILOT_SUBMIT_DECISION":
             try:
-                write_message(_handle_copilot_submit_decision(msg, bridge))
+                write_message(
+                    _with_request_id(
+                        _handle_copilot_submit_decision(msg, bridge), req_id
+                    )
+                )
             except (ValidationError, ValueError, OSError):
-                write_message({"ok": False, "error": "copilot_message_rejected"})
+                write_message(
+                    _with_request_id(
+                        {"ok": False, "error": "copilot_message_rejected"}, req_id
+                    )
+                )
             continue
 
         if msg_type == "COPILOT_AUTH_PAUSED":
             try:
-                write_message(_handle_copilot_auth_paused(msg, recording))
+                reply = _handle_copilot_auth_paused(msg, recording)
+                paused_tabs.add(int(reply["tab_id"]))
+                write_message(_with_request_id(reply, req_id))
             except (ValidationError, ValueError, OSError):
-                write_message({"ok": False, "error": "copilot_auth_pause_rejected"})
+                write_message(
+                    _with_request_id(
+                        {"ok": False, "error": "copilot_auth_pause_rejected"}, req_id
+                    )
+                )
             continue
 
         if msg_type == "COPILOT_AUTH_RESUMED":
             try:
-                write_message(_handle_copilot_auth_resumed(msg, recording))
+                reply = _handle_copilot_auth_resumed(msg, recording)
+                paused_tabs.discard(int(reply["tab_id"]))
+                write_message(_with_request_id(reply, req_id))
             except (ValidationError, ValueError, OSError):
-                write_message({"ok": False, "error": "copilot_auth_resume_rejected"})
+                write_message(
+                    _with_request_id(
+                        {"ok": False, "error": "copilot_auth_resume_rejected"}, req_id
+                    )
+                )
             continue
 
         if msg_type == "EXTENSION_EVIDENCE":
             try:
                 evidence = validate_native_message(msg)
             except ValueError as exc:
-                write_message({"ok": False, "error": str(exc)})
+                write_message(
+                    _with_request_id({"ok": False, "error": str(exc)}, req_id)
+                )
+                continue
+            ev_tab_id = _evidence_tab_id(evidence)
+            if ev_tab_id is not None and ev_tab_id in paused_tabs:
+                write_message(
+                    _with_request_id(
+                        {
+                            "ok": True,
+                            "paused": True,
+                            "dropped": True,
+                            "count": buf.count,
+                        },
+                        req_id,
+                    )
+                )
                 continue
             buf.append(evidence)
             buf.write(recording)
-            write_message({"ok": True, "count": buf.count})
+            write_message(_with_request_id({"ok": True, "count": buf.count}, req_id))
             continue
 
         write_message(
-            {
-                "ok": False,
-                "error": (
-                    "native message type must be EXTENSION_EVIDENCE, "
-                    "COPILOT_GET_STATE, COPILOT_SUBMIT_DECISION, "
-                    "COPILOT_AUTH_PAUSED, or COPILOT_AUTH_RESUMED"
-                ),
-            }
+            _with_request_id(
+                {
+                    "ok": False,
+                    "error": (
+                        "native message type must be EXTENSION_EVIDENCE, "
+                        "COPILOT_GET_STATE, COPILOT_SUBMIT_DECISION, "
+                        "COPILOT_AUTH_PAUSED, or COPILOT_AUTH_RESUMED"
+                    ),
+                },
+                req_id,
+            )
         )
     return 0
 
