@@ -585,7 +585,9 @@ def _read_registry(subkey: str) -> Optional[dict]:  # pragma: no cover - Windows
     """The ``Policy`` value under ``HKLM\\<subkey>``. None only when the key
     does not exist; access denied or a key without the value is an error, so
     a policy the account can't read never falls back to solo mode."""
-    import winreg
+    import importlib
+
+    winreg: Any = importlib.import_module("winreg")
 
     try:
         handle = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, subkey)
@@ -599,8 +601,10 @@ def _read_registry(subkey: str) -> Optional[dict]:  # pragma: no cover - Windows
 def _read_trusted_file(path: Path) -> tuple[bytes, os.stat_result]:
     """Read ``path`` once and return its bytes with the status of the file
     actually read (not of whatever the path names a moment later)."""
-    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
-    fd = os.open(path, flags)
+    from openadapt_flow.private_file import open_binary
+
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    fd = open_binary(path, flags)
     try:
         info = os.fstat(fd)
         chunks = []
