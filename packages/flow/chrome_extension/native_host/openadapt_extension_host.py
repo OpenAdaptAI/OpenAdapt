@@ -2,13 +2,17 @@
 """Native messaging host for the optional OpenAdapt Chrome extension and Co-Pilot.
 
 Chrome talks to this process over stdin/stdout (length-prefixed JSON).
-Supports three strictly validated local message envelopes against the directory
+Supports five strictly validated local message envelopes against the directory
 named in ``OPENADAPT_EXTENSION_RECORDING`` (or ``--recording``):
 
 - ``EXTENSION_EVIDENCE`` -> redacted append to ``extension_evidence.jsonl``
 - ``COPILOT_GET_STATE`` -> read validated ``CopilotViewState`` from ``copilot_state.json``
 - ``COPILOT_SUBMIT_DECISION`` -> validate the bound run/halt envelope and
   queue one idempotent operator decision for the live runtime to claim.
+- ``COPILOT_AUTH_PAUSED`` -> record structural sign-in/MFA pause state in
+  ``copilot_auth_state.json`` (zero credentials) and acknowledge the pause.
+- ``COPILOT_AUTH_RESUMED`` -> clear structural sign-in/MFA pause state in
+  ``copilot_auth_state.json`` and acknowledge resumption.
 
 Zero remote calls. Unknown or malformed envelopes fail closed.
 """
@@ -18,8 +22,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import struct
 import sys
+import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -112,6 +118,95 @@ def _handle_copilot_submit_decision(
     }
 
 
+_VALID_AUTH_KINDS = frozenset({"mfa", "signin", "sso"})
+_SAFE_SIGNAL_RE = re.compile(r"^[a-z0-9_]{1,32}$")
+COPILOT_AUTH_STATE_FILE = "copilot_auth_state.json"
+
+
+def _write_auth_state(recording: Path, payload: dict[str, Any]) -> None:
+    recording.mkdir(parents=True, exist_ok=True)
+    target = recording / COPILOT_AUTH_STATE_FILE
+    tmp = recording / f".{COPILOT_AUTH_STATE_FILE}.tmp"
+    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    tmp.replace(target)
+
+
+def _validate_tab_id(value: Any) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError("tab_id must be a non-negative integer")
+    return value
+
+
+def _handle_copilot_auth_paused(
+    msg: Mapping[str, Any], recording: Path
+) -> dict[str, Any]:
+    extra = set(msg.keys()) - {"type", "tab_id", "kind", "signals", "origin", "schema"}
+    if extra:
+        raise ValueError(f"unexpected fields in COPILOT_AUTH_PAUSED: {sorted(extra)}")
+    if msg.get("schema") not in (None, COPILOT_STATE_SCHEMA):
+        raise ValueError(f"schema must be {COPILOT_STATE_SCHEMA}")
+    tab_id = _validate_tab_id(msg.get("tab_id"))
+    kind = msg.get("kind")
+    if kind not in _VALID_AUTH_KINDS:
+        raise ValueError("kind must be one of mfa, signin, sso")
+    raw_signals = msg.get("signals", [])
+    if not isinstance(raw_signals, list):
+        raise ValueError("signals must be a list")
+    signals = [
+        s for s in raw_signals if isinstance(s, str) and _SAFE_SIGNAL_RE.match(s)
+    ][:8]
+    origin = msg.get("origin", "")
+    if not isinstance(origin, str) or len(origin) > 256:
+        raise ValueError("origin must be a short string")
+    payload = {
+        "schema": COPILOT_STATE_SCHEMA,
+        "paused": True,
+        "tab_id": tab_id,
+        "kind": kind,
+        "signals": signals,
+        "origin": origin,
+        "updated_at_ms": int(time.time() * 1000),
+    }
+    _write_auth_state(recording, payload)
+    return {
+        "ok": True,
+        "type": "COPILOT_AUTH_PAUSED_ACK",
+        "paused": True,
+        "tab_id": tab_id,
+        "kind": kind,
+    }
+
+
+def _handle_copilot_auth_resumed(
+    msg: Mapping[str, Any], recording: Path
+) -> dict[str, Any]:
+    extra = set(msg.keys()) - {"type", "tab_id", "kind", "schema"}
+    if extra:
+        raise ValueError(f"unexpected fields in COPILOT_AUTH_RESUMED: {sorted(extra)}")
+    if msg.get("schema") not in (None, COPILOT_STATE_SCHEMA):
+        raise ValueError(f"schema must be {COPILOT_STATE_SCHEMA}")
+    tab_id = _validate_tab_id(msg.get("tab_id"))
+    kind = msg.get("kind")
+    if kind not in _VALID_AUTH_KINDS:
+        raise ValueError("kind must be one of mfa, signin, sso")
+    payload = {
+        "schema": COPILOT_STATE_SCHEMA,
+        "paused": False,
+        "tab_id": tab_id,
+        "kind": kind,
+        "updated_at_ms": int(time.time() * 1000),
+    }
+    _write_auth_state(recording, payload)
+    return {
+        "ok": True,
+        "type": "COPILOT_AUTH_RESUMED_ACK",
+        "paused": False,
+        "resumed": True,
+        "tab_id": tab_id,
+        "kind": kind,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument(
@@ -163,6 +258,20 @@ def main(argv: list[str] | None = None) -> int:
                 write_message({"ok": False, "error": "copilot_message_rejected"})
             continue
 
+        if msg_type == "COPILOT_AUTH_PAUSED":
+            try:
+                write_message(_handle_copilot_auth_paused(msg, recording))
+            except (ValidationError, ValueError, OSError):
+                write_message({"ok": False, "error": "copilot_auth_pause_rejected"})
+            continue
+
+        if msg_type == "COPILOT_AUTH_RESUMED":
+            try:
+                write_message(_handle_copilot_auth_resumed(msg, recording))
+            except (ValidationError, ValueError, OSError):
+                write_message({"ok": False, "error": "copilot_auth_resume_rejected"})
+            continue
+
         if msg_type == "EXTENSION_EVIDENCE":
             try:
                 evidence = validate_native_message(msg)
@@ -179,7 +288,8 @@ def main(argv: list[str] | None = None) -> int:
                 "ok": False,
                 "error": (
                     "native message type must be EXTENSION_EVIDENCE, "
-                    "COPILOT_GET_STATE, or COPILOT_SUBMIT_DECISION"
+                    "COPILOT_GET_STATE, COPILOT_SUBMIT_DECISION, "
+                    "COPILOT_AUTH_PAUSED, or COPILOT_AUTH_RESUMED"
                 ),
             }
         )

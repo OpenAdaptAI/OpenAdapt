@@ -5,9 +5,7 @@
   "minimum_chrome_version": "116",
   "description": "Local browser co-pilot for OpenAdapt: side-panel run control, popup return, MFA pause, and verified receipts. Zero cloud egress.",
   "permissions": [
-    "activeTab",
     "tabs",
-    "scripting",
     "storage",
     "nativeMessaging",
     "webRequest",

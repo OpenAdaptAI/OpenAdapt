@@ -21,14 +21,50 @@ let copilotPort = null;
 let copilotQueue = [];
 let copilotHaltCount = 0;
 let lastCopilotHighlights = [];
+let copilotRunActive = false;
+let activeRunTabId = null;
 // Ephemeral MV3 service worker state is mirrored into chrome.storage.session
-// whenever available so popup tracking & auth pauses survive worker sleep.
+// whenever available so popup tracking & per-tab auth pauses survive worker sleep.
 let trackedPopups = new Map(); // childTabId -> { childTabId, childWindowId, parentTabId, parentWindowId, focused, openedAt }
-let authPauseState = null; // { paused: true, kind, tabId, origin, signals, detectedAt }
+let authPauseByTab = new Map(); // tabId -> { paused: true, kind, tabId, origin, signals, detectedAt, hostAcked, mode }
 
 const SESSION_POPUPS_KEY = 'openadapt_copilot_popups';
 const SESSION_AUTH_KEY = 'openadapt_copilot_auth_pause';
 const VALID_AUTH_KINDS = new Set(['mfa', 'signin', 'sso']);
+
+function hasActiveRun() {
+  return Boolean(recording || copilotRunActive || Number.isInteger(activeRunTabId));
+}
+
+function setActiveRunTab(tabId) {
+  activeRunTabId = Number.isInteger(tabId) ? tabId : null;
+  if (Number.isInteger(activeRunTabId)) {
+    try {
+      chrome.tabs.sendMessage(
+        activeRunTabId,
+        { type: 'SET_RUN_ACTIVE', active: true },
+        () => {
+          void (chrome.runtime && chrome.runtime.lastError);
+        }
+      );
+    } catch (e) {}
+  }
+}
+
+function serializeAuthPauses() {
+  return Array.from(authPauseByTab.values());
+}
+
+function getActiveAuthPause(tabId) {
+  if (Number.isInteger(tabId) && authPauseByTab.has(tabId)) {
+    return authPauseByTab.get(tabId);
+  }
+  if (Number.isInteger(activeRunTabId) && authPauseByTab.has(activeRunTabId)) {
+    return authPauseByTab.get(activeRunTabId);
+  }
+  const list = serializeAuthPauses();
+  return list.length ? list[list.length - 1] : null;
+}
 
 function persistSession(key, value) {
   try {
@@ -52,8 +88,12 @@ function hydrateSessionState() {
                 .map((e) => [e.childTabId, e])
             );
           }
-          if (data && data[SESSION_AUTH_KEY] && data[SESSION_AUTH_KEY].paused) {
-            authPauseState = data[SESSION_AUTH_KEY];
+          if (data && Array.isArray(data[SESSION_AUTH_KEY])) {
+            authPauseByTab = new Map(
+              data[SESSION_AUTH_KEY]
+                .filter((e) => e && e.paused && Number.isInteger(e.tabId))
+                .map((e) => [e.tabId, e])
+            );
             setBadge(recording);
           }
         }).catch(() => {});
@@ -92,7 +132,12 @@ async function focusParentTab(entry) {
 }
 
 async function trackOpenedChildTab(tab) {
+  // Never track popups or steal focus outside an active OpenAdapt run.
+  if (!hasActiveRun()) return null;
   if (!tab || !Number.isInteger(tab.id) || !Number.isInteger(tab.openerTabId)) return null;
+  if (Number.isInteger(activeRunTabId) && tab.openerTabId !== activeRunTabId) {
+    return null;
+  }
   let parentWindowId = tab.windowId;
   try {
     if (chrome && chrome.tabs && typeof chrome.tabs.get === 'function') {
@@ -126,7 +171,17 @@ async function trackOpenedChildTab(tab) {
   return entry;
 }
 
+function clearAuthStateForTab(tabId) {
+  if (!Number.isInteger(tabId) || !authPauseByTab.has(tabId)) return false;
+  authPauseByTab.delete(tabId);
+  persistSession(SESSION_AUTH_KEY, serializeAuthPauses());
+  setBadge(recording);
+  return true;
+}
+
 async function handleClosedChildTab(tabId) {
+  clearAuthStateForTab(tabId);
+  if (activeRunTabId === tabId) activeRunTabId = null;
   if (!trackedPopups.has(tabId)) return false;
   const entry = trackedPopups.get(tabId);
   trackedPopups.delete(tabId);
@@ -159,43 +214,95 @@ function handleWindowFocusChanged(windowId) {
   if (changed) persistSession(SESSION_POPUPS_KEY, serializePopups());
 }
 
-function recordAuthInterstitial(msg, sender) {
+async function recordAuthInterstitial(msg, sender) {
+  const tabId = sender && sender.tab && Number.isInteger(sender.tab.id) ? sender.tab.id : null;
+  if (!Number.isInteger(tabId)) {
+    return { ok: false, error: 'auth_sender_missing_tab' };
+  }
+  // Ignore subframe/ad-iframe detections: only top-level frame auth walls pause a run.
+  if (Number.isInteger(sender.frameId) && sender.frameId !== 0) {
+    return { ok: true, ignored: true, reason: 'subframe_ignored' };
+  }
+  // Do not pause or alert on unrelated browsing tabs outside an active co-pilot run.
+  const copilotActive = Boolean(copilotRunActive || Number.isInteger(activeRunTabId));
+  if (!copilotActive || (Number.isInteger(activeRunTabId) && tabId !== activeRunTabId)) {
+    return { ok: true, ignored: true, reason: 'no_active_run_on_tab' };
+  }
+
   const kind = VALID_AUTH_KINDS.has(msg && msg.kind) ? msg.kind : 'signin';
   const rawSignals = Array.isArray(msg && msg.signals) ? msg.signals : [];
   const signals = rawSignals
     .filter((s) => typeof s === 'string' && /^[a-z0-9_]{1,32}$/.test(s))
     .slice(0, 8);
-  const tabId = sender && sender.tab && Number.isInteger(sender.tab.id) ? sender.tab.id : null;
   const origin = sender && typeof sender.origin === 'string' ? sender.origin : '';
-  // Zero credential storage: strictly structural metadata only.
-  authPauseState = {
+
+  // Notify local native host so the runtime acknowledges the pause (no self-vouching).
+  let hostAcked = false;
+  try {
+    const reply = await sendCopilotNative({
+      type: 'COPILOT_AUTH_PAUSED',
+      tab_id: tabId,
+      kind,
+      signals,
+      origin,
+    });
+    hostAcked = Boolean(reply && reply.ok === true);
+  } catch (e) {
+    hostAcked = false;
+  }
+
+  // Zero credential storage: strictly structural metadata only, keyed by tabId.
+  const entry = {
     paused: true,
     kind,
     tabId,
     origin,
     signals,
     detectedAt: Date.now(),
+    hostAcked,
+    mode: hostAcked ? 'run_paused' : 'local_notice',
   };
-  persistSession(SESSION_AUTH_KEY, authPauseState);
+  authPauseByTab.set(tabId, entry);
+  persistSession(SESSION_AUTH_KEY, serializeAuthPauses());
   setBadge(recording);
-  return authPauseState;
+  return entry;
 }
 
-async function resumeAfterAuth() {
-  const prev = authPauseState;
-  authPauseState = null;
-  persistSession(SESSION_AUTH_KEY, null);
-  setBadge(recording);
-  if (prev && Number.isInteger(prev.tabId)) {
-    try {
-      await sendCopilotNative({
-        type: 'COPILOT_AUTH_RESUMED',
-        tab_id: prev.tabId,
-        kind: prev.kind,
-      });
-    } catch (e) {}
+async function resumeAfterAuth(tabId) {
+  const entry = getActiveAuthPause(tabId);
+  if (!entry) {
+    return { ok: true, resumed: false };
   }
-  return { ok: true, resumed: Boolean(prev) };
+  // If the native host acknowledged a real pause, require an explicit ok:true ack
+  // from the native host before clearing the pause state (no self-vouching).
+  if (entry.hostAcked) {
+    let reply = null;
+    try {
+      reply = await sendCopilotNative({
+        type: 'COPILOT_AUTH_RESUMED',
+        tab_id: entry.tabId,
+        kind: entry.kind,
+      });
+    } catch (e) {
+      reply = { ok: false, error: 'native_host_error' };
+    }
+    if (!reply || reply.ok !== true) {
+      return {
+        ok: false,
+        resumed: false,
+        error: (reply && reply.error) || 'native_host_rejected',
+      };
+    }
+  }
+  authPauseByTab.delete(entry.tabId);
+  persistSession(SESSION_AUTH_KEY, serializeAuthPauses());
+  setBadge(recording);
+  return {
+    ok: true,
+    resumed: true,
+    tabId: entry.tabId,
+    hostAcked: Boolean(entry.hostAcked),
+  };
 }
 
 if (typeof chrome !== 'undefined') {
@@ -204,6 +311,13 @@ if (typeof chrome !== 'undefined') {
     if (chrome.tabs && chrome.tabs.onCreated && typeof chrome.tabs.onCreated.addListener === 'function') {
       chrome.tabs.onCreated.addListener((tab) => {
         void trackOpenedChildTab(tab);
+      });
+    }
+    if (chrome.tabs && chrome.tabs.onUpdated && typeof chrome.tabs.onUpdated.addListener === 'function') {
+      chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+        if (changeInfo && (changeInfo.url || changeInfo.status === 'loading')) {
+          clearAuthStateForTab(tabId);
+        }
       });
     }
     if (chrome.tabs && chrome.tabs.onRemoved && typeof chrome.tabs.onRemoved.addListener === 'function') {
@@ -248,7 +362,7 @@ function setBadge(active) {
     text = 'REC';
     color = '#b00020';
     title = 'OpenAdapt Co-Pilot (recording)';
-  } else if (authPauseState && authPauseState.paused) {
+  } else if (getActiveAuthPause()) {
     text = 'AUTH';
     color = '#7c3aed';
     title = 'OpenAdapt Co-Pilot (sign-in / MFA pause)';
@@ -514,7 +628,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         );
       } catch (e) {}
     }
-    sendResponse({ active: recording });
+    const senderTabId = sender && sender.tab && Number.isInteger(sender.tab.id) ? sender.tab.id : null;
+    const runActiveForTab =
+      hasActiveRun() && (!Number.isInteger(activeRunTabId) || senderTabId === activeRunTabId);
+    sendResponse({ active: recording, runActive: runActiveForTab });
     return true;
   }
   if (msg.type === 'EXTENSION_EVIDENCE') {
@@ -527,8 +644,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'AUTH_INTERSTITIAL_DETECTED') {
-    const pause = recordAuthInterstitial(msg, sender);
-    sendResponse({ ok: true, authPause: pause });
+    (async () => {
+      const pause = await recordAuthInterstitial(msg, sender);
+      if (pause && pause.ok === false) {
+        sendResponse(pause);
+        return;
+      }
+      if (pause && pause.ignored) {
+        sendResponse(pause);
+        return;
+      }
+      sendResponse({ ok: true, authPause: pause });
+    })();
     return true;
   }
   const sidePanelOnlyTypes = new Set([
@@ -562,12 +689,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'COPILOT_GET_AUTH_STATE') {
-    sendResponse({ ok: true, authPause: authPauseState });
+    const targetTabId = Number.isInteger(msg.tabId) ? msg.tabId : undefined;
+    sendResponse({
+      ok: true,
+      authPause: getActiveAuthPause(targetTabId),
+      authPauses: serializeAuthPauses(),
+    });
     return true;
   }
   if (msg.type === 'COPILOT_AUTH_RESUME') {
     (async () => {
-      const res = await resumeAfterAuth();
+      const targetTabId = Number.isInteger(msg.tabId) ? msg.tabId : undefined;
+      const res = await resumeAfterAuth(targetTabId);
       sendResponse(res);
     })();
     return true;
@@ -576,16 +709,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (async () => {
       const reply = await sendCopilotNative({ type: 'COPILOT_GET_STATE' });
       if (!reply || !reply.ok) {
+        copilotRunActive = false;
         sendResponse({
           ok: false,
           error: (reply && reply.error) || 'copilot_sync_failed',
           state: null,
           popupState: getActivePopupSummary(),
-          authPause: authPauseState,
+          authPause: getActiveAuthPause(),
         });
         return;
       }
       const state = reply.state || null;
+      copilotRunActive = Boolean(
+        state && state.run_id && state.outcome !== 'verified_done'
+      );
       copilotHaltCount =
         state && Array.isArray(state.halts) ? state.halts.length : 0;
       setBadge(recording);
@@ -596,7 +733,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         type: 'COPILOT_STATE',
         state,
         popupState: getActivePopupSummary(),
-        authPause: authPauseState,
+        authPause: getActiveAuthPause(),
       });
     })();
     return true;
@@ -699,6 +836,7 @@ const networkListening = installNetworkListeners();
 if (typeof globalThis !== 'undefined') {
   globalThis.__openadaptExtensionBackground = {
     setRecording,
+    setActiveRunTab,
     deliver,
     stampSender,
     trackOpenedChildTab,
@@ -706,10 +844,15 @@ if (typeof globalThis !== 'undefined') {
     handleClosedChildWindow,
     handleWindowFocusChanged,
     recordAuthInterstitial,
+    clearAuthStateForTab,
     resumeAfterAuth,
     getActivePopupSummary,
+    getActiveAuthPause,
     get recording() {
       return recording;
+    },
+    get activeRunTabId() {
+      return activeRunTabId;
     },
     get queued() {
       return queued.slice();
@@ -724,22 +867,27 @@ if (typeof globalThis !== 'undefined') {
       return copilotHaltCount;
     },
     get authPauseState() {
-      return authPauseState;
+      return getActiveAuthPause();
+    },
+    get authPauses() {
+      return serializeAuthPauses();
     },
     get trackedPopups() {
       return serializePopups();
     },
     _reset() {
       recording = false;
+      copilotRunActive = false;
+      activeRunTabId = null;
       queued = [];
       pendingSaves.clear();
       port = null;
       copilotHaltCount = 0;
       lastCopilotHighlights = [];
       trackedPopups = new Map();
-      authPauseState = null;
+      authPauseByTab = new Map();
       persistSession(SESSION_POPUPS_KEY, []);
-      persistSession(SESSION_AUTH_KEY, null);
+      persistSession(SESSION_AUTH_KEY, []);
       if (copilotPort) {
         try {
           copilotPort.disconnect();

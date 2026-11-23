@@ -79,51 +79,48 @@ Required to render the OpenAdapt Co-Pilot side panel alongside the user's active
 tab so the user can monitor workflow progress, resolve prefill conflicts, resume
 after manual sign-in, and inspect verified receipts.
 
-### `activeTab`
-
-Required to inspect and highlight form fields on the tab the user is actively
-working on when the user invokes the co-pilot.
-
 ### `tabs`
 
-Required to track parent/child pop-up windows (such as external estimators opened
-from a quoting workflow), return focus to the parent tab when a child pop-up
-closes, and synchronize field highlights with open web tabs.
-
-### `scripting`
-
-Required to highlight fields requiring operator review and verify form element
-states inside the active workflow tab.
+Required to track parent/child pop-up windows opened from an active workflow
+tab (such as external estimators opened during a quoting run), return focus to
+the parent tab when that child pop-up closes, clear per-tab auth pause state on
+navigation or tab close, and synchronize field highlights with open web tabs.
 
 ### `storage`
 
 Required to persist transient co-pilot session state (such as active child
-pop-up tab mappings and sign-in pause state) across extension restarts without
-storing any credentials or sending data off-device.
+pop-up tab mappings and per-tab sign-in pause state) across extension restarts
+without storing any credentials or sending data off-device.
 
 ### `nativeMessaging`
 
-Required to exchange workflow state, operator conflict decisions, and redacted
-local workflow evidence directly with the user's locally installed OpenAdapt
-desktop runtime (`com.openadapt.extension`). No network or cloud endpoints are
-used.
+Required to exchange workflow state, operator conflict decisions, auth
+pause/resume acknowledgements, and locally redacted workflow evidence directly
+with the user's locally installed OpenAdapt desktop runtime
+(`com.openadapt.extension`). No network or cloud endpoints are used.
 
 ### `webRequest`
 
-Required in read-only observation mode (non-blocking) to record redacted
-metadata about form-submission network responses during an active user-initiated
-recording session so the local runtime can verify whether a portal save
-succeeded. Request bodies, headers, cookies, tokens, and query secrets are
-stripped locally before leaving the extension.
+Required in read-only observation mode (non-blocking) only while the user has
+explicitly started a local recording session. It observes state-changing form
+submission requests (`POST`/`PUT`/`PATCH`/`DELETE`) so the local runtime on the
+same computer can verify whether a portal save succeeded. Non-secret request
+fields (form-data and JSON payloads) and response status codes are sent **only
+to the user's local OpenAdapt runtime on the same computer**. Secret-looking
+keys, passwords, authorization headers, cookies, tokens, and query secrets are
+redacted locally before leaving the extension; response bodies are never
+captured, and nothing is sent to remote or cloud servers.
 
 ### Host Permissions (`<all_urls>`)
 
 Users run structured form workflows across a wide variety of self-hosted,
 internal, and third-party web portals (such as carrier quoting portals, EHRs,
-and enterprise web apps) whose domains cannot be enumerated in advance. Host
-access is used solely to render field highlights, detect sign-in/MFA walls so
-the co-pilot can pause safely, and capture user-initiated workflow evidence for
-the local desktop runtime.
+and enterprise web apps) whose domains cannot be enumerated in advance. Outside
+an active user-initiated recording or co-pilot run, the extension performs no
+background page scanning, popup tracking, or network capture. Host access is
+used solely during an active run or user-invoked side panel session to render
+field highlights, detect sign-in/MFA walls on the active run's tab, and relay
+locally redacted workflow evidence to the local desktop runtime.
 
 ### Remote Code Certification
 
@@ -135,26 +132,34 @@ the local desktop runtime.
 
 ## 4. Privacy Policy (Zero Cloud Egress)
 
+**Hosted Privacy Policy URL:** `https://openadapt.ai/privacy`
 **Effective Date:** 2026-11-22
 
 1. **Local-Only Architecture:** OpenAdapt Co-Pilot operates exclusively on the
    user's local machine. It communicates only with the user's locally installed
-   OpenAdapt desktop application via Chrome Native Messaging. It does **not**
-   transmit browsing history, form inputs, screenshots, or telemetry to
-   OpenAdapt servers or any third-party cloud service.
-2. **Zero Credential Capture:** OpenAdapt Co-Pilot never reads, logs, stores,
-   or transmits passwords, passkeys, security tokens, cookies, or one-time MFA
-   codes. When a sign-in or multi-factor authentication screen is detected, the
-   co-pilot automatically pauses so the user can authenticate directly in their
-   own Chrome profile.
-3. **Redacted Local Evidence:** During an explicit user-started recording
-   session, network response metadata is redacted locally (stripping query
-   strings, authorization headers, cookies, and response bodies) before being
-   passed to the local OpenAdapt runtime.
+   OpenAdapt desktop application via Chrome Native Messaging
+   (`com.openadapt.extension`). It does **not** transmit browsing history, form
+   values, screenshots, or telemetry to OpenAdapt servers or any third-party
+   cloud service.
+2. **What Is Sent Locally During Active Recording:** Only when the user
+   explicitly starts a local recording session, non-secret form values and
+   non-secret request payloads (such as form-data or JSON fields) from the
+   recorded workflow are sent **exclusively to the user's local OpenAdapt
+   runtime on the same computer**. Outside an active recording or co-pilot run,
+   no page values or network requests are captured.
+3. **Zero Credential Capture:** OpenAdapt Co-Pilot never reads, logs, stores,
+   or transmits passwords, passkeys, security tokens, cookies, authorization
+   headers, or one-time MFA codes. Secret-looking fields, query parameters,
+   headers, and request keys are redacted locally before leaving the extension,
+   and response bodies are never captured. When a sign-in or multi-factor
+   authentication screen is detected on an active run's tab, the co-pilot sends
+   a structural pause signal (zero credentials) to the local runtime so the user
+   can authenticate directly in Chrome and resume once acknowledged.
 4. **No Data Sale or Advertising:** OpenAdapt does not collect, sell, rent, or
    transfer user data to third parties for advertising, analytics, or credit
    decisions.
-5. **Contact:** For privacy questions, contact `privacy@openadapt.ai`.
+5. **Support & Privacy Contact:** `richard@openadapt.ai` (Hosted policy:
+   `https://openadapt.ai/privacy`).
 
 ---
 

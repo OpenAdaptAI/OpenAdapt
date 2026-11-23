@@ -27,7 +27,9 @@ PACKAGER_SCRIPT = REPO_ROOT / "scripts" / "package_chrome_extension.py"
 
 
 def _load_packager():
-    spec = importlib.util.spec_from_file_location("package_chrome_extension", PACKAGER_SCRIPT)
+    spec = importlib.util.spec_from_file_location(
+        "package_chrome_extension", PACKAGER_SCRIPT
+    )
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -45,7 +47,9 @@ def _run_node(script: str) -> dict:
         timeout=15,
         check=False,
     )
-    assert proc.returncode == 0, f"node failed:\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
+    assert proc.returncode == 0, (
+        f"node failed:\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
+    )
     return json.loads(proc.stdout.strip())
 
 
@@ -62,6 +66,9 @@ def test_manifest_and_extension_pass_cws_validation() -> None:
     assert "sidePanel" in manifest["permissions"]
     assert "storage" in manifest["permissions"]
     assert "tabs" in manifest["permissions"]
+    # Least privilege: unused scripting and redundant activeTab must not be declared.
+    assert "scripting" not in manifest["permissions"]
+    assert "activeTab" not in manifest["permissions"]
 
 
 def test_store_listing_covers_every_permission_and_zero_egress() -> None:
@@ -71,17 +78,28 @@ def test_store_listing_covers_every_permission_and_zero_egress() -> None:
 
     manifest = json.loads((EXT_DIR / "manifest.json").read_text(encoding="utf-8"))
     for perm in manifest["permissions"]:
-        assert f"`{perm}`" in text, f"Permission {perm!r} missing justification in STORE_LISTING.md"
+        assert f"`{perm}`" in text, (
+            f"Permission {perm!r} missing justification in STORE_LISTING.md"
+        )
     for host in manifest.get("host_permissions", []):
-        assert f"`{host}`" in text, f"Host permission {host!r} missing in STORE_LISTING.md"
+        assert f"`{host}`" in text, (
+            f"Host permission {host!r} missing in STORE_LISTING.md"
+        )
 
     assert manifest["description"] in text
     assert "Single Purpose Statement" in text
     assert "Privacy Policy" in text
     assert "Zero Credential Capture" in text
+    assert "https://openadapt.ai/privacy" in text
+    assert "richard@openadapt.ai" in text
+    assert "non-secret form values" in text
+    assert "### `scripting`" not in text
+    assert "### `activeTab`" not in text
 
     # Ensure user-facing Store Listing Copy section avoids implementation jargon
-    section1 = text.split("## 1. Store Listing Copy")[1].split("## 2. Single Purpose")[0]
+    section1 = text.split("## 1. Store Listing Copy")[1].split("## 2. Single Purpose")[
+        0
+    ]
     for jargon in ("Manifest V3", "service worker", "content script", "chrome.storage"):
         assert jargon.lower() not in section1.lower(), (
             f"Implementation jargon {jargon!r} found in user-facing store listing copy"
@@ -204,7 +222,24 @@ async function sendMsg(msg, senderUrl) {{
 }}
 
 (async () => {{
-  // 1. Child popup tab opens from parent quoting tab 10
+  // 0. Outside an active run, child tabs must NOT be tracked or steal focus
+  listeners.tabsCreated[0](tabsById[25]);
+  await new Promise((r) => setTimeout(r, 20));
+  const outsideRunPopup = await sendMsg(
+    {{ type: 'COPILOT_GET_POPUP_STATE' }},
+    'chrome-extension://testext/sidepanel.html'
+  );
+
+  // Activate run on tab 10; child tab opened from unrelated tab 99 must be ignored
+  ctx.__openadaptExtensionBackground.setActiveRunTab(10);
+  listeners.tabsCreated[0]({{ id: 30, windowId: 3, openerTabId: 99, url: 'https://other.example.com' }});
+  await new Promise((r) => setTimeout(r, 20));
+  const unrelatedOpenerPopup = await sendMsg(
+    {{ type: 'COPILOT_GET_POPUP_STATE' }},
+    'chrome-extension://testext/sidepanel.html'
+  );
+
+  // 1. Child popup tab opens from active run's parent quoting tab 10
   listeners.tabsCreated[0](tabsById[25]);
   await new Promise((r) => setTimeout(r, 20));
 
@@ -233,6 +268,8 @@ async function sendMsg(msg, senderUrl) {{
   );
 
   console.log(JSON.stringify({{
+    outsideRunPopup: outsideRunPopup.popup,
+    unrelatedOpenerPopup: unrelatedOpenerPopup.popup,
     rejected,
     popupBeforeClose: stateResp.popup,
     manualReturnOk: manualReturn.ok,
@@ -244,6 +281,8 @@ async function sendMsg(msg, senderUrl) {{
 }})();
 """
     out = _run_node(script)
+    assert out["outsideRunPopup"] is None
+    assert out["unrelatedOpenerPopup"] is None
     assert out["rejected"]["ok"] is False
     assert out["rejected"]["error"] == "copilot_requires_sidepanel"
     assert out["popupBeforeClose"]["childTabId"] == 25
@@ -343,10 +382,44 @@ const normalDoc = {{
 }};
 const normalResult = detectAuthInterstitial(normalDoc);
 
-// Part B: Feed detection into background.js and verify pause + badge + resume
+// Part B: Feed detection into background.js with native host ack + fail-closed resume + per-tab clearing
 const bgListeners = [];
+const tabUpdatedListeners = [];
+const tabRemovedListeners = [];
 const badgeHistory = [];
 const sessionStore = {{}};
+const nativeMessages = [];
+let rejectNextResume = true;
+
+function makeMockNativePort() {{
+  const msgListeners = [];
+  const disconnectListeners = [];
+  return {{
+    onMessage: {{ addListener: (fn) => msgListeners.push(fn) }},
+    onDisconnect: {{ addListener: (fn) => disconnectListeners.push(fn) }},
+    postMessage: (payload) => {{
+      nativeMessages.push(payload);
+      let reply = {{ ok: true }};
+      if (payload.type === 'COPILOT_AUTH_PAUSED') {{
+        reply = {{ ok: true, type: 'COPILOT_AUTH_PAUSED_ACK', paused: true, tab_id: payload.tab_id }};
+      }} else if (payload.type === 'COPILOT_AUTH_RESUMED') {{
+        if (rejectNextResume) {{
+          rejectNextResume = false;
+          reply = {{ ok: false, error: 'copilot_auth_resume_rejected' }};
+        }} else {{
+          reply = {{ ok: true, type: 'COPILOT_AUTH_RESUMED_ACK', paused: false, resumed: true }};
+        }}
+      }} else if (payload.type === 'COPILOT_GET_STATE') {{
+        reply = {{ ok: true, state: {{ run_id: 'run_1', outcome: 'halted_needs_human', halts: [] }} }};
+      }}
+      setTimeout(() => {{
+        for (const fn of msgListeners) fn(reply);
+      }}, 5);
+    }},
+    disconnect: () => {{}},
+  }};
+}}
+
 const bgCtx = vm.createContext({{
   chrome: {{
     runtime: {{
@@ -354,7 +427,7 @@ const bgCtx = vm.createContext({{
       getURL: (p) => 'chrome-extension://testext/' + p,
       onMessage: {{ addListener: (fn) => bgListeners.push(fn) }},
       onInstalled: {{ addListener: () => {{}} }},
-      connectNative: () => {{ throw new Error('offline'); }},
+      connectNative: () => makeMockNativePort(),
     }},
     action: {{
       onClicked: {{ addListener: () => {{}} }},
@@ -372,7 +445,8 @@ const bgCtx = vm.createContext({{
     }},
     tabs: {{
       onCreated: {{ addListener: () => {{}} }},
-      onRemoved: {{ addListener: () => {{}} }},
+      onUpdated: {{ addListener: (fn) => tabUpdatedListeners.push(fn) }},
+      onRemoved: {{ addListener: (fn) => tabRemovedListeners.push(fn) }},
       query: (q, cb) => cb([]),
       sendMessage: (id, m, cb) => {{ if (cb) cb(); }},
     }},
@@ -404,31 +478,66 @@ function sendBg(msg, sender) {{
 }}
 
 (async () => {{
+  // 1. Missing tab sender is rejected; subframe & idle-tab detections are ignored
+  const missingTabResp = await sendBg(
+    {{ type: 'AUTH_INTERSTITIAL_DETECTED', kind: 'mfa', signals: ['mfa_input'] }},
+    {{ origin: 'https://portal.example.com' }}
+  );
+  const idleResp = await sendBg(
+    {{ type: 'AUTH_INTERSTITIAL_DETECTED', kind: 'mfa', signals: ['mfa_input'] }},
+    {{ tab: {{ id: 42 }}, frameId: 0, origin: 'https://portal.example.com' }}
+  );
+
+  // Activate run on tab 42
+  bgCtx.__openadaptExtensionBackground.setActiveRunTab(42);
+  const subframeResp = await sendBg(
+    {{ type: 'AUTH_INTERSTITIAL_DETECTED', kind: 'mfa', signals: ['mfa_input'] }},
+    {{ tab: {{ id: 42 }}, frameId: 2, origin: 'https://ad.example.com' }}
+  );
+
+  // 2. Top-frame detection on active run tab 42 sends COPILOT_AUTH_PAUSED and records hostAcked=true
   const detectResp = await sendBg(
     {{
       type: 'AUTH_INTERSTITIAL_DETECTED',
       kind: mfaResult.kind,
       signals: mfaResult.signals,
-      origin: 'https://portal.example.com',
-      pathname: '/mfa',
     }},
-    {{ tab: {{ id: 42 }}, origin: 'https://portal.example.com' }}
+    {{ tab: {{ id: 42 }}, frameId: 0, origin: 'https://portal.example.com' }}
   );
 
-  // Sync from side panel even when native host is offline still exposes authPause
   const syncResp = await sendBg(
     {{ type: 'COPILOT_SYNC_STATE' }},
     {{ url: 'chrome-extension://testext/sidepanel.html' }}
   );
 
-  // Operator resumes after completing sign-in / 1Password / MFA
-  const resumeResp = await sendBg(
-    {{ type: 'COPILOT_AUTH_RESUME' }},
+  // 3. Host rejects first resume -> fail closed, authPause MUST remain active
+  const rejectedResume = await sendBg(
+    {{ type: 'COPILOT_AUTH_RESUME', tabId: 42 }},
+    {{ url: 'chrome-extension://testext/sidepanel.html' }}
+  );
+  const afterRejectedResume = await sendBg(
+    {{ type: 'COPILOT_GET_AUTH_STATE', tabId: 42 }},
     {{ url: 'chrome-extension://testext/sidepanel.html' }}
   );
 
-  const afterResume = await sendBg(
-    {{ type: 'COPILOT_GET_AUTH_STATE' }},
+  // 4. Host acks second resume -> clears authPause for tab 42
+  const acceptedResume = await sendBg(
+    {{ type: 'COPILOT_AUTH_RESUME', tabId: 42 }},
+    {{ url: 'chrome-extension://testext/sidepanel.html' }}
+  );
+  const afterAcceptedResume = await sendBg(
+    {{ type: 'COPILOT_GET_AUTH_STATE', tabId: 42 }},
+    {{ url: 'chrome-extension://testext/sidepanel.html' }}
+  );
+
+  // 5. Per-tab auth state clears automatically on navigation (tabs.onUpdated)
+  await sendBg(
+    {{ type: 'AUTH_INTERSTITIAL_DETECTED', kind: 'signin', signals: ['password_input'] }},
+    {{ tab: {{ id: 42 }}, frameId: 0, origin: 'https://portal.example.com' }}
+  );
+  tabUpdatedListeners[0](42, {{ status: 'loading', url: 'https://portal.example.com/dashboard' }});
+  const afterNavClear = await sendBg(
+    {{ type: 'COPILOT_GET_AUTH_STATE', tabId: 42 }},
     {{ url: 'chrome-extension://testext/sidepanel.html' }}
   );
 
@@ -437,11 +546,18 @@ function sendBg(msg, sender) {{
     mfaResult,
     pwdResult,
     normalResult,
+    missingTabResp,
+    idleResp,
+    subframeResp,
     detectAuthPause: detectResp.authPause,
     syncAuthPause: syncResp.authPause,
     badgeHistory,
-    resumeOk: resumeResp.ok,
-    afterResume: afterResume.authPause,
+    rejectedResume,
+    stillPausedAfterReject: Boolean(afterRejectedResume.authPause && afterRejectedResume.authPause.paused),
+    acceptedResume,
+    afterAcceptedResume: afterAcceptedResume.authPause,
+    afterNavClear: afterNavClear.authPause,
+    nativeTypes: nativeMessages.map((m) => m.type),
   }}));
 }})();
 """
@@ -453,12 +569,102 @@ function sendBg(msg, sender) {{
     assert out["pwdResult"]["kind"] == "signin"
     assert out["normalResult"]["detected"] is False
 
+    assert out["missingTabResp"]["ok"] is False
+    assert out["idleResp"]["ignored"] is True
+    assert out["subframeResp"]["ignored"] is True
     assert out["detectAuthPause"]["paused"] is True
-    assert out["detectAuthPause"]["kind"] == "mfa"
+    assert out["detectAuthPause"]["hostAcked"] is True
+    assert out["detectAuthPause"]["mode"] == "run_paused"
     assert out["syncAuthPause"]["paused"] is True
     assert "AUTH" in out["badgeHistory"]
-    assert out["resumeOk"] is True
-    assert out["afterResume"] is None
+    # Fail-closed resume: host rejection must NOT clear pause state
+    assert out["rejectedResume"]["ok"] is False
+    assert out["stillPausedAfterReject"] is True
+    # Host-acked resume clears pause state cleanly
+    assert out["acceptedResume"]["ok"] is True
+    assert out["acceptedResume"]["resumed"] is True
+    assert out["afterAcceptedResume"] is None
+    assert out["afterNavClear"] is None
+    assert "COPILOT_AUTH_PAUSED" in out["nativeTypes"]
+    assert "COPILOT_AUTH_RESUMED" in out["nativeTypes"]
+
+
+def test_native_host_handles_auth_pause_and_resume_real_handler(tmp_path: Path) -> None:
+    """Exercise the real native_host/openadapt_extension_host.py subprocess over stdio."""
+    import struct
+    import sys
+
+    host_script = EXT_DIR / "native_host" / "openadapt_extension_host.py"
+    assert host_script.is_file()
+
+    def encode(obj: dict) -> bytes:
+        raw = json.dumps(obj).encode("utf-8")
+        return struct.pack("<I", len(raw)) + raw
+
+    def decode_all(buf: bytes) -> list[dict]:
+        out_msgs: list[dict] = []
+        pos = 0
+        while pos + 4 <= len(buf):
+            (length,) = struct.unpack("<I", buf[pos : pos + 4])
+            pos += 4
+            out_msgs.append(json.loads(buf[pos : pos + length].decode("utf-8")))
+            pos += length
+        return out_msgs
+
+    stdin_bytes = b"".join(
+        [
+            encode(
+                {
+                    "type": "COPILOT_AUTH_PAUSED",
+                    "tab_id": 42,
+                    "kind": "mfa",
+                    "signals": ["mfa_input"],
+                    "origin": "https://portal.example.com",
+                }
+            ),
+            encode(
+                {
+                    "type": "COPILOT_AUTH_PAUSED",
+                    "tab_id": -1,
+                    "kind": "mfa",
+                }
+            ),
+            encode(
+                {
+                    "type": "COPILOT_AUTH_RESUMED",
+                    "tab_id": 42,
+                    "kind": "mfa",
+                }
+            ),
+        ]
+    )
+    proc = subprocess.run(
+        [sys.executable, str(host_script), "--recording", str(tmp_path)],
+        input=stdin_bytes,
+        capture_output=True,
+        timeout=15,
+        check=False,
+    )
+    assert proc.returncode == 0, (
+        f"native host failed: {proc.stderr.decode('utf-8', 'replace')}"
+    )
+    replies = decode_all(proc.stdout)
+    assert len(replies) == 3
+    assert replies[0]["ok"] is True
+    assert replies[0]["type"] == "COPILOT_AUTH_PAUSED_ACK"
+    assert replies[0]["paused"] is True
+    assert replies[1]["ok"] is False
+    assert replies[1]["error"] == "copilot_auth_pause_rejected"
+    assert replies[2]["ok"] is True
+    assert replies[2]["type"] == "COPILOT_AUTH_RESUMED_ACK"
+    assert replies[2]["resumed"] is True
+
+    auth_state = json.loads(
+        (tmp_path / "copilot_auth_state.json").read_text(encoding="utf-8")
+    )
+    assert auth_state["paused"] is False
+    assert auth_state["tab_id"] == 42
+    assert auth_state["kind"] == "mfa"
 
 
 def test_sidepanel_wires_auth_pause_and_popup_return_controls() -> None:

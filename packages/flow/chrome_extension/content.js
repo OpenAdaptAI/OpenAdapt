@@ -537,10 +537,63 @@
     return check;
   }
 
+  let runActive = false;
+  let authObserver = null;
+  let authObserverTimer = null;
+
+  function stopAuthObserver() {
+    if (authObserverTimer) {
+      clearTimeout(authObserverTimer);
+      authObserverTimer = null;
+    }
+    if (authObserver) {
+      try {
+        authObserver.disconnect();
+      } catch (e) {}
+      authObserver = null;
+    }
+  }
+
+  function startAuthObserver() {
+    if (isIframe() || authObserver) return;
+    if (typeof MutationObserver !== 'function' || typeof document === 'undefined') return;
+    const root = document.documentElement || document.body;
+    if (!root) return;
+    try {
+      authObserver = new MutationObserver(() => {
+        if (!runActive && !recording) return;
+        if (authObserverTimer) return;
+        authObserverTimer = setTimeout(() => {
+          authObserverTimer = null;
+          reportAuthInterstitialIfPresent();
+        }, 250);
+      });
+      authObserver.observe(root, { childList: true, subtree: true });
+    } catch (e) {
+      authObserver = null;
+    }
+  }
+
+  function setRunActive(active) {
+    const next = Boolean(active);
+    if (next === runActive) return;
+    runActive = next;
+    if (runActive && !isIframe()) {
+      reportAuthInterstitialIfPresent();
+      startAuthObserver();
+    } else if (!runActive && !recording) {
+      stopAuthObserver();
+    }
+  }
+
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!msg || typeof msg !== 'object') return;
     if (msg.type === 'SET_RECORDING') {
       setRecording(Boolean(msg.active));
+      return;
+    }
+    if (msg.type === 'SET_RUN_ACTIVE') {
+      setRunActive(Boolean(msg.active));
       return;
     }
     if (msg.type === 'COPILOT_APPLY_HIGHLIGHTS') {
@@ -561,30 +614,19 @@
   });
 
   // Ask background for current state on load (idempotent).
+  // Outside an active run, do zero background DOM scanning or mutation observing.
   try {
     chrome.runtime.sendMessage({ type: 'CONTENT_READY' }, (resp) => {
       if (resp && typeof resp.active === 'boolean') setRecording(resp.active);
+      if (resp && resp.runActive) setRunActive(true);
     });
   } catch (e) {}
-
-  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
-    if (document.readyState === 'loading') {
-      document.addEventListener(
-        'DOMContentLoaded',
-        () => {
-          reportAuthInterstitialIfPresent();
-        },
-        { once: true }
-      );
-    } else {
-      reportAuthInterstitialIfPresent();
-    }
-  }
 
   // Expose for the Node harness (no Chrome).
   if (typeof globalThis !== 'undefined') {
     globalThis.__openadaptExtensionContent = {
       setRecording,
+      setRunActive,
       applyCopilotHighlights,
       detectAuthInterstitial,
       reportAuthInterstitialIfPresent,

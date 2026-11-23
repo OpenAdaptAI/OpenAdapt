@@ -535,8 +535,12 @@
     header.className = 'auth-pause-header';
     const badge = document.createElement('span');
     badge.className = 'auth-pause-badge';
-    badge.textContent =
-      authPause.kind === 'mfa' ? 'MFA / Passkey Pause' : 'Operator Sign-In Pause';
+    const hostAcked = Boolean(authPause.hostAcked);
+    badge.textContent = hostAcked
+      ? authPause.kind === 'mfa'
+        ? 'MFA / Passkey Pause'
+        : 'Operator Sign-In Pause'
+      : 'Sign-In Notice (Local Only)';
     header.appendChild(badge);
     card.appendChild(header);
 
@@ -547,8 +551,9 @@
 
     const body = document.createElement('p');
     body.className = 'auth-pause-copy';
-    body.textContent =
-      'OpenAdapt paused automatically and never reads or stores passwords, MFA codes, or 1Password fills. Complete sign-in in the active tab, then click Resume.';
+    body.textContent = hostAcked
+      ? 'The local OpenAdapt runtime acknowledged the pause and never reads or stores passwords or MFA codes. Complete sign-in in the active tab, then click Resume.'
+      : 'A sign-in or MFA screen was detected on this tab, but the local OpenAdapt runtime is not attached. Sign in normally in Chrome, then dismiss or reconnect the runtime.';
     card.appendChild(body);
 
     const actions = document.createElement('div');
@@ -558,15 +563,18 @@
     resumeBtn.id = 'auth-resume-btn';
     resumeBtn.className = 'action-btn btn-primary';
     resumeBtn.setAttribute('data-action', 'auth_resume');
-    resumeBtn.textContent = 'I Signed In — Resume';
+    resumeBtn.textContent = hostAcked ? 'I Signed In — Resume' : 'Dismiss Notice';
     resumeBtn.addEventListener('click', async () => {
       resumeBtn.disabled = true;
-      const resp = await sendRuntimeMessage({ type: 'COPILOT_AUTH_RESUME' });
+      const resp = await sendRuntimeMessage({
+        type: 'COPILOT_AUTH_RESUME',
+        tabId: Number.isInteger(authPause.tabId) ? authPause.tabId : undefined,
+      });
       resumeBtn.disabled = false;
-      if (!resp || !resp.ok) {
+      if (!resp || resp.ok !== true) {
         showCardFeedback(
           card,
-          `Could not resume: ${(resp && resp.error) || 'unknown error'}`,
+          `Could not resume: ${(resp && resp.error) || 'native host rejected resume'}`,
           true
         );
         return;
