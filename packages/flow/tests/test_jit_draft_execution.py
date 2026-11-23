@@ -80,7 +80,7 @@ def test_an_attended_or_admitted_draft_passes_the_check(
 
 def _admission(bundle: Path) -> Any:
     from openadapt_flow.execute.models import AdmittedBundle
-    from openadapt_flow.execute.registry import (
+    from openadapt_flow.mockmed.execute_seed import (
         MOCKMED_EFFECT_STRENGTH,
         MOCKMED_ENVIRONMENT_OK,
         MOCKMED_QUALIFICATION_ID,
@@ -102,11 +102,12 @@ def test_serve_execute_refuses_a_draft_before_any_effect(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     pytest.importorskip("openadapt_types")
-    import openadapt_flow.tutorial as tutorial
     from openadapt_types.execute import (
         ExecuteRequestV1,
         ExecuteTerminalOutcomeV1,
     )
+
+    import openadapt_flow.tutorial as tutorial
     from openadapt_flow.execute.dispatch import DispatchError, live_replay
     from openadapt_flow.execute.service import ExecuteService
     from tests.test_execute_post_dispatch_faults import _request
@@ -126,8 +127,13 @@ def test_serve_execute_refuses_a_draft_before_any_effect(
     def runner(_admission: Any, req: Any, run_dir: Path) -> Any:
         return live_replay(admission, req, run_dir)
 
+    from openadapt_flow.mockmed.execute_seed import mockmed_admissions
+
     store = ExecuteService(
-        tmp_path / "svc", token="t", runner=runner, seed_mockmed=True
+        tmp_path / "svc",
+        token="t",
+        runner=runner,
+        seed_admissions=mockmed_admissions(),
     )
     receipt = store.get_receipt(store.create_execution(_request()).execution_id)
     assert receipt.outcome is ExecuteTerminalOutcomeV1.FAILED_PLATFORM

@@ -263,7 +263,9 @@ def test_approval_needs_a_screenshot(sor, agent, tmp_path):
     )
     with pytest.raises(GuardRefused) as exc:
         guard.commit()
-    assert exc.value.code == "screenshot_required"
+    # No screenshot and no value read: nothing a person could check, so no
+    # card is offered at all.
+    assert exc.value.code == "values_unread"
 
 
 def test_unreachable_store_refuses_begin(tmp_path):

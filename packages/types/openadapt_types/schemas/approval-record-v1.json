@@ -27,7 +27,7 @@
     },
     "ApproverIdentityV1": {
       "additionalProperties": false,
-      "description": "Who or what approved or declined one step. PHI-free by construction.\n\n``id`` is an opaque identifier (a Cloud user id, a rule id, an agent id,\na system id), never a name or free text.",
+      "description": "Who or what approved or declined one step. Sensitive-data-free by construction.\n\n``id`` is an opaque identifier (a Cloud user id, a rule id, an agent id,\na system id), never a name or free text.",
       "properties": {
         "auth": {
           "$ref": "#/$defs/ApproverAuth"
@@ -116,6 +116,7 @@
         "reversible",
         "consequential",
         "irreversible",
+        "clinical_write",
         "clinical_write"
       ],
       "title": "StepClass",
@@ -123,7 +124,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "One approval decision, as it goes into the audit trail and receipt.\n\nPHI-free: digests, codes and opaque ids only.",
+  "description": "One approval decision, as it goes into the audit trail and receipt.\n\nSensitive-data-free: digests, codes and opaque ids only.",
   "properties": {
     "approver": {
       "$ref": "#/$defs/ApproverIdentityV1"

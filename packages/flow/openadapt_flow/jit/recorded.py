@@ -3,7 +3,7 @@
 A trajectory file holds the native actions an agent sent in one run, in its
 own format, with the task id and inputs that run had::
 
-    {"dialect": "anthropic", "task_id": "mockmed.add_note",
+    {"dialect": "anthropic", "task_id": "demo.add_note",
      "inputs": {"note": "..."}, "actions": [{"action": "screenshot"}, ...]}
 
 :class:`RecordedTrajectoryAgent` sends those actions through the capture

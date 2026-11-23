@@ -129,3 +129,26 @@ def test_the_engine_passes_against_its_baseline(check) -> None:
     new, stale = check.compare(check.scan(), baseline)
     assert not new, "\n".join(new)
     assert not stale, "\n".join(stale)
+
+
+def test_core_packages_guard_catches_app_names(check, tmp_path: Path) -> None:
+    for rel, text in {
+        "types/openadapt_types/a.py": 'APP = "OpenEMR"\n',
+        "desktop/openadapt_desktop/b.py": "# example: Medplum\nx = 1\n",
+        "desktop/openadapt_desktop/c.py": "URL = 'https://stedi.example'\n",
+        "capture/openadapt_capture/d.py": "isMockMed = True\n",
+    }.items():
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    violations = check.scan_core_packages(tmp_path)
+    assert len(violations) == 3
+    assert any("openadapt_types/a.py" in v and "openemr" in v for v in violations)
+    assert any("openadapt_desktop/c.py" in v and "stedi" in v for v in violations)
+    assert any("openadapt_capture/d.py" in v and "mockmed" in v for v in violations)
+
+
+def test_monorepo_core_packages_have_zero_app_leaks(check) -> None:
+    violations = check.scan_core_packages()
+    assert not violations, "\n".join(violations)
