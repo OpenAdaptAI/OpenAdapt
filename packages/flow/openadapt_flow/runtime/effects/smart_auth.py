@@ -410,6 +410,20 @@ class SmartBackendTokenSource:
             self._renew_at = self._clock() + expires_in - margin
             return token
 
+    def token_endpoint(self) -> str:
+        """The exact token URL this source signs its assertions for.
+
+        The configured ``token_url``, or the one ``smart-configuration``
+        names, discovered once (no token is requested). A delayed recheck in
+        a new process needs it before any token was asked for. Raises
+        :class:`SmartTokenError` when discovery fails.
+        """
+
+        with self._lock:
+            if self._token_url is None:
+                self._token_url = self._discover()
+            return self._token_url
+
     def invalidate(self) -> None:
         with self._lock:
             self._token = None

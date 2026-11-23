@@ -1,0 +1,28 @@
+{
+  "case_id": "cr-s07",
+  "facts": {
+    "applicant.date_of_birth": "1983-04-21",
+    "applicant.email": "esme.halloran@example.test",
+    "applicant.first_name": "Esme",
+    "applicant.last_name": "Halloran",
+    "applicant.license_state": "WA",
+    "applicant.marital_status": "Married",
+    "coverage.bi_limits": "50/100",
+    "coverage.collision_deductible": 500,
+    "coverage.comprehensive_deductible": 250,
+    "driver2.date_of_birth": "1981-10-09",
+    "driver2.first_name": "Pavel",
+    "driver2.last_name": "Halloran",
+    "driver2.relationship": "Spouse",
+    "garaging.city": "Port Alder",
+    "garaging.state": "WA",
+    "garaging.zip": "98368",
+    "household.driver_count": 2,
+    "vehicle.annual_miles": 6000,
+    "vehicle.make": "Kestrel",
+    "vehicle.model": "Ridgeback",
+    "vehicle.ownership": "own",
+    "vehicle.primary_use": "pleasure",
+    "vehicle.year": 2016
+  }
+}

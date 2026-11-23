@@ -8,9 +8,12 @@ import re
 import threading
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
-from openadapt_flow.integrations.agents.skills import SkillRun
+if TYPE_CHECKING:
+    # Imported lazily: the agent integrations pull in POSIX-only modules,
+    # and building the openadapt-flow parser imports this package.
+    from openadapt_flow.integrations.agents.skills import SkillRun
 
 _PARAMETER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
@@ -234,7 +237,13 @@ class WrappedTask:
         if "receipt_binding" not in result:
             result["receipt_binding"] = unbound("NO_RECEIPT")
         result["reason"] = "cached_tool_result"
+        # The stored result is the reply, so a retry replays all of it.
+        result = self.finalize(result)
         store.finish(begin.record, result)
+        return result
+
+    def finalize(self, result: dict[str, Any]) -> dict[str, Any]:
+        """The result as it is stored and returned; a caller may add fields."""
         return result
 
 

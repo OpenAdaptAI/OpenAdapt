@@ -1,0 +1,26 @@
+{
+  "case_id": "hl-s03",
+  "facts": {
+    "applicant.date_of_birth": "1979-01-30",
+    "applicant.email": "rdenholm@example.test",
+    "applicant.first_name": "Rafael",
+    "applicant.last_name": "Denholm",
+    "applicant.phone": "425-555-0182",
+    "coverage.deductible": 1000,
+    "coverage.effective_date": "2026-12-15",
+    "coverage.liability_limit": 500000,
+    "history.prior_claims_5yr": 0,
+    "property.address_line1": "5120 Alder Crest Way",
+    "property.city": "Bellevue",
+    "property.construction_quality": "Custom",
+    "property.exterior_wall": "cedar siding",
+    "property.has_pool": false,
+    "property.roof_material": "Architectural Shingle",
+    "property.roof_year": 2016,
+    "property.square_feet": 2860,
+    "property.state": "WA",
+    "property.stories": "2",
+    "property.year_built": 1961,
+    "property.zip": "98006"
+  }
+}

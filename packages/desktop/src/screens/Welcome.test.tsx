@@ -23,8 +23,8 @@ test("says what OpenAdapt does for any app, for a person or an AI agent", () => 
   );
 });
 
-test("names regulated settings only as examples", () => {
+test("stays domain-neutral on the welcome screen", () => {
   const text = welcomeText();
-  expect(text).toContain("such as medical records and insurance");
-  expect(text).not.toMatch(/EMR|payer|Citrix|patient|member|clinic/i);
+  expect(text).toContain("high-stakes and regulated systems of record");
+  expect(text).not.toMatch(/EMR|payer|Citrix|patient|member|clinic|medical|insurance/i);
 });

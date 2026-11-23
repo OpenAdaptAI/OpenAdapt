@@ -1,0 +1,22 @@
+{
+  "case_id": "tw-s02",
+  "facts": {
+    "applicant.date_of_birth": "1975-05-19",
+    "applicant.email": "b.strand@example.test",
+    "applicant.first_name": "Benedikt",
+    "applicant.last_name": "Strand",
+    "history.prior_claims_3yr": 0,
+    "household.driver_count": 1,
+    "property.address_line1": "88 Harbor View Rd Apt 4",
+    "property.city": "Gloucester",
+    "property.occupancy": "Owner occupied",
+    "property.roof_year": 2012,
+    "property.square_feet": 1100,
+    "property.state": "MA",
+    "property.year_built": 1961,
+    "property.zip": "01930",
+    "vehicle.make": "Marlowe",
+    "vehicle.model": "Avenue",
+    "vehicle.year": 2015
+  }
+}

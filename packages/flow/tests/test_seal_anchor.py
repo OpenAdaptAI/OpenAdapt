@@ -176,7 +176,13 @@ def _run(tmp_path: Path, name: str = "run", outcome: str = "VERIFIED") -> Path:
     run.mkdir(parents=True)
     (run / "report.json").write_text(
         json.dumps(
-            {"run_id": name, "execution_outcome": outcome, "patient": "SYNTH-0001"}
+            {
+                "run_id": name,
+                "execution_outcome": outcome,
+                "patient": "SYNTH-0001",
+                "results": [],
+                "change_ledger": [],
+            }
         ),
         encoding="utf-8",
     )
@@ -991,3 +997,78 @@ def test_cli_malformed_seal_file_and_log_key(tmp_path):
         str(junk_pem),
     )
     assert out.returncode == 2 and "Traceback" not in out.stderr
+
+
+def test_a_receipt_is_anchored_by_its_payload_and_verifies_offline(
+    tmp_path, rekor, no_network
+):
+    from openadapt_flow.receipt_record import write_receipt_record
+    from openadapt_flow.seal_anchor import anchor_receipt, verify_receipt_anchor
+
+    run, signer, _, _ = _anchored(tmp_path, rekor)
+    write_receipt_record(run, signer=signer)
+    anchor = anchor_receipt(
+        run / "receipt.json", signer, log_keys=[rekor.log], submit=rekor.submit, env={}
+    )
+    assert (run / "receipt.anchor.json").is_file()
+    envelope = json.loads((run / "receipt.json").read_text())
+    good = verify_receipt_anchor(
+        envelope, anchor, signer.public_raw(), log_keys=[rekor.log]
+    )
+    assert good.ok and good.integrated_time is not None
+    # A countersignature doesn't change what was logged: the payload is the same.
+    envelope["signatures"].append({"keyid": "seal-ed25519-" + "0" * 16, "sig": "AA=="})
+    assert verify_receipt_anchor(
+        envelope, anchor, signer.public_raw(), log_keys=[rekor.log]
+    ).ok
+    # Another payload does not match the anchor.
+    envelope["payload"] = envelope["payload"][:-4] + "AAAA"
+    assert not verify_receipt_anchor(
+        envelope, anchor, signer.public_raw(), log_keys=[rekor.log]
+    ).ok
+
+
+def test_a_receipt_with_a_bad_signature_is_never_sent_to_the_log(
+    tmp_path, rekor, no_network
+):
+    from openadapt_flow.receipt_record import write_receipt_record
+    from openadapt_flow.seal_anchor import AnchorError, anchor_receipt
+
+    run, signer, _, _ = _anchored(tmp_path, rekor)
+    write_receipt_record(run, signer=signer)
+    path = run / "receipt.json"
+    envelope = json.loads(path.read_text())
+    envelope["payload"] = envelope["payload"][:-4] + "AAAA"  # signer's keyid kept
+    path.write_text(json.dumps(envelope))
+    sent = []
+
+    def submit(*args):
+        sent.append(args)
+        return rekor.submit(*args)
+
+    with pytest.raises(AnchorError, match="doesn't verify"):
+        anchor_receipt(path, signer, log_keys=[rekor.log], submit=submit, env={})
+    assert sent == [] and not (run / "receipt.anchor.json").exists()
+
+
+def test_an_anchored_receipt_says_when_it_was_logged(tmp_path, rekor, monkeypatch):
+    from openadapt_types.receipt import RoleKey
+
+    from openadapt_flow import seal_anchor
+    from openadapt_flow.receipt_record import verify_run_receipt, write_receipt_record
+    from openadapt_flow.seal_anchor import anchor_receipt
+
+    monkeypatch.setattr(seal_anchor, "default_log_keys", lambda: [rekor.log])
+    run, signer, _, _ = _anchored(tmp_path, rekor)
+    write_receipt_record(run, signer=signer)
+    anchor_receipt(
+        run / "receipt.json", signer, log_keys=[rekor.log], submit=rekor.submit, env={}
+    )
+    entry = signer.registry_entry()
+    registry = [RoleKey(entry["key_id"], entry["public_key"], "this_computer")]
+    result = verify_run_receipt(run, registry)
+    assert result.ok, result.detail
+    assert result.signer_lines[0] == "Signed by this computer"
+    assert result.signer_lines[-1].startswith("Logged publicly at ")
+    (run / "receipt.anchor.json").write_text('{"schema": "x"}')
+    assert not verify_run_receipt(run, registry).ok
