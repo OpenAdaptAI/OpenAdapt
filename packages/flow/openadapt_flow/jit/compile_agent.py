@@ -535,6 +535,40 @@ class Recording:
         self._baseline: Optional[list[dict[str, Any]]] = None
 
     def __enter__(self) -> "Recording":
+        """The JIT cache (recording, draft bundle, signed records) is
+        plaintext by design: the draft lifecycle re-seals and signs the
+        bundle's files directly. Under the default (encryption on), this
+        capture is named on stderr and in the plaintext ledger, and strict
+        mode refuses it before anything is recorded. The opt-out lasts for
+        this capture only."""
+        from contextlib import ExitStack
+
+        from openadapt_flow import at_rest
+
+        at_rest.unsealed_write(
+            "a JIT draft (its recording and bundle are plaintext by design)",
+            self._owner.program_dir,
+        )
+        self._plaintext = ExitStack()
+        self._plaintext.enter_context(at_rest.opted_out("a JIT draft"))
+        try:
+            return self._enter_capture()
+        except BaseException:
+            self._plaintext.close()
+            raise
+
+    def __exit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc: Optional[BaseException],
+        tb: Optional[TracebackType],
+    ) -> bool:
+        try:
+            return self._exit_capture(exc_type, exc, tb)
+        finally:
+            self._plaintext.close()
+
+    def _enter_capture(self) -> "Recording":
         from openadapt_flow.authoring import AuthoringSession
         from openadapt_flow.backends._owned import close_owned
 
@@ -642,7 +676,7 @@ class Recording:
             raise
         return self
 
-    def __exit__(
+    def _exit_capture(
         self,
         exc_type: Optional[type[BaseException]],
         exc: Optional[BaseException],

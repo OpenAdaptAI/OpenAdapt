@@ -525,7 +525,9 @@ def distill_recording(recording_dir: Path | str, out_dir: Path | str) -> Distill
     # nothing it holds is written in plaintext.
     sealed_src = sealed_set.is_sealed_path(src)
     if sealed_src:
-        target: Any = sealed_set.writing(dst, "recording", sealed_set.recording_key())
+        target: Any = sealed_set.writing(
+            dst, "recording", sealed_set.recording_key() or ""
+        )
     else:
         dst.mkdir(parents=True)
         (dst / "frames").mkdir()

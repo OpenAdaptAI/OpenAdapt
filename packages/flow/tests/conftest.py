@@ -79,7 +79,9 @@ def _configure_at_rest() -> None:
     if os.environ.get("OPENADAPT_TEST_DEFAULT_AT_REST") == "1":
         import tempfile
 
-        _SESSION_AT_REST_HOME = tempfile.mkdtemp(prefix="openadapt-at-rest-home-")
+        _SESSION_AT_REST_HOME = os.path.realpath(
+            tempfile.mkdtemp(prefix="openadapt-at-rest-home-")
+        )
         wanted["OPENADAPT_FLOW_AT_REST_HOME"] = _SESSION_AT_REST_HOME
     if os.environ.get("OPENADAPT_TEST_DEFAULT_AT_REST") != "1":
         wanted["OPENADAPT_FLOW_PLAINTEXT_AT_REST"] = os.environ.get(

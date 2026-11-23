@@ -1562,6 +1562,21 @@ def write_bytes(path: Path | str, data: bytes, *, key: Optional[str] = None) -> 
     resumed.finalize()
 
 
+@contextmanager
+def side_lock(path: Path | str, purpose: str) -> Iterator[None]:
+    """A lock for one operation on ``path`` that also writes through the
+    sealed set (whose writer takes the set's own lock for each write, and
+    can't be nested inside it): a private folder per path and purpose."""
+    from openadapt_flow import at_rest
+
+    digest = hashlib.sha256(os.fsencode(_abs(path))).hexdigest()[:32]
+    lock_dir = at_rest._home() / "locks" / f"{purpose}-{digest}"
+    at_rest._private_dir(lock_dir.parent)
+    at_rest._private_dir(lock_dir)
+    with mutation_lock(lock_dir):
+        yield
+
+
 def replace_bytes(path: Path | str, data: bytes) -> None:
     """Replace ``path`` atomically: through its sealed set when it lies in
     one (whose writer replaces files atomically), else by a rename."""
