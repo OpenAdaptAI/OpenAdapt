@@ -106,7 +106,7 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 | packages.yml | `types`, `agent` | Python 3.12 | Python 3.12 | Python 3.10 and 3.12 |
 | packages.yml | `verify-clean-install` | Python 3.12 | Python 3.12 | Python 3.10 and 3.12 |
 | packages.yml | `flow-lint`, `flow-critical`, `flow-onprem-offline` | yes | yes | yes |
-| ci.yml | `smoke` (with the file-size ratchet against the base), `ci` | yes | yes | no |
+| ci.yml | `smoke` (with the file-size ratchet against the base and the generated-page check), `ci` | yes | yes | no |
 | packages.yml | `flow-unit` | 3 shards packed by measured time, fast lane (without `nightly_only.txt`) | no | 2 shards, without the `live ` entries (nightly runs them) |
 | packages.yml | `flow-native-census` | no | no | Windows and macOS |
 | packages.yml | `capture-linux` | Python 3.12 | Python 3.12 | Python 3.10 (ubuntu-22.04), 3.11, 3.12 |
@@ -118,6 +118,7 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 | packages.yml | `tray-contract`, `tray-desktop-ipc`, `program-graph`, `install-weight` | yes | yes | yes |
 | packages.yml | `desktop-release-intent` | yes | no | no |
 | desktop-test.yml | `test-python` | ubuntu-latest, Python 3.12 | ubuntu-latest, Python 3.12 | Linux, macOS and Windows, Python 3.11 and 3.12 |
+| desktop-test.yml | `release-intent-tests` | ubuntu-latest, Python 3.12 | ubuntu-latest, Python 3.12 | Linux, macOS and Windows, Python 3.11 and 3.12 |
 | desktop-test.yml | `qualification-contract` | yes | yes | yes |
 | desktop-build.yml | `frontend`, `python-distribution` | yes | yes | yes |
 | desktop-build.yml | `python-sidecar` | ubuntu-22.04 | no | Linux, macOS 15 arm64 and Windows |
@@ -131,6 +132,23 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 | codeql.yml | `Analyze` (Python, JavaScript/TypeScript, Rust) | per changed language | per changed language | all languages on main (one analysis at a time, newest waiting push wins) and weekly |
 | secret-scan.yml, dependency-review.yml, platform-manifest.yml | all | yes | yes | yes |
 | docs.yml, link-check.yml (internal), production-lifecycle.yml, release-health.yml (self-test) | all | yes | no | main only |
+| refresh-generated.yml | `refresh` (opens a draft pull request that regenerates CAPABILITIES.md and llms-full.txt) | no | no | when their sources change on main, daily, and on dispatch |
+
+## Generated pages
+
+CAPABILITIES.md and llms-full.txt are generated, and nearly every pull request
+changes their sources. When each pull request regenerated them, every merge
+made the other open pull requests conflict. Now a pull request edits only the
+sources (a row file under `capabilities/`, a command file, README.md, ...),
+and `refresh-generated.yml` regenerates both pages after the change lands. It
+opens a draft pull request from `bot/refresh-generated-<sha>-<run>` and closes the
+one it replaces; it never pushes to main. GitHub starts no workflows for a
+pull request the workflow token opens, so the pull request is a draft, and
+marking it ready runs CI. On a pull request, the smoke job's
+`build_capabilities.py --check-pr HEAD^1` fails only a hand edit of a page (a
+page that matches neither its sources nor the base), since the refresh would
+drop it. Main can trail its sources until the refresh merges; nothing strict
+runs on main or nightly, so a pending refresh never turns main red.
 
 Ubuntu package callers use the composite at the immutable
 `OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68`.

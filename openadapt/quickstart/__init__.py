@@ -58,9 +58,7 @@ def next_steps(
         return NextSteps(
             verify=verify,
             verify_run=lambda run_dir: hint(f"verify {quote(display_path(run_dir))}"),
-            record=hint(
-                f"flow record --backend web --url {YOUR_APP_URL} --out my-task"
-            ),
+            record=hint(f"record --backend web --url {YOUR_APP_URL} --out my-task"),
             agent=agent,
             keep=keep,
             shadow=shadow() if shadow is not None else None,

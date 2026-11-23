@@ -281,6 +281,7 @@ def test_a_sign_in_becomes_secret_parameters_and_never_persists(
 
     _assert_nothing_holds_a_credential(tmp_path, capfd)
     _assert_fields_blacked_out(Path(program["task_dir"]))
+    _assert_no_pixel_check_froze_a_black_box(Path(program["bundle"]), workflow)
 
     # What `openadapt wrap publish` would upload holds no credential either,
     # and names the sign-in inputs as secret parameters, not call inputs.
@@ -296,13 +297,8 @@ def test_a_sign_in_becomes_secret_parameters_and_never_persists(
     assert not (staged.staged / "teach-authorization").exists()
 
     # A cached run: no model, the values only in memory, read back VERIFIED.
-    # mcp 1.x runs the emitted server's sync tool on its event loop, where
-    # Playwright's sync API refuses to start (a limit of every cached web
-    # task, not of sign-in); mcp 2 runs it in a worker thread.
-    from importlib.metadata import version
-
-    if int(version("mcp").split(".")[0]) < 2:
-        pytest.skip("the cached web run needs mcp 2 (sync tools run in a thread)")
+    # The emitted tool runs the program off the MCP server's event loop, so
+    # Playwright's sync API starts under mcp 1 as well as mcp 2.
     second = task.call(
         "second-run",
         {"username": USERNAME, "password": PASSWORD, "note": "second sign-in note"},
@@ -314,6 +310,20 @@ def test_a_sign_in_becomes_secret_parameters_and_never_persists(
     assert state.sign_ins >= 3  # run 1, the canary and the cached run
 
     _assert_nothing_holds_a_credential(tmp_path, capfd)
+
+
+def _assert_no_pixel_check_froze_a_black_box(bundle: Path, workflow) -> None:
+    """A REGION_STABLE crop over a withheld field would hold the recorder's
+    black box, which no live screen shows, and refute every hosted run."""
+    import numpy as np
+    from PIL import Image
+
+    for step in workflow.steps:
+        for pc in step.expect:
+            if pc.kind.value != "region_stable" or not pc.template:
+                continue
+            pixels = np.asarray(Image.open(bundle / pc.template).convert("L"))
+            assert (pixels <= 8).mean() < 0.05, (step.id, pc.template)
 
 
 def _assert_nothing_holds_a_credential(

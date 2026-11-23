@@ -672,6 +672,182 @@ jobs:
             openadapt_flow/compiler/induction.py \
             openadapt_flow/compiler/loop_authoring.py
 
+  flow-default-at-rest:
+    # The whole flow suite under the product default: encryption at rest on
+    # (no plaintext opt-out). Required on pull requests. Tests that read or
+    # plant plaintext files directly, and known open limitations, are skipped
+    # in this mode with their reason (tests/default_at_rest_skips.txt, #2423).
+    name: flow default at rest (shard ${{ matrix.shard }}/${{ matrix.of }})
+    needs: scope
+    # PR and post-merge tiers. The merge queue skips it: a pull request can
+    # enter the queue only after packages-gate passed with these shards green
+    # on its merge with main, and flow-critical re-checks the golden path on
+    # the group.
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft != true && needs.scope.outputs.flow == 'true'
+    runs-on: ubuntu-latest
+    # The nightly tier (a schedule or a dispatch) also measures coverage,
+    # which slows the suite by about a third; it gets 60 minutes.
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each shard runs one pytest-xdist worker per vCPU (four on
+        # ubuntu-latest) and pays about 35 s of setup. Files are packed by
+        # measured time (scripts/ci/flow_shards.py), so the shards finish
+        # together. A pull request's fast lane takes four shards: with three,
+        # the identity, wire and verifier tests it must keep held each shard
+        # near 12 minutes of tests (run 44684203094). The full suite on main
+        # and nightly takes two.
+        include: [{"shard":1,"of":4},{"shard":2,"of":4},{"shard":3,"of":4},{"shard":4,"of":4}]
+    defaults:
+      run:
+        working-directory: packages/flow
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      # uv installs the locked requirements into the setup-python interpreter,
+      # in seconds instead of minutes, from a cache keyed on the locks.
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            packages/flow/uv.lock
+            packages/capture/uv.lock
+          cache-suffix: flow-default-at-rest
+      - name: Install from the locks
+        # Flow's lock, then Capture's: the in-tree Capture can need newer
+        # dependencies than the published one Flow's lock names.
+        run: >-
+          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,capture,agent]' --lock packages/capture
+          --editable packages/types --editable packages/capture --editable packages/flow --editable packages/agent --editable .
+      - name: Install tesseract for the flight scrubber's OCR tests
+        # pytesseract comes from Flow's dev extra (locked); this is its binary.
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68
+        with:
+          packages: tesseract-ocr tesseract-ocr-eng
+      - name: Install Harness² for the integration tests
+        # Not on PyPI. Pinned to the commit benchmark.harness.harness2
+        # is written against; it has no runtime dependencies.
+        run: >-
+          uv pip install --system --no-deps
+          'harness2 @ git+https://github.com/google-research/harness2@1cfe254e8d25b15f37048c3730134686abe60335'
+      - name: Verify the in-tree openadapt-capture imports headless
+        run: |
+          python - <<'PY'
+          import pathlib, openadapt_capture
+          here = pathlib.Path(openadapt_capture.__file__).resolve().as_posix()
+          assert "packages/capture/openadapt_capture" in here, here
+          print("openadapt_capture from", here)
+          PY
+      - name: Verify the installed Agent shim, launcher and Flow implementation
+        run: |
+          python - <<'PY'
+          import importlib.metadata
+          import importlib.util
+          import json
+          import pathlib
+
+          root = pathlib.Path.cwd().resolve().parents[1]
+          shim = importlib.util.find_spec("openadapt_agent")
+          expected = root / "packages/agent/src/openadapt_agent/__init__.py"
+          assert (
+              shim and shim.origin and pathlib.Path(shim.origin).resolve() == expected
+          ), shim
+          installed = importlib.metadata.distribution("openadapt-agent")
+          direct = json.loads(installed.read_text("direct_url.json") or "{}")
+          assert direct.get("url") == (root / "packages/agent").as_uri(), direct
+          assert direct.get("dir_info", {}).get("editable") is True, direct
+
+          compatibility = importlib.import_module("openadapt_agent")
+          engine = importlib.import_module("openadapt_flow.agent")
+          assert compatibility is engine
+          implementation = pathlib.Path(engine.__file__).resolve()
+          expected_implementation = root / "packages/flow/openadapt_flow/agent/__init__.py"
+          assert implementation == expected_implementation, implementation
+          print("openadapt-agent shim from", expected)
+          print("openadapt_flow.agent from", implementation)
+
+          launcher_spec = importlib.util.find_spec("openadapt")
+          expected_launcher = root / "openadapt/__init__.py"
+          assert (
+              launcher_spec
+              and launcher_spec.origin
+              and pathlib.Path(launcher_spec.origin).resolve() == expected_launcher
+          ), launcher_spec
+          launcher_distribution = importlib.metadata.distribution("openadapt")
+          launcher_direct = json.loads(
+              launcher_distribution.read_text("direct_url.json") or "{}"
+          )
+          assert launcher_direct.get("url") == root.as_uri(), launcher_direct
+          assert (
+              launcher_direct.get("dir_info", {}).get("editable") is True
+          ), launcher_direct
+          launcher = importlib.import_module("openadapt")
+          assert pathlib.Path(launcher.__file__).resolve() == expected_launcher
+          print("openadapt launcher from", expected_launcher)
+          PY
+      - name: Resolve Playwright version
+        id: pw
+        run: |
+          python -c "import importlib.metadata as m; print('version=' + m.version('playwright'))" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+      - name: Install and launch Playwright browser
+        timeout-minutes: 12
+        run: >-
+          python scripts/install_playwright_browser.py
+          --attempts 2 --attempt-timeout-seconds 270
+      - name: Select this shard's test files
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ matrix.of }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          # Everything outside tests/e2e, minus the installer self-test and the
+          # long qualification campaign. The nightly run (a schedule, or a
+          # dispatch) also takes all of tests/e2e; pull requests and main run
+          # the end-to-end tests flow-critical names. flow_shards.py packs the
+          # files by their measured time (scripts/ci/flow_test_durations.json)
+          # and lists each shard longest first; every file lands in exactly
+          # one shard.
+          e2e=(-not -path 'tests/e2e/*')
+          case "$EVENT_NAME" in schedule|workflow_dispatch) e2e=() ;; esac
+          find tests -name 'test_*.py' "${e2e[@]}" \
+            -not -path 'tests/test_install_playwright_browser.py' \
+            -not -path 'tests/test_qualification_gate_campaign.py' \
+            -not -path 'tests/golden_runs/test_golden_runs.py' \
+            | python ../../scripts/ci/flow_shards.py --shard "$SHARD" --of "$SHARDS" > "$RUNNER_TEMP/shard.txt"
+          wc -l < "$RUNNER_TEMP/shard.txt"
+      - name: Test under the default (encrypted) mode
+        env:
+          OPENADAPT_TEST_DEFAULT_AT_REST: "1"
+          OPENADAPT_TEST_LANE: fast
+        run: |
+          set -uo pipefail
+          mkdir -p runs
+          mapfile -t files < "$RUNNER_TEMP/shard.txt"
+          # The wall-clock bound needs an uncontended worker; flow core unit
+          # runs it alone, so it is not repeated here.
+          pytest -n logical --dist loadfile -q -rfE --timeout 300 \
+            --deselect=tests/test_tx_acid_servers.py::test_50k_seed_speed_and_8_worker_background_concurrency \
+            --basetemp=runs/ci-default \
+            --junitxml=runs/flow-default-at-rest-${{ matrix.shard }}.xml "${files[@]}"
+      - name: Upload the default-mode results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flow-default-at-rest-${{ matrix.shard }}
+          path: packages/flow/runs/flow-default-at-rest-${{ matrix.shard }}.xml
+          if-no-files-found: warn
+
   flow-unit:
     name: flow core unit (shard ${{ matrix.shard }}/${{ matrix.of }})
     needs: scope
@@ -720,6 +896,11 @@ jobs:
         run: >-
           python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,capture,agent]' --lock packages/capture
           --editable packages/types --editable packages/capture --editable packages/flow --editable packages/agent --editable .
+      - name: Install tesseract for the flight scrubber's OCR tests
+        # pytesseract comes from Flow's dev extra (locked); this is its binary.
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68
+        with:
+          packages: tesseract-ocr tesseract-ocr-eng
       - name: Install Harness² for the integration tests
         # Not on PyPI. Pinned to the commit benchmark.harness.harness2
         # is written against; it has no runtime dependencies.
@@ -877,6 +1058,33 @@ jobs:
           fi
           exit "$unit_rc"
       # Before the claims upload, which tests expect to be the last step.
+      - name: Rollback, checkpoint and key tests under the default (encrypted) mode
+        # The suite above runs with a recorded plaintext opt-out. Encryption is
+        # the default, so run the stores that keep their own state inside a
+        # run directory (rollback, durable checkpoints, the key hierarchy)
+        # with it off as well: a plaintext write inside an encrypted run, or a
+        # reader that assumes plaintext, fails here.
+        if: matrix.shard == 1
+        env:
+          OPENADAPT_TEST_DEFAULT_AT_REST: "1"
+        # The durable and authority files whose tests read files directly
+        # as plaintext are not listed yet (#2423 lists them).
+        run: >-
+          pytest -n logical --dist loadfile -q --basetemp=runs/ci-default-at-rest
+          tests/test_rollback.py tests/test_rollback_qualify.py
+          tests/test_checkpoint_key_derivations.py tests/test_key_hierarchy.py
+          tests/test_at_rest_review_round3.py
+          tests/test_api_step_durable.py tests/test_attended_executor_fence_v13.py
+          tests/test_authoring_authority.py tests/test_continuation_receiver_clock.py
+          tests/test_default_ledger_authority.py tests/test_durable_authority_create.py
+          tests/test_durable_authority_edges_v13.py
+          tests/test_durable_authority_isolation_policy.py
+          tests/test_durable_first_local_delivery.py
+          tests/test_durable_first_local_program_delivery.py
+          tests/test_durable_pipelined_readback.py
+          tests/test_durable_resume_state_binding.py tests/test_durable_runtime.py
+          tests/test_module_durable_authority.py tests/test_realism_durable_resume.py
+          tests/test_tx_atomic_authority.py
       - name: Upload coverage data
         if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -1014,6 +1222,7 @@ jobs:
             tests/e2e/test_browser_teach_write_e2e.py \
             tests/e2e/test_browser_teach_write_guard_e2e.py \
             tests/e2e/test_agent_guard_e2e.py \
+            tests/e2e/test_wrap_example_e2e.py \
             --basetemp=runs/ci-critical-e2e --junitxml=runs/critical-e2e-junit.xml
       - name: Golden runs (report, artifacts and actions unchanged)
         # docs/design/DECOMPOSITION.md, section 3.1. The baselines are Linux
@@ -1893,6 +2102,7 @@ jobs:
       - verify-clean-install
       - flow-lint
       - flow-unit
+      - flow-default-at-rest
       - flow-critical
       - flow-onprem-offline
       - flow-agent-frameworks
@@ -1950,6 +2160,7 @@ jobs:
               "verify-clean-install": "verify",
               "flow-lint": "flow",
               "flow-unit": "flow",
+              "flow-default-at-rest": "flow",
               "flow-critical": "flow",
               "flow-onprem-offline": "flow",
               "flow-agent-frameworks": "flow",
@@ -1984,7 +2195,7 @@ jobs:
           # it on its merge with main (packages-gate is required there).
           not_in_queue = {"flow-unit"}
           # PR tier only: checks a pull request's own diff.
-          pr_only = {"desktop-release-intent"}
+          pr_only = {"desktop-release-intent", "flow-default-at-rest"}
           scope = needs["scope"]
           outputs = scope.get("outputs", {})
           bad = {}

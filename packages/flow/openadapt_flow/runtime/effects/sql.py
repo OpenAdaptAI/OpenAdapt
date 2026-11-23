@@ -1,7 +1,7 @@
 """Read-only SQL system-of-record :class:`EffectVerifier` + table-delta audit.
 
-Promotes the SQL-audit verification the governed Frappe Lending reference
-matrix proved (``benchmark/frappe_lending/fixture.py``, merged PR #131) from
+Promotes the SQL-audit verification pattern
+proved by the governed reference matrix from
 bespoke benchmark plumbing into a deployable kit component:
 
 - :class:`SqlRecordVerifier` -- a PARAMETERIZED read-only SELECT is the record
@@ -9,7 +9,7 @@ bespoke benchmark plumbing into a deployable kit component:
   idempotency key, field read-back, collateral loss, ``count_new_only``),
   exactly like every other substrate.
 - :func:`audit_table_deltas` -- the EXACT row-count-delta contract lifted from
-  the Frappe fixture: every table named in the contract must move by exactly
+  the reference fixture: every table named in the contract must move by exactly
   the declared delta, and every OTHER table must move by exactly 0 (a write
   that "worked" but also inserted a stray row elsewhere is a violation).
 - :func:`capture_table_counts` -- read-only ``COUNT(*)`` per audited table,
@@ -253,7 +253,7 @@ def _sql_tokens(
 
 
 #: Audited table names must be plain identifiers (letters / digits / ``_`` /
-#: space -- Frappe's ``tabLoan Application`` has a space). Anything else
+#: space -- some SQL schemas use spaces in table names). Anything else
 #: (quotes, backticks, semicolons, comment tokens) is refused rather than
 #: escaped: the audit runs with read credentials, but identifier smuggling
 #: must still be impossible.
@@ -1037,7 +1037,7 @@ def bind_null_sql_params(
 def read_cell(value: Any) -> Any:
     """A binary column as ``0x`` + hex, so records stay JSON-serializable.
 
-    OpenEMR keys rows by ``uuid binary(16)``; a driver returns those as bytes,
+    Some apps key rows by ``uuid binary(16)``; a driver returns those as bytes,
     which a baseline (JSON) cannot hold. Equal bytes give equal text, so
     record identity and change detection are unaffected.
     """
@@ -1217,7 +1217,7 @@ class SqlRecordVerifier(VerifierAdapterBase):
             time.sleep(self.poll_interval_s)
 
 
-# -- exact table-delta audit (promoted from benchmark/frappe_lending) --------
+# -- exact table-delta audit ------------------------------------------------
 
 
 def capture_table_counts(
@@ -1271,8 +1271,8 @@ def audit_table_deltas(
 ) -> tuple[list[str], dict[str, int]]:
     """Exact-contract table-delta audit; violations plus the full delta map.
 
-    The contract the governed Frappe Lending matrix proved (lifted from
-    ``benchmark/frappe_lending/fixture.py::audit_table_deltas``): every table
+    The contract proved by the governed table-delta reference matrix
+    (``audit_table_deltas``): every table
     in ``expected`` must change by EXACTLY its declared delta, and every other
     observed table must change by exactly 0 -- a "successful" write that also
     perturbed an unrelated table is a violation, not noise.

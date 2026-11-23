@@ -14,7 +14,7 @@ This module closes that gap *honestly*, respecting the boundary the RFC draws
 in ``docs/design/WORKFLOW_PROGRAM_IR.md`` §7:
 
 - **Derivable now** — when the demonstration actually OBSERVED the system of
-  record (a ``/api/db``-style JSON snapshot captured before and after a step,
+  record (a REST JSON snapshot captured before and after a step,
   or a structured DOM field map), the concrete binding *is* in the recording:
   which record appeared, which field took the typed value, and (if present)
   the idempotency key. We mine those into real, machine-checkable ``Effect``s.

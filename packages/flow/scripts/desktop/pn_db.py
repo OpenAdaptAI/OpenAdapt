@@ -132,10 +132,17 @@ def get(pid: int) -> None:
     print(json.dumps(_patient_dict(r) if r else None))
 
 
+def _stored_row(r: sqlite3.Row) -> dict:
+    """A row as stored: unlike ``_patient_dict``, a NULL note stays null, so
+    evidence read through ``all`` can tell it from an empty note."""
+    return {"id": r["id"], "first": r["first"], "last": r["last"],
+            "dob": r["dob"], "note": r["note"]}
+
+
 def dump_all() -> None:
     con = _conn()
     rows = [
-        _patient_dict(r)
+        _stored_row(r)
         for r in con.execute("SELECT * FROM patients ORDER BY id").fetchall()
     ]
     con.close()

@@ -100,7 +100,10 @@ NotChecked = Literal[
     "approved_unverified",
     "field_values",
     "postconditions",
+    "uncertain",
 ]
+#: A line backed by its own signed receipt in the run folder, by digest.
+LineEvidenceKind = Literal["tx_receipt", "write_receipt"]
 #: ``report.json``: SHA-256 of the report file's exact bytes on disk.
 #: ``report.canonical``: SHA-256 of the report's RFC 8785 (JCS) canonical
 #: JSON, the digest OpenAdapt Cloud's managed callback sends. They are
@@ -207,7 +210,15 @@ class Line(_Closed):
     operation: Operation
     check: CheckResult
     strength: Strength
-    not_checked: list[NotChecked] = Field(max_length=4)
+    not_checked: list[NotChecked] = Field(max_length=5)
+    #: The transaction or write receipt this line comes from (its file's
+    #: SHA-256); omitted for a step's own check.
+    evidence: Optional["LineEvidence"] = None
+
+
+class LineEvidence(_Closed):
+    kind: LineEvidenceKind
+    sha256: StrictStr = Field(pattern=_SHA256_HEX)
 
 
 class CheckCount(_Closed):
@@ -347,6 +358,9 @@ class RunStatementV1(_Closed):
         for subject in out["subject"]:
             if subject["media_type"] is None:
                 del subject["media_type"]
+        for line in out["predicate"]["lines"]:
+            if line["evidence"] is None:
+                del line["evidence"]
         return out
 
 
@@ -1414,3 +1428,5 @@ __all__ = [
     "statement_payload",
     "verify_receipt",
 ]
+
+Line.model_rebuild()

@@ -36,6 +36,9 @@ CodecKind = Literal[
     "phone_digits",
     "iso_date",
     "bijection",
+    # ``None`` and ``""`` are the same empty value for this field; every
+    # other value compares exactly. Learned per field, never global.
+    "null_empty",
 ]
 JudgeTier = Literal[
     "exact",

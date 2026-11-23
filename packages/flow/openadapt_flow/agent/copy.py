@@ -7,7 +7,7 @@ bodies add ``SKILL_WHEN_TO_USE`` and ``OUTCOME_RULES``.
 
 from __future__ import annotations
 
-IDENTITY_SENTENCE = "Your AI agent decides what to enter. OpenAdapt enters it in the app and checks that it saved."
+IDENTITY_SENTENCE = "Verified local desktop & browser automation with read-back checks and signed receipts. Zero egress."
 
 SKILL_WHEN_TO_USE = (
     "Use this when your agent has decided what to enter and the app has no usable "

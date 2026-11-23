@@ -768,6 +768,39 @@ def _quickstart_root(out: Optional[Path]) -> Path:
     return root
 
 
+def _quickstart_own(root: Path, url: Optional[str], watch: bool) -> None:
+    """`openadapt quickstart --own`: see openadapt/quickstart/own.py."""
+    from functools import partial
+
+    from openadapt.quickstart.engine import display_available
+    from openadapt.quickstart.own import OwnTaskError, run_own, share_runs
+
+    def ask(prompt: str) -> str:
+        return input(prompt)
+
+    from contextlib import nullcontext
+
+    context = _synthetic_scrub_off() if url is None else nullcontext()
+    try:
+        with context:
+            run_own(
+                root,
+                url=url,
+                visible=_watch_window(watch),
+                can_record_here=sys.stdin.isatty() and display_available(),
+                ask=ask,
+                say=click.echo,
+                hint=_hint,
+                quote=_shell_quote,
+                share=partial(share_runs, ask=ask, say=click.echo, command=_hint),
+            )
+    except OwnTaskError as error:
+        raise click.ClickException(str(error)) from error
+    except KeyboardInterrupt:
+        click.echo(f"\nStopped. Anything written so far is in {root}", err=True)
+        raise click.exceptions.Exit(130)
+
+
 @main.command(
     "quickstart",
     context_settings={
@@ -834,6 +867,19 @@ def _quickstart_root(out: Optional[Path]) -> Path:
 # --headed is the older spelling of --watch. --headless was the opt-out when
 # the window showed by default; hidden is the default now, so it changes
 # nothing and is kept so older commands still run.
+@click.option(
+    "--own",
+    is_flag=True,
+    help=(
+        "Your own task: record it once (in the sample app, or your web app "
+        "with --url), run it with new inputs, and end with an agent tool."
+    ),
+)
+@click.option(
+    "--url",
+    default=None,
+    help="With --own: your web app's address. Recording opens a browser window.",
+)
 @click.option("--headed", is_flag=True, hidden=True)
 @click.option("--headless", is_flag=True, hidden=True)
 @click.option("--break-it", "break_it", is_flag=True, hidden=True)
@@ -847,6 +893,8 @@ def quickstart(
     no_break: bool,
     verbose: bool,
     more: bool,
+    own: bool,
+    url: Optional[str],
     headed: bool,
     headless: bool,
     break_it: bool,
@@ -873,6 +921,11 @@ def quickstart(
         _quickstart_more(out, app)
         return
     _require_supported_python()
+    if url is not None and not own:
+        raise click.UsageError("--url works with --own.")
+    if own:
+        _quickstart_own(_quickstart_root(out), url, watch or headed)
+        return
     _refuse_unknown_tutorial_options(command_ctx.args)
     openemr = _openemr_checkout(command_ctx.args) if app == "openemr" else None
     root = _quickstart_root(out)
@@ -1131,7 +1184,13 @@ def _hint(rest: str) -> str:
 
 def _under_uvx() -> bool:
     """True when this process runs from a ``uvx`` throwaway environment."""
-    return "/uv/archive-v" in sys.prefix.replace("\\", "/")
+    return any(
+        "/uv/archive-v" in path or ("uv" in path.lower() and "/archive-v" in path)
+        for path in (
+            sys.prefix.replace("\\", "/"),
+            sys.executable.replace("\\", "/"),
+        )
+    )
 
 
 def _keep_command() -> Optional[str]:
@@ -1282,8 +1341,9 @@ _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]
 # public_seal module, and the quickstart's encrypted checkpoints rely on its
 # key derivation once per store. Launcher 1.23 requires Flow 3.3: the OpenEMR
 # quickstart's referral program checks its date picker against the run's
-# clock (`Postcondition.text_clock`), which Flow 3.2 ignores.
-_SUPPORTED_FLOW_RANGE = ">=3.3.0,<4.0.0"
+# clock (`Postcondition.text_clock`), which Flow 3.2 ignores. Flow 4.0
+# removes and renames APIs the launcher doesn't use, so it is accepted too.
+_SUPPORTED_FLOW_RANGE = ">=3.3.0,<5.0.0"
 _RDP_INSTALL_COMMAND = _pip_install("openadapt[rdp]")
 _CHROMIUM_SYSTEM_LIBS_COMMAND = (
     f"{shlex.quote(sys.executable)} -m playwright install-deps chromium"
@@ -1293,7 +1353,7 @@ _CHROMIUM_SYSTEM_LIBS_COMMAND = (
 def _supported_flow_version(value: str) -> bool:
     """Return whether a stable Flow version is in the launcher's supported range."""
     parsed = _release_tuple(value)
-    return parsed is not None and (3, 3, 0) <= parsed < (4, 0, 0)
+    return parsed is not None and (3, 3, 0) <= parsed < (5, 0, 0)
 
 
 # The Python modules each native or remote Flow backend imports when its
@@ -1577,6 +1637,10 @@ for _verb, _help in (
     ("record", "Record a workflow. Uses the same options as flow record."),
     ("compile", "Compile a recording. Uses the same options as flow compile."),
     ("run", "Run a bundle with its checks. Uses the same options as flow run."),
+    (
+        "handoff",
+        "Handoffs to other parties: what they recorded, and who follows up.",
+    ),
 ):
     main.add_command(
         _FlowAliasCommand(
@@ -2015,6 +2079,104 @@ def shadow(command_ctx: click.Context) -> None:
     _run_flow(["shadow", *command_ctx.args])
 
 
+#: `openadapt flow flight` options that take a value, and flags. Click drops
+#: the "--" before CMD, so the launcher puts it back after these.
+FLIGHT_VALUE_OPTIONS = frozenset(
+    {
+        "--task-id",
+        "--out",
+        "--label",
+        "--gate",
+        "--approval-timeout",
+        "--cdp",
+        "--guard-config",
+        "--guard-task",
+        "--max-cost-usd",
+        "--safe-label",
+    }
+)
+FLIGHT_FLAGS = frozenset(
+    {
+        "--no-scrub",
+        "--i-accept-unscrubbed",
+        "--allow-unenforced-egress",
+        "--no-egress-block",
+        "--json",
+        "-h",
+        "--help",
+    }
+)
+
+
+def _flight_argv(args: list[str]) -> list[str]:
+    """``args`` with "--" restored before CMD, so CMD's options stay CMD's."""
+    out: list[str] = []
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token in FLIGHT_VALUE_OPTIONS:
+            out.extend(args[index : index + 2])
+            index += 2
+        elif token in FLIGHT_FLAGS or token.split("=", 1)[0] in FLIGHT_VALUE_OPTIONS:
+            out.append(token)
+            index += 1
+        else:
+            return [*out, "--", *args[index:]]
+    return out
+
+
+@main.command(
+    "flight",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def flight(command_ctx: click.Context) -> None:
+    """Record any agent you already run, and hold its saves for a person.
+
+    `openadapt flight [OPTIONS] -- CMD ...` meters and prices the agent's
+    model calls, scrubs text and PNG/JPEG/GIF/BMP/TIFF/WEBP screenshots before they leave the
+    machine, blocks other egress on macOS, logs its actions and writes
+    flight.json. Every argument passes to
+    `openadapt flow flight`; its options are listed by
+    `openadapt flight --help`. With an openadapt-flow older than 3.5.0 it
+    says so and exits 4.
+    """
+    if "flight" not in _flow_verbs():
+        installed = _installed_flow_version()
+        needs = (
+            f"openadapt flight needs openadapt-flow >= {FLIGHT_MIN_FLOW} "
+            f"(installed: {installed}). Upgrade with: pip install --upgrade openadapt"
+        )
+        if any(arg in ("-h", "--help") for arg in command_ctx.args):
+            # Help is always there; it says what is missing.
+            click.echo(command_ctx.get_help())
+            click.echo("\n" + needs)
+            return
+        click.echo("Error: " + needs, err=True)
+        sys.exit(FLIGHT_ENGINE_TOO_OLD_EXIT)
+    _run_flow(["flight", *_flight_argv(list(command_ctx.args))])
+
+
+#: The first openadapt-flow release with the flight verb.
+FLIGHT_MIN_FLOW = "3.5.0"
+#: Exit status of `openadapt flight` when the installed Flow has no flight
+#: verb (not argparse's 2, which means a bad option).
+FLIGHT_ENGINE_TOO_OLD_EXIT = 4
+
+
+def _installed_flow_version() -> str:
+    from importlib import metadata
+
+    try:
+        return metadata.version("openadapt-flow")
+    except metadata.PackageNotFoundError:
+        return "not installed"
+
+
 def _optional_engine_entrypoint(command_ctx: click.Context, modules: tuple[str, ...]):
     """Show pure help for absent commands; preserve installed-engine failures."""
     targets = {
@@ -2054,6 +2216,56 @@ def hooks(command_ctx: click.Context) -> None:
         )
         sys.exit(2)
     sys.exit(int(hooks_main(list(command_ctx.args)) or 0))
+
+
+@main.command(
+    "plan",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def plan(command_ctx: click.Context) -> None:
+    """Dry-run a batch of writes to external systems, then apply, undo or release it."""
+    _require_supported_python()
+    plan_main = _optional_engine_entrypoint(command_ctx, ("openadapt_flow.txplan.cli",))
+    if plan_main is None:
+        click.echo(
+            "Error: this openadapt-flow installation has no plan command.", err=True
+        )
+        sys.exit(2)
+    sys.exit(int(plan_main(list(command_ctx.args)) or 0))
+
+
+@main.command(
+    "proxy",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def proxy(command_ctx: click.Context) -> None:
+    """Hold the database credentials; give the agent tools that preview, apply once and undo."""
+    _require_supported_python()
+    proxy_main = _optional_engine_entrypoint(
+        command_ctx, ("openadapt_flow.txplan.proxy_cli",)
+    )
+    if proxy_main is None:
+        click.echo(
+            "Error: this openadapt-flow installation has no proxy command.", err=True
+        )
+        sys.exit(2)
+    args = list(command_ctx.args)
+    # Click drops a bare "--"; restore it from argv so the agent's arguments stay its own.
+    if "--" in sys.argv and "--" not in args:
+        tail = sys.argv[sys.argv.index("--") + 1 :]
+        if tail and args[-len(tail) :] == tail:
+            args = args[: -len(tail)] + ["--"] + tail
+    sys.exit(int(proxy_main(args) or 0))
 
 
 @main.command(
@@ -2103,6 +2315,32 @@ def agent(command_ctx: click.Context) -> None:
         click.echo("Reinstall with: pip install --upgrade openadapt", err=True)
         sys.exit(1)
     sys.exit(int(agent_main(list(command_ctx.args)) or 0))
+
+
+@main.command(
+    "handoff",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def handoff(command_ctx: click.Context) -> None:
+    """Hand a result to another agent with its run's receipt, and verify one.
+
+    `send FILE --run RUN_DIR` attaches the run's receipt (inline, `--detached`
+    beside the file, or `--post URL` to a webhook). `verify FILE.handoff.json`
+    checks it against your pinned keys and says who signed it, what was
+    checked, and that a valid signature proves who signed, not that the claim
+    is true. Also available as `openadapt verify handoff`.
+    """
+    _require_supported_python()
+    args = list(command_ctx.args)
+    if args[:1] in ([], ["-h"], ["--help"]):
+        click.echo(command_ctx.get_help())
+        sys.exit(0 if args else 2)
+    sys.exit(_invoke_flow(["handoff", *args]))
 
 
 @main.command(
@@ -3239,8 +3477,34 @@ def version():
             click.echo(f"  {name}: {number}")
 
 
+def _doctor_uv_tool_command(arguments: str) -> Optional[str]:
+    """Translate a doctor ``pip install`` hint into ``uv tool install`` under ``uvx``."""
+    prefix = "-m pip install "
+    if not arguments.startswith(prefix):
+        return None
+    spec = arguments[len(prefix) :].strip()
+    upgrade = False
+    if spec.startswith("--upgrade "):
+        upgrade = True
+        spec = spec[len("--upgrade ") :].strip()
+    if not (
+        spec == "openadapt"
+        or spec.startswith('"openadapt[')
+        or spec.startswith("'openadapt[")
+    ):
+        return None
+    major, minor = sys.version_info[:2]
+    py = f"{major}.{minor}" if (major, minor) in ((3, 10), (3, 11), (3, 12)) else "3.12"
+    flag = " --upgrade" if upgrade else ""
+    return f"uv tool install --python {py}{flag} {spec}"
+
+
 def _doctor_python_command(arguments: str) -> str:
     """Show a command for the interpreter running doctor, in the host shell."""
+    if _under_uvx():
+        uv_cmd = _doctor_uv_tool_command(arguments)
+        if uv_cmd is not None:
+            return uv_cmd
     if _host_platform() == "win32":
         powershell = "'" + sys.executable.replace("'", "''") + "'"
         return (

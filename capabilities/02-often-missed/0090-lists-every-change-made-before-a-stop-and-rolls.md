@@ -1,0 +1,1 @@
+| Lists every change made before a stop and rolls it back with compensations a person approved once, then proves it by reading the whole database: equal to the read from before the run is `ROLLED_BACK`, anything else names the exact rows. | `undo`, `rollback`, [ROLLBACK.md](packages/flow/docs/ROLLBACK.md), [AFTER_A_STOP.md](packages/flow/docs/AFTER_A_STOP.md) |
