@@ -320,6 +320,55 @@ def test_a_control_filled_more_than_once_counts_once_on_the_receipt(
     assert result.receipt.payload.fields_filled_auto == 1
 
 
+def test_an_auto_fill_the_ledger_records_under_another_source_is_not_signed(
+    browser: Browser, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The fill reaches the ledger, so the unrecorded-actuation check passes,
+    # but not as an auto-fill. The session's own record of what it auto-filled
+    # disagrees with the ledger, and the signer must refuse. A count derived
+    # from the ledger itself would agree with the ledger and sign.
+    original = ReconcilerSession.record_write
+
+    def relabel_the_fill(self: ReconcilerSession, **kwargs: Any) -> None:
+        if kwargs.get("source") == "auto_fill":
+            kwargs["source"] = "kept_matching"
+        original(self, **kwargs)
+
+    monkeypatch.setattr(ReconcilerSession, "record_write", relabel_the_fill)
+    portal = _Portal()
+    ctx, _surface, reconciler, session = _start(browser, portal, _dossier())
+    try:
+        result = reconciler.run_until_halt_or_done(session)
+    finally:
+        ctx.close()
+        portal.close()
+    assert portal.saved == {"name": "Synthetic Name"}
+    assert session.auto_filled_subject_count == 1
+    assert result.outcome == FormTxOutcome.READBACK_INCOMPLETE, result.what_happened
+    assert result.receipt is None
+    assert "auto-fill count does not match" in result.what_happened
+
+
+def test_the_session_counts_each_auto_filled_control_once() -> None:
+    session = ReconcilerSession(_pack(), _dossier())
+    fill = {
+        "dossier_key": "name",
+        "label": "Name",
+        "selector": "#name",
+        "in_popup_subroutine": None,
+    }
+    assert session.note_auto_fill(**fill) is True
+    session.record_write(source="auto_fill", **fill)
+    # Filled again after a sign-in: still one field.
+    assert session.note_auto_fill(**fill) is False
+    session.record_write(source="auto_fill", **fill)
+    assert session.auto_filled_subject_count == 1
+    # An operator's value later replaces the auto-fill on the same control.
+    session.record_write(source="operator_value", **fill)
+    assert session.auto_filled_subject_count == 0
+    assert [w.source for w in session.writes] == ["operator_value"]
+
+
 def test_a_later_save_with_no_status_vetoes_an_earlier_2xx(browser: Browser) -> None:
     # The first save is answered 2xx and read; the second never gets a
     # status. Nothing confirms that the record ended up saved.

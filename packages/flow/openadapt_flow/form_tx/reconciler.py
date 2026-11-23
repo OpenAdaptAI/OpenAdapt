@@ -73,7 +73,6 @@ from openadapt_flow.form_tx.types import (
     UIProfileSpec,
     WizardScreenSpec,
     canonical_sha256,
-    read_subjects,
 )
 
 __all__ = [
@@ -184,6 +183,10 @@ class ReconcilerSession:
 
         # Internal session bookkeeping across halt/resume cycles:
         self._filled_selectors: set[str] = set()
+        # Every control this session auto-filled, by ledger key, noted at the
+        # fill itself and not read back from the ledger, so the signer's
+        # auto-fill count check compares two independent records.
+        self._auto_filled_subjects: set[tuple[str, str, str, str]] = set()
         # Successful-save count when the commit control was clicked.
         self._pre_commit_confirmed: Optional[int] = None
         # Surface mutation count when this run first started.
@@ -236,24 +239,26 @@ class ReconcilerSession:
         Keyed by field, screen, selector and popup: the same selector on two
         wizard screens is two controls.
         """
-        if dossier_key and dossier_key != "human-current-field":
-            field_key = dossier_key
-        else:
+        if not dossier_key or dossier_key == "human-current-field":
             dossier_key = None
-            field_key = f"control:{label or selector or 'unlabelled'}"
-        screen_id = (
-            self._last_observation.screen_id
-            if self._last_observation is not None
-            else None
+        ledger_key = self._ledger_key(
+            dossier_key=dossier_key,
+            label=label,
+            selector=selector,
+            in_popup_subroutine=in_popup_subroutine,
         )
-        ledger_key = (
-            field_key,
-            screen_id or "",
-            selector or "",
-            in_popup_subroutine or "",
-        )
+        field_key, screen_id = ledger_key[0], ledger_key[1] or None
         if keep_existing and ledger_key in self._writes:
             return
+        previous = self._writes.get(ledger_key)
+        if (
+            previous is not None
+            and previous.source == "auto_fill"
+            and source != "auto_fill"
+        ):
+            # A later write (an operator's value, say) replaced the auto-fill:
+            # the control no longer counts as auto-filled on either side.
+            self._auto_filled_subjects.discard(ledger_key)
         self._writes[ledger_key] = FieldWriteRecord(
             field_key=field_key,
             dossier_key=dossier_key,
@@ -265,6 +270,55 @@ class ReconcilerSession:
             from_popup_subroutine=from_popup_subroutine,
             matched_popup_result=matched_popup_result,
         )
+
+    def _ledger_key(
+        self,
+        *,
+        dossier_key: Optional[str],
+        label: Optional[str],
+        selector: Optional[str],
+        in_popup_subroutine: Optional[str],
+    ) -> tuple[str, str, str, str]:
+        if dossier_key and dossier_key != "human-current-field":
+            field_key = dossier_key
+        else:
+            field_key = f"control:{label or selector or 'unlabelled'}"
+        screen_id = (
+            self._last_observation.screen_id
+            if self._last_observation is not None
+            else None
+        )
+        return (field_key, screen_id or "", selector or "", in_popup_subroutine or "")
+
+    def note_auto_fill(
+        self,
+        *,
+        dossier_key: Optional[str],
+        label: Optional[str],
+        selector: Optional[str],
+        in_popup_subroutine: Optional[str],
+    ) -> bool:
+        """Note that the session auto-filled a control; True if it is new.
+
+        This is the session's own record, kept apart from the write ledger.
+        The signer refuses a receipt when the two disagree, for example when
+        a fill never reached the ledger as an auto-fill.
+        """
+        key = self._ledger_key(
+            dossier_key=dossier_key,
+            label=label,
+            selector=selector,
+            in_popup_subroutine=in_popup_subroutine,
+        )
+        if key in self._auto_filled_subjects:
+            return False
+        self._auto_filled_subjects.add(key)
+        return True
+
+    @property
+    def auto_filled_subject_count(self) -> int:
+        """Distinct controls this session auto-filled, from its own record."""
+        return len(self._auto_filled_subjects)
 
     @property
     def writes(self) -> tuple[FieldWriteRecord, ...]:
@@ -1513,13 +1567,22 @@ class FormReconciler:
                         }
                         return edited_any, False, act_halt
 
-                    session.fields_filled_auto += 1
+                    subject_selector = _subject_selector(ctrl, snapshot)
+                    if session.note_auto_fill(
+                        dossier_key=binding.dossier_key,
+                        label=ctrl.label_text,
+                        selector=subject_selector,
+                        in_popup_subroutine=in_popup_subroutine,
+                    ):
+                        # A control filled again (after a sign-in or a
+                        # re-render) is still one field.
+                        session.fields_filled_auto += 1
                     session._filled_selectors.add(filled_key)
                     session.record_write(
                         source="auto_fill",
                         dossier_key=binding.dossier_key,
                         label=ctrl.label_text,
-                        selector=_subject_selector(ctrl, snapshot),
+                        selector=subject_selector,
                         in_popup_subroutine=in_popup_subroutine,
                     )
                     edited_any = True
@@ -2697,14 +2760,10 @@ class FormReconciler:
                 dossier=session.dossier,
                 signing_key=session.signing_key,
                 outcome=FormTxOutcome.VERIFIED_DONE,
-                # Each auto-filled control once, as the signer counts them from
-                # the ledger: a control filled again (after a sign-in or a
-                # re-render) is still one field.
-                fields_filled_auto=len(
-                    read_subjects(
-                        [w for w in session.writes if w.source == "auto_fill"], ()
-                    )
-                ),
+                # The session's own record of the controls it auto-filled,
+                # each once. The signer checks it against the ledger's
+                # auto_fill subjects, so a fill the ledger lost is refused.
+                fields_filled_auto=session.auto_filled_subject_count,
                 human_resolutions=session.human_resolutions,
                 commit_mutations_observed=delta_mutations,
                 summary_verdict=verdict,
