@@ -66,6 +66,11 @@ systems:
           condition_header: {If-None-Exist: "identifier=urn:openadapt:idempotency|{marker}"}
           search: "/fhir/R4/Patient?identifier=urn:openadapt:idempotency|{marker}"
           search_items: entry.*.resource
+          # Only entries marked as matches count; an OperationOutcome
+          # warning or error about the search is not a found record.
+          search_match:
+            path: search.mode
+            equals: match
           search_empty:
             equals: {resourceType: Bundle, type: searchset}
             absent: ["link[relation=next]"]

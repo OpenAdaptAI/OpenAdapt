@@ -1,0 +1,1 @@
+| Fleet drift patches: a verified fix with no patient data, shared across sites under policy, moved as files or through a local reference hub | Released, local reference hub | Simulator | `openadapt-flow fleet`, [FLEET_DRIFT_PATCHES.md](packages/flow/docs/FLEET_DRIFT_PATCHES.md) |

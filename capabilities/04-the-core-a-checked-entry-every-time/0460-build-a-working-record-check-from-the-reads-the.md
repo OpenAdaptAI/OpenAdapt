@@ -1,0 +1,1 @@
+| Build a working record check from the reads the app made while the person viewed the saved record, and test it against injected bad writes before anyone reviews it | Released ([#1284](https://github.com/OpenAdaptAI/OpenAdapt/pull/1284)) | Synthetic (MockMed, OpenEMR fixture) | `openadapt-flow scaffold-verifier` |
