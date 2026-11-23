@@ -477,9 +477,9 @@
     "cmp_literal": 1
   },
   "packages/flow/openadapt_flow/connector/executor.py": {
-    "cmp_literal": 16,
+    "cmp_literal": 18,
     "swallow": 6,
-    "swallow_wide": 1
+    "swallow_wide": 2
   },
   "packages/flow/openadapt_flow/connector/windows_service.py": {
     "swallow": 6,
