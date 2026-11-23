@@ -95,6 +95,10 @@ def plan_rewrap(
     if old_key == new_key:
         raise RotationError("distinct_wrapping_key_required")
     base = _root(root)
+    if sealed_set.read_header(base).get("version") == sealed_set.ENVELOPE_VERSION:
+        # A version 3 set has no passphrase wrap: its keys rotate by
+        # rewrapping its bucket record (docs/phi_at_rest.md).
+        raise RotationError("version_3_set_rotates_by_bucket")
     info = base.stat()
     opened, files, header = _verified(base, old_key)
     data_key = sealed_set._data_key(opened._header, old_key)

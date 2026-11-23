@@ -171,6 +171,8 @@ def is_encrypted(data: bytes) -> bool:
     """
     if data[: len(SET_FILE_MAGIC)] == SET_FILE_MAGIC:
         return True
+    if data[: len(SET3_FILE_MAGIC)] == SET3_FILE_MAGIC:
+        return True
     if data[: len(SALTED_FILE_MAGIC)] == SALTED_FILE_MAGIC:
         return True
     try:
@@ -361,6 +363,8 @@ def _container_key(
 
 #: Prefix of a per-file container sealed under a :class:`SetKey`.
 SET_FILE_MAGIC: Final[bytes] = b"OAFLOW-SEALED-1\n"
+#: A version 3 sealed-set file: a Tink AES-256-GCM-HKDF stream follows.
+SET3_FILE_MAGIC: Final[bytes] = b"OAFLOW-SEALED-3\n"
 
 
 class SetKey:

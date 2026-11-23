@@ -921,6 +921,7 @@ def test_the_new_key_notice_is_held_for_the_finale(root, monkeypatch, tmp_path):
 
     monkeypatch.delenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", raising=False)
     monkeypatch.setenv("OPENADAPT_FLOW_AT_REST_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("OPENADAPT_FLOW_KEY_STORE", "file")
     err = io.StringIO()
     monkeypatch.setattr(sys, "stderr", err)
     stream = io.StringIO()
@@ -930,10 +931,12 @@ def test_the_new_key_notice_is_held_for_the_finale(root, monkeypatch, tmp_path):
         assert at_rest.local_key_path().exists()
         run_story(FakeEngine(root), view, next_steps=_steps, clock=_clock())
     assert err.getvalue() == ""
-    assert (
-        f"Created a local encryption key at {at_rest.local_key_path()}"
-        in stream.getvalue()
-    )
+    # The local passphrase and the device key new runs are wrapped to.
+    assert "Created a local encryption key at " in stream.getvalue()
+    assert str(at_rest.local_key_path()) in stream.getvalue()
+    device_key_path = getattr(at_rest, "device_key_path", None)
+    if device_key_path is not None:  # Flow with the key hierarchy
+        assert str(device_key_path()) in stream.getvalue()
 
 
 def test_no_key_is_created_under_the_opt_out(root, monkeypatch, tmp_path):
@@ -1169,6 +1172,8 @@ def test_real_quickstart(tmp_path, monkeypatch, capfd):
     monkeypatch.delenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", raising=False)
     monkeypatch.setenv("OPENADAPT_FLOW_AT_REST_HOME", str(tmp_path / "at-rest"))
     monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal"))
+    # The device key goes to a file here, never to the OS keychain.
+    monkeypatch.setenv("OPENADAPT_FLOW_KEY_STORE", "file")
     root = tmp_path / "openadapt-quickstart"
     stream = io.StringIO()
     outcome = run_quickstart(
@@ -1189,14 +1194,38 @@ def test_real_quickstart(tmp_path, monkeypatch, capfd):
     assert outcome.broken.new_records == 0
     assert outcome.broken.transaction_outcome == "RECONCILIATION_REQUIRED"
     assert f"{runs} of {runs} saved and checked" in output
+    from openadapt_flow import sealed_set
+
+    notes = []
     for index in range(1, runs + 1):
-        report = json.loads((root / f"run-{index}" / "report.json").read_text())
+        run_dir = root / f"run-{index}"
+        # Encrypted by default: read in memory, receipts beside it.
+        report = json.loads(sealed_set.read_bytes(run_dir / "report.json"))
         assert report["execution_outcome"] == "VERIFIED"
         assert report["params"]["note"] in output
+        notes.append(report["params"]["note"].encode("utf-8"))
+        assert sealed_set.is_sealed(run_dir)
+        assert (run_dir / "seal.json").is_file()
     checkpoints = root / "run-1" / "checkpoints"
     assert list(checkpoints.glob("*.enc"))
     assert not list(checkpoints.glob("*.json"))
-    assert "Created a local encryption key at" in output
+    # Only ciphertext screenshots, frames and typed values on disk. The
+    # receipt files are plaintext by design; the receipt pages embed the
+    # report (logged); the summary page leaves the screenshots out.
+    plain_ok = {"seal.html", "receipt.png"}
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        data = path.read_bytes()
+        if path.name not in plain_ok:
+            assert not data.startswith(b"\x89PNG"), path
+            assert not data.startswith(b"\xff\xd8\xff"), path
+        if path.name != "seal.html":
+            for note in notes:
+                assert note not in data, path
+    for folder in ("recording", "bundle", "run-1", "run-broken"):
+        assert sealed_set.is_sealed(root / folder), folder
+    assert "Created a local encryption key" in output
     # Neither the key notice nor a plaintext notice reached the terminal.
     err = capfd.readouterr().err
     assert "Created a local encryption key" not in err

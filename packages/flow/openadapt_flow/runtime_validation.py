@@ -565,7 +565,10 @@ def _replay_attestation(
 
     report_path = run_dir / "report.json"
     try:
-        report_bytes = report_path.read_bytes()
+        from openadapt_flow import sealed_set
+
+        # The run directory is encrypted by default: read it in memory.
+        report_bytes = sealed_set.read_bytes(report_path)
         report = RunReport.model_validate_json(report_bytes)
     except (OSError, ValueError) as exc:
         raise RuntimeValidationError(f"Cannot read a valid run report: {exc}") from exc
