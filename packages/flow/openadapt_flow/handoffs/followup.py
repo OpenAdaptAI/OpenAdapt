@@ -57,7 +57,37 @@ def _signature(handoff: Handoff) -> dict[str, Any]:
     return {**item.line, "values": values}
 
 
+def _is_file(path: Path) -> bool:
+    # The run directory is encrypted by default: its files are read, written
+    # and removed through its sealed set (in memory), never in plaintext.
+    from openadapt_flow import sealed_set
+
+    return sealed_set.is_file(path)
+
+
+def _read(path: Path) -> str:
+    from openadapt_flow import sealed_set
+
+    return sealed_set.read_text(path)
+
+
+def _unlink(path: Path) -> None:
+    from openadapt_flow import sealed_set
+
+    if sealed_set.is_sealed_path(path):
+        sealed_set.unlink(path, missing_ok=True)
+    else:
+        path.unlink(missing_ok=True)
+
+
 def _write_json(path: Path, payload: Any, *, private: bool) -> None:
+    from openadapt_flow import sealed_set
+
+    if sealed_set.is_sealed_path(path):
+        sealed_set.write_text(
+            path, json.dumps(payload, indent=2, sort_keys=True) + "\n"
+        )
+        return
     tmp = path.with_name(path.name + ".tmp")
     fd = os.open(
         tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600 if private else 0o644
@@ -69,9 +99,9 @@ def _write_json(path: Path, payload: Any, *, private: bool) -> None:
 
 def _sidecar(run_dir: Path) -> dict[str, Any]:
     path = run_dir / SIDECAR
-    if not path.is_file():
+    if not _is_file(path):
         return {"schema": SCHEMA, "records": []}
-    data = json.loads(path.read_text("utf-8"))
+    data = json.loads(_read(path))
     if data.get("schema") != SCHEMA:
         raise ValueError(f"{SIDECAR} is not {SCHEMA}")
     return data
@@ -112,7 +142,9 @@ def updates(run_dir: Path) -> list[Path]:
     """
     numbers: list[int] = []
     private_numbers: set[int] = set()
-    for path in Path(run_dir).iterdir():
+    from openadapt_flow import sealed_set
+
+    for path in sealed_set.list_files(run_dir, "receipt.update-*"):
         match = _UPDATE_NAME.match(path.name)
         if not match:
             continue
@@ -148,15 +180,15 @@ def _finish_pending(run_dir: Path, registry: Sequence[Any]) -> None:
     from openadapt_flow.offline_seal import loads_strict
 
     pending = _pending_path(run_dir)
-    if not pending.is_file():
+    if not _is_file(pending):
         return
-    note = json.loads(pending.read_text("utf-8"))
+    note = json.loads(_read(pending))
     out = run_dir / str(note["file"])
     private = run_dir / str(note["private"])
     complete = False
     try:
-        envelope = loads_strict(out.read_text("utf-8"))
-        complete = r.verify_receipt(envelope, registry).ok and private.is_file()
+        envelope = loads_strict(_read(out))
+        complete = r.verify_receipt(envelope, registry).ok and _is_file(private)
     except (OSError, ValueError):
         complete = False
     if complete:
@@ -166,8 +198,8 @@ def _finish_pending(run_dir: Path, registry: Sequence[Any]) -> None:
             _write_json(run_dir / SIDECAR, data, private=True)
     else:
         for partial in (out, private):
-            partial.unlink(missing_ok=True)
-    pending.unlink()
+            _unlink(partial)
+    _unlink(pending)
 
 
 def sign_updates(
@@ -185,6 +217,13 @@ def sign_updates(
     completed or rolled back by the next call."""
 
     run_dir = Path(run_dir)
+    from openadapt_flow import sealed_set
+
+    if sealed_set.is_sealed(run_dir):
+        # An encrypted run's writes take its set's lock per write; one signer
+        # at a time holds a lock of its own instead of a file in the set.
+        with sealed_set.side_lock(run_dir, "receipt-update"):
+            return _sign_updates_locked(run_dir, ledgers, signer=signer)
     lock = run_dir / ".receipt-update.lock"
     try:
         fd = os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -214,7 +253,7 @@ def _sign_updates_locked(
         kid, base64.b64encode(signer.public_raw()).decode("ascii"), "this_computer"
     )
     _finish_pending(run_dir, [own])
-    original = loads_strict((run_dir / r.RECEIPT_FILE).read_text("utf-8"))
+    original = loads_strict(_read(run_dir / r.RECEIPT_FILE))
     # Extend only a chain that verifies as it stands, signed by this key
     # alone: the receipt and every update already written. verify_chain
     # refuses a follow-up from any other key.
@@ -225,7 +264,9 @@ def _sign_updates_locked(
             f" ({existing.detail})" if existing is not None and existing.detail else ""
         )
         raise ValueError(f"the run's receipt does not verify: {reason}{detail}")
-    raw_report = (run_dir / "report.json").read_bytes()
+    from openadapt_flow import sealed_set
+
+    raw_report = sealed_set.read_bytes(run_dir / "report.json")
     statement = r.loads_strict(base64.b64decode(original["payload"]))
     subjects = {
         x["name"]: x["digest"]["sha256"] for x in statement.get("subject") or []
@@ -249,7 +290,7 @@ def _sign_updates_locked(
     out = run_dir / update_file(sequence)
     # Race class: a sequence is claimed exclusively, so two signers can't
     # write the same update; the loser fails and signs nothing.
-    if out.exists():
+    if _is_file(out):
         raise ValueError(f"{out.name} was written by another signer")
     # Durable before any update file: what this update is, so an
     # interrupted publication can be completed or rolled back.
@@ -269,7 +310,7 @@ def _sign_updates_locked(
     )
     _write_json(out, envelope, private=False)
     record_signed(run_dir, out.name, changed)
-    _pending_path(run_dir).unlink()
+    _unlink(_pending_path(run_dir))
     return out
 
 
@@ -285,12 +326,12 @@ def verify_history(run_dir: str | Path, registry: Sequence[Any]) -> Any:
 
     def load(name: str) -> Optional[Mapping[str, Any]]:
         path = run_dir / name
-        return loads_strict(path.read_text("utf-8")) if path.is_file() else None
+        return loads_strict(_read(path)) if _is_file(path) else None
 
     original = load(r.RECEIPT_FILE)
     found = updates(run_dir)
     if original is None:
-        if found or (run_dir / SIDECAR).is_file():
+        if found or _is_file(run_dir / SIDECAR):
             # Missing-evidence class: signed updates without their receipt are
             # a broken history, not an unsigned run.
             raise ValueError("signed updates are here but receipt.json is missing")
@@ -304,7 +345,7 @@ def verify_history(run_dir: str | Path, registry: Sequence[Any]) -> Any:
     ]
     if sorted(recorded) != sorted(p.name for p in found):
         raise ValueError("the signed updates don't match the record of what was signed")
-    chain = [loads_strict(p.read_text("utf-8")) for p in found]
+    chain = [loads_strict(_read(p)) for p in found]
     return r.verify_chain(
         original,
         chain,
