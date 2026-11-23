@@ -26,7 +26,21 @@ on:
     # Drafts run nothing (each job checks `draft`); marking one ready runs it.
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
-      - packages/flow/openadapt_flow/**
+      - packages/flow/openadapt_flow/backend.py
+      - packages/flow/openadapt_flow/backends/**
+      - packages/flow/openadapt_flow/runtime/**
+      - packages/flow/openadapt_flow/compiler/**
+      - packages/flow/openadapt_flow/desktop_record.py
+      - packages/flow/openadapt_flow/recorder.py
+      - packages/flow/openadapt_flow/approval_mode/**
+      - packages/flow/openadapt_flow/policy.py
+      - packages/flow/openadapt_flow/qualification/**
+      - packages/flow/openadapt_flow/ir.py
+      - packages/flow/openadapt_flow/contracts.py
+      - packages/flow/openadapt_flow/_windows_directory.py
+      - packages/flow/openadapt_flow/crypto.py
+      - packages/flow/openadapt_flow/at_rest.py
+      - packages/flow/openadapt_flow/sealed_set.py
       - packages/flow/scripts/desktop/pn_db.py
       - packages/flow/scripts/desktop/patient_notes.ps1
       - packages/flow/tests/e2e/test_windows_hosted_replay.py
