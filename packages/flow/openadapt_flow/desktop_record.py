@@ -449,11 +449,11 @@ def _policy_key(out_dir: Path | str, explicit: Optional[str] | object) -> Option
     Strict mode refuses any desktop capture (its raw session is plaintext
     while it records), whether or not a key was passed. An explicit ``None``
     is a plaintext recording, recorded in the ledger."""
-    from openadapt_flow import at_rest
+    from openadapt_flow import at_rest, sealed_set
 
     if at_rest.strict():
         at_rest.unsealed_write("a desktop raw capture session", str(out_dir))
-    return at_rest.new_artifact_key(explicit, "a desktop recording", out_dir)
+    return sealed_set.new_artifact_key(explicit, "a desktop recording", out_dir)
 
 
 def _seal_recording(plain: Path, dest: Path, key: str) -> None:

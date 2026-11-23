@@ -61,7 +61,6 @@ from typing import Any, Callable, Optional
 
 from PIL import Image, ImageDraw
 
-from openadapt_flow import at_rest as _at_rest
 from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.at_rest import POLICY
 from openadapt_flow.backend import (
@@ -277,7 +276,7 @@ class Recorder:
         self._finalize_on_finish = finalize_on_finish
         # Encrypted by default (the at-rest policy decides); an explicit
         # ``None`` is plaintext that strict mode refuses and the ledger records.
-        encryption_key = _at_rest.new_artifact_key(
+        encryption_key = _sealed.new_artifact_key(
             encryption_key, "a recording", self._dir
         )
         if encryption_key:

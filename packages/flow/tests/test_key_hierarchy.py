@@ -929,7 +929,7 @@ def test_a_v3_runs_checkpoints_are_keyed_to_the_run_and_die_with_it(
     # Organization mode: the backup's header names a bucket whose every
     # tracked key copy is gone, so its checkpoints are gone too.
     with pytest.raises(sealed_set.SealedSetError):
-        CheckpointStore(backup, key=local)
+        CheckpointStore(backup, key=local).key  # refused when used
 
 
 def test_a_checkpoint_store_without_a_key_encrypts_by_default(home) -> None:

@@ -812,25 +812,6 @@ def plaintext_by_caller(artifact: str, path: Path | str) -> None:
     )
 
 
-def new_artifact_key(
-    explicit: Optional[str] | object, artifact: str, path: Path | str
-) -> Optional[str]:
-    """The key for a new recording a library entry point writes: the
-    caller's key; under :data:`POLICY`, the policy's (None, plaintext, only
-    under the recorded opt-out); an explicit ``None`` is plaintext through
-    :func:`plaintext_by_caller` (refused in strict mode, else recorded)."""
-    if explicit is POLICY:
-        if not seal_new(artifact, path):
-            return None
-        from openadapt_flow import sealed_set
-
-        return sealed_set.recording_key()
-    if not explicit:
-        plaintext_by_caller(artifact, path)
-        return None
-    return str(explicit)
-
-
 def seals_by_default() -> bool:
     """Whether new artifacts are sealed now, without recording anything:
     strict mode, or the default mode without the opt-out."""

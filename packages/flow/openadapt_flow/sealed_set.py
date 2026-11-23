@@ -984,6 +984,24 @@ def _new_v3(
     return header, V3Key(dek, set_id, bucket)
 
 
+def new_artifact_key(
+    explicit: Optional[str] | object, artifact: str, path: Path | str
+) -> Optional[str]:
+    """The key for a new recording a library entry point writes: the
+    caller's key; under :data:`at_rest.POLICY`, the policy's (None, plaintext,
+    only under the recorded opt-out); an explicit ``None`` is plaintext through
+    :func:`at_rest.plaintext_by_caller` (refused in strict mode, else
+    recorded)."""
+    from openadapt_flow import at_rest
+
+    if explicit is at_rest.POLICY:
+        return recording_key() if at_rest.seal_new(artifact, path) else None
+    if not explicit:
+        at_rest.plaintext_by_caller(artifact, path)
+        return None
+    return str(explicit)
+
+
 def preflight_new(kind: str, passphrase: Optional[str]) -> None:
     """Refuse, before a capture starts, a new set :func:`_new_v3` would
     refuse at sealing time (organization recipients, archive and backlog,
@@ -1110,7 +1128,7 @@ class SealedSetWriter:
                 rel = physical
             hashes[rel] = _sha256(raw)
         self._header = dict(header)
-        self._key = key
+        self._key = key  # type: ignore[assignment]
         self._header_revision = _sha256((self.root / HEADER).read_bytes())
         self._codecs.update(files)
         self._hashes.update(hashes)
