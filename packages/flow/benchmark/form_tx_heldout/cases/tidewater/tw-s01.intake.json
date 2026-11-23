@@ -1,0 +1,23 @@
+{
+  "case_id": "tw-s01",
+  "facts": {
+    "applicant.date_of_birth": "1987-08-09",
+    "applicant.email": "junia.m@example.test",
+    "applicant.first_name": "Junia",
+    "applicant.last_name": "Marchbanks",
+    "history.prior_claims_3yr": 0,
+    "household.driver_count": 2,
+    "property.address_line1": "1120 Cormorant Dr",
+    "property.address_line2": "Unit 3B",
+    "property.city": "Bar Harbor",
+    "property.occupancy": "Owner occupied",
+    "property.roof_year": 2019,
+    "property.square_feet": 1350,
+    "property.state": "ME",
+    "property.year_built": 2004,
+    "property.zip": "04609",
+    "vehicle.make": "Kestrel",
+    "vehicle.model": "Ridgeback XL",
+    "vehicle.year": 2022
+  }
+}

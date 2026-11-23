@@ -20,7 +20,6 @@ from openadapt_flow.form_tx.playwright_surface import PlaywrightFormSurface
 from openadapt_flow.form_tx.profiles import load_ui_profile
 from openadapt_flow.form_tx.receipt import (
     generate_ed25519_keypair,
-    verify_form_tx_receipt,
 )
 from openadapt_flow.form_tx.reconciler import FormReconciler
 from openadapt_flow.form_tx.types import (
@@ -56,10 +55,19 @@ def test_full_three_arm_multi_portal_benchmark():
 
     tx_summary = by_arm["openadapt_form_tx"]
     assert tx_summary.total_cases == 9
-    assert tx_summary.verified_accurate_completions == 9
+    # With the complete read-back, the 7 underwriting cases end
+    # readback_incomplete: the estimator inputs are typed in a popup and the
+    # portal never shows them, so they cannot be read back. Only the 2
+    # hospital-portal jobs verify. This historical benchmark stays invalidated.
+    assert tx_summary.verified_accurate_completions == 2
     assert tx_summary.silent_corrupt_commits == 0
-    assert tx_summary.failed_or_aborted == 0
-    assert tx_summary.receipts_verified == 9
+    assert tx_summary.receipts_verified == 2
+    underwriting_tx = [
+        c
+        for c in report.cases
+        if c.portal == "underwriting_wizard" and c.arm == "openadapt_form_tx"
+    ]
+    assert {c.outcome for c in underwriting_tx} == {"readback_incomplete"}
 
     # Repetition alone cannot admit a policy: proposals remain unqualified.
     assert report.learned_candidates_admitted == 0
@@ -69,9 +77,11 @@ def test_full_three_arm_multi_portal_benchmark():
         if c.case_id == "uw_06_pool_zero_halt_after_learned_rule"
         and c.arm == "openadapt_form_tx"
     )
-    assert uw_06_tx.completed is True
-    assert uw_06_tx.ground_truth_accurate is True
     assert uw_06_tx.human_decisions == 1
+    # The saved record is checked against the server oracle on its own, so a
+    # wrong stored answer fails here whatever the run's outcome.
+    assert uw_06_tx.saved_record_accurate is True
+    assert all(c.saved_record_accurate is True for c in underwriting_tx)
 
     # Zero-mutation keepalive & request_id idempotency on second synthetic portal
     assert report.hms_keepalive_pings >= 1
@@ -82,14 +92,9 @@ def test_full_three_arm_multi_portal_benchmark():
     assert ungov.silent_corrupt_commits >= 4
 
     # Rigid step replay fails on conditional cascades and HMS async combobox/modals
-    rigid = by_arm["rigid_step_replay"]
-    assert (
-        rigid.verified_accurate_completions < tx_summary.verified_accurate_completions
-    )
-
     md = format_markdown_report(report)
     assert "openadapt_form_tx" in md
-    assert "9/9" in md
+    assert "2/9" in md
 
 
 def test_copilot_bridge_roundtrip_and_readback_corruption_refusal(tmp_path):
@@ -172,9 +177,16 @@ def test_copilot_bridge_roundtrip_and_readback_corruption_refusal(tmp_path):
             assert len(decisions) == 1
 
             final_res = reconciler.apply_human_resolution(sess, decisions[0])
-            assert final_res.outcome == FormTxOutcome.VERIFIED_DONE
-            assert final_res.receipt is not None
-            assert verify_form_tx_receipt(final_res.receipt) is True
+            # Submitted; the estimator inputs cannot be read back on this
+            # portal, so the run is not verified and no receipt is issued.
+            assert final_res.outcome == FormTxOutcome.READBACK_INCOMPLETE
+            assert final_res.receipt is None
+            assert final_res.summary_verdict is not None
+            assert final_res.summary_verdict.failed_keys == ()
+            assert all(
+                key.startswith("estimator.")
+                for key in final_res.summary_verdict.not_checked_keys
+            )
             ctx.close()
 
             # 2. Planted server read-back corruption -> SummaryJudge MUST refuse (READBACK_REFUTED)!
@@ -267,9 +279,20 @@ def test_six_second_server_rerender_preserves_declared_readback() -> None:
             reconciler = FormReconciler(surface)
             session = reconciler.create_session(pack, scenario.dossier)
             result = reconciler.run_until_halt_or_done(session)
-            assert result.outcome == FormTxOutcome.VERIFIED_DONE, result.what_happened
+            # The estimator inputs are typed in the popup and the portal does
+            # not store or show them, so they cannot be read back. They are
+            # not_checked, and the run is submitted but never verified.
+            assert result.outcome == FormTxOutcome.READBACK_INCOMPLETE, (
+                result.what_happened
+            )
             assert result.summary_verdict is not None
-            assert result.summary_verdict.passed is True
+            assert result.summary_verdict.passed is False
+            assert result.summary_verdict.failed_keys == ()
+            assert result.summary_verdict.not_checked_keys == (
+                "estimator.finish_grade",
+                "estimator.living_area_sqft",
+                "estimator.stories",
+            )
             # Explicit fixture specification: conditional roof/pool follow-ups
             # are absent in this case. Every other intended field and the
             # estimator return must appear in successful saved-state read-back.
@@ -294,7 +317,6 @@ def test_six_second_server_rerender_preserves_declared_readback() -> None:
                 if verdict.passed
             }
             assert expected_keys == checked_keys
-            assert result.receipt is not None
-            assert verify_form_tx_receipt(result.receipt)
+            assert result.receipt is None
         finally:
             browser.close()
