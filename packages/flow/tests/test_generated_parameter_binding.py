@@ -284,7 +284,17 @@ def _compiler(tmp_path: Path, parameters: tuple[str, ...]) -> pipeline.FirstRunC
     records = tmp_path / "export"
     records.mkdir(exist_ok=True)
     verify = tmp_path / "verify.yaml"
-    verify.write_text(json.dumps({"verifier": {"kind": "file", "root": str(records)}}))
+    verify.write_text(
+        json.dumps(
+            {
+                "verifier": {
+                    "kind": "file",
+                    "root": str(records),
+                    "artifact_producer": "system_of_record",
+                }
+            }
+        )
+    )
     return pipeline.FirstRunCompiler(
         " ".join("{" + name + "}" for name in parameters),
         params=parameters,
