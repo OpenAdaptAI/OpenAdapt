@@ -43,8 +43,9 @@ def check(records: list[dict[str, Any]]) -> tuple[bool, str]:
         raise SystemExit("callback carried no x-run-token header")
     if ack_body.get("job_id") != JOB_ID or ack_body.get("status") != "failed":
         raise SystemExit(f"unexpected ack: {ack_body}")
-    if "safety" not in (ack_body.get("error") or ""):
-        raise SystemExit(f"ack error does not name the safety refusal: {ack_body}")
+    # The ack carries a closed code, never free text.
+    if ack_body.get("error_code") != "governance_refused" or "error" in ack_body:
+        raise SystemExit(f"ack does not carry the governance refusal code: {ack_body}")
     return True, f"poll -> failed callback -> ack after {len(records)} requests"
 
 

@@ -22,7 +22,7 @@ recording already holds, then tries to break it before anyone reviews it.
    field dropped, saved twice, saved on the wrong record, another record of
    the same subject destroyed, a stray write elsewhere), plus another record
    changed or deleted. Every generated read is built, and a database read is
-   run, so a read that can't work is caught too. On a fixture (MockMed, the
+   run, so a read that can't work is caught too. On a local fixture (the
    effect_e2e record service) the check also runs end to end through the
    replayer (:mod:`openadapt_flow.record_check_proof`). A check that misses
    any fault, or stops the clean save, is written as a draft with the misses

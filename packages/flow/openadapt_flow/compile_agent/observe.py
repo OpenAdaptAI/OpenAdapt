@@ -159,7 +159,11 @@ _OBSERVE_JS = (
       var r = el.getBoundingClientRect();
       var value = null;
       if (tag === 'input' || tag === 'textarea' || tag === 'select') {
-        value = el.type === 'password' ? '' : String(el.value || '');
+        // A password or a one-time sign-in code never enters the listing.
+        var secret = el.type === 'password' ||
+          /(^|\\s)(one-time-code|current-password|new-password)(\\s|$)/i
+            .test(el.getAttribute('autocomplete') || '');
+        value = secret ? '' : String(el.value || '');
       }
       var cls = (el.className && el.className.baseVal === undefined)
         ? String(el.className) : '';

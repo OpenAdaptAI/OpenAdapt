@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import stat
+import sys
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -18,6 +20,8 @@ from openadapt_desktop.authoring_runner import (
     AuthoringCoachOnly,
     AuthoringError,
     AuthoringRunner,
+    OwnedChromium,
+    launch_empty_playwright_chromium,
     project_observe,
 )
 from openadapt_desktop.config import EngineConfig
@@ -608,3 +612,211 @@ def test_callback_strips_titles_and_never_retries_uncertain_click(tmp_path: Path
     with pytest.raises(AuthoringError, match="RECONCILIATION_REQUIRED"):
         runner._click({"node_id": button["node_id"]})
     assert recorder.clicks == []
+
+
+class _FakeOwner:
+    def __init__(self, name: str, log: list[str], *, fail: str | None = None) -> None:
+        self.name = name
+        self.log = log
+        self.fail = fail
+
+    def close(self) -> None:
+        self.log.append(f"close {self.name}")
+        if self.fail == "close":
+            raise RuntimeError("close failed")
+
+
+class _FakePlaywright:
+    """A synthetic sync_playwright driver that records launches and teardown."""
+
+    def __init__(self, *, cookies: list[dict] | None = None, fail: str | None = None) -> None:
+        self.log: list[str] = []
+        self.launches: list[dict[str, Any]] = []
+        self.cookies = cookies or []
+        self.fail = fail
+        self.chromium = SimpleNamespace(launch=self._launch)
+
+    def start(self) -> _FakePlaywright:
+        self.log.append("start")
+        return self
+
+    def stop(self) -> None:
+        self.log.append("stop")
+
+    def _launch(self, **kwargs: Any) -> Any:
+        self.launches.append(kwargs)
+        if self.fail == "launch":
+            raise RuntimeError("launch failed")
+        browser = _FakeOwner("browser", self.log)
+        browser.new_context = self._new_context
+        return browser
+
+    def _new_context(self) -> Any:
+        context = _FakeOwner("context", self.log, fail=self.fail)
+        context.cookies = lambda: list(self.cookies)
+        context.new_page = self._new_page
+        return context
+
+    def _new_page(self) -> Any:
+        def goto(url: str) -> None:
+            self.log.append(f"goto {url}")
+            if self.fail == "goto":
+                raise RuntimeError("navigation failed")
+
+        return SimpleNamespace(goto=goto)
+
+
+@pytest.fixture
+def fake_playwright(monkeypatch: pytest.MonkeyPatch):
+    def install(**kwargs: Any) -> _FakePlaywright:
+        driver = _FakePlaywright(**kwargs)
+        module = SimpleNamespace(sync_playwright=lambda: driver)
+        monkeypatch.setitem(sys.modules, "playwright.sync_api", module)
+        return driver
+
+    return install
+
+
+def test_owned_launch_is_keychain_safe(fake_playwright) -> None:
+    driver = fake_playwright()
+    owned = launch_empty_playwright_chromium("https://openadapt.ai/mockmed", headless=True)
+    assert isinstance(owned, OwnedChromium)
+    assert driver.launches == [
+        {"headless": True, "args": ["--use-mock-keychain", "--password-store=basic"]}
+    ]
+    assert driver.log == ["start", "goto https://openadapt.ai/mockmed"]
+    owned.close()
+    owned.close()
+    assert driver.log[2:] == ["close context", "close browser", "stop"]
+
+
+@pytest.mark.parametrize("fail", ["launch", "goto"])
+def test_owned_launch_tears_down_on_setup_failure(fake_playwright, fail) -> None:
+    driver = fake_playwright(fail=fail)
+    with pytest.raises(RuntimeError):
+        launch_empty_playwright_chromium("https://openadapt.ai/mockmed")
+    assert driver.log[-1] == "stop"
+    if fail == "goto":
+        assert driver.log[-3:] == ["close context", "close browser", "stop"]
+
+
+def test_owned_launch_with_cookies_tears_down(fake_playwright) -> None:
+    driver = fake_playwright(cookies=[{"name": "sid"}])
+    with pytest.raises(AuthoringError, match="empty cookies"):
+        launch_empty_playwright_chromium("https://openadapt.ai/mockmed")
+    assert driver.log == ["start", "close context", "close browser", "stop"]
+
+
+def test_owned_teardown_keeps_going_when_a_close_fails(fake_playwright) -> None:
+    driver = fake_playwright(fail="close")
+    owned = launch_empty_playwright_chromium("https://openadapt.ai/mockmed")
+    owned.close()
+    assert driver.log[-3:] == ["close context", "close browser", "stop"]
+
+
+def _web_runner(tmp_path: Path, driver: _FakePlaywright):
+    runner, requests, recorder, audit = _mailbox(tmp_path)
+    runner._playwright_launcher = lambda url: launch_empty_playwright_chromium(url, headless=True)
+    runner.claim_uri(URI, start_loop=False)
+    runner.handle_envelope(_envelope("bind_pack"))
+    runner.allow()
+    runner.pin_target(backend="web", url="https://openadapt.ai/mockmed")
+    return runner, requests, recorder
+
+
+def test_stop_record_closes_the_owned_browser(tmp_path: Path, fake_playwright) -> None:
+    driver = fake_playwright()
+    runner, _requests, recorder = _web_runner(tmp_path, driver)
+    runner._start_record()
+    assert "close browser" not in driver.log
+    runner._stop_record()
+    assert recorder.finished is True
+    assert driver.log[-3:] == ["close context", "close browser", "stop"]
+    assert runner._playwright is None
+
+
+def test_halt_closes_the_owned_browser(tmp_path: Path, fake_playwright) -> None:
+    driver = fake_playwright()
+    runner, _requests, _recorder = _web_runner(tmp_path, driver)
+    runner.handle_envelope(_envelope("start_record"))
+    runner.handle_envelope(_envelope("halt"))
+    assert driver.log[-3:] == ["close context", "close browser", "stop"]
+
+
+def test_a_paused_session_keeps_its_browser(tmp_path: Path, fake_playwright) -> None:
+    driver = fake_playwright()
+    runner, _requests, _recorder = _web_runner(tmp_path, driver)
+    runner.handle_envelope(_envelope("start_record"))
+    note = next(n for n in runner._observe()["tree"] if n.get("automation_id") == "note")
+    runner.handle_envelope(
+        _envelope("pause_for_input", args={"node_id": note["node_id"], "param": "note"})
+    )
+    assert runner.has_pause()
+    assert "close browser" not in driver.log
+    assert isinstance(runner._playwright, OwnedChromium)
+
+
+def test_setup_failure_after_launch_closes_the_owned_browser(
+    tmp_path: Path, fake_playwright
+) -> None:
+    driver = fake_playwright()
+    runner, _requests, _recorder = _web_runner(tmp_path, driver)
+    runner._recorder_factory = None
+    with pytest.raises(AuthoringError, match="recorder is unavailable"):
+        runner._start_record()
+    assert driver.log[-3:] == ["close context", "close browser", "stop"]
+    assert runner._playwright is None
+
+
+def test_an_attached_browser_is_never_closed(tmp_path: Path) -> None:
+    closed: list[str] = []
+    runner, _requests, _recorder, _audit = _mailbox(tmp_path)
+    runner._playwright_launcher = lambda _url: SimpleNamespace(
+        cookies=lambda: [], close=lambda: closed.append("browser")
+    )
+    runner.claim_uri(URI, start_loop=False)
+    runner.handle_envelope(_envelope("bind_pack"))
+    runner.allow()
+    runner.pin_target(backend="web", url="https://openadapt.ai/mockmed")
+    runner._start_record()
+    runner._stop_record()
+    assert closed == []
+
+
+def test_stop_during_browser_launch_cancels_start_and_cleans_up(
+    tmp_path: Path, fake_playwright
+) -> None:
+    driver = fake_playwright()
+    runner, _requests, _recorder = _web_runner(tmp_path, driver)
+
+    launch_started = threading.Event()
+    stop_called = threading.Event()
+
+    def slow_launcher(url: str):
+        launch_started.set()
+        assert stop_called.wait(timeout=3.0)
+        return launch_empty_playwright_chromium(url, headless=True)
+
+    runner._playwright_launcher = slow_launcher
+
+    start_thread = threading.Thread(target=runner._start_record)
+    start_thread.start()
+
+    assert launch_started.wait(timeout=3.0)
+    stop_result = runner.operator_stop()
+    assert stop_result == {"recording": False, "paused": False, "halted": True}
+    stop_called.set()
+
+    start_thread.join(timeout=3.0)
+    assert not start_thread.is_alive()
+
+    # The late-arriving browser must be closed on its owner thread,
+    # and the runner must not be recording.
+    assert runner._recording is False
+    assert runner._playwright is None
+    assert runner._recorder is None
+    status = runner.status_dict()
+    assert status is not None
+    assert status["recording"] is False
+    assert driver.log[-3:] == ["close context", "close browser", "stop"]
+

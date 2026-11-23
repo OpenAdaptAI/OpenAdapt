@@ -95,7 +95,7 @@ from openadapt_flow.backends.playwright_backend import (
     PlaywrightBackend,
 )
 from openadapt_flow.ir import StructuralLocator, structural_locator_is_locatable
-from openadapt_flow.recorder import Recorder
+from openadapt_flow.recorder import POLICY, Recorder
 from openadapt_flow.section_capture import SECTION_CONTEXT_JS
 from openadapt_flow.submit_binding import (
     OBSERVE_SUBMIT_BINDING_JS,
@@ -2334,7 +2334,7 @@ class InteractiveRecorder:
         stop_when: Optional[Callable[[], bool]] = None,
         surface: str = "web",
         capture_network: bool = False,
-        encryption_key: Optional[str] = None,
+        encryption_key: Optional[str] | object = POLICY,
         event_clock: Optional[list[float]] = None,
     ) -> None:
         self._url = url

@@ -257,6 +257,51 @@ def save_approval_task(
     return sign_human_decision_task_hmac(key=_task_key(store), fields=fields)
 
 
+#: ``openadapt_flow.guard.Guard``'s item-approval workflow name.
+GUARDED_SAVE_WORKFLOW = "guarded-save"
+
+
+def _guarded_wording(presentation: dict[str, Any], request: Any, run_dir: Path) -> None:
+    from openadapt_flow.agent_guard.approval_fields import NOT_READ, read_values_for
+
+    fields = list(request.fields or [])
+    # Every field shown was read from the held request, and the card kept
+    # none out (a task over the field cap): the sources file, bound to this
+    # request's digest, says so. A missing or other file: not checked.
+    values = read_values_for(run_dir, request)
+    checked = (
+        bool(fields)
+        and all(f.after != NOT_READ for f in fields)
+        and values is not None
+        and values.get("read") is True
+    )
+    presentation["values_checked"] = checked
+    if checked:
+        presentation["explanation"] = (
+            "These are the values in the save the agent is sending, read from "
+            "the held request before it goes out. After it saves, OpenAdapt "
+            "reads the record back and reports any difference."
+        )
+    elif any(
+        isinstance(row, dict) and row.get("screen") is not None
+        for row in presentation.get("sources") or []
+    ):
+        presentation["explanation"] = (
+            "OpenAdapt could not read the values this save will send, so they "
+            "were not checked before saving. The screenshot and the values on "
+            "screen were taken when the agent asked; compare them with the "
+            "task's values before you approve. After it saves, OpenAdapt "
+            "reads the record back and reports any difference."
+        )
+    else:
+        presentation["explanation"] = (
+            "OpenAdapt could not read the values this save will send, so they "
+            "were not checked before saving. Compare the screen with the "
+            "task's values before you approve. After it saves, OpenAdapt "
+            "reads the record back and reports any difference."
+        )
+
+
 def save_approval_detail(root: Path, request_id: str) -> dict[str, Any]:
     """The portal's view of one waiting save: signed task + local presentation.
 
@@ -293,6 +338,21 @@ def save_approval_detail(root: Path, request_id: str) -> dict[str, Any]:
         presentation["fields"] = [
             field.model_dump(mode="json") for field in request.fields
         ]
+        # A guarded save's source column, kept beside the request and bound
+        # to its digest (agent_guard/approval_fields.py). Local only.
+        from openadapt_flow.agent_guard.approval_fields import read_sources_for
+
+        sources = read_sources_for(run_dir, request)
+        if sources:
+            presentation["sources"] = sources
+    if request.workflow_name == GUARDED_SAVE_WORKFLOW:
+        # An agent's save the guard holds. The card says "exactly" only when
+        # every value came from the held request (request.fields, inside the
+        # digest); otherwise it says plainly they were not read or checked.
+        _guarded_wording(presentation, request, run_dir)
+    elif request.workflow_name != LEDGER_QUESTION_WORKFLOW:
+        # A compiled program's own save: the form it filled is the save.
+        presentation["values_checked"] = True
     if request.workflow_name == LEDGER_QUESTION_WORKFLOW:
         # An agent's question from its task ledger, not a save. Approve is
         # yes and decline is no; the answer saves nothing in any app.

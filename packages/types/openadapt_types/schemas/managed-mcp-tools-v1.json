@@ -1,0 +1,152 @@
+{
+  "$defs": {
+    "ManagedAttachArtifactToolSpecV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "const": "attach_artifact",
+          "title": "Action",
+          "type": "string"
+        },
+        "destructive": {
+          "const": true,
+          "default": true,
+          "title": "Destructive",
+          "type": "boolean"
+        },
+        "name": {
+          "const": "run_attach_artifact",
+          "title": "Name",
+          "type": "string"
+        },
+        "read_only": {
+          "const": false,
+          "default": false,
+          "title": "Read Only",
+          "type": "boolean"
+        },
+        "requires_outbox": {
+          "const": true,
+          "title": "Requires Outbox",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "action",
+        "requires_outbox"
+      ],
+      "title": "ManagedAttachArtifactToolSpecV1",
+      "type": "object"
+    },
+    "ManagedCollectToolSpecV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "const": "collect",
+          "title": "Action",
+          "type": "string"
+        },
+        "destructive": {
+          "const": true,
+          "default": true,
+          "title": "Destructive",
+          "type": "boolean"
+        },
+        "name": {
+          "const": "run_collect",
+          "title": "Name",
+          "type": "string"
+        },
+        "read_only": {
+          "const": false,
+          "default": false,
+          "title": "Read Only",
+          "type": "boolean"
+        },
+        "requires_outbox": {
+          "const": false,
+          "title": "Requires Outbox",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "action",
+        "requires_outbox"
+      ],
+      "title": "ManagedCollectToolSpecV1",
+      "type": "object"
+    },
+    "ManagedCreateTaskToolSpecV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "const": "create_task",
+          "title": "Action",
+          "type": "string"
+        },
+        "destructive": {
+          "const": true,
+          "default": true,
+          "title": "Destructive",
+          "type": "boolean"
+        },
+        "name": {
+          "const": "run_create_task",
+          "title": "Name",
+          "type": "string"
+        },
+        "read_only": {
+          "const": false,
+          "default": false,
+          "title": "Read Only",
+          "type": "boolean"
+        },
+        "requires_outbox": {
+          "const": true,
+          "title": "Requires Outbox",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "action",
+        "requires_outbox"
+      ],
+      "title": "ManagedCreateTaskToolSpecV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "openadapt.managed-mcp-tools/v1",
+      "default": "openadapt.managed-mcp-tools/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tools": {
+      "maxItems": 3,
+      "minItems": 3,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/ManagedCollectToolSpecV1"
+        },
+        {
+          "$ref": "#/$defs/ManagedAttachArtifactToolSpecV1"
+        },
+        {
+          "$ref": "#/$defs/ManagedCreateTaskToolSpecV1"
+        }
+      ],
+      "title": "Tools",
+      "type": "array"
+    }
+  },
+  "required": [
+    "tools"
+  ],
+  "title": "ManagedMcpToolCatalogV1",
+  "type": "object"
+}

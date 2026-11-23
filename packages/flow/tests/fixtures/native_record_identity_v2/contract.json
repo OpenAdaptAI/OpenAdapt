@@ -8,7 +8,7 @@
   },
   "database_source": {
     "path": "scripts/desktop/pn_db.py",
-    "sha256": "4d455e8ef30004a663aaa44b35e6b2e536d625281e3972486d0f4aad7ddf7e7f"
+    "sha256": "b36bc38ac2bd1166e8136c52e9cfa9b2ef2b7b5f6eab55c3d6c6ba4fd1af936a"
   },
   "database_mapping": {
     "table": "patients",
