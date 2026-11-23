@@ -41,6 +41,15 @@
   form's submit counts as a sign-in only once, right after a
   username-and-password sign-in. A field split into one box per character
   is refused. See docs/SECOND_FACTOR.md.
+- An interactive run (a terminal on stdin and stderr) asks for a sign-in's
+  second factor at that terminal when no control plane or command is set. A
+  code is read without echo, under the step's deadline, in the calling
+  thread; echo comes back on when the read ends, including on a timeout, and
+  input typed before the prompt is discarded. On Windows the console is read
+  one key at a time with `msvcrt.getwch`, which never echoes, under the same
+  deadline and discard rules. A run without a terminal never
+  prompts and still stops before typing. `OPENADAPT_SECOND_FACTOR_PROMPT=off`
+  turns the prompt off.
 - Effect locations (`openadapt.effect-location/v1`,
   `openadapt_flow/effect_location/`): the place a careful person would look
   again to see an intended value, stored as pack data. Each record holds the
@@ -56,7 +65,7 @@
   application vocabulary: month names, yes and no words, currency signs and
   tables come from the pack. See docs/EFFECT_LOCATION.md.
 
-### Bug Fixes
+### Fixes
 
 - A FHIR searchset Bundle's `OperationOutcome` entry (`search.mode:
   outcome`) is no longer read as a marker match. Packs can declare
@@ -64,6 +73,24 @@
   `equals: match`). A non-informational outcome is an error, not a
   found id, so recovery cannot adopt a write that never landed and an
   outcome id does not count toward `duplicate_write`.
+- File, document, document-hash and email checks no longer claim
+  `system_of_record` (tier 1) for every file. Their strength now follows who
+  produced the artifact, set by the new `effects.artifact_producer`:
+  `acting_session` and the default, `unknown`, are at most `same_screen`;
+  `separate_session` is at most `separate_session`; `system_of_record` keeps
+  tier 1. A store that overlaps `effects.acting_roots`, the user's Downloads
+  folder or a Playwright download folder is graded as the acting session's.
+  Under a declared `separate_session` or `system_of_record` producer, a scan
+  that lists a file in a Playwright download folder beneath the store, or a
+  file whose real path leaves the store, is refused:
+  the verdict is INDETERMINATE and names why. Each verdict records the
+  producer, and whether it was declared or observed, in
+  `read_evidence.provenance`. Breaking: a deployment that relied on the old
+  tier 1 for these kinds must now declare `artifact_producer:
+  system_of_record` (one line in its `effects:` or `verifier:` section,
+  including a `record --verify` file); until it does, runs that need a
+  separate-session or system-of-record check are not `VERIFIED`. Verifier
+  identities of configs that leave both new fields unset are unchanged.
 
 ## v3.4.0 (2026-11-21)
 
