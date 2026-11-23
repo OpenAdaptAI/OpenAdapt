@@ -386,8 +386,9 @@
     "swallow": 6
   },
   "packages/flow/openadapt_flow/compile_agent/pipeline.py": {
-    "cmp_literal": 6,
-    "swallow": 2
+    "cmp_literal": 7,
+    "swallow": 2,
+    "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/compile_agent/repair_bridge.py": {
     "cmp_literal": 4,
@@ -1640,7 +1641,7 @@
   },
   "packages/flow/openadapt_flow/wrap/cli.py": {
     "says_success": 1,
-    "swallow": 1
+    "swallow": 2
   },
   "packages/flow/openadapt_flow/wrap/dispatch_cli.py": {
     "says_success": 3

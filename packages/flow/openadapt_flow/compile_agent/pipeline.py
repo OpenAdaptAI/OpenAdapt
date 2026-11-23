@@ -1346,13 +1346,17 @@ class FirstRunCompiler:
         return emitted
 
     def server_needs_reemit(self) -> bool:
-        """True when the emitted mcp/server.py lacks request context binding (#2154)."""
+        """True when the emitted mcp/server.py predates the current template."""
         server = self.out_dir / "mcp" / "server.py"
         if not server.is_file():
             return True
         try:
             source = server.read_text(encoding="utf-8")
-            return "mcp_request_scope" not in source
+            # #2154 added the request binding; the tool must also run the
+            # program off the server's event loop (run_compiled_tool).
+            return (
+                "mcp_request_scope" not in source or "run_compiled_tool" not in source
+            )
         except OSError:
             return True
 
@@ -1659,3 +1663,44 @@ def run_compiled_params(
     """
 
     return FirstRunCompiler.load(task_dir, reset=reset).run(**dict(params))
+
+
+def run_compiled_tool(
+    task_dir: Union[str, Path], params: Mapping[str, Any], /
+) -> dict[str, Any]:
+    """What a generated MCP tool calls: :func:`run_compiled_params`, off the loop.
+
+    An MCP server calls a synchronous tool on its event loop's thread, and the
+    browser backend's synchronous Playwright API refuses to start there. The
+    run therefore happens on a worker thread with a copy of the caller's
+    context (which carries the MCP request binding), while the tool call
+    waits for it. Exceptions are raised in the caller unchanged.
+    """
+
+    import asyncio
+    import contextvars
+    import threading
+
+    # The package export, so a caller that instruments it is honored.
+    from openadapt_flow import compile_agent as package
+
+    run_params = package.run_compiled_params
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return run_params(task_dir, params).to_dict()
+    context = contextvars.copy_context()
+    outcome: dict[str, Any] = {}
+
+    def work() -> None:
+        try:
+            outcome["result"] = context.run(run_params, task_dir, params).to_dict()
+        except BaseException as exc:  # handed back to the tool call
+            outcome["error"] = exc
+
+    worker = threading.Thread(target=work, name="openadapt-compiled-tool")
+    worker.start()
+    worker.join()
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome["result"]

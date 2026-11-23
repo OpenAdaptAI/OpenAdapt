@@ -173,12 +173,17 @@ class _App:
             def do_POST(self) -> None:
                 length = int(self.headers.get("Content-Length") or 0)
                 body = json.loads(self.rfile.read(length) or b"{}")
+                # Commit (leave the with-block) before writing the HTTP
+                # response. probe_read_routes digests the store as soon as
+                # the status returns; a 200 sent before the implicit commit
+                # can make a real save look unchanged and be learned as a
+                # read — the fail-open store_reset is meant to prevent.
                 with sqlite3.connect(app.db) as conn:
                     if self.path == "/search":
                         rows = conn.execute("select id from rec").fetchall()
-                        self._json(200, {"ids": [r[0] for r in rows]})
+                        status, payload = 200, {"ids": [r[0] for r in rows]}
                     elif self.path == "/rpc" and body.get("method") == "rec.read":
-                        self._json(
+                        status, payload = (
                             200,
                             {
                                 "n": conn.execute(
@@ -190,14 +195,15 @@ class _App:
                         conn.execute(
                             "update rec set note=? where id=1", (body["note"],)
                         )
-                        self._json(200, {"ok": True})
+                        status, payload = 200, {"ok": True}
                     elif self.path == "/rec/1":
                         conn.execute(
                             "update rec set note=? where id=1", (body["note"],)
                         )
-                        self._json(200, {"id": 1, "note": body["note"]})
+                        status, payload = 200, {"id": 1, "note": body["note"]}
                     else:
-                        self._json(404, {})
+                        status, payload = 404, {}
+                self._json(status, payload)
 
             def _json(self, status: int, payload: Any) -> None:
                 raw = json.dumps(payload).encode()
