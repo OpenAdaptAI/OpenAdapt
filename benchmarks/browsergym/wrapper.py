@@ -111,6 +111,9 @@ class CompiledTrajectory:
     expected_state: dict[str, Any] = field(default_factory=dict)
     baseline_llm_calls: int = 0
     baseline_elapsed_ms: float = 0.0
+    train_seed: int = 0
+    lora_adapter_path: str | None = None
+    lora_adapter_size_mb: float | None = None
 
 
 ReadbackOracle = Callable[[Mapping[str, Any], Mapping[str, Any]], ReadbackResult]
@@ -393,6 +396,9 @@ class OpenAdaptBrowserGymWrapper:
         task_id: str,
         *,
         expected_state: Mapping[str, Any] | None = None,
+        train_seed: int = 0,
+        lora_adapter_path: str | None = None,
+        lora_adapter_size_mb: float | None = None,
     ) -> CompiledTrajectory:
         """Compile the verified executed trajectory for deterministic zero-LLM replay."""
         return CompiledTrajectory(
@@ -401,6 +407,9 @@ class OpenAdaptBrowserGymWrapper:
             expected_state=dict(expected_state or {}),
             baseline_llm_calls=sum(1 for h in self.history if h.used_llm),
             baseline_elapsed_ms=sum(h.elapsed_ms for h in self.history),
+            train_seed=train_seed,
+            lora_adapter_path=lora_adapter_path,
+            lora_adapter_size_mb=lora_adapter_size_mb,
         )
 
     def replay_compiled(

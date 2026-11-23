@@ -15,14 +15,18 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from benchmarks.browsergym import (
     EpisodeRecord,
     OpenAdaptBrowserGymWrapper,
     PolicyConfig,
     compute_suite_summary,
     render_markdown_scoreboard,
+    validate_disjoint_split,
 )
 from benchmarks.browsergym.__main__ import main as cli_main
+from benchmarks.browsergym.__main__ import run_two_track_comparison
 
 
 class _StubBrowserGymEnv:
@@ -199,6 +203,8 @@ def test_metrics_cup_risk_ratio_and_cli_scoreboard(tmp_path: Path) -> None:
             "all",
             "--mode",
             "contract",
+            "--protocol",
+            "single",
             "--output-json",
             str(out_json),
             "--output-md",
@@ -215,3 +221,94 @@ def test_metrics_cup_risk_ratio_and_cli_scoreboard(tmp_path: Path) -> None:
     assert "OpenAdapt BrowserGym Verification Scoreboard" in out_md.read_text(
         encoding="utf-8"
     )
+
+
+def test_split_manifest_fails_closed_on_seed_overlap_and_is_deterministic() -> None:
+    m1 = validate_disjoint_split("stwebagentbench", [0], [1, 2, 3])
+    m2 = validate_disjoint_split("stwebagentbench", [0], [3, 1, 2])
+    assert m1.split_sha256 == m2.split_sha256
+    assert len(m1.split_sha256) == 64
+    assert m1.train_seeds == (0,)
+    assert m1.eval_seeds == (1, 2, 3)
+
+    with pytest.raises(ValueError, match="contamination"):
+        validate_disjoint_split("stwebagentbench", [0], [0, 1, 2])
+
+    with pytest.raises(ValueError, match="non-empty"):
+        validate_disjoint_split("stwebagentbench", [0], [])
+
+
+def test_two_track_protocol_side_by_side_scoreboard_and_cli_fail_closed(
+    tmp_path: Path,
+) -> None:
+    # CLI fails closed with exit code 2 when train_seed overlaps eval_seeds
+    rc_bad = cli_main(
+        [
+            "run",
+            "--suite",
+            "stwebagentbench",
+            "--mode",
+            "contract",
+            "--protocol",
+            "two_track",
+            "--train-seed",
+            "1",
+            "--eval-seeds",
+            "1,2,3",
+        ]
+    )
+    assert rc_bad == 2
+
+    comparisons = run_two_track_comparison(
+        "all", "contract", train_seed=0, eval_seeds=(1, 2, 3)
+    )
+    assert len(comparisons) == 3
+    for _suite, manifest, rows in comparisons:
+        assert 0 not in manifest.eval_seeds
+        assert len(manifest.split_sha256) == 64
+        by_arm = {r.arm_id: r for r in rows}
+        assert by_arm["baseline_raw_agent"].summary.risk_ratio > 0.0
+        assert by_arm["zero_shot_guard"].demos_used == 0
+        assert by_arm["zero_shot_guard"].official_leaderboard_eligible is True
+        assert by_arm["zero_shot_guard"].summary.cup_rate == 1.0
+        assert by_arm["zero_shot_guard"].summary.risk_ratio == 0.0
+        assert by_arm["zero_shot_guard"].summary.silent_fail_catch_rate == 1.0
+
+        track_b = by_arm["one_demo_adapted_unseen_seeds"]
+        assert track_b.demos_used == 1
+        assert track_b.official_leaderboard_eligible is False
+        assert track_b.lora_adapter_size_mb == 111.0
+        assert track_b.summary.cup_rate == 1.0
+        assert track_b.summary.risk_ratio == 0.0
+        assert track_b.summary.silent_fail_catch_rate == 1.0
+        assert track_b.summary.llm_call_reduction_rate == 1.0
+
+    out_json = tmp_path / "two_track.json"
+    out_md = tmp_path / "two_track.md"
+    rc = cli_main(
+        [
+            "run",
+            "--suite",
+            "all",
+            "--mode",
+            "contract",
+            "--protocol",
+            "two_track",
+            "--output-json",
+            str(out_json),
+            "--output-md",
+            str(out_md),
+        ]
+    )
+    assert rc == 0
+    payload = json.loads(out_json.read_text(encoding="utf-8"))
+    assert payload["protocol"] == "two_track"
+    assert len(payload["comparisons"]) == 3
+    for comp in payload["comparisons"]:
+        assert len(comp["split_manifest"]["split_sha256"]) == 64
+        assert len(comp["arms"]) == 3
+    md_text = out_md.read_text(encoding="utf-8")
+    assert "Baseline Raw Agent" in md_text
+    assert "OpenAdapt Zero-Shot Guard (0 demos)" in md_text
+    assert "OpenAdapt 1-Demo Adapted (unseen seeds 1..3)" in md_text
+    assert "split_sha256=" in md_text

@@ -2,8 +2,81 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import asdict, dataclass
 from typing import Any, Sequence
+
+
+@dataclass(frozen=True)
+class SplitManifest:
+    """Cryptographically verifiable train/eval seed split manifest (fail-closed)."""
+
+    suite: str
+    train_seeds: tuple[int, ...]
+    eval_seeds: tuple[int, ...]
+    split_sha256: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "suite": self.suite,
+            "train_seeds": list(self.train_seeds),
+            "eval_seeds": list(self.eval_seeds),
+            "split_sha256": self.split_sha256,
+        }
+
+
+def validate_disjoint_split(
+    suite: str,
+    train_seeds: Sequence[int],
+    eval_seeds: Sequence[int],
+) -> SplitManifest:
+    """Enforce strict train/eval seed disjointness and compute canonical SHA-256 digest."""
+    train_t = tuple(sorted(set(int(s) for s in train_seeds)))
+    eval_t = tuple(sorted(set(int(s) for s in eval_seeds)))
+    if not eval_t:
+        raise ValueError(f"{suite}: eval_seeds must be non-empty")
+    overlap = sorted(set(train_t) & set(eval_t))
+    if overlap:
+        raise ValueError(
+            f"{suite}: train/eval seed contamination detected! Overlapping seeds: {overlap}"
+        )
+    canonical = json.dumps(
+        {"suite": suite, "train_seeds": list(train_t), "eval_seeds": list(eval_t)},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    digest = hashlib.sha256(canonical).hexdigest()
+    return SplitManifest(
+        suite=suite,
+        train_seeds=train_t,
+        eval_seeds=eval_t,
+        split_sha256=digest,
+    )
+
+
+@dataclass(frozen=True)
+class ArmComparisonRow:
+    """One arm in a Two-Track side-by-side protocol comparison."""
+
+    arm_id: str  # "baseline_raw_agent" | "zero_shot_guard" | "one_demo_adapted_unseen_seeds"
+    arm_label: str
+    demos_used: int
+    official_leaderboard_eligible: bool
+    summary: SuiteSummary
+    speedup_x: float
+    lora_adapter_size_mb: float | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "arm_id": self.arm_id,
+            "arm_label": self.arm_label,
+            "demos_used": self.demos_used,
+            "official_leaderboard_eligible": self.official_leaderboard_eligible,
+            "speedup_x": self.speedup_x,
+            "lora_adapter_size_mb": self.lora_adapter_size_mb,
+            "summary": self.summary.to_dict(),
+        }
 
 
 @dataclass(frozen=True)
@@ -133,4 +206,45 @@ def render_markdown_scoreboard(summaries: Sequence[SuiteSummary], *, mode: str) 
             f"| {_fmt_pct(s.llm_call_reduction_rate)} |"
         )
     lines.append("")
+    return "\n".join(lines)
+
+
+def render_two_track_markdown_scoreboard(
+    comparisons: Sequence[tuple[str, SplitManifest, Sequence[ArmComparisonRow]]],
+    *,
+    mode: str,
+) -> str:
+    """Render side-by-side 3-arm Two-Track Protocol Markdown scoreboard."""
+    lines = [
+        f"# OpenAdapt BrowserGym Two-Track Verification Scoreboard (`mode={mode}`)",
+        "",
+        "- **Track A (`zero_shot_guard`):** 0 demos, 100% official-leaderboard eligible (policy/consent firewall + independent read-back).",
+        "- **Track B (`one_demo_adapted_unseen_seeds`):** 1 demo on `train_seed=0` -> compiled deterministic code + optional `111 MB` per-app LoRA hook -> evaluated on strictly disjoint unseen `eval_seeds`.",
+        "",
+    ]
+    for suite, manifest, rows in comparisons:
+        lines.extend(
+            [
+                f"## Suite: `{suite}`",
+                "",
+                f"- **Split Manifest (Disjoint Verified):** `train_seeds={list(manifest.train_seeds)}`, `eval_seeds={list(manifest.eval_seeds)}`, `split_sha256={manifest.split_sha256[:16]}...`",
+                "",
+                "| Arm | Demos | Official Eligible | CuP | Risk Ratio | Silent-Fail Catch | Speedup | LLM Call Reduction |",
+                "|---|---:|---|---:|---:|---:|---:|---:|",
+            ]
+        )
+        for row in rows:
+            s = row.summary
+            elig = "Yes" if row.official_leaderboard_eligible else "Track B (1-demo)"
+            lines.append(
+                f"| {row.arm_label} "
+                f"| {row.demos_used} "
+                f"| {elig} "
+                f"| **{_fmt_pct(s.cup_rate)}** "
+                f"| {_fmt_pct(s.risk_ratio)} "
+                f"| {_fmt_pct(s.silent_fail_catch_rate)} "
+                f"| {row.speedup_x:.2f}x "
+                f"| {_fmt_pct(s.llm_call_reduction_rate)} |"
+            )
+        lines.append("")
     return "\n".join(lines)
