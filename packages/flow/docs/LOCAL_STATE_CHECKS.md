@@ -17,9 +17,9 @@ rules. It never runs a command you supply, and it never writes.
 | `file` | A file's contents | Ordinary read-only file I/O | `present`, `size`, `sha256`, `text` (UTF-8, files up to 1 MiB) |
 | `macos_defaults` | One key in a preferences domain | `/usr/bin/defaults export <domain> -` (goes through `cfprefsd`, so it sees the current value). Unit-tested only so far; not yet run on a real Mac | `present`, `value`, `value_type` |
 | `windows_registry` | One registry value under `HKCU` or `HKLM` | `winreg` with `KEY_READ` access only | `present`, `value`, `value_type` |
-| `macos_night_shift` | Current macOS Night Shift enabled state | Read-only `CBBlueLightClient.getBlueLightStatus:` via `CoreBrightness` (`ctypes`/`libobjc`). Fails closed (`INDETERMINATE`) if unavailable | `present`, `enabled`, `value` (`"true"`/`"false"`), `value_type` |
-| `windows_night_light` | Current Windows Night Light enabled state | Read-only `winreg` (`KEY_READ`) read of `HKCU\...\bluelightreductionstate` `Data` bytes (byte 18 `0x15` enabled vs `0x13` disabled). Fails closed on missing or unexpected bytes | `present`, `enabled`, `value` (`"true"`/`"false"`), `value_type` |
-| `macos_calendar_event` | Whether a macOS Calendar event matching `(calendar_name, title, start_iso)` exists | Fixed read-only AppleScript via `/usr/bin/osascript` with argv parameters (never mutates Calendar). Fails closed if the calendar is missing or permission is denied | `present`, `exists`, `calendar_name`, `title`, `start_iso`, `value` (`"true"`/`"false"`), `value_type` |
+| `macos_night_shift` | Current macOS Night Shift enabled state | Read-only `CBBlueLightClient.getBlueLightStatus:` via private `CoreBrightness` (`ctypes`/`libobjc`). Fails closed (`INDETERMINATE`) if unavailable; note private struct layout may change across macOS releases | `present`, `enabled`, `value` (`"true"`/`"false"`), `value_type` |
+| `windows_night_light` | Current Windows Night Light enabled state | Read-only `winreg` (`KEY_READ`) read of `HKCU\...\bluelightreductionstate` `Data` bytes (byte 18 `0x15` enabled vs `0x13` disabled heuristic, unit-tested on synthetic blobs). Fails closed on missing or unexpected bytes | `present`, `enabled`, `value` (`"true"`/`"false"`), `value_type` |
+| `macos_calendar_event` | Whether a macOS EventKit calendar event matching `(calendar_name, exact title, local start/end, recurrence, optional event_uid)` exists | Fixed read-only EventKit (`EKEventStore`) JXA probe via `/usr/bin/osascript -l JavaScript` with argv parameters (never launches or mutates Calendar.app). Fails closed if EventKit is unauthorized, calendar is missing, or multiple calendars share the name | `present`, `exists`, `event_uid`, `calendar_name`, `title`, `start_iso`, `end_iso`, `recurrence`, `value` (`"true"`/`"false"`), `value_type` |
 
 Each source becomes one record with the source's `id`, judged by the same
 effect kinds every other record check uses (`field_equals`, `record_written`).
@@ -96,9 +96,9 @@ The examples live in [`examples/local_state/`](../examples/local_state/).
 | --- | --- | --- |
 | `notepad-save` | `~/openadapt-examples/note.txt`, text equals the note | End to end on Windows 11 in the lab: record, compile, replay, check `verified`. Turn Notepad's status bar off (View > Status bar) so replay can confirm the typing |
 | `windows-dark-mode` | `HKCU\...\Themes\Personalize` `AppsUseLightTheme` and `SystemUsesLightTheme` are `0` | Check only, on the real registry; see below |
-| `macos-night-shift` | macOS Night Shift `enabled` state via `CoreBrightness` | Read-only probe verified on macOS; fail-closed unit-tested across platforms |
-| `windows-night-light` | Windows Night Light `Data` byte 18 (`0x15` vs `0x13`) | Unit-tested against CloudStore blobs; fail-closed on missing or unexpected bytes |
-| `macos-calendar-block` | macOS Calendar event matching `(calendar_name, title, start_iso)` | Fixed read-only AppleScript probe; unit-tested with fail-closed missing-calendar/error checks |
+| `macos-night-shift` | macOS Night Shift `enabled` state via private `CoreBrightness` | Unit-tested across platforms (fail-closed when unavailable); not yet recorded across an end-to-end toggle run |
+| `windows-night-light` | Windows Night Light `Data` byte 18 (`0x15` vs `0x13`) | Unit-tested against synthetic CloudStore blobs; fail-closed on missing or unexpected bytes; not yet recorded on a live Windows host |
+| `macos-calendar-block` | macOS EventKit event matching `(calendar_name, title, start_iso, end_iso, recurrence, event_uid)` | Fixed read-only EventKit JXA probe; unit-tested with fail-closed unauthorized/missing/ambiguous-calendar and timezone checks |
 
 TextEdit and macOS Dark Mode follow the same pattern (a `file` source; a
 `macos_defaults` source on `NSGlobalDomain` `AppleInterfaceStyle`). They have
@@ -109,10 +109,12 @@ no example yet because they haven't been run on a Mac.
 - **Notes (macOS).** The Notes database is private and protected by Full Disk
   Access, and reading arbitrary note bodies via AppleScript needs per-app
   Automation consent without a typed schema. There is no Notes source.
-- **Calendar (macOS) without Automation permission.** `macos_calendar_event`
-  uses a fixed read-only AppleScript probe; if Calendar Automation consent is
-  not granted or the named calendar does not exist, it fails closed as
-  `INDETERMINATE`.
+- **Calendar (macOS) without EventKit permission.** `macos_calendar_event`
+  uses a fixed read-only EventKit (`EKEventStore`) probe without launching
+  Calendar.app; if macOS Calendars privacy permission is not granted, the named
+  calendar does not exist, or multiple calendars share the name, it fails
+  closed as `INDETERMINATE`. In `openadapt quickstart --task calendar-block`,
+  baseline probing is opt-in (`--probe-baseline`).
 - **Night Shift (macOS) on unsupported displays.** `macos_night_shift` reads
   the private `CoreBrightness` framework (`CBBlueLightClient`); if the
   framework or display capability is unavailable, it fails closed as

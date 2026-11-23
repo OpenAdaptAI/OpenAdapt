@@ -115,31 +115,117 @@ _WINDOWS_NIGHT_LIGHT_STATE_BYTE_INDEX = 18
 _WINDOWS_NIGHT_LIGHT_ENABLED_BYTE = 0x15
 _WINDOWS_NIGHT_LIGHT_DISABLED_BYTE = 0x13
 
-# Fixed read-only AppleScript: receives (calendar_name, title, year, month,
-# day, hour, minute) via argv and never creates, modifies, or deletes events.
-_MACOS_CALENDAR_READ_SCRIPT = """
-on run argv
-    set calName to item 1 of argv
-    set targetTitle to item 2 of argv
-    set targetYear to (item 3 of argv) as integer
-    set targetMonth to (item 4 of argv) as integer
-    set targetDay to (item 5 of argv) as integer
-    set targetHour to (item 6 of argv) as integer
-    set targetMinute to (item 7 of argv) as integer
-    tell application "Calendar"
-        if not (exists calendar calName) then
-            return "NO_CALENDAR"
-        end if
-        set matchingEvents to (every event of calendar calName whose summary is targetTitle)
-        repeat with ev in matchingEvents
-            set sd to start date of ev
-            if ((year of sd) is targetYear) and (((month of sd) as integer) is targetMonth) and ((day of sd) is targetDay) and ((hours of sd) is targetHour) and ((minutes of sd) is targetMinute) then
-                return "FOUND"
-            end if
-        end repeat
-        return "NOT_FOUND"
-    end tell
-end run
+# Fixed read-only EventKit (OS framework) JXA script: receives
+# (calendar_name, title, start_y, start_m, start_d, start_h, start_min,
+# end_y, end_m, end_d, end_h, end_min, recurrence, event_uid) via argv.
+# Reads the OS EKEventStore directly without naming or launching any app, and
+# fails closed when EventKit access is not authorized or calendar names collide.
+_MACOS_EVENTKIT_READ_SCRIPT = """
+ObjC.import('EventKit');
+ObjC.import('Foundation');
+function run(argv) {
+  var calName = argv[0];
+  var targetTitle = argv[1];
+  var sYear = parseInt(argv[2], 10);
+  var sMonth = parseInt(argv[3], 10);
+  var sDay = parseInt(argv[4], 10);
+  var sHour = parseInt(argv[5], 10);
+  var sMin = parseInt(argv[6], 10);
+  var hasEnd = argv[7] !== '';
+  var eYear = hasEnd ? parseInt(argv[7], 10) : 0;
+  var eMonth = hasEnd ? parseInt(argv[8], 10) : 0;
+  var eDay = hasEnd ? parseInt(argv[9], 10) : 0;
+  var eHour = hasEnd ? parseInt(argv[10], 10) : 0;
+  var eMin = hasEnd ? parseInt(argv[11], 10) : 0;
+  var recurrence = argv[12] || 'none';
+  var targetUid = argv[13] || '';
+
+  var auth = $.EKEventStore.authorizationStatusForEntityType(0);
+  if (auth !== 3 && auth !== 4) {
+    return JSON.stringify({status: 'UNAUTHORIZED'});
+  }
+  var store = $.EKEventStore.alloc.init;
+  var cals = store.calendarsForEntityType(0);
+  var matchedCals = [];
+  for (var i = 0; i < cals.count; i++) {
+    var c = cals.objectAtIndex(i);
+    if (ObjC.unwrap(c.title) === calName) {
+      matchedCals.push(c);
+    }
+  }
+  if (matchedCals.length === 0) {
+    return JSON.stringify({status: 'NO_CALENDAR'});
+  }
+  if (matchedCals.length > 1) {
+    return JSON.stringify({status: 'AMBIGUOUS_CALENDAR'});
+  }
+
+  var startJs = new Date(sYear, sMonth - 1, sDay, sHour, sMin, 0);
+  var endJs = hasEnd
+    ? new Date(eYear, eMonth - 1, eDay, eHour, eMin, 0)
+    : new Date(startJs.getTime() + 3600000);
+  var winStart = $.NSDate.dateWithTimeIntervalSince1970((startJs.getTime() - 60000) / 1000.0);
+  var winEnd = $.NSDate.dateWithTimeIntervalSince1970((endJs.getTime() + 60000) / 1000.0);
+  var calArr = $.NSArray.arrayWithObject(matchedCals[0]);
+  var pred = store.predicateForEventsWithStartDateEndDateCalendars(winStart, winEnd, calArr);
+  var events = store.eventsMatchingPredicate(pred);
+
+  function matchesRecurrence(ev, expected) {
+    var hasRules = Boolean(ev.hasRecurrenceRules);
+    if (expected === 'none') return !hasRules;
+    if (!hasRules) return false;
+    var rules = ev.recurrenceRules;
+    if (!rules || rules.count === 0) return false;
+    var rule = rules.objectAtIndex(0);
+    var freq = rule.frequency;
+    if (expected === 'daily') return freq === 0;
+    if (expected === 'weekly') return freq === 1;
+    if (expected === 'weekdays') {
+      if (freq !== 1) return false;
+      var days = rule.daysOfTheWeek;
+      if (!days || days.count !== 5) return false;
+      var seen = {};
+      for (var d = 0; d < days.count; d++) {
+        seen[days.objectAtIndex(d).dayOfTheWeek] = true;
+      }
+      return Boolean(seen[2] && seen[3] && seen[4] && seen[5] && seen[6]);
+    }
+    return false;
+  }
+
+  for (var j = 0; j < events.count; j++) {
+    var ev = events.objectAtIndex(j);
+    var title = ObjC.unwrap(ev.title);
+    if (title !== targetTitle) continue;
+    var uid = ObjC.unwrap(ev.eventIdentifier) || '';
+    if (targetUid && uid !== targetUid) continue;
+    var sd = new Date(ev.startDate.timeIntervalSince1970 * 1000.0);
+    if (
+      sd.getFullYear() !== sYear ||
+      sd.getMonth() + 1 !== sMonth ||
+      sd.getDate() !== sDay ||
+      sd.getHours() !== sHour ||
+      sd.getMinutes() !== sMin
+    ) {
+      continue;
+    }
+    if (hasEnd) {
+      var ed = new Date(ev.endDate.timeIntervalSince1970 * 1000.0);
+      if (
+        ed.getFullYear() !== eYear ||
+        ed.getMonth() + 1 !== eMonth ||
+        ed.getDate() !== eDay ||
+        ed.getHours() !== eHour ||
+        ed.getMinutes() !== eMin
+      ) {
+        continue;
+      }
+    }
+    if (!matchesRecurrence(ev, recurrence)) continue;
+    return JSON.stringify({status: 'FOUND', event_uid: uid});
+  }
+  return JSON.stringify({status: 'NOT_FOUND', event_uid: null});
+}
 """.strip()
 
 #: Registry hives a source may read. Per-user settings and machine settings;
@@ -547,19 +633,33 @@ class LocalStateVerifier(VerifierAdapterBase):
     ) -> dict[str, Any]:
         if self._platform != "darwin":
             raise _Unreadable(f"{source.id}: macos_calendar_event needs macOS")
-        normalized = (
-            source.start_iso[:-1] + "+00:00"
-            if source.start_iso.endswith("Z")
-            else source.start_iso
+
+        def _parse_local(iso_text: str, field_name: str) -> datetime:
+            normalized = (
+                iso_text[:-1] + "+00:00" if iso_text.endswith("Z") else iso_text
+            )
+            try:
+                parsed = datetime.fromisoformat(normalized)
+            except ValueError as exc:
+                raise _Unreadable(f"{source.id}: invalid {field_name}") from exc
+            # Convert timezone-aware timestamps to local system time so EventKit
+            # local wall-clock comparisons match regardless of input offset.
+            if parsed.tzinfo is not None:
+                parsed = parsed.astimezone()
+            return parsed
+
+        start_dt = _parse_local(source.start_iso, "start_iso")
+        end_dt = (
+            _parse_local(source.end_iso, "end_iso")
+            if source.end_iso is not None
+            else None
         )
-        try:
-            start_dt = datetime.fromisoformat(normalized)
-        except ValueError as exc:
-            raise _Unreadable(f"{source.id}: invalid start_iso") from exc
         argv = [
             OSASCRIPT_BINARY,
+            "-l",
+            "JavaScript",
             "-e",
-            _MACOS_CALENDAR_READ_SCRIPT,
+            _MACOS_EVENTKIT_READ_SCRIPT,
             "--",
             source.calendar_name,
             source.title,
@@ -568,6 +668,13 @@ class LocalStateVerifier(VerifierAdapterBase):
             str(start_dt.day),
             str(start_dt.hour),
             str(start_dt.minute),
+            str(end_dt.year) if end_dt is not None else "",
+            str(end_dt.month) if end_dt is not None else "",
+            str(end_dt.day) if end_dt is not None else "",
+            str(end_dt.hour) if end_dt is not None else "",
+            str(end_dt.minute) if end_dt is not None else "",
+            source.recurrence,
+            source.event_uid or "",
         ]
         try:
             done = self._runner(argv)
@@ -576,24 +683,48 @@ class LocalStateVerifier(VerifierAdapterBase):
         if done.returncode != 0:
             raise _Unreadable(f"{source.id}: osascript exited {done.returncode}")
         output = done.stdout.decode("utf-8", errors="replace").strip()
-        if output == "NO_CALENDAR":
+        try:
+            payload = json.loads(output)
+        except json.JSONDecodeError as exc:
+            raise _Unreadable(
+                f"{source.id}: unexpected EventKit probe output {output!r}"
+            ) from exc
+        if not isinstance(payload, dict):
+            raise _Unreadable(
+                f"{source.id}: EventKit probe output is not a JSON object"
+            )
+        status = payload.get("status")
+        if status == "UNAUTHORIZED":
+            raise _Unreadable(
+                f"{source.id}: macOS EventKit calendar access not authorized"
+            )
+        if status == "NO_CALENDAR":
             raise _Unreadable(
                 f"{source.id}: calendar {source.calendar_name!r} does not exist"
             )
-        if output == "FOUND":
+        if status == "AMBIGUOUS_CALENDAR":
+            raise _Unreadable(
+                f"{source.id}: multiple calendars named {source.calendar_name!r}; refusing ambiguous match"
+            )
+        if status == "FOUND":
             exists = True
-        elif output == "NOT_FOUND":
+        elif status == "NOT_FOUND":
             exists = False
         else:
-            raise _Unreadable(f"{source.id}: unexpected osascript output {output!r}")
+            raise _Unreadable(f"{source.id}: unexpected EventKit status {status!r}")
+        raw_uid = payload.get("event_uid")
+        event_uid = str(raw_uid) if isinstance(raw_uid, str) and raw_uid else None
         return {
             "id": source.id,
             "type": source.type,
             "present": exists,
             "exists": exists,
+            "event_uid": event_uid,
             "calendar_name": source.calendar_name,
             "title": source.title,
             "start_iso": source.start_iso,
+            "end_iso": source.end_iso,
+            "recurrence": source.recurrence,
             "value": value_text(exists),
             "value_type": "boolean",
         }
@@ -614,8 +745,12 @@ class LocalStateVerifier(VerifierAdapterBase):
                     records.append(self._read_macos_night_shift(source))
                 elif isinstance(source, WindowsNightLightSource):
                     records.append(self._read_windows_night_light(source))
-                else:
+                elif isinstance(source, MacosCalendarEventSource):
                     records.append(self._read_macos_calendar_event(source))
+                else:
+                    raise _Unreadable(
+                        f"unsupported local-state source type: {type(source).__name__}"
+                    )
         except _Unreadable as exc:
             self.last_error = str(exc)
             return None

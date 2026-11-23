@@ -924,7 +924,19 @@ def _quickstart_own(root: Path, url: Optional[str], watch: bool) -> None:
     "--revert/--no-revert",
     default=True,
     show_default=True,
-    help="With --task: emit a revert/undo verification contract to leave the machine clean.",
+    help=(
+        "With --task: write a revert_verify.yaml check file to run after undoing "
+        "the change (withheld if Night Shift baseline is unreadable)."
+    ),
+)
+@click.option(
+    "--probe-baseline",
+    is_flag=True,
+    default=False,
+    help=(
+        "With --task calendar-block: run an opt-in read-only macOS EventKit "
+        "baseline check (requires Calendars privacy permission)."
+    ),
 )
 @click.option("--headed", is_flag=True, hidden=True)
 @click.option("--headless", is_flag=True, hidden=True)
@@ -948,6 +960,7 @@ def quickstart(
     duration_minutes: Optional[int],
     recurrence: Optional[str],
     revert: bool,
+    probe_baseline: bool,
     headed: bool,
     headless: bool,
     break_it: bool,
@@ -980,10 +993,10 @@ def quickstart(
         opt is not None
         for opt in (title, calendar_name, start_iso, duration_minutes, recurrence)
     )
-    if calendar_opts_used and task != "calendar-block":
+    if (calendar_opts_used or probe_baseline) and task != "calendar-block":
         raise click.UsageError(
-            "--title, --calendar, --start, --duration, and --recurrence require "
-            "--task calendar-block."
+            "--title, --calendar, --start, --duration, --recurrence, and "
+            "--probe-baseline require --task calendar-block."
         )
     if task is not None:
         if own:
@@ -1018,6 +1031,7 @@ def quickstart(
                     recurrence if recurrence is not None else DEFAULT_RECURRENCE
                 ),
                 revert=revert,
+                probe_baseline=probe_baseline,
                 say=click.echo,
             )
         except EverydayTaskError as error:

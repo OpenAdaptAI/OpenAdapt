@@ -43,6 +43,14 @@ def test_build_night_shift_contracts_macos_and_windows_with_revert() -> None:
     assert params_win["revert"] is False
     VerifyConfig.model_validate(fwd_win)
 
+    # Unreadable baseline (None) must NOT invent a revert baseline
+    _fwd_unk, rev_unk, params_unk = build_night_shift_contracts(
+        platform="darwin", baseline_enabled=None, revert=True
+    )
+    assert rev_unk is None
+    assert params_unk["restore_enabled"] is None
+    assert params_unk["revert_withheld_reason"] == "baseline_indeterminate"
+
     with pytest.raises(EverydayTaskError, match="unsupported platform"):
         build_night_shift_contracts(platform="linux")
 
@@ -106,12 +114,22 @@ def test_run_everyday_task_night_shift_writes_contracts_and_probes_baseline(
     assert any("Baseline probe (read-only)" in line for line in lines)
 
 
-def test_run_everyday_task_calendar_block_writes_parameterized_bundle(
+def test_run_everyday_task_calendar_block_opt_in_probe_and_refuses_preexisting(
     tmp_path: Path,
 ) -> None:
-    bundle = run_everyday_task(
+    # 1. Default (probe_baseline=False) never invokes the EventKit probe
+    probe_called = False
+
+    def _should_not_run(*_args: object, **_kwargs: object) -> object:
+        nonlocal probe_called
+        probe_called = True
+        raise AssertionError(
+            "baseline probe must not run by default for calendar-block"
+        )
+
+    bundle_default = run_everyday_task(
         "calendar-block",
-        tmp_path / "cal",
+        tmp_path / "cal-default",
         title="Focus Sprint",
         calendar_name="Work",
         start_iso="2026-11-24T11:00:00",
@@ -120,22 +138,62 @@ def test_run_everyday_task_calendar_block_writes_parameterized_bundle(
         revert=True,
         platform="darwin",
         say=lambda _msg: None,
+        verifier_factory=_should_not_run,
+    )
+    assert probe_called is False
+    assert bundle_default.baseline_state is None
+    params = json.loads(bundle_default.params_path.read_text(encoding="utf-8"))
+    assert params["title"] == "Focus Sprint"
+    assert params["end_iso"] == "2026-11-24T12:00:00"
+    assert params["recurrence"] == "weekdays"
+    assert bundle_default.revert_verify_path is not None
+
+    # 2. Opt-in probe_baseline=True with NOT_FOUND succeeds
+    bundle_probed = run_everyday_task(
+        "calendar-block",
+        tmp_path / "cal-probed",
+        title="Focus Sprint",
+        calendar_name="Work",
+        start_iso="2026-11-24T11:00:00",
+        duration_minutes=60,
+        recurrence="weekdays",
+        revert=True,
+        probe_baseline=True,
+        platform="darwin",
+        say=lambda _msg: None,
         verifier_factory=lambda sources, platform: LocalStateVerifier(
             sources,
             platform=platform,
             runner=lambda argv: subprocess.CompletedProcess(
-                argv, 0, b"NOT_FOUND\n", b""
+                argv, 0, b'{"status":"NOT_FOUND","event_uid":null}\n', b""
             ),
         ),
     )
-    assert bundle.baseline_state is not None
-    assert bundle.baseline_state["exists"] is False
-    params = json.loads(bundle.params_path.read_text(encoding="utf-8"))
-    assert params["title"] == "Focus Sprint"
-    assert params["calendar_name"] == "Work"
-    assert params["end_iso"] == "2026-11-24T12:00:00"
-    assert params["recurrence"] == "weekdays"
-    assert bundle.revert_verify_path is not None and bundle.revert_verify_path.is_file()
+    assert bundle_probed.baseline_state is not None
+    assert bundle_probed.baseline_state["exists"] is False
+
+    # 3. Opt-in probe_baseline=True when matching event ALREADY EXISTS refuses!
+    with pytest.raises(EverydayTaskError, match="already exists in the baseline"):
+        run_everyday_task(
+            "calendar-block",
+            tmp_path / "cal-existing",
+            title="Existing Meeting",
+            calendar_name="Work",
+            start_iso="2026-11-24T11:00:00",
+            duration_minutes=60,
+            recurrence="weekdays",
+            revert=True,
+            probe_baseline=True,
+            platform="darwin",
+            say=lambda _msg: None,
+            verifier_factory=lambda sources, platform: LocalStateVerifier(
+                sources,
+                platform=platform,
+                runner=lambda argv: subprocess.CompletedProcess(
+                    argv, 0, b'{"status":"FOUND","event_uid":"existing-1"}\n', b""
+                ),
+            ),
+        )
 
 
 def test_cli_quickstart_task_validation_and_invocation(

@@ -11,8 +11,11 @@ fail-closed ``INDETERMINATE`` behavior.
 
 from __future__ import annotations
 
+import json
+import os
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -139,7 +142,10 @@ def test_macos_night_shift_fails_closed_when_probe_unavailable() -> None:
     assert verdict.verdict == Verdict.INDETERMINATE
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="macOS-only live read-only probe")
+@pytest.mark.skipif(
+    sys.platform != "darwin" or os.environ.get("OPENADAPT_LIVE_OS_PROBES") != "1",
+    reason="opt-in macOS-only live CoreBrightness probe (set OPENADAPT_LIVE_OS_PROBES=1)",
+)
 def test_macos_night_shift_live_readonly_probe_on_mac() -> None:
     """Exercise the real CoreBrightness ctypes reader read-only on macOS."""
     src = MacosNightShiftSource(id="ns")
@@ -267,18 +273,26 @@ def test_windows_night_light_fails_closed_on_missing_key_value_malformed_and_wro
 # --- macos_calendar_event ---------------------------------------------------
 
 
-def test_macos_calendar_event_found_and_not_found_and_argv_safety() -> None:
+def test_macos_calendar_event_found_not_found_timezone_and_argv_safety() -> None:
     captured_argv: list[list[str]] = []
 
     def _runner_found(argv: list[str]) -> subprocess.CompletedProcess[bytes]:
         captured_argv.append(argv)
-        return subprocess.CompletedProcess(argv, 0, b"FOUND\n", b"")
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            json.dumps({"status": "FOUND", "event_uid": "evt-uid-1"}).encode(),
+            b"",
+        )
 
     src = MacosCalendarEventSource(
         id="cal",
         calendar_name="Work",
         title='Focus "Block" & Sync',
         start_iso="2026-11-24T10:30:00",
+        end_iso="2026-11-24T11:00:00",
+        recurrence="weekly",
+        event_uid="evt-uid-1",
     )
     v_found = LocalStateVerifier([src], platform="darwin", runner=_runner_found)
     rec = v_found.read()
@@ -288,16 +302,21 @@ def test_macos_calendar_event_found_and_not_found_and_argv_safety() -> None:
             "type": "macos_calendar_event",
             "present": True,
             "exists": True,
+            "event_uid": "evt-uid-1",
             "calendar_name": "Work",
             "title": 'Focus "Block" & Sync',
             "start_iso": "2026-11-24T10:30:00",
+            "end_iso": "2026-11-24T11:00:00",
+            "recurrence": "weekly",
             "value": "true",
             "value_type": "boolean",
         }
     ]
-    # Verify absolute osascript path and argv isolation (no string interpolation)
-    assert captured_argv[0][0] == OSASCRIPT_BINARY
-    assert captured_argv[0][3:] == [
+    # Verify absolute osascript path, JXA EventKit (zero app names), and argv isolation
+    assert captured_argv[0][0:4] == [OSASCRIPT_BINARY, "-l", "JavaScript", "-e"]
+    assert 'tell application "Calendar"' not in captured_argv[0][4]
+    assert 'Focus "Block" & Sync' not in captured_argv[0][4]
+    assert captured_argv[0][5:] == [
         "--",
         "Work",
         'Focus "Block" & Sync',
@@ -306,18 +325,50 @@ def test_macos_calendar_event_found_and_not_found_and_argv_safety() -> None:
         "24",
         "10",
         "30",
+        "2026",
+        "11",
+        "24",
+        "11",
+        "0",
+        "weekly",
+        "evt-uid-1",
     ]
-    assert 'Focus "Block" & Sync' not in captured_argv[0][2]
 
-    def _runner_not_found(argv: list[str]) -> subprocess.CompletedProcess[bytes]:
-        return subprocess.CompletedProcess(argv, 0, b"NOT_FOUND\n", b"")
+    # Timezone-aware UTC timestamp must be converted to local system time before argv
+    utc_src = MacosCalendarEventSource(
+        id="cal_tz",
+        calendar_name="Work",
+        title="UTC Block",
+        start_iso="2026-11-24T15:00:00Z",
+        end_iso="2026-11-24T15:30:00Z",
+    )
+    tz_argv: list[list[str]] = []
 
-    v_missing = LocalStateVerifier([src], platform="darwin", runner=_runner_not_found)
-    rec_missing = v_missing.read()
+    def _runner_tz(argv: list[str]) -> subprocess.CompletedProcess[bytes]:
+        tz_argv.append(argv)
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            json.dumps({"status": "NOT_FOUND", "event_uid": None}).encode(),
+            b"",
+        )
+
+    v_tz = LocalStateVerifier([utc_src], platform="darwin", runner=_runner_tz)
+    rec_missing = v_tz.read()
     assert rec_missing is not None
     assert rec_missing[0]["present"] is False
     assert rec_missing[0]["exists"] is False
     assert rec_missing[0]["value"] == "false"
+    expected_local_start = datetime.fromisoformat(
+        "2026-11-24T15:00:00+00:00"
+    ).astimezone()
+    assert tz_argv[0][8:13] == [
+        str(expected_local_start.year),
+        str(expected_local_start.month),
+        str(expected_local_start.day),
+        str(expected_local_start.hour),
+        str(expected_local_start.minute),
+    ]
 
 
 def test_macos_calendar_event_fails_closed_on_errors_and_wrong_os() -> None:
@@ -332,20 +383,46 @@ def test_macos_calendar_event_fails_closed_on_errors_and_wrong_os() -> None:
     v_wrong = LocalStateVerifier(
         [src],
         platform="win32",
-        runner=lambda argv: subprocess.CompletedProcess(argv, 0, b"FOUND\n", b""),
+        runner=lambda argv: subprocess.CompletedProcess(
+            argv, 0, b'{"status":"FOUND","event_uid":"u1"}\n', b""
+        ),
     )
     assert v_wrong.read() is None
+
+    # Unauthorized EventKit
+    v_unauth = LocalStateVerifier(
+        [src],
+        platform="darwin",
+        runner=lambda argv: subprocess.CompletedProcess(
+            argv, 0, b'{"status":"UNAUTHORIZED"}\n', b""
+        ),
+    )
+    assert v_unauth.read() is None
+    assert v_unauth.last_error is not None and "not authorized" in v_unauth.last_error
 
     # Missing calendar container
     v_no_cal = LocalStateVerifier(
         [src],
         platform="darwin",
-        runner=lambda argv: subprocess.CompletedProcess(argv, 0, b"NO_CALENDAR\n", b""),
+        runner=lambda argv: subprocess.CompletedProcess(
+            argv, 0, b'{"status":"NO_CALENDAR"}\n', b""
+        ),
     )
     assert v_no_cal.read() is None
     assert v_no_cal.last_error is not None and "does not exist" in v_no_cal.last_error
 
-    # osascript error (e.g. Automation permission denied)
+    # Ambiguous duplicate calendar names
+    v_ambig = LocalStateVerifier(
+        [src],
+        platform="darwin",
+        runner=lambda argv: subprocess.CompletedProcess(
+            argv, 0, b'{"status":"AMBIGUOUS_CALENDAR"}\n', b""
+        ),
+    )
+    assert v_ambig.read() is None
+    assert v_ambig.last_error is not None and "multiple calendars" in v_ambig.last_error
+
+    # osascript error
     v_err = LocalStateVerifier(
         [src],
         platform="darwin",

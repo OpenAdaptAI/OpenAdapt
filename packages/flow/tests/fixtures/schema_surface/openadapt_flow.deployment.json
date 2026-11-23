@@ -3261,7 +3261,7 @@
      },
      "MacosCalendarEventSource": {
       "additionalProperties": false,
-      "description": "Read-only check for a macOS Calendar event matching calendar, title, and start.",
+      "description": "Read-only check for a macOS EventKit calendar event.\n\nMatches exact calendar name (rejecting ambiguous duplicates), case-sensitive\ntitle, local-timezone start/end time to the minute, recurrence cadence, and\noptional ``event_uid``.",
       "properties": {
        "id": {
         "title": "Id",
@@ -3290,6 +3290,45 @@
         "minLength": 10,
         "title": "Start Iso",
         "type": "string"
+       },
+       "end_iso": {
+        "anyOf": [
+         {
+          "maxLength": 64,
+          "minLength": 10,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "End Iso"
+       },
+       "recurrence": {
+        "default": "none",
+        "enum": [
+         "none",
+         "daily",
+         "weekly",
+         "weekdays"
+        ],
+        "title": "Recurrence",
+        "type": "string"
+       },
+       "event_uid": {
+        "anyOf": [
+         {
+          "maxLength": 255,
+          "minLength": 1,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Event Uid"
        }
       },
       "required": [
@@ -6673,7 +6712,7 @@
      },
      "MacosCalendarEventSource": {
       "additionalProperties": false,
-      "description": "Read-only check for a macOS Calendar event matching calendar, title, and start.",
+      "description": "Read-only check for a macOS EventKit calendar event.\n\nMatches exact calendar name (rejecting ambiguous duplicates), case-sensitive\ntitle, local-timezone start/end time to the minute, recurrence cadence, and\noptional ``event_uid``.",
       "properties": {
        "id": {
         "title": "Id",
@@ -6702,6 +6741,45 @@
         "minLength": 10,
         "title": "Start Iso",
         "type": "string"
+       },
+       "end_iso": {
+        "anyOf": [
+         {
+          "maxLength": 64,
+          "minLength": 10,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "End Iso"
+       },
+       "recurrence": {
+        "default": "none",
+        "enum": [
+         "none",
+         "daily",
+         "weekly",
+         "weekdays"
+        ],
+        "title": "Recurrence",
+        "type": "string"
+       },
+       "event_uid": {
+        "anyOf": [
+         {
+          "maxLength": 255,
+          "minLength": 1,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Event Uid"
        }
       },
       "required": [

@@ -12,7 +12,7 @@ import re
 from datetime import datetime
 from typing import Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 __all__ = [
     "FileSource",
@@ -110,13 +110,24 @@ class WindowsNightLightSource(_Source):
 
 
 class MacosCalendarEventSource(_Source):
-    """Read-only check for a macOS Calendar event matching calendar, title, and start."""
+    """Read-only check for a macOS EventKit calendar event.
+
+    Matches exact calendar name (rejecting ambiguous duplicates), case-sensitive
+    title, local-timezone start/end time to the minute, recurrence cadence, and
+    optional ``event_uid``.
+    """
 
     type: Literal["macos_calendar_event"] = "macos_calendar_event"
     calendar_name: str = Field(min_length=1, max_length=255)
     title: str = Field(min_length=1, max_length=255)
-    #: ISO-8601 start timestamp (e.g. ``2026-11-24T10:00:00``).
+    #: ISO-8601 start timestamp (e.g. ``2026-11-24T10:00:00`` or aware ``...Z``).
     start_iso: str = Field(min_length=10, max_length=64)
+    #: Optional ISO-8601 end timestamp; when set, end time must also match to the minute.
+    end_iso: str | None = Field(default=None, min_length=10, max_length=64)
+    #: Expected recurrence cadence (``none``, ``daily``, ``weekly``, or ``weekdays``).
+    recurrence: Literal["none", "daily", "weekly", "weekdays"] = "none"
+    #: Optional EventKit event identifier to bind verification to one created event.
+    event_uid: str | None = Field(default=None, min_length=1, max_length=255)
 
     @field_validator("calendar_name", "title")
     @classmethod
@@ -124,6 +135,17 @@ class MacosCalendarEventSource(_Source):
         if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in value):
             raise ValueError(
                 "macos_calendar_event text fields must not contain control characters"
+            )
+        return value
+
+    @field_validator("event_uid")
+    @classmethod
+    def _check_event_uid(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in value):
+            raise ValueError(
+                "macos_calendar_event event_uid must not contain control characters"
             )
         return value
 
@@ -138,6 +160,43 @@ class MacosCalendarEventSource(_Source):
                 "macos_calendar_event start_iso must be a valid ISO-8601 timestamp"
             ) from exc
         return value
+
+    @field_validator("end_iso")
+    @classmethod
+    def _check_end_iso(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+        try:
+            datetime.fromisoformat(normalized)
+        except ValueError as exc:
+            raise ValueError(
+                "macos_calendar_event end_iso must be a valid ISO-8601 timestamp"
+            ) from exc
+        return value
+
+    @model_validator(mode="after")
+    def _check_end_after_start(self) -> "MacosCalendarEventSource":
+        if self.end_iso is not None:
+            s_norm = (
+                self.start_iso[:-1] + "+00:00"
+                if self.start_iso.endswith("Z")
+                else self.start_iso
+            )
+            e_norm = (
+                self.end_iso[:-1] + "+00:00"
+                if self.end_iso.endswith("Z")
+                else self.end_iso
+            )
+            s_dt = datetime.fromisoformat(s_norm)
+            e_dt = datetime.fromisoformat(e_norm)
+            if (s_dt.tzinfo is None) != (e_dt.tzinfo is None):
+                raise ValueError(
+                    "macos_calendar_event start_iso and end_iso must both be naive or both be timezone-aware"
+                )
+            if e_dt <= s_dt:
+                raise ValueError("macos_calendar_event end_iso must be after start_iso")
+        return self
 
 
 LocalStateSource = Union[

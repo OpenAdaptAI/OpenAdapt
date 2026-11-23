@@ -1,15 +1,19 @@
 """Built-in everyday OS quickstart tasks (zero sample apps, zero logins).
 
-Provides parameterized task definitions and read-only ``local-state`` verification
-contracts (including optional revert/undo contracts) for:
+Generates parameterized task definitions and read-only ``local-state``
+verification contract files (``verify.yaml`` and, when baseline state is known,
+``revert_verify.yaml``) for:
 
 1. ``night-shift``: Toggle macOS Night Shift (``macos_night_shift``) or Windows
    Night Light (``windows_night_light``).
-2. ``calendar-block``: Schedule a recurring Calendar block with parameterized
-   title, start/end time, duration, and recurrence (``macos_calendar_event``).
+2. ``calendar-block``: Schedule a Calendar block with parameterized title,
+   start/end time, duration, and recurrence (``macos_calendar_event`` via
+   macOS EventKit).
 
-Nothing in this module mutates OS settings or Calendar data; probes are strictly
-read-only and fail closed when unreadable.
+This module only writes contract/parameter files (it does not mutate OS
+settings or Calendar data, and does not run the change or revert itself).
+For ``calendar-block``, baseline probing is opt-in (``probe_baseline=True``)
+so running quickstart never queries EventKit without explicit user intent.
 """
 
 from __future__ import annotations
@@ -89,8 +93,9 @@ def build_night_shift_contracts(
         )
 
     target_enabled = (not baseline_enabled) if baseline_enabled is not None else True
-    restore_enabled = (
-        baseline_enabled if baseline_enabled is not None else (not target_enabled)
+    # Never invent a revert baseline when the prior state is unreadable.
+    restore_enabled: Optional[bool] = (
+        baseline_enabled if baseline_enabled is not None else None
     )
 
     def _contract(expected_enabled: bool) -> dict[str, Any]:
@@ -113,7 +118,9 @@ def build_night_shift_contracts(
         }
 
     forward = _contract(target_enabled)
-    revert_contract = _contract(restore_enabled) if revert else None
+    revert_contract = (
+        _contract(restore_enabled) if (revert and restore_enabled is not None) else None
+    )
     params: dict[str, Any] = {
         "task": "night-shift",
         "label": label,
@@ -121,9 +128,15 @@ def build_night_shift_contracts(
         "source_type": source_type,
         "baseline_enabled": baseline_enabled,
         "target_enabled": "true" if target_enabled else "false",
-        "restore_enabled": "true" if restore_enabled else "false",
+        "restore_enabled": (
+            ("true" if restore_enabled else "false")
+            if restore_enabled is not None
+            else None
+        ),
         "revert": revert,
     }
+    if revert and restore_enabled is None:
+        params["revert_withheld_reason"] = "baseline_indeterminate"
     return forward, revert_contract, params
 
 
@@ -134,13 +147,14 @@ def build_calendar_block_contracts(
     start_iso: Optional[str] = None,
     duration_minutes: int = DEFAULT_DURATION_MINUTES,
     recurrence: str = DEFAULT_RECURRENCE,
+    event_uid: Optional[str] = None,
     platform: str = "darwin",
     revert: bool = True,
 ) -> tuple[dict[str, Any], Optional[dict[str, Any]], dict[str, Any]]:
     """Build parameterized forward and optional revert contracts for a Calendar block."""
     if platform != "darwin":
         raise EverydayTaskError(
-            f"calendar-block local-state probe currently supports macOS Calendar; "
+            f"calendar-block local-state probe currently supports macOS EventKit; "
             f"unsupported platform {platform!r}"
         )
     if not title or not title.strip():
@@ -159,13 +173,17 @@ def build_calendar_block_contracts(
     end_dt = start_dt + timedelta(minutes=duration_minutes)
     end_iso = end_dt.isoformat(timespec="seconds")
 
-    source_spec = {
+    source_spec: dict[str, Any] = {
         "type": "macos_calendar_event",
         "id": "calendar_block",
         "calendar_name": calendar_name.strip(),
         "title": title.strip(),
         "start_iso": resolved_start,
+        "end_iso": end_iso,
+        "recurrence": recurrence,
     }
+    if event_uid is not None and event_uid.strip():
+        source_spec["event_uid"] = event_uid.strip()
 
     def _contract(expected_exists: bool) -> dict[str, Any]:
         return {
@@ -175,7 +193,7 @@ def build_calendar_block_contracts(
                 "kind": "local-state",
                 "local_state": [source_spec],
             },
-            "frame": {"target_fields": ["present", "exists", "value"]},
+            "frame": {"target_fields": ["present", "exists", "event_uid", "value"]},
             "effects": [
                 {
                     "kind": "field_equals",
@@ -197,6 +215,7 @@ def build_calendar_block_contracts(
         "end_iso": end_iso,
         "duration_minutes": duration_minutes,
         "recurrence": recurrence,
+        "event_uid": event_uid.strip() if event_uid and event_uid.strip() else None,
         "revert": revert,
     }
     return forward, revert_contract, params
@@ -234,11 +253,12 @@ def run_everyday_task(
     duration_minutes: int = DEFAULT_DURATION_MINUTES,
     recurrence: str = DEFAULT_RECURRENCE,
     revert: bool = True,
+    probe_baseline: bool = False,
     platform: Optional[str] = None,
     say: Callable[[str], None] = print,
     verifier_factory: Optional[Callable[..., Any]] = None,
 ) -> EverydayTaskBundle:
-    """Prepare and baseline-probe a built-in everyday OS task into ``root``."""
+    """Write parameterized verify/revert contracts for a built-in everyday OS task into ``root``."""
     if task not in EVERYDAY_TASKS:
         raise EverydayTaskError(
             f"Unknown task {task!r}. Expected one of: {', '.join(EVERYDAY_TASKS)}"
@@ -247,6 +267,7 @@ def run_everyday_task(
     active_platform = platform or sys.platform
     baseline_state: Optional[dict[str, Any]] = None
     probe_error: Optional[str] = None
+    probe_skipped = False
 
     if task == "night-shift":
         # Probe baseline first so the forward target flips the actual current state.
@@ -277,9 +298,19 @@ def run_everyday_task(
             platform=active_platform,
             revert=revert,
         )
-        baseline_state, probe_error = _probe_baseline(
-            forward, platform=active_platform, verifier_factory=verifier_factory
-        )
+        if probe_baseline:
+            baseline_state, probe_error = _probe_baseline(
+                forward, platform=active_platform, verifier_factory=verifier_factory
+            )
+            if baseline_state is not None and baseline_state.get("exists") is True:
+                raise EverydayTaskError(
+                    "Refusing to generate calendar-block contracts: a matching event "
+                    f"({title!r} at {params['start_iso']} in {calendar_name!r}) already "
+                    "exists in the baseline. Choose a different --title or --start so "
+                    "the revert check cannot target a pre-existing user event."
+                )
+        else:
+            probe_skipped = True
 
     root.mkdir(parents=True, exist_ok=True)
     verify_path = root / "verify.yaml"
@@ -298,7 +329,12 @@ def run_everyday_task(
     )
 
     say(f"Everyday task: {task} ({active_platform})")
-    if baseline_state is not None:
+    if probe_skipped:
+        say(
+            "  Baseline probe: skipped by default for calendar-block "
+            "(pass --probe-baseline to read macOS EventKit; requires Calendars permission)"
+        )
+    elif baseline_state is not None:
         say(
             f"  Baseline probe (read-only): {baseline_state['type']} -> "
             f"value={baseline_state.get('value')}"
@@ -307,9 +343,17 @@ def run_everyday_task(
         say(
             f"  Baseline probe (read-only): INDETERMINATE ({probe_error or 'unavailable'})"
         )
-    say(f"  Verify contract: {verify_path}")
+    say(f"  Verify contract written: {verify_path} (run via openadapt-flow verify-run)")
     if revert_verify_path is not None:
-        say(f"  Revert contract: {revert_verify_path} (leaves machine clean)")
+        say(
+            f"  Revert contract written: {revert_verify_path} "
+            "(run via openadapt-flow verify-run after undoing the change)"
+        )
+    elif revert and task == "night-shift":
+        say(
+            "  Revert contract withheld: baseline was INDETERMINATE "
+            "(will not invent a prior Night Shift state)"
+        )
     say(f"  Task parameters: {params_path}")
 
     return EverydayTaskBundle(
