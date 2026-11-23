@@ -535,6 +535,7 @@ def default_deterministic_runner(
     executed_steps = [_render_value(step, arguments) for step in spec.steps]
     writes_applied = 0
     unexecuted_ops: list[str] = []
+    applied_targets: list[dict[str, str]] = []
 
     for step in executed_steps:
         if not isinstance(step, Mapping):
@@ -553,6 +554,7 @@ def default_deterministic_runner(
             tmp.write_text(json.dumps(dict(data), sort_keys=True), encoding="utf-8")
             tmp.replace(target)
             writes_applied += 1
+            applied_targets.append({"kind": "json_file", "path": str(target.resolve())})
         elif op == "sqlite_insert":
             db_raw = step.get("database")
             table = step.get("table")
@@ -581,6 +583,13 @@ def default_deterministic_runner(
                     [values[c] for c in cols],
                 )
             writes_applied += 1
+            applied_targets.append(
+                {
+                    "kind": "sqlite",
+                    "database": str(Path(db_raw).resolve()),
+                    "table": table,
+                }
+            )
         elif isinstance(op, str):
             unexecuted_ops.append(op)
 
@@ -588,6 +597,7 @@ def default_deterministic_runner(
         "executed_steps": executed_steps,
         "step_count": len(executed_steps),
         "writes_applied": writes_applied,
+        "applied_targets": applied_targets,
         "unexecuted_ops": unexecuted_ops,
         "llm_calls": 0,
     }
@@ -600,25 +610,37 @@ def default_readback_oracle(
 ) -> ReadbackResult:
     """Built-in read-back oracle supporting SQLite and JSON file contracts.
 
-    Fails closed (returns ``ABSTAIN``) whenever the runner did not apply a write,
-    the contract cannot be read independently, or the contract kind is unsupported.
+    Fails closed (returns ``ABSTAIN``) whenever the runner left unexecuted ops,
+    did not attest ``writes_applied > 0``, wrote to a different target than the
+    read-back contract, or the contract cannot be read independently.
     """
+    unexecuted = execution_output.get("unexecuted_ops")
+    if isinstance(unexecuted, (list, tuple)) and len(unexecuted) > 0:
+        return ReadbackResult(
+            verdict="ABSTAIN",
+            reason=(
+                f"Runner left unexecuted ops {list(unexecuted)!r}; refusing to "
+                "verify a partially executed workflow"
+            ),
+            observed={"unexecuted_ops": list(unexecuted)},
+        )
+
+    writes_applied = execution_output.get("writes_applied")
     if (
-        "writes_applied" in execution_output
-        and int(execution_output["writes_applied"]) <= 0
+        isinstance(writes_applied, bool)
+        or not isinstance(writes_applied, int)
+        or writes_applied <= 0
     ):
         return ReadbackResult(
             verdict="ABSTAIN",
             reason=(
-                "Runner applied 0 writes to the target store; refusing to verify "
+                "Runner did not attest writes_applied > 0; refusing to verify "
                 "pre-existing state without an executed write"
             ),
-            observed={
-                "writes_applied": 0,
-                "unexecuted_ops": list(execution_output.get("unexecuted_ops", ())),
-            },
+            observed={"writes_applied": writes_applied},
         )
 
+    applied_targets = execution_output.get("applied_targets")
     contract = spec.readback_contract
     kind = contract.get("kind")
 
@@ -643,6 +665,23 @@ def default_readback_oracle(
                 verdict="ABSTAIN",
                 reason=f"Read-back SQLite database does not exist: {db_path}",
             )
+        if isinstance(applied_targets, (list, tuple)):
+            resolved_db = str(db_path.resolve())
+            if not any(
+                isinstance(t, Mapping)
+                and t.get("kind") == "sqlite"
+                and t.get("database") == resolved_db
+                and t.get("table") == table
+                for t in applied_targets
+            ):
+                return ReadbackResult(
+                    verdict="ABSTAIN",
+                    reason=(
+                        f"Applied write(s) did not target read-back SQLite "
+                        f"table {table!r} in {db_path}"
+                    ),
+                    observed={"applied_targets": list(applied_targets)},
+                )
         expected: dict[str, Any] = {}
         columns: list[str] = []
         for col, tmpl in match_spec.items():
@@ -708,6 +747,22 @@ def default_readback_oracle(
                 verdict="ABSTAIN",
                 reason=f"Read-back JSON file not found: {file_path}",
             )
+        if isinstance(applied_targets, (list, tuple)):
+            resolved_file = str(file_path.resolve())
+            if not any(
+                isinstance(t, Mapping)
+                and t.get("kind") == "json_file"
+                and t.get("path") == resolved_file
+                for t in applied_targets
+            ):
+                return ReadbackResult(
+                    verdict="ABSTAIN",
+                    reason=(
+                        f"Applied write(s) did not target read-back JSON file "
+                        f"{file_path}"
+                    ),
+                    observed={"applied_targets": list(applied_targets)},
+                )
         try:
             observed_data = json.loads(file_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
@@ -785,6 +840,7 @@ class McpifyServer:
             readback_oracle or default_readback_oracle
         )
         self._signer = signing_key or Ed25519PrivateKey.generate()
+        self._initialize_received: bool = False
         self.initialized: bool = False
 
     @property
@@ -842,7 +898,8 @@ class McpifyServer:
             )
 
         if method == "notifications/initialized":
-            self.initialized = True
+            if self._initialize_received:
+                self.initialized = True
             return None
 
         if is_notification:
@@ -865,6 +922,7 @@ class McpifyServer:
         self, request_id: Any, params: Mapping[str, Any]
     ) -> dict[str, Any]:
         del params
+        self._initialize_received = True
         return self._ok(
             request_id,
             {
@@ -1177,6 +1235,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional PEM-encoded Ed25519 private key path to include in the serve args.",
     )
 
+    pubkey_cmd = sub.add_parser(
+        "pubkey",
+        help="Print the base64 Ed25519 public key for a PEM signing key so operators can pin it.",
+    )
+    pubkey_cmd.add_argument(
+        "--signing-key",
+        required=True,
+        help="Path to a PEM-encoded Ed25519 private key.",
+    )
+
     return parser
 
 
@@ -1189,7 +1257,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         server_name = args.server_name or specs[0].name
         signing_key = load_signing_key(args.signing_key) if args.signing_key else None
         server = McpifyServer(specs, server_name=server_name, signing_key=signing_key)
+        sys.stderr.write(f"[openadapt-mcpify] public_key_b64={server.public_key_b64}\n")
+        sys.stderr.flush()
         server.serve_stdio()
+        return 0
+
+    if args.command == "pubkey":
+        key = load_signing_key(args.signing_key)
+        raw = key.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        print(base64.b64encode(raw).decode("ascii"))
         return 0
 
     if args.command == "config":

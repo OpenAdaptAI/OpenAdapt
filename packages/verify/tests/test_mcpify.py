@@ -157,7 +157,7 @@ def test_stdio_roundtrip_verified_with_ed25519_receipt(tmp_path: Path) -> None:
                 "INSERT INTO ledger_entries (entry_code, quantity) VALUES (?, ?)",
                 (args["entry_code"], args["quantity"]),
             )
-        return {"written": True, "llm_calls": 0}
+        return {"written": True, "writes_applied": 1, "llm_calls": 0}
 
     server = McpifyServer(
         spec,
@@ -274,7 +274,7 @@ def test_stdio_silent_fail_readback_mismatch_halts(tmp_path: Path) -> None:
                 "INSERT INTO ledger_entries (entry_code, quantity) VALUES (?, ?)",
                 (args["entry_code"], 999),
             )
-        return {"claimed_success": True, "llm_calls": 0}
+        return {"claimed_success": True, "writes_applied": 1, "llm_calls": 0}
 
     server = McpifyServer(spec, runner=silent_fail_writer)
     responses = _run_stdio_session(
@@ -359,7 +359,10 @@ def test_stdio_invalid_args_and_unknown_tool_fail_closed(tmp_path: Path) -> None
         return {"llm_calls": 0}
 
     server = McpifyServer(spec, runner=spy_runner)
-    # Calling tools/call before notifications/initialized must be rejected.
+    # notifications/initialized without prior initialize must NOT mark server initialized.
+    server.handle_message({"jsonrpc": "2.0", "method": "notifications/initialized"})
+    assert server.initialized is False
+    # Calling tools/call before initialize + notifications/initialized must be rejected.
     early = server.handle_message(
         {
             "jsonrpc": "2.0",
@@ -648,3 +651,131 @@ def test_cli_serve_and_config_subprocess(tmp_path: Path) -> None:
     assert noop_call["structuredContent"]["status"] == "HALT"
     assert noop_call["structuredContent"]["verdict"] == "ABSTAIN"
     assert noop_call["structuredContent"]["receipt"] is None
+
+    # Grok P1 probe 1: unexecuted UI op + json_write audit file against pre-existing SQLite row MUST HALT.
+    db_path = tmp_path / "claims.sqlite"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE claims (id TEXT, status TEXT)")
+        conn.execute("CREATE TABLE audit_log (msg TEXT)")
+        conn.execute("INSERT INTO claims (id, status) VALUES ('C1', 'open')")
+    partial_spec = _sample_spec_dict(db_path)
+    partial_spec["input_schema"] = {
+        "type": "object",
+        "properties": {"id": {"type": "string"}},
+        "required": ["id"],
+        "additionalProperties": False,
+    }
+    partial_spec["steps"] = [
+        {"op": "click", "target": "Submit {id}"},
+        {
+            "op": "json_write",
+            "path": str(tmp_path / "audit.json"),
+            "data": {"id": "{id}"},
+        },
+    ]
+    partial_spec["readback_contract"] = {
+        "kind": "sqlite",
+        "database": str(db_path),
+        "table": "claims",
+        "match": {"id": "{id}", "status": "open"},
+        "expected_count": 1,
+    }
+    partial_srv = McpifyServer(
+        WorkflowToolSpec.from_dict(partial_spec), signing_key=op_key
+    )
+    partial_res = _run_stdio_session(
+        partial_srv,
+        [
+            *_handshake_messages(),
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 10,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "record_ledger_entry",
+                        "arguments": {"id": "C1"},
+                    },
+                }
+            ),
+        ],
+    )[1]["result"]
+    assert partial_res["isError"] is True
+    assert partial_res["structuredContent"]["verdict"] == "ABSTAIN"
+
+    # Grok P1 probe 2: sqlite_insert into a different table ('audit_log') MUST NOT verify 'claims'.
+    wrong_tbl_spec = dict(partial_spec)
+    wrong_tbl_spec["steps"] = [
+        {
+            "op": "sqlite_insert",
+            "database": str(db_path),
+            "table": "audit_log",
+            "values": {"msg": "ran {id}"},
+        }
+    ]
+    wrong_tbl_srv = McpifyServer(
+        WorkflowToolSpec.from_dict(wrong_tbl_spec), signing_key=op_key
+    )
+    wrong_tbl_res = _run_stdio_session(
+        wrong_tbl_srv,
+        [
+            *_handshake_messages(),
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 11,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "record_ledger_entry",
+                        "arguments": {"id": "C1"},
+                    },
+                }
+            ),
+        ],
+    )[1]["result"]
+    assert wrong_tbl_res["isError"] is True
+    assert wrong_tbl_res["structuredContent"]["verdict"] == "ABSTAIN"
+
+    # Grok P1 probe 3: custom runner omitting writes_applied MUST fail closed (ABSTAIN).
+    omit_srv = McpifyServer(
+        WorkflowToolSpec.from_dict(wrong_tbl_spec),
+        runner=lambda _s, _a: {"llm_calls": 0},
+        signing_key=op_key,
+    )
+    omit_res = _run_stdio_session(
+        omit_srv,
+        [
+            *_handshake_messages(),
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 12,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "record_ledger_entry",
+                        "arguments": {"id": "C1"},
+                    },
+                }
+            ),
+        ],
+    )[1]["result"]
+    assert omit_res["isError"] is True
+    assert omit_res["structuredContent"]["verdict"] == "ABSTAIN"
+
+    # P3: `pubkey --signing-key` prints the exact operator public key.
+    pub_run = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "openadapt_verify.mcpify",
+            "pubkey",
+            "--signing-key",
+            str(key_path),
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert pub_run.returncode == 0, pub_run.stderr
+    assert pub_run.stdout.strip() == noop_server.public_key_b64
