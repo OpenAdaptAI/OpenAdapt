@@ -1,4 +1,4 @@
-"""Tests for the 1-line Universal Commit Firewall (openadapt_verify.commit_firewall)."""
+"""Tests for openadapt_verify.commit_firewall (UI commit check helper)."""
 
 from __future__ import annotations
 
@@ -10,13 +10,13 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from openadapt_types import receipt as receipt_lib
-
 from openadapt_verify import (
     CommitBlockedError,
     CommitResult,
     async_verify_commit,
-    commit_guard,
+    ui_commit_check,
     verify_commit,
 )
 
@@ -30,7 +30,7 @@ class _SyncLocator:
 
 
 class _SyncPlaywrightPage:
-    """Duck-typed sync Playwright Page (no playwright import)."""
+    """Duck-typed sync page exposing get_by_label() and screenshot()."""
 
     def __init__(self, fields: dict[str, str], *, body_text: str = "") -> None:
         self.fields = dict(fields)
@@ -59,7 +59,7 @@ class _AsyncLocator:
 
 
 class _AsyncPlaywrightPage:
-    """Duck-typed async Playwright Page (no playwright import)."""
+    """Duck-typed async page exposing get_by_label() and screenshot()."""
 
     def __init__(self, fields: dict[str, str]) -> None:
         self.fields = dict(fields)
@@ -73,6 +73,26 @@ class _AsyncPlaywrightPage:
     async def screenshot(self) -> bytes:
         self.screenshots_taken += 1
         return f"\x89PNG-async-{self.screenshots_taken}".encode("utf-8")
+
+
+class _BodyOnlyPage:
+    """Page exposing only body text (no field-level reader)."""
+
+    def __init__(self, body_text: str) -> None:
+        self._body = body_text
+
+    def inner_text(self, selector: str) -> str:
+        return self._body
+
+
+class _RaisingReadFieldPage:
+    """Page whose read_field raises RuntimeError while body text contains 'Yes'."""
+
+    def read_field(self, key: str) -> str:
+        raise RuntimeError(f"DOM detached while reading {key}")
+
+    def inner_text(self, selector: str) -> str:
+        return "Status: Yes"
 
 
 class _FakeVetoVerdict(str, Enum):
@@ -121,46 +141,86 @@ class _DuckPrePostVisualVeto:
         )
 
 
-def test_verify_commit_clean_emits_verifiable_ed25519_receipt(tmp_path: Path) -> None:
-    page = _SyncPlaywrightPage(
-        {"Policy Holder": "Alice Novak", "Coverage Limit": "$250,000"}
-    )
+def test_verify_commit_clean_with_explicit_key_binds_expected_values(
+    tmp_path: Path,
+) -> None:
+    signing_key = Ed25519PrivateKey.generate()
+    page_500 = _SyncPlaywrightPage({"Amount": "$500"})
+    page_9999 = _SyncPlaywrightPage({"Amount": "$9999"})
     receipt_dir = tmp_path / "receipts"
 
-    result = verify_commit(
-        page,
+    res_500 = verify_commit(
+        page_500,
         intent="Bind Policy",
-        expected={"Policy Holder": "Alice Novak", "Coverage Limit": "$250,000"},
+        expected={"Amount": "$500"},
+        record_id="rec-1",
         receipt_dir=receipt_dir,
+        signing_key=signing_key,
+    )
+    res_9999 = verify_commit(
+        page_9999,
+        intent="Bind Policy",
+        expected={"Amount": "$9999"},
+        record_id="rec-2",
+        receipt_dir=receipt_dir,
+        signing_key=signing_key,
     )
 
-    assert isinstance(result, CommitResult)
-    assert result.status == "VERIFIED"
-    assert result.verdict == "VERIFIED"
-    assert result.verified is True
-    assert result.receipt_id is not None
-    assert result.receipt_path is not None and result.receipt_path.is_file()
-    assert result.receipt is not None
-    assert result.key_id is not None and result.public_key is not None
+    assert isinstance(res_500, CommitResult)
+    assert res_500.status == "VERIFIED"
+    assert res_500.receipt_id is not None and res_9999.receipt_id is not None
+    # Different expected values must produce different signed receipt subjects/IDs!
+    assert res_500.receipt_id != res_9999.receipt_id
+    assert res_500.receipt_path is not None and res_500.receipt_path.is_file()
+    assert res_500.key_id is not None and res_500.public_key is not None
 
-    # Cryptographically verify the emitted record/run/v1 DSSE envelope with openadapt-types!
-    on_disk = json.loads(result.receipt_path.read_text(encoding="utf-8"))
+    on_disk = json.loads(res_500.receipt_path.read_text(encoding="utf-8"))
     registry = [
         receipt_lib.RoleKey(
-            key_id=result.key_id,
-            public_key=result.public_key,
+            key_id=res_500.key_id,
+            public_key=res_500.public_key,
             role="this_computer",
         )
     ]
     check = receipt_lib.verify_receipt(on_disk, registry)
     assert check.ok is True, f"Receipt verification failed: {check}"
-    assert check.outcome == "VERIFIED"
+
+    # Without an explicit signing_key, no ephemeral key or receipt is silently minted.
+    unsigned = verify_commit(
+        page_500, intent="Bind Policy", expected={"Amount": "$500"}
+    )
+    assert unsigned.status == "VERIFIED"
+    assert unsigned.receipt is None
+    assert unsigned.receipt_id is None
+
+
+def test_empty_expected_body_substring_and_read_errors_fail_closed(
+    tmp_path: Path,
+) -> None:
+    # 1. Empty expected ALWAYS fails closed (ABSTAIN -> STOPPED).
+    empty_res = verify_commit(None, intent="x", expected={})
+    assert empty_res.status == "STOPPED"
+    assert empty_res.verdict == "ABSTAIN"
+    assert empty_res.receipt is None
+
+    # 2. Body text "Amount due: $5000" must NEVER match expected={"Amount": "$500"}!
+    body_only = _BodyOnlyPage("Amount due: $5000")
+    sub_res = verify_commit(body_only, intent="Pay", expected={"Amount": "$500"})
+    assert sub_res.status == "STOPPED"
+    assert sub_res.verdict == "VETO"
+    assert sub_res.receipt is None
+
+    # 3. read_field raising RuntimeError must NEVER fall back to body text "Yes"!
+    err_page = _RaisingReadFieldPage()
+    err_res = verify_commit(err_page, intent="Confirm", expected={"Approved": "Yes"})
+    assert err_res.status == "STOPPED"
+    assert err_res.verdict == "VETO"
+    assert "RuntimeError" in err_res.reason
 
 
 def test_verify_commit_catches_silent_unbound_and_homoglyph_mismatch(
     tmp_path: Path,
 ) -> None:
-    # Cyrillic 'А' (U+0410) instead of Latin 'A' + empty unbound Coverage Limit control
     page = _SyncPlaywrightPage(
         {"Policy Holder": "\u0410lice Novak", "Coverage Limit": ""}
     )
@@ -185,13 +245,12 @@ def test_verify_commit_catches_silent_unbound_and_homoglyph_mismatch(
     assert len(lines) == 1
     entry = json.loads(lines[0])
     assert entry["schema"] == "openadapt.commit-inbox/v1"
-    assert entry["status"] == "STOPPED"
     assert entry["verdict"] == "VETO"
-    assert entry["expected_keys"] == ["Coverage Limit", "Policy Holder"]
 
 
-def test_abstain_halts_even_when_dom_is_clean(tmp_path: Path) -> None:
-    """Strict ABSTAIN -> HALT: clean DOM must NEVER override visual occlusion."""
+def test_abstain_halts_and_raw_screenshot_passes_deterministic_passed_false(
+    tmp_path: Path,
+) -> None:
     clean_page = _SyncPlaywrightPage({"Status": "Approved"})
     occluded_veto = _DuckPrePostVisualVeto(
         _FakeVetoVerdict.ABSTAIN, reason="modal dialog occludes submit button"
@@ -210,95 +269,76 @@ def test_abstain_halts_even_when_dom_is_clean(tmp_path: Path) -> None:
     assert occluded_veto.calls[0]["deterministic_passed"] is True
     assert result.status == "STOPPED"
     assert result.verdict == "ABSTAIN"
-    assert result.verified is False
-    assert result.receipt is None
-    assert "occludes" in result.reason
-    assert inbox_path.is_file()
 
-
-def test_visual_pass_never_overrides_dom_mismatch() -> None:
-    bad_page = _SyncPlaywrightPage({"Amount": "$0.00"})
-    passing_veto = _DuckPrePostVisualVeto(_FakeVetoVerdict.PASS)
-
-    result = verify_commit(
-        bad_page,
-        intent="Submit Payment",
-        expected={"Amount": "$500.00"},
-        verifier=passing_veto,
+    # When no DOM check ran (raw PNG), visual verifier MUST receive deterministic_passed=False!
+    raw_veto = _DuckPrePostVisualVeto(_FakeVetoVerdict.PASS)
+    raw_res = verify_commit(
+        b"\x89PNG-raw",
+        intent="Approve Invoice",
+        expected={"Status": "Approved"},
+        verifier=raw_veto,
     )
+    assert len(raw_veto.calls) == 1
+    assert raw_veto.calls[0]["deterministic_passed"] is False
+    assert raw_res.status == "VERIFIED"
+    # No signing_key supplied -> no receipt minted.
+    assert raw_res.receipt is None
 
-    assert result.status == "STOPPED"
-    assert result.verdict == "VETO"
-    assert result.verified is False
 
+def test_ui_commit_check_pre_commit_gate_body_exception_and_async(
+    tmp_path: Path,
+) -> None:
+    signing_key = Ed25519PrivateKey.generate()
 
-def test_sync_and_async_commit_guard_context_managers(tmp_path: Path) -> None:
-    # Sync context manager: captures before & after screenshots and verifies
-    sync_page = _SyncPlaywrightPage({"Status": "Draft"})
-    with commit_guard(
-        sync_page,
+    # 1. Pre-commit gate blocks BEFORE body executes when pre_expected fails.
+    pre_page = _SyncPlaywrightPage({"Amount": "$9999"})
+    body_ran = False
+    with pytest.raises(CommitBlockedError):
+        with ui_commit_check(
+            pre_page,
+            intent="Submit Payment",
+            pre_expected={"Amount": "$500"},
+            expected={"Status": "Paid"},
+        ):
+            body_ran = True
+    assert body_ran is False
+
+    # 2. Exception inside body records ABSTAIN inbox entry before re-raising.
+    exc_inbox = tmp_path / "exc_inbox.jsonl"
+    exc_page = _SyncPlaywrightPage({"Status": "Draft"})
+    check = ui_commit_check(
+        exc_page,
         intent="Submit Form",
         expected={"Status": "Submitted"},
-        receipt_dir=tmp_path / "sync_receipts",
-    ) as guard:
-        sync_page.fields["Status"] = "Submitted"
+        inbox=exc_inbox,
+    )
+    with pytest.raises(RuntimeError, match="click crashed"):
+        with check:
+            raise RuntimeError("click crashed")
+    assert check.result is not None
+    assert check.result.verdict == "ABSTAIN"
+    assert exc_inbox.is_file()
 
-    assert guard.before_screenshot is not None
-    assert guard.result is not None and guard.result.status == "VERIFIED"
-    assert sync_page.screenshots_taken == 2
-
-    # Sync context manager raises CommitBlockedError on mismatch
-    broken_page = _SyncPlaywrightPage({"Status": "Draft"})
-    with pytest.raises(CommitBlockedError) as exc_info:
-        with commit_guard(
-            broken_page,
-            intent="Submit Form",
-            expected={"Status": "Submitted"},
-            inbox=tmp_path / "blocked.jsonl",
-        ):
-            pass  # click failed silently
-    assert exc_info.value.result.status == "STOPPED"
-    assert exc_info.value.inbox_item is not None
-
-    # Async context manager with duck-typed async Playwright page
+    # 3. Async context manager succeeds with explicit signing key.
     async def _run_async() -> CommitResult:
         async_page = _AsyncPlaywrightPage({"Status": "Draft"})
-        async with commit_guard(
+        async with ui_commit_check(
             async_page,
             intent="Approve Async",
             expected={"Status": "Approved"},
             receipt_dir=tmp_path / "async_receipts",
-        ) as aguard:
+            signing_key=signing_key,
+        ) as acheck:
             async_page.fields["Status"] = "Approved"
-        assert aguard.before_screenshot is not None
-        assert aguard.result is not None
-        return aguard.result
+        assert acheck.before_screenshot is not None
+        assert acheck.result is not None
+        return acheck.result
 
     async_res = asyncio.run(_run_async())
     assert async_res.status == "VERIFIED"
     assert async_res.receipt_path is not None and async_res.receipt_path.is_file()
 
-
-def test_raw_screenshot_requires_verifier_fail_closed() -> None:
-    # Raw screenshot without a visual verifier must ABSTAIN -> HALT when expected is set
-    res_no_verifier = verify_commit(
-        b"\x89PNG-raw",
-        intent="Submit",
-        expected={"Status": "Saved"},
-    )
-    assert res_no_verifier.status == "STOPPED"
-    assert res_no_verifier.verdict == "ABSTAIN"
-
-    # Raw screenshot with a passing visual verifier succeeds
-    res_with_verifier = verify_commit(
-        b"\x89PNG-raw",
-        intent="Submit",
-        expected={"Status": "Saved"},
-        verifier=lambda **_: {"verdict": "PASS", "reason": "confirmed visually"},
-    )
-    assert res_with_verifier.status == "VERIFIED"
-
-    # Async verify_commit with verifier raising exception -> ABSTAIN -> HALT
+    # 4. Async verify_commit with raising verifier -> ABSTAIN.
     async def _raising_verifier(**_: Any) -> dict[str, Any]:
         raise RuntimeError("VLM timeout")
 

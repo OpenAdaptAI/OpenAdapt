@@ -25,16 +25,15 @@ from openadapt_flow.write_receipt import ReceiptError
 from openadapt_flow.write_receipt import Verification as PortableReceiptVerification
 from openadapt_flow.write_receipt import verify as verify_receipt
 
-from openadapt_verify.guard import (
+from openadapt_verify.commit_firewall import (
     CommitBlockedError,
-    CommitGuard,
     CommitResult,
+    UiCommitCheck,
     async_verify_commit,
-    checked_write,
-    commit_guard,
-    verified,
+    ui_commit_check,
     verify_commit,
 )
+from openadapt_verify.guard import checked_write, verified
 
 __version__ = "0.2.0"
 
@@ -42,7 +41,6 @@ __all__ = [
     "Actor",
     "AlreadyWritten",
     "CommitBlockedError",
-    "CommitGuard",
     "CommitResult",
     "Contract",
     "LocalSealVerification",
@@ -50,15 +48,16 @@ __all__ = [
     "PortableReceiptVerification",
     "ReceiptError",
     "Scope",
+    "UiCommitCheck",
     "WriteBlocked",
     "WriteGuard",
     "WriteResult",
     "async_verify_commit",
     "begin_write",
     "checked_write",
-    "commit_guard",
     "issue_write_receipt",
     "recheck",
+    "ui_commit_check",
     "verify_commit",
     "verify_local_seal",
     "verified",

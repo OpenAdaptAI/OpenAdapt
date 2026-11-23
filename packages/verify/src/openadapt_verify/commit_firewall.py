@@ -1,17 +1,26 @@
-"""Universal 1-line Commit Firewall for GUI and browser agents.
+"""UI commit check helper for duck-typed sync/async browser pages and screenshots.
 
-Wraps any irreversible UI commit step (Playwright, Browser-Use, Claude CUA,
-OpenAI CUA, or raw screenshots) with:
+Tested against duck-typed sync/async page objects exposing field-level readers
+(``read_field``, ``get_by_label``, ``input_value``) and raw screenshot bytes
+paired with a visual verifier. This module provides same-screen UI checks (not
+an independent system-of-record store verifier like ``openadapt_verify.guard``):
 
-1. Fast deterministic DOM/text verification (duck-typed; zero hard dependency
-   on Playwright or any browser/vision library).
-2. Optional visual veto check (duck-typed for ``PrePostSubmitVisualVeto`` or
-   any custom visual verifier callable) enforcing strict ``ABSTAIN -> HALT``
-   semantics so clean DOM never silently overrides visual occlusion.
-3. Cryptographically signed Ed25519 ``record/run/v1`` DSSE receipts via
-   ``openadapt_types.receipt`` on ``VERIFIED`` outcomes.
-4. Structured ``CommitBlockedError`` / ``CommitResult(status="STOPPED")`` and
-   optional local Exception Inbox JSONL logging on ``VETO`` / ``ABSTAIN``.
+1. **Exact field-level DOM checks (no body-text substring fallback):** Reads
+   each expected field directly via ``read_field`` / ``get_by_label`` /
+   ``input_value`` with exact Unicode comparison (no NFKC folding). Empty
+   ``expected`` maps and field-read errors always fail closed.
+2. **Optional visual veto check:** Duck-typed for ``PrePostSubmitVisualVeto``
+   or a custom visual verifier callable, enforcing strict ``ABSTAIN -> HALT``
+   semantics and passing ``deterministic_passed=False`` whenever no DOM check
+   ran.
+3. **Explicitly keyed Ed25519 receipts:** Mints a signed ``record/run/v1`` DSSE
+   receipt only when the caller supplies an explicit ``signing_key`` (never
+   silently generates an ephemeral per-call key) and binds both
+   ``expected_values_sha256`` and ``record_id`` into the signed statement.
+4. **Pre-commit gate & exception recording:** :class:`UiCommitCheck` supports
+   an optional ``pre_expected`` check in ``__enter__`` / ``__aenter__`` that
+   halts BEFORE the commit body executes, and records an ``ABSTAIN`` inbox
+   entry if the wrapped body raises.
 """
 
 from __future__ import annotations
@@ -36,7 +45,7 @@ ScreenshotInput = Union[bytes, bytearray, str, Path, None]
 
 @dataclass(frozen=True)
 class CommitResult:
-    """Outcome of a commit firewall check."""
+    """Outcome of a UI commit check."""
 
     status: CommitStatus
     verdict: CommitVerdict
@@ -73,7 +82,7 @@ class CommitResult:
 
 
 class CommitBlockedError(RuntimeError):
-    """Raised when the commit firewall halts an irreversible commit."""
+    """Raised when a UI commit check halts before or after a commit step."""
 
     def __init__(self, result: CommitResult) -> None:
         self.result = result
@@ -115,53 +124,21 @@ def _coerce_screenshot_bytes(source: ScreenshotInput) -> Optional[bytes]:
     return None
 
 
-def _extract_page_text_sync(page: Any) -> Optional[str]:
-    for method, args in (
-        ("inner_text", ("body",)),
-        ("text_content", ("body",)),
-        ("content", ()),
-    ):
-        fn = getattr(page, method, None)
-        if callable(fn):
-            try:
-                val = fn(*args)
-            except Exception:
-                continue
-            if isinstance(val, str):
-                return val
-    return None
+def _read_field_sync(page: Any, key: str) -> tuple[bool, Optional[str], Optional[str]]:
+    """Read a field directly from a page object.
 
-
-async def _extract_page_text_async(page: Any) -> Optional[str]:
-    for method, args in (
-        ("inner_text", ("body",)),
-        ("text_content", ("body",)),
-        ("content", ()),
-    ):
-        fn = getattr(page, method, None)
-        if callable(fn):
-            try:
-                val = fn(*args)
-                if inspect.isawaitable(val):
-                    val = await val
-            except Exception:
-                continue
-            if isinstance(val, str):
-                return val
-    return None
-
-
-def _read_field_sync(page: Any, key: str) -> tuple[bool, Optional[str]]:
-    """Try field-level read first; returns (found_field, value)."""
+    Returns ``(found, value, error_detail)``. Never falls back to body-text
+    substring matching.
+    """
     read_field = getattr(page, "read_field", None)
     if callable(read_field):
         try:
             val = read_field(key)
-            return True, None if val is None else str(val)
+            return True, None if val is None else str(val), None
         except KeyError:
-            return False, None
-        except Exception:
-            return False, None
+            return False, None, f"field {key!r} not found via read_field"
+        except Exception as exc:  # noqa: BLE001
+            return False, None, f"read_field({key!r}) raised {type(exc).__name__}"
 
     get_by_label = getattr(page, "get_by_label", None)
     if callable(get_by_label):
@@ -172,34 +149,40 @@ def _read_field_sync(page: Any, key: str) -> tuple[bool, Optional[str]]:
                 if callable(getter):
                     val = getter()
                     if isinstance(val, str):
-                        return True, val
-        except Exception:
-            pass
+                        return True, val, None
+        except KeyError:
+            return False, None, f"field {key!r} not found via get_by_label"
+        except Exception as exc:  # noqa: BLE001
+            return False, None, f"get_by_label({key!r}) raised {type(exc).__name__}"
 
     input_value = getattr(page, "input_value", None)
     if callable(input_value):
         try:
             val = input_value(key)
             if isinstance(val, str):
-                return True, val
-        except Exception:
-            pass
+                return True, val, None
+        except KeyError:
+            return False, None, f"field {key!r} not found via input_value"
+        except Exception as exc:  # noqa: BLE001
+            return False, None, f"input_value({key!r}) raised {type(exc).__name__}"
 
-    return False, None
+    return False, None, f"page exposes no field-level reader for {key!r}"
 
 
-async def _read_field_async(page: Any, key: str) -> tuple[bool, Optional[str]]:
+async def _read_field_async(
+    page: Any, key: str
+) -> tuple[bool, Optional[str], Optional[str]]:
     read_field = getattr(page, "read_field", None)
     if callable(read_field):
         try:
             val = read_field(key)
             if inspect.isawaitable(val):
                 val = await val
-            return True, None if val is None else str(val)
+            return True, None if val is None else str(val), None
         except KeyError:
-            return False, None
-        except Exception:
-            return False, None
+            return False, None, f"field {key!r} not found via read_field"
+        except Exception as exc:  # noqa: BLE001
+            return False, None, f"read_field({key!r}) raised {type(exc).__name__}"
 
     get_by_label = getattr(page, "get_by_label", None)
     if callable(get_by_label):
@@ -212,9 +195,11 @@ async def _read_field_async(page: Any, key: str) -> tuple[bool, Optional[str]]:
                     if inspect.isawaitable(val):
                         val = await val
                     if isinstance(val, str):
-                        return True, val
-        except Exception:
-            pass
+                        return True, val, None
+        except KeyError:
+            return False, None, f"field {key!r} not found via get_by_label"
+        except Exception as exc:  # noqa: BLE001
+            return False, None, f"get_by_label({key!r}) raised {type(exc).__name__}"
 
     input_value = getattr(page, "input_value", None)
     if callable(input_value):
@@ -223,43 +208,30 @@ async def _read_field_async(page: Any, key: str) -> tuple[bool, Optional[str]]:
             if inspect.isawaitable(val):
                 val = await val
             if isinstance(val, str):
-                return True, val
-        except Exception:
-            pass
+                return True, val, None
+        except KeyError:
+            return False, None, f"field {key!r} not found via input_value"
+        except Exception as exc:  # noqa: BLE001
+            return False, None, f"input_value({key!r}) raised {type(exc).__name__}"
 
-    return False, None
+    return False, None, f"page exposes no field-level reader for {key!r}"
 
 
 def _check_dom_sync(
     page: Any, expected: Mapping[str, str]
 ) -> tuple[bool, tuple[str, ...]]:
-    """Run exact Unicode DOM/text checks (no NFKC folding so homoglyphs fail)."""
+    """Run exact field-level Unicode checks (no NFKC folding, no body-text fallback)."""
     mismatches: list[str] = []
-    page_text: Optional[str] = None
-    page_text_loaded = False
-
     for field_key, expected_val in expected.items():
         expected_str = str(expected_val)
-        found, actual = _read_field_sync(page, field_key)
-        if found:
-            if actual != expected_str:
-                mismatches.append(
-                    f"field {field_key!r}: expected {expected_str!r}, observed {actual!r}"
-                )
+        found, actual, err = _read_field_sync(page, field_key)
+        if not found:
+            mismatches.append(err or f"field {field_key!r}: unreadable")
             continue
-
-        if not page_text_loaded:
-            page_text = _extract_page_text_sync(page)
-            page_text_loaded = True
-        if page_text is None:
+        if actual != expected_str:
             mismatches.append(
-                f"field {field_key!r}: page exposed no readable field or text"
+                f"field {field_key!r}: expected {expected_str!r}, observed {actual!r}"
             )
-        elif expected_str not in page_text:
-            mismatches.append(
-                f"field {field_key!r}: expected value {expected_str!r} not found in page text"
-            )
-
     return len(mismatches) == 0, tuple(mismatches)
 
 
@@ -267,31 +239,16 @@ async def _check_dom_async(
     page: Any, expected: Mapping[str, str]
 ) -> tuple[bool, tuple[str, ...]]:
     mismatches: list[str] = []
-    page_text: Optional[str] = None
-    page_text_loaded = False
-
     for field_key, expected_val in expected.items():
         expected_str = str(expected_val)
-        found, actual = await _read_field_async(page, field_key)
-        if found:
-            if actual != expected_str:
-                mismatches.append(
-                    f"field {field_key!r}: expected {expected_str!r}, observed {actual!r}"
-                )
+        found, actual, err = await _read_field_async(page, field_key)
+        if not found:
+            mismatches.append(err or f"field {field_key!r}: unreadable")
             continue
-
-        if not page_text_loaded:
-            page_text = await _extract_page_text_async(page)
-            page_text_loaded = True
-        if page_text is None:
+        if actual != expected_str:
             mismatches.append(
-                f"field {field_key!r}: page exposed no readable field or text"
+                f"field {field_key!r}: expected {expected_str!r}, observed {actual!r}"
             )
-        elif expected_str not in page_text:
-            mismatches.append(
-                f"field {field_key!r}: expected value {expected_str!r} not found in page text"
-            )
-
     return len(mismatches) == 0, tuple(mismatches)
 
 
@@ -304,7 +261,6 @@ def _normalize_visual_outcome(raw: Any) -> tuple[CommitVerdict, str]:
     if raw is None:
         return "ABSTAIN", "visual verifier returned no decision"
 
-    # Unwrap SubmitVetoResult-like objects (has .decision and .allowed)
     decision_obj = getattr(raw, "decision", None)
     if decision_obj is not None:
         raw = decision_obj
@@ -344,7 +300,6 @@ def _run_visual_verifier_sync(
     deterministic_passed: bool,
 ) -> tuple[CommitVerdict, str]:
     try:
-        # Duck-type PrePostSubmitVisualVeto (post-submit or pre-submit)
         check_post = getattr(verifier, "check_post_submit", None)
         if callable(check_post) and after_png is not None:
             res = check_post(
@@ -382,7 +337,7 @@ def _run_visual_verifier_sync(
                 expected=dict(expected),
             )
             return _normalize_visual_outcome(res)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return "ABSTAIN", f"visual verifier error (fail-closed): {exc}"
 
     return "ABSTAIN", "unsupported visual verifier interface (fail-closed)"
@@ -443,7 +398,7 @@ async def _run_visual_verifier_async(
             if inspect.isawaitable(res):
                 res = await res
             return _normalize_visual_outcome(res)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return "ABSTAIN", f"visual verifier error (fail-closed): {exc}"
 
     return "ABSTAIN", "unsupported visual verifier interface (fail-closed)"
@@ -453,30 +408,45 @@ def _build_signed_receipt(
     *,
     intent: str,
     expected: Mapping[str, str],
+    record_id: str,
+    dom_checked: bool,
     used_visual_verifier: bool,
     after_png: Optional[bytes],
     receipt_dir: Optional[Union[str, Path]],
-    signing_key: Optional[Ed25519PrivateKey],
+    signing_key: Ed25519PrivateKey,
 ) -> tuple[str, dict[str, Any], Optional[Path], str, str]:
-    """Emit a signed Ed25519 ``record/run/v1`` DSSE receipt."""
-    private_key = signing_key or Ed25519PrivateKey.generate()
-    pub_raw = private_key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    """Emit a signed Ed25519 ``record/run/v1`` DSSE receipt bound to expected values & record_id."""
+    pub_raw = signing_key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
     pub_b64 = base64.b64encode(pub_raw).decode("ascii")
     kid = receipt_lib.key_id(pub_raw)
 
     intent_sha = hashlib.sha256(intent.encode("utf-8")).hexdigest()
+    canonical_expected = {str(k): str(v) for k, v in sorted(expected.items())}
+    expected_values_sha = hashlib.sha256(
+        receipt_lib.canonical_json(canonical_expected).encode("utf-8")
+    ).hexdigest()
+
     report_basis = {
         "intent_sha256": intent_sha,
-        "expected_keys": sorted(str(k) for k in expected.keys()),
+        "record_id": record_id,
+        "expected_keys": sorted(canonical_expected.keys()),
+        "expected_values_sha256": expected_values_sha,
         "outcome": "VERIFIED",
+        "dom_checked": dom_checked,
         "visual_checked": used_visual_verifier,
+        "strength": "same_screen",
     }
     report_sha = hashlib.sha256(
         receipt_lib.canonical_json(report_basis).encode("utf-8")
     ).hexdigest()
 
     subjects: list[dict[str, Any]] = [
-        {"name": "report.json", "digest": {"sha256": report_sha}}
+        {"name": "report.json", "digest": {"sha256": report_sha}},
+        {
+            "name": "payload",
+            "media_type": "application/json",
+            "digest": {"sha256": expected_values_sha},
+        },
     ]
     if after_png is not None:
         subjects.append(
@@ -487,6 +457,8 @@ def _build_signed_receipt(
         )
 
     started_hour = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00:00Z")
+    # Same-screen checks do NOT claim independent store/identity confirmation.
+    post_confirmed = 1 if dom_checked else 0
     statement: dict[str, Any] = {
         "_type": receipt_lib.STATEMENT_TYPE,
         "subject": subjects,
@@ -504,19 +476,23 @@ def _build_signed_receipt(
                     "step": 0,
                     "target_kind": "gui",
                     "operation": "irreversible_write",
-                    "check": "confirmed",
+                    "check": "confirmed" if dom_checked else "not_checked",
                     "strength": "same_screen",
-                    "not_checked": [],
+                    "not_checked": (
+                        ["effect_not_declared"]
+                        if dom_checked
+                        else ["field_values", "effect_not_declared"]
+                    ),
                 }
             ],
             "checks": {
-                "identity": {"required": 1, "confirmed": 1},
-                "postconditions": {"required": 1, "confirmed": 1},
+                "identity": {"required": 0, "confirmed": 0},
+                "postconditions": {"required": 1, "confirmed": post_confirmed},
                 "effects": {"required": 0, "confirmed": 0},
                 "authorization": {"required": 0, "confirmed": 0},
-                "lines_confirmed": 1,
+                "lines_confirmed": post_confirmed,
                 "lines_refuted": 0,
-                "lines_not_checked": 0,
+                "lines_not_checked": 0 if dom_checked else 1,
             },
             "model_calls": 1 if used_visual_verifier else 0,
             "disclosure": {
@@ -526,7 +502,7 @@ def _build_signed_receipt(
         },
     }
 
-    envelope = receipt_lib.sign_statement(statement, [(kid, private_key.sign)])
+    envelope = receipt_lib.sign_statement(statement, [(kid, signing_key.sign)])
     rid = receipt_lib.payload_sha256(envelope)
 
     written_path: Optional[Path] = None
@@ -574,6 +550,7 @@ def _finalize_commit(
     *,
     intent: str,
     expected: Mapping[str, str],
+    record_id: str,
     dom_checked: bool,
     dom_passed: bool,
     mismatches: tuple[str, ...],
@@ -585,15 +562,19 @@ def _finalize_commit(
     signing_key: Optional[Ed25519PrivateKey],
     raise_on_block: bool,
 ) -> CommitResult:
-    # Strict ABSTAIN -> HALT & fail-closed combination rule:
-    # 1. Visual ABSTAIN ALWAYS halts (clean DOM never overrides occlusion).
-    # 2. Visual VETO ALWAYS halts.
-    # 3. DOM mismatch ALWAYS halts (passing visual never overrides bad DOM).
-    # 4. If neither DOM nor visual verifier ran for non-empty expected, ABSTAIN -> HALT.
+    # Strict fail-closed combination rule:
+    # 1. Empty `expected` ALWAYS abstains/halts (never VERIFIED on nothing).
+    # 2. Visual ABSTAIN ALWAYS halts (clean DOM never overrides occlusion).
+    # 3. Visual VETO ALWAYS halts.
+    # 4. DOM mismatch ALWAYS halts (passing visual never overrides bad DOM).
+    # 5. If neither DOM nor visual verifier ran, ABSTAIN -> HALT.
     final_verdict: CommitVerdict = "VERIFIED"
     reason = ""
 
-    if visual_verdict == "ABSTAIN":
+    if not expected:
+        final_verdict = "ABSTAIN"
+        reason = "expected must contain at least one field to verify"
+    elif visual_verdict == "ABSTAIN":
         final_verdict = "ABSTAIN"
         reason = visual_reason or "visual verifier abstained (ABSTAIN -> HALT)"
     elif visual_verdict == "VETO":
@@ -602,7 +583,7 @@ def _finalize_commit(
     elif dom_checked and not dom_passed:
         final_verdict = "VETO"
         reason = "; ".join(mismatches) or "DOM verification failed"
-    elif not dom_checked and visual_verdict is None and expected:
+    elif not dom_checked and visual_verdict is None:
         final_verdict = "ABSTAIN"
         reason = "no DOM page or visual verifier available to verify expected fields"
 
@@ -628,14 +609,23 @@ def _finalize_commit(
             raise CommitBlockedError(result)
         return result
 
-    rid, envelope, receipt_path, kid, pub_b64 = _build_signed_receipt(
-        intent=intent,
-        expected=expected,
-        used_visual_verifier=visual_verdict is not None,
-        after_png=after_png,
-        receipt_dir=receipt_dir,
-        signing_key=signing_key,
-    )
+    rid: Optional[str] = None
+    envelope: Optional[dict[str, Any]] = None
+    receipt_path: Optional[Path] = None
+    kid: Optional[str] = None
+    pub_b64: Optional[str] = None
+    if signing_key is not None:
+        rid, envelope, receipt_path, kid, pub_b64 = _build_signed_receipt(
+            intent=intent,
+            expected=expected,
+            record_id=record_id,
+            dom_checked=dom_checked,
+            used_visual_verifier=visual_verdict is not None,
+            after_png=after_png,
+            receipt_dir=receipt_dir,
+            signing_key=signing_key,
+        )
+
     return CommitResult(
         status="VERIFIED",
         verdict="VERIFIED",
@@ -654,6 +644,7 @@ def verify_commit(
     *,
     intent: str,
     expected: Mapping[str, str],
+    record_id: str = "",
     before_screenshot: ScreenshotInput = None,
     verifier: Any = None,
     inbox: Optional[Union[str, Path]] = None,
@@ -661,19 +652,19 @@ def verify_commit(
     signing_key: Optional[Ed25519PrivateKey] = None,
     raise_on_block: bool = False,
 ) -> CommitResult:
-    """Verify an irreversible UI commit in 1 line (sync).
+    """Verify UI commit fields (sync) with strict fail-closed semantics.
 
-    Accepts a duck-typed Playwright-like ``page`` or screenshot bytes/path.
-    Enforces strict ``ABSTAIN -> HALT`` semantics and emits a signed Ed25519
-    ``record/run/v1`` receipt on ``VERIFIED``.
+    Requires non-empty ``expected``. Uses exact field-level reads only (no
+    body-text substring fallback). Emits a signed Ed25519 ``record/run/v1``
+    receipt only when an explicit ``signing_key`` is supplied.
     """
     dom_checked = False
-    dom_passed = True
+    dom_passed = False
     mismatches: tuple[str, ...] = ()
     after_png: Optional[bytes] = None
     before_png = _coerce_screenshot_bytes(before_screenshot)
 
-    if _is_page_like(page_or_screenshot):
+    if expected and _is_page_like(page_or_screenshot):
         dom_checked = True
         dom_passed, mismatches = _check_dom_sync(page_or_screenshot, expected)
         shot_fn = getattr(page_or_screenshot, "screenshot", None)
@@ -688,19 +679,20 @@ def verify_commit(
 
     visual_verdict: Optional[CommitVerdict] = None
     visual_reason = ""
-    if verifier is not None:
+    if expected and verifier is not None:
         visual_verdict, visual_reason = _run_visual_verifier_sync(
             verifier,
             before_png=before_png,
             after_png=after_png,
             intent=intent,
             expected=expected,
-            deterministic_passed=dom_passed if dom_checked else True,
+            deterministic_passed=dom_passed if dom_checked else False,
         )
 
     return _finalize_commit(
         intent=intent,
         expected=expected,
+        record_id=record_id,
         dom_checked=dom_checked,
         dom_passed=dom_passed,
         mismatches=mismatches,
@@ -719,6 +711,7 @@ async def async_verify_commit(
     *,
     intent: str,
     expected: Mapping[str, str],
+    record_id: str = "",
     before_screenshot: ScreenshotInput = None,
     verifier: Any = None,
     inbox: Optional[Union[str, Path]] = None,
@@ -726,14 +719,14 @@ async def async_verify_commit(
     signing_key: Optional[Ed25519PrivateKey] = None,
     raise_on_block: bool = False,
 ) -> CommitResult:
-    """Async counterpart to :func:`verify_commit` for async Playwright pages."""
+    """Async counterpart to :func:`verify_commit` for async page objects."""
     dom_checked = False
-    dom_passed = True
+    dom_passed = False
     mismatches: tuple[str, ...] = ()
     after_png: Optional[bytes] = None
     before_png = _coerce_screenshot_bytes(before_screenshot)
 
-    if _is_page_like(page_or_screenshot):
+    if expected and _is_page_like(page_or_screenshot):
         dom_checked = True
         dom_passed, mismatches = await _check_dom_async(page_or_screenshot, expected)
         shot_fn = getattr(page_or_screenshot, "screenshot", None)
@@ -750,19 +743,20 @@ async def async_verify_commit(
 
     visual_verdict: Optional[CommitVerdict] = None
     visual_reason = ""
-    if verifier is not None:
+    if expected and verifier is not None:
         visual_verdict, visual_reason = await _run_visual_verifier_async(
             verifier,
             before_png=before_png,
             after_png=after_png,
             intent=intent,
             expected=expected,
-            deterministic_passed=dom_passed if dom_checked else True,
+            deterministic_passed=dom_passed if dom_checked else False,
         )
 
     return _finalize_commit(
         intent=intent,
         expected=expected,
+        record_id=record_id,
         dom_checked=dom_checked,
         dom_passed=dom_passed,
         mismatches=mismatches,
@@ -776,8 +770,8 @@ async def async_verify_commit(
     )
 
 
-class CommitGuard:
-    """Dual sync/async context manager wrapping an irreversible UI commit."""
+class UiCommitCheck:
+    """Dual sync/async context manager for pre-commit gating and post-commit UI read-back."""
 
     def __init__(
         self,
@@ -785,6 +779,8 @@ class CommitGuard:
         *,
         intent: str,
         expected: Mapping[str, str],
+        pre_expected: Optional[Mapping[str, str]] = None,
+        record_id: str = "",
         verifier: Any = None,
         inbox: Optional[Union[str, Path]] = None,
         receipt_dir: Optional[Union[str, Path]] = None,
@@ -794,6 +790,8 @@ class CommitGuard:
         self._page = page
         self._intent = intent
         self._expected = dict(expected)
+        self._pre_expected = dict(pre_expected) if pre_expected is not None else None
+        self._record_id = record_id
         self._verifier = verifier
         self._inbox = inbox
         self._receipt_dir = receipt_dir
@@ -802,22 +800,51 @@ class CommitGuard:
         self.before_screenshot: Optional[bytes] = None
         self.result: Optional[CommitResult] = None
 
-    def __enter__(self) -> CommitGuard:
+    def __enter__(self) -> UiCommitCheck:
         shot_fn = getattr(self._page, "screenshot", None)
         if callable(shot_fn):
             try:
                 self.before_screenshot = _coerce_screenshot_bytes(shot_fn())
             except Exception:
                 self.before_screenshot = None
+        if self._pre_expected is not None:
+            pre_res = verify_commit(
+                self._page,
+                intent=f"{self._intent} (pre-commit)",
+                expected=self._pre_expected,
+                record_id=self._record_id,
+                inbox=self._inbox,
+                raise_on_block=self._raise_on_block,
+            )
+            if not pre_res.verified:
+                self.result = pre_res
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> Literal[False]:
         if exc_type is not None:
+            reason = f"commit body raised {exc_type.__name__}: {exc}"
+            inbox_item, inbox_path = _write_inbox_item(
+                self._inbox,
+                intent=self._intent,
+                verdict="ABSTAIN",
+                reason=reason,
+                mismatches=(),
+                expected=self._expected,
+            )
+            self.result = CommitResult(
+                status="STOPPED",
+                verdict="ABSTAIN",
+                intent=self._intent,
+                reason=reason,
+                inbox_item=inbox_item,
+                inbox_path=inbox_path,
+            )
             return False
         self.result = verify_commit(
             self._page,
             intent=self._intent,
             expected=self._expected,
+            record_id=self._record_id,
             before_screenshot=self.before_screenshot,
             verifier=self._verifier,
             inbox=self._inbox,
@@ -827,7 +854,7 @@ class CommitGuard:
         )
         return False
 
-    async def __aenter__(self) -> CommitGuard:
+    async def __aenter__(self) -> UiCommitCheck:
         shot_fn = getattr(self._page, "screenshot", None)
         if callable(shot_fn):
             try:
@@ -837,15 +864,44 @@ class CommitGuard:
                 self.before_screenshot = _coerce_screenshot_bytes(raw)
             except Exception:
                 self.before_screenshot = None
+        if self._pre_expected is not None:
+            pre_res = await async_verify_commit(
+                self._page,
+                intent=f"{self._intent} (pre-commit)",
+                expected=self._pre_expected,
+                record_id=self._record_id,
+                inbox=self._inbox,
+                raise_on_block=self._raise_on_block,
+            )
+            if not pre_res.verified:
+                self.result = pre_res
         return self
 
     async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> Literal[False]:
         if exc_type is not None:
+            reason = f"commit body raised {exc_type.__name__}: {exc}"
+            inbox_item, inbox_path = _write_inbox_item(
+                self._inbox,
+                intent=self._intent,
+                verdict="ABSTAIN",
+                reason=reason,
+                mismatches=(),
+                expected=self._expected,
+            )
+            self.result = CommitResult(
+                status="STOPPED",
+                verdict="ABSTAIN",
+                intent=self._intent,
+                reason=reason,
+                inbox_item=inbox_item,
+                inbox_path=inbox_path,
+            )
             return False
         self.result = await async_verify_commit(
             self._page,
             intent=self._intent,
             expected=self._expected,
+            record_id=self._record_id,
             before_screenshot=self.before_screenshot,
             verifier=self._verifier,
             inbox=self._inbox,
@@ -856,22 +912,26 @@ class CommitGuard:
         return False
 
 
-def commit_guard(
+def ui_commit_check(
     page: Any,
     *,
     intent: str,
     expected: Mapping[str, str],
+    pre_expected: Optional[Mapping[str, str]] = None,
+    record_id: str = "",
     verifier: Any = None,
     inbox: Optional[Union[str, Path]] = None,
     receipt_dir: Optional[Union[str, Path]] = None,
     signing_key: Optional[Ed25519PrivateKey] = None,
     raise_on_block: bool = True,
-) -> CommitGuard:
-    """Return a sync/async context manager guarding an irreversible UI commit."""
-    return CommitGuard(
+) -> UiCommitCheck:
+    """Return a sync/async context manager for pre-commit gating and post-commit UI checks."""
+    return UiCommitCheck(
         page,
         intent=intent,
         expected=expected,
+        pre_expected=pre_expected,
+        record_id=record_id,
         verifier=verifier,
         inbox=inbox,
         receipt_dir=receipt_dir,
@@ -882,9 +942,9 @@ def commit_guard(
 
 __all__ = [
     "CommitBlockedError",
-    "CommitGuard",
     "CommitResult",
+    "UiCommitCheck",
     "async_verify_commit",
-    "commit_guard",
+    "ui_commit_check",
     "verify_commit",
 ]

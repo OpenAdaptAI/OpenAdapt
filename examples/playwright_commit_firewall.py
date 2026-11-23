@@ -1,12 +1,13 @@
-"""60-second Commit Firewall example for Playwright / CUA agents."""
+"""Minimal UI commit check example with an explicit Ed25519 signing key."""
 
 from pathlib import Path
 
-from openadapt_verify import CommitBlockedError, commit_guard
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from openadapt_verify import CommitBlockedError, ui_commit_check
 
 
 class DemoPage:
-    """Minimal duck-typed Playwright page (swap for a real sync/async Page)."""
+    """Minimal duck-typed page object exposing input_value() and screenshot()."""
 
     def __init__(self, fields: dict[str, str]) -> None:
         self._fields = dict(fields)
@@ -20,18 +21,34 @@ class DemoPage:
 
 def main() -> None:
     expected = {"Policy Holder": "Alice Novak", "Coverage Limit": "$250,000"}
-    out = Path("/tmp/openadapt-commit-firewall-demo")
+    out = Path("/tmp/openadapt-ui-commit-check-demo")
+    signing_key = Ed25519PrivateKey.generate()
 
     # 1. Clean commit -> verified + signed Ed25519 record/run/v1 receipt.
-    with commit_guard(DemoPage(expected), intent="Bind Policy", expected=expected, receipt_dir=out) as g:
-        pass  # page.get_by_role("button", name="Bind Policy").click()
-    print(f"VERIFIED | receipt_id={g.result.receipt_id[:16]} | path={g.result.receipt_path}")
+    with ui_commit_check(
+        DemoPage(expected),
+        intent="Bind Policy",
+        expected=expected,
+        record_id="quote-2026-0001",
+        receipt_dir=out,
+        signing_key=signing_key,
+    ) as check:
+        pass
+    assert check.result is not None and check.result.receipt_id is not None
+    print(
+        f"VERIFIED | receipt_id={check.result.receipt_id[:16]} | path={check.result.receipt_path}"
+    )
 
     # 2. Silent homoglyph + unbound control -> blocked & logged to Exception Inbox.
     corrupted = DemoPage({"Policy Holder": "\u0410lice Novak", "Coverage Limit": ""})
     try:
-        with commit_guard(corrupted, intent="Bind Policy", expected=expected, inbox=out / "inbox.jsonl"):
-            pass  # Cyrillic 'А' + empty unbound input
+        with ui_commit_check(
+            corrupted,
+            intent="Bind Policy",
+            expected=expected,
+            inbox=out / "inbox.jsonl",
+        ):
+            pass
     except CommitBlockedError as err:
         print(f"STOPPED  | verdict={err.result.verdict} | reason={err.reason}")
 
