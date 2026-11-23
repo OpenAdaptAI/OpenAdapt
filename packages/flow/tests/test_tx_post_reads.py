@@ -183,11 +183,14 @@ class _App:
                         rows = conn.execute("select id from rec").fetchall()
                         status, payload = 200, {"ids": [r[0] for r in rows]}
                     elif self.path == "/rpc" and body.get("method") == "rec.read":
-                        status, payload = 200, {
-                            "n": conn.execute(
-                                "select count(*) from rec"
-                            ).fetchone()[0]
-                        }
+                        status, payload = (
+                            200,
+                            {
+                                "n": conn.execute(
+                                    "select count(*) from rec"
+                                ).fetchone()[0]
+                            },
+                        )
                     elif self.path == "/rpc" and body.get("method") == "rec.write":
                         conn.execute(
                             "update rec set note=? where id=1", (body["note"],)
