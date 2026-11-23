@@ -1,0 +1,62 @@
+name: OSWorld 2.0 + OS-Harm Benchmarks
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "Benchmark suite to run"
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - osworld2
+          - os_harm
+      mode:
+        description: "Execution mode (contract = deterministic offline, live = OSWorld VM)"
+        required: true
+        default: contract
+        type: choice
+        options:
+          - contract
+          - live
+
+permissions:
+  contents: read
+
+jobs:
+  osworld-benchmarks:
+    name: Run OSWorld 2.0 + OS-Harm (${{ inputs.suite }} / ${{ inputs.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Run benchmark suite
+        env:
+          SUITE: ${{ inputs.suite }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/osworld-v2
+          python -m benchmarks.osworld_v2 run \
+            --suite "$SUITE" \
+            --mode "$MODE" \
+            --output-json artifacts/osworld-v2/scoreboard.json \
+            --output-md artifacts/osworld-v2/scoreboard.md
+          cat artifacts/osworld-v2/scoreboard.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload scoreboard artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: osworld-v2-scoreboard-${{ inputs.suite }}-${{ inputs.mode }}
+          path: artifacts/osworld-v2/
+          if-no-files-found: error
