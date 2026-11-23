@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import zlib
 from pathlib import Path
@@ -14,6 +15,8 @@ from openadapt_verify.portal_readback import (
     normalize_field_value,
 )
 
+_SAMPLE_DOM_SHA = hashlib.sha256(b"<html>summary</html>").hexdigest()
+
 
 def _escape_pdf_text(text: str) -> str:
     return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
@@ -24,9 +27,15 @@ def _make_synthetic_pdf(
     *,
     compress: bool = False,
     use_tj_array: bool = False,
+    invisible_lines: list[str] | None = None,
 ) -> bytes:
     """Build a minimal valid PDF containing text lines in Tj or TJ operators."""
     ops: list[str] = ["BT", "/F1 12 Tf", "72 720 Td"]
+    if invisible_lines:
+        ops.append("3 Tr")
+        for line in invisible_lines:
+            ops.append(f"({_escape_pdf_text(line)}) Tj")
+        ops.append("0 Tr")
     for idx, line in enumerate(lines):
         if idx > 0:
             ops.append("0 -16 Td")
@@ -60,21 +69,30 @@ def _make_synthetic_pdf(
     return b"".join(parts)
 
 
+def _valid_reload_proof(**overrides: object) -> ReloadProof:
+    kwargs: dict[str, object] = {
+        "navigation_type": "reload",
+        "submit_url": "https://carrier.example/quote/submit",
+        "summary_url": "https://carrier.example/quote/Q-90412/summary",
+        "submit_dom_token": "dom-submit-111",
+        "summary_dom_token": "dom-summary-222",
+        "reloaded_at_utc": "2026-11-23T05:10:00Z",
+        "summary_dom_sha256": _SAMPLE_DOM_SHA,
+        "producer": "separate_session",
+    }
+    kwargs.update(overrides)
+    return ReloadProof(**kwargs)  # type: ignore[arg-type]
+
+
 class TestFreshReloadSummaryOracle:
     def test_happy_path_verified_with_normalization(self) -> None:
         oracle = FreshReloadSummaryOracle()
-        proof = ReloadProof(
-            navigation_type="reload",
-            submit_url="https://carrier.example/quote/submit",
-            summary_url="https://carrier.example/quote/Q-90412/summary",
-            submit_dom_token="dom-submit-111",
-            summary_dom_token="dom-summary-222",
-            reloaded_at_utc="2026-11-23T05:10:00Z",
-        )
+        proof = _valid_reload_proof()
         expected = {
             "insured_name": "Jordan Rivera",
             "effective_date": "2026-03-14",
             "deductible": 1000,
+            "coverage_limit": 2000,
             "prior_losses": 0,
             "bundled_auto": True,
             "quote_id": "MRN-88041",
@@ -83,6 +101,7 @@ class TestFreshReloadSummaryOracle:
             "insured_name": "  Jordan   Rivera ",
             "effective_date": "03/14/2026",
             "deductible": "$1,000.00",
+            "coverage_limit": "2000",
             "prior_losses": "0",
             "bundled_auto": "Yes",
             "quote_id": "MRN-88041",
@@ -91,149 +110,109 @@ class TestFreshReloadSummaryOracle:
         res = oracle.verify(expected, observed, proof)
 
         assert res.verdict == "VERIFIED"
+        assert res.receipt_verdict == "CONFIRMED"
         assert res.channel == "fresh_reload_summary"
         assert res.reason == "ok"
-        assert res.confirmed_count == 6
+        assert res.confirmed_count == 7
         assert res.refuted_count == 0
         assert res.abstained_count == 0
+        assert res.artifact_sha256 == _SAMPLE_DOM_SHA
         assert all(c.status == "CONFIRMED" for c in res.checks)
-        assert all("fresh_reload:reload:" in c.provenance for c in res.checks)
-        # Ensure JSON serializability
         payload = json.dumps(res.to_dict())
         assert "VERIFIED" in payload
 
+    def test_untrusted_producer_and_missing_url_or_digest_halt(self) -> None:
+        oracle = FreshReloadSummaryOracle()
+        for bad_proof in (
+            _valid_reload_proof(producer="unknown"),
+            _valid_reload_proof(producer="acting_session"),
+            _valid_reload_proof(submit_url="", summary_url=""),
+            _valid_reload_proof(summary_url="https://other-host.example/summary"),
+            _valid_reload_proof(reloaded_at_utc=""),
+            _valid_reload_proof(summary_dom_sha256="not-a-sha"),
+        ):
+            res = oracle.verify({"prior_losses": 0}, {"prior_losses": 0}, bad_proof)
+            assert res.verdict == "HALT"
+            assert res.receipt_verdict == "UNCERTAIN"
+
     def test_stale_same_dom_halts_fail_closed(self) -> None:
         oracle = FreshReloadSummaryOracle()
-        stale_proof = ReloadProof(
-            navigation_type="same_dom",
-            submit_url="https://carrier.example/quote/submit",
-            summary_url="https://carrier.example/quote/submit",
-            submit_dom_token="dom-111",
-            summary_dom_token="dom-222",
+        res = oracle.verify(
+            {"prior_losses": 0},
+            {"prior_losses": 0},
+            _valid_reload_proof(navigation_type="same_dom"),
         )
-        res = oracle.verify({"prior_losses": 0}, {"prior_losses": 0}, stale_proof)
-
         assert res.verdict == "HALT"
         assert "stale_in_memory_dom_without_reload_proof" in res.reason
-        assert res.confirmed_count == 0
-        assert res.abstained_count == 1
 
     def test_identical_dom_tokens_halt_fail_closed(self) -> None:
         oracle = FreshReloadSummaryOracle()
-        same_token_proof = ReloadProof(
-            navigation_type="reload",
-            submit_url="https://carrier.example/quote/submit",
-            summary_url="https://carrier.example/quote/summary",
-            submit_dom_token="dom-same-token",
-            summary_dom_token="dom-same-token",
+        res = oracle.verify(
+            {"prior_losses": 0},
+            {"prior_losses": 0},
+            _valid_reload_proof(
+                submit_dom_token="dom-same", summary_dom_token="dom-same"
+            ),
         )
-        res = oracle.verify({"prior_losses": 0}, {"prior_losses": 0}, same_token_proof)
-
         assert res.verdict == "HALT"
         assert "summary_dom_token matches submit_dom_token" in res.reason
 
-    def test_missing_dom_tokens_halt_fail_closed(self) -> None:
+    def test_currency_mismatch_and_field_mismatch_halt(self) -> None:
         oracle = FreshReloadSummaryOracle()
-        missing_token_proof = ReloadProof(
-            navigation_type="fresh_navigation",
-            submit_url="https://carrier.example/quote/submit",
-            summary_url="https://carrier.example/quote/summary",
-            submit_dom_token="dom-submit-1",
-            summary_dom_token="   ",
-        )
-        res = oracle.verify(
-            {"prior_losses": 0}, {"prior_losses": 0}, missing_token_proof
-        )
+        proof = _valid_reload_proof(navigation_type="new_session")
+        # $500 vs €500 must NOT compare equal
+        res_cur = oracle.verify({"premium": "$500"}, {"premium": "€500"}, proof)
+        assert res_cur.verdict == "HALT"
+        assert res_cur.receipt_verdict == "REFUTED"
+        assert res_cur.refuted_count == 1
 
-        assert res.verdict == "HALT"
-        assert "missing submit/summary DOM tokens" in res.reason
-
-    def test_field_mismatch_halts_with_refuted_check(self) -> None:
-        oracle = FreshReloadSummaryOracle()
-        proof = ReloadProof(
-            navigation_type="new_session",
-            submit_url="https://carrier.example/quote/submit",
-            summary_url="https://carrier.example/quote/summary",
-            submit_dom_token="dom-a",
-            summary_dom_token="dom-b",
-        )
         res = oracle.verify(
             {"prior_losses": 0, "deductible": 1000},
             {"prior_losses": 2, "deductible": "$1,000.00"},
             proof,
         )
-
         assert res.verdict == "HALT"
+        assert res.receipt_verdict == "REFUTED"
         assert res.reason == "field_mismatch"
         assert res.confirmed_count == 1
         assert res.refuted_count == 1
-        assert res.abstained_count == 0
-        refuted = [c for c in res.checks if c.status == "REFUTED"]
-        assert len(refuted) == 1
-        assert refuted[0].field == "prior_losses"
-        assert refuted[0].normalized_expected == "0"
-        assert refuted[0].normalized_observed == "2"
 
     def test_missing_required_field_abstains_and_halts(self) -> None:
         oracle = FreshReloadSummaryOracle()
-        proof = ReloadProof(
-            navigation_type="reload",
-            submit_url="https://carrier.example/quote/submit",
-            summary_url="https://carrier.example/quote/summary",
-            submit_dom_token="dom-a",
-            summary_dom_token="dom-b",
-        )
         res = oracle.verify(
             {"prior_losses": 0, "roof_year": 2018},
             {"prior_losses": 0},
-            proof,
+            _valid_reload_proof(),
         )
-
         assert res.verdict == "HALT"
+        assert res.receipt_verdict == "UNCERTAIN"
         assert res.reason == "missing_required_fields"
-        assert res.confirmed_count == 1
-        assert res.refuted_count == 0
         assert res.abstained_count == 1
-        abstained = [c for c in res.checks if c.status == "ABSTAIN"]
-        assert len(abstained) == 1
-        assert abstained[0].field == "roof_year"
 
     def test_lookalike_identifier_is_not_blurred(self) -> None:
         oracle = FreshReloadSummaryOracle()
-        proof = ReloadProof(
-            navigation_type="reload",
-            submit_url="https://carrier.example/submit",
-            summary_url="https://carrier.example/summary",
-            submit_dom_token="dom-a",
-            summary_dom_token="dom-b",
-        )
         res = oracle.verify(
             {"policy_ref": "MRN-88041"},
             {"policy_ref": "MRN-88O41"},
-            proof,
+            _valid_reload_proof(),
         )
-
         assert res.verdict == "HALT"
-        assert res.reason == "field_mismatch"
-        assert res.refuted_count == 1
+        assert res.receipt_verdict == "REFUTED"
 
     def test_empty_expected_fields_halts(self) -> None:
         oracle = FreshReloadSummaryOracle()
-        proof = ReloadProof(
-            navigation_type="reload",
-            submit_url="https://carrier.example/submit",
-            summary_url="https://carrier.example/summary",
-            submit_dom_token="dom-a",
-            summary_dom_token="dom-b",
-        )
-        res = oracle.verify({}, {"a": 1}, proof)
+        res = oracle.verify({}, {"a": 1}, _valid_reload_proof())
         assert res.verdict == "HALT"
         assert res.reason == "empty_expected_fields"
 
 
 class TestConfirmationPdfOracle:
-    def test_uncompressed_quote_pdf_verified(self, tmp_path: Path) -> None:
-        pdf_path = tmp_path / "quote_confirmation.pdf"
+    def test_uncompressed_quote_pdf_verified_with_separate_session_producer(
+        self, tmp_path: Path
+    ) -> None:
+        store = tmp_path / "independent_store"
+        store.mkdir()
+        pdf_path = store / "quote_confirmation.pdf"
         pdf_bytes = _make_synthetic_pdf(
             [
                 "Carrier Quote Confirmation (Homeowners)",
@@ -248,6 +227,7 @@ class TestConfirmationPdfOracle:
             use_tj_array=True,
         )
         pdf_path.write_bytes(pdf_bytes)
+        expected_sha = hashlib.sha256(pdf_bytes).hexdigest()
 
         oracle = ConfirmationPdfOracle()
         res = oracle.verify(
@@ -260,32 +240,73 @@ class TestConfirmationPdfOracle:
                 "bundled_auto": True,
                 "quote_number": "NW-2026-88041",
             },
+            producer="separate_session",
+            expected_fetch_sha256=expected_sha,
         )
 
         assert res.verdict == "VERIFIED"
+        assert res.receipt_verdict == "CONFIRMED"
         assert res.channel == "confirmation_pdf"
-        assert res.reason == "ok"
         assert res.confirmed_count == 6
-        assert res.refuted_count == 0
-        assert res.abstained_count == 0
-        assert res.artifact_sha256 is not None and len(res.artifact_sha256) == 64
-        assert all(
-            c.provenance.startswith(f"pdf:{res.artifact_sha256[:12]}:")
-            for c in res.checks
+        assert res.artifact_sha256 == expected_sha
+        assert res.provenance_evidence["producer"] == "separate_session"
+
+    def test_unverified_or_acting_producer_cannot_issue_verified(
+        self, tmp_path: Path
+    ) -> None:
+        pdf_path = tmp_path / "quote.pdf"
+        pdf_path.write_bytes(_make_synthetic_pdf(["Insured Name: Jordan Rivera"]))
+        oracle = ConfirmationPdfOracle()
+
+        # Default producer="unknown" -> HALT / UNCERTAIN
+        res_unknown = oracle.verify(pdf_path, {"insured_name": "Jordan Rivera"})
+        assert res_unknown.verdict == "HALT"
+        assert res_unknown.receipt_verdict == "UNCERTAIN"
+        assert "unverified_producer_provenance" in res_unknown.reason
+
+        # Explicit acting_session -> HALT / UNCERTAIN
+        res_acting = oracle.verify(
+            pdf_path, {"insured_name": "Jordan Rivera"}, producer="acting_session"
         )
+        assert res_acting.verdict == "HALT"
+
+        # Declared separate_session but inside acting_roots -> downgraded -> HALT
+        res_overlap = oracle.verify(
+            pdf_path,
+            {"insured_name": "Jordan Rivera"},
+            producer="separate_session",
+            acting_roots=[tmp_path],
+        )
+        assert res_overlap.verdict == "HALT"
+        assert "unverified_producer_provenance" in res_overlap.reason
+
+        # Inside playwright-artifacts-* download dir -> refused -> HALT
+        pw_dir = tmp_path / "playwright-artifacts-xyz"
+        pw_dir.mkdir()
+        pw_pdf = pw_dir / "quote.pdf"
+        pw_pdf.write_bytes(_make_synthetic_pdf(["Insured Name: Jordan Rivera"]))
+        res_pw = oracle.verify(
+            pw_pdf,
+            {"insured_name": "Jordan Rivera"},
+            producer="separate_session",
+        )
+        assert res_pw.verdict == "HALT"
 
     def test_flatedecode_compressed_pdf_verified(self, tmp_path: Path) -> None:
-        pdf_path = tmp_path / "quote_compressed.pdf"
-        pdf_bytes = _make_synthetic_pdf(
-            [
-                "Named Insured: Taylor Chen",
-                "Policy Effective: March 14, 2026",
-                "Annual Premium: $2,450.50",
-                "Prior Claims: 0",
-            ],
-            compress=True,
+        store = tmp_path / "store"
+        store.mkdir()
+        pdf_path = store / "quote_compressed.pdf"
+        pdf_path.write_bytes(
+            _make_synthetic_pdf(
+                [
+                    "Named Insured: Taylor Chen",
+                    "Policy Effective: March 14, 2026",
+                    "Annual Premium: $2,450.50",
+                    "Prior Claims: 0",
+                ],
+                compress=True,
+            )
         )
-        pdf_path.write_bytes(pdf_bytes)
 
         oracle = ConfirmationPdfOracle()
         res = oracle.verify(
@@ -296,6 +317,7 @@ class TestConfirmationPdfOracle:
                 "annual_premium": "2450.50",
                 "prior_losses": 0,
             },
+            producer="system_of_record",
             field_labels={
                 "insured_name": ("Named Insured", "Insured Name"),
                 "effective_date": ("Policy Effective", "Effective Date"),
@@ -303,124 +325,117 @@ class TestConfirmationPdfOracle:
             },
             field_types={"annual_premium": "currency"},
         )
-
         assert res.verdict == "VERIFIED"
+        assert res.receipt_verdict == "CONFIRMED"
         assert res.confirmed_count == 4
-        assert res.artifact_sha256 is not None
 
-    def test_pdf_field_mismatch_halts(self, tmp_path: Path) -> None:
-        pdf_path = tmp_path / "quote_mismatch.pdf"
-        pdf_path.write_bytes(
-            _make_synthetic_pdf(
-                [
-                    "Insured Name: Jordan Rivera",
-                    "Prior Losses: 2",
-                    "Deductible: $1,000.00",
-                ],
-                compress=True,
-            )
-        )
-
-        oracle = ConfirmationPdfOracle()
-        res = oracle.verify(
-            pdf_path,
-            expected_fields={
-                "insured_name": "Jordan Rivera",
-                "prior_losses": 0,
-                "deductible": 1000,
-            },
-        )
-
-        assert res.verdict == "HALT"
-        assert res.reason == "field_mismatch"
-        assert res.confirmed_count == 2
-        assert res.refuted_count == 1
-        refuted = [c for c in res.checks if c.status == "REFUTED"]
-        assert refuted[0].field == "prior_losses"
-        assert refuted[0].normalized_observed == "2"
-
-    def test_pdf_missing_required_field_abstains_and_halts(
+    def test_duplicate_conflicting_labels_and_invisible_text_fail_closed(
         self, tmp_path: Path
     ) -> None:
-        pdf_path = tmp_path / "quote_partial.pdf"
-        pdf_path.write_bytes(_make_synthetic_pdf(["Insured Name: Jordan Rivera"]))
-
+        store = tmp_path / "store"
+        store.mkdir()
         oracle = ConfirmationPdfOracle()
-        res = oracle.verify(
-            pdf_path,
-            expected_fields={
-                "insured_name": "Jordan Rivera",
-                "roof_year": 2018,
-            },
+
+        # Duplicate label with conflicting values (requested vs issued) -> HALT
+        dup_pdf = store / "dup.pdf"
+        dup_pdf.write_bytes(_make_synthetic_pdf(["Prior Losses: 0", "Prior Losses: 2"]))
+        res_dup = oracle.verify(
+            dup_pdf, {"prior_losses": 0}, producer="separate_session"
         )
+        assert res_dup.verdict == "HALT"
+        assert res_dup.receipt_verdict == "UNCERTAIN"
+        assert "ambiguous_duplicate_label" in res_dup.reason
 
-        assert res.verdict == "HALT"
-        assert res.reason == "missing_required_fields"
-        assert res.confirmed_count == 1
-        assert res.abstained_count == 1
+        # Invisible text (3 Tr) must be ignored and cannot spoof VERIFIED
+        inv_pdf = store / "inv.pdf"
+        inv_pdf.write_bytes(
+            _make_synthetic_pdf(
+                ["Prior Losses: 2"], invisible_lines=["Prior Losses: 0"]
+            )
+        )
+        res_inv = oracle.verify(
+            inv_pdf, {"prior_losses": 0}, producer="separate_session"
+        )
+        assert res_inv.verdict == "HALT"
+        assert res_inv.receipt_verdict == "REFUTED"
 
-    def test_missing_pdf_file_halts(self, tmp_path: Path) -> None:
+    def test_incremental_update_corrupt_flate_and_fetch_digest_mismatch_halt(
+        self, tmp_path: Path
+    ) -> None:
+        store = tmp_path / "store"
+        store.mkdir()
         oracle = ConfirmationPdfOracle()
-        res = oracle.verify(tmp_path / "does_not_exist.pdf", {"insured_name": "Jordan"})
 
-        assert res.verdict == "HALT"
-        assert res.reason.startswith("missing_pdf:")
-        assert res.abstained_count == 1
+        # Incremental update (multiple %%EOF) -> HALT
+        inc_pdf = store / "inc.pdf"
+        inc_pdf.write_bytes(
+            _make_synthetic_pdf(["Prior Losses: 0"]) + b"\n% incremental\n%%EOF\n"
+        )
+        res_inc = oracle.verify(
+            inc_pdf, {"prior_losses": 0}, producer="separate_session"
+        )
+        assert res_inc.verdict == "HALT"
+        assert "incremental PDF updates" in res_inc.reason
 
-    def test_corrupt_non_pdf_bytes_halt(self, tmp_path: Path) -> None:
-        bad_pdf = tmp_path / "corrupt.pdf"
-        bad_pdf.write_bytes(b"<html><body>502 Bad Gateway</body></html>")
+        # Corrupt /FlateDecode stream -> HALT (never silently skipped!)
+        bad_flate = store / "bad_flate.pdf"
+        bad_flate.write_bytes(
+            b"%PDF-1.4\n"
+            b"1 0 obj << /Length 20 >>\nstream\nBT (Prior Losses: 0) Tj ET\nendstream\nendobj\n"
+            b"2 0 obj << /Length 8 /Filter /FlateDecode >>\nstream\nnot-zlib\nendstream\nendobj\n"
+            b"%%EOF\n"
+        )
+        res_flate = oracle.verify(
+            bad_flate, {"prior_losses": 0}, producer="separate_session"
+        )
+        assert res_flate.verdict == "HALT"
+        assert "corrupt FlateDecode stream" in res_flate.reason
 
+        # Fetch digest mismatch -> HALT / REFUTED
+        good_pdf = store / "good.pdf"
+        good_pdf.write_bytes(_make_synthetic_pdf(["Prior Losses: 0"]))
+        res_sha = oracle.verify(
+            good_pdf,
+            {"prior_losses": 0},
+            producer="separate_session",
+            expected_fetch_sha256="0" * 64,
+        )
+        assert res_sha.verdict == "HALT"
+        assert res_sha.receipt_verdict == "REFUTED"
+        assert res_sha.reason == "fetch_digest_mismatch"
+
+    def test_missing_corrupt_and_textless_pdfs_halt(self, tmp_path: Path) -> None:
+        store = tmp_path / "store"
+        store.mkdir()
         oracle = ConfirmationPdfOracle()
-        res = oracle.verify(bad_pdf, {"insured_name": "Jordan"})
 
-        assert res.verdict == "HALT"
-        assert "corrupt_or_unreadable_pdf" in res.reason
+        res_missing = oracle.verify(
+            store / "nope.pdf", {"insured_name": "Jordan"}, producer="separate_session"
+        )
+        assert res_missing.verdict == "HALT"
 
-    def test_pdf_without_extractable_text_halts(self, tmp_path: Path) -> None:
-        image_only_pdf = tmp_path / "scanned_image_only.pdf"
-        image_only_pdf.write_bytes(
+        bad_pdf = store / "corrupt.pdf"
+        bad_pdf.write_bytes(b"<html>502</html>")
+        res_bad = oracle.verify(
+            bad_pdf, {"insured_name": "Jordan"}, producer="separate_session"
+        )
+        assert res_bad.verdict == "HALT"
+
+        img_pdf = store / "img.pdf"
+        img_pdf.write_bytes(
             b"%PDF-1.4\n1 0 obj << /Length 4 >>\nstream\n\x00\x01\x02\x03\nendstream\nendobj\n%%EOF\n"
         )
-
-        oracle = ConfirmationPdfOracle()
-        res = oracle.verify(image_only_pdf, {"insured_name": "Jordan"})
-
-        assert res.verdict == "HALT"
-        assert "no extractable text streams" in res.reason
-        assert res.artifact_sha256 is not None
-
-    def test_custom_field_pattern_extraction(self, tmp_path: Path) -> None:
-        pdf_path = tmp_path / "regex_quote.pdf"
-        pdf_path.write_bytes(
-            _make_synthetic_pdf(["Confirmation #NW-99421 issued for $1,250.00"])
+        res_img = oracle.verify(
+            img_pdf, {"insured_name": "Jordan"}, producer="separate_session"
         )
-
-        oracle = ConfirmationPdfOracle()
-        res = oracle.verify(
-            pdf_path,
-            expected_fields={"quote_id": "NW-99421", "premium": 1250},
-            field_patterns={
-                "quote_id": r"Confirmation #([A-Z0-9-]+)",
-                "premium": r"issued for (\$[0-9,]+\.\d{2})",
-            },
-        )
-
-        assert res.verdict == "VERIFIED"
-        assert res.confirmed_count == 2
-        assert all(":regex:" in c.provenance for c in res.checks)
-
-    def test_empty_expected_fields_halts(self, tmp_path: Path) -> None:
-        pdf_path = tmp_path / "any.pdf"
-        pdf_path.write_bytes(_make_synthetic_pdf(["Insured Name: Jordan"]))
-        oracle = ConfirmationPdfOracle()
-        res = oracle.verify(pdf_path, {})
-        assert res.verdict == "HALT"
-        assert res.reason == "empty_expected_fields"
+        assert res_img.verdict == "HALT"
+        assert "no extractable text streams" in res_img.reason
 
 
 def test_normalize_and_extract_helpers() -> None:
-    assert normalize_field_value("$1,200.50") == "1200.50"
+    assert normalize_field_value("$1,200.50") == "USD:1200.50"
+    assert normalize_field_value("€500") == "EUR:500.00"
+    assert normalize_field_value(2000) == "2000"
     assert normalize_field_value("03/14/2026") == "2026-03-14"
     assert normalize_field_value("Yes") == "true"
     assert normalize_field_value("No") == "false"

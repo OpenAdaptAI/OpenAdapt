@@ -5,36 +5,56 @@ insurance carrier quoting portals or payer portals) where direct SQL or backend
 API read-back is unavailable:
 
 1. ``FreshReloadSummaryOracle``:
-   Requires cryptographic/session proof of a fresh navigation or full page reload
-   distinct from the submit DOM, then diffs extracted summary fields against the
-   expected intake record. Stale in-memory DOM without reload proof -> ``HALT``.
-   Missing required field -> ``ABSTAIN`` (overall verdict ``HALT``).
-   Mismatched field -> ``REFUTED`` (overall verdict ``HALT``).
+   Requires an independent producer (``separate_session`` or ``system_of_record``),
+   valid same-origin ``submit_url`` / ``summary_url``, ISO-8601 ``reloaded_at_utc``,
+   a 64-hex ``summary_dom_sha256`` digest, and distinct non-empty DOM tokens
+   proving a fresh navigation/reload distinct from the submit DOM, then diffs
+   extracted summary fields against the expected intake record.
 
 2. ``ConfirmationPdfOracle``:
-   Extracts persisted field values from a downloaded quote/submission confirmation
-   PDF using Python stdlib only (supports uncompressed and ``FlateDecode`` PDF
-   text streams), normalizes currency/dates/booleans, and diffs every agreed field
-   against the expected record with per-field provenance and SHA-256 digest.
+   Enforces artifact provenance via
+   :mod:`openadapt_flow.runtime.effects.artifact_provenance` (refusing ``unknown``,
+   ``acting_session``, ``Downloads``, ``playwright-artifacts-*``, and symlinks
+   escaping the store), checks PDF integrity (``%%EOF``, no incremental-update
+   shadowing, no silent ``FlateDecode`` decompression errors, optional
+   ``expected_fetch_sha256``), ignores invisible text (``3 Tr``), detects
+   ambiguous duplicate labels with conflicting values, preserves currency codes,
+   and diffs every field with per-field provenance and SHA-256 artifact digest.
 """
 
 from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import hmac
 import re
 import zlib
-from dataclasses import asdict, dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import asdict, dataclass, field
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, Literal, Mapping, Sequence
+from typing import Any, Literal
+from urllib.parse import urlsplit
+
+from openadapt_flow.runtime.effects.artifact_provenance import (
+    ArtifactProducer,
+    grade_artifact,
+    parse_producer,
+)
 
 FieldStatus = Literal["CONFIRMED", "REFUTED", "ABSTAIN"]
 Verdict = Literal["VERIFIED", "HALT"]
+ReceiptVerdict = Literal["CONFIRMED", "REFUTED", "UNCERTAIN"]
 NavigationType = Literal["reload", "fresh_navigation", "new_session", "same_dom"]
 
 _VALID_RELOAD_NAV_TYPES = frozenset({"reload", "fresh_navigation", "new_session"})
+_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 
+_CURRENCY_SYMBOL_TO_CODE = {
+    "$": "USD",
+    "€": "EUR",
+    "£": "GBP",
+}
 _CURRENCY_RE = re.compile(
     r"^\s*([$€£])?\s*([+-]?\d{1,3}(?:,\d{3})*(?:\.\d+)?|[+-]?\d+(?:\.\d+)?)\s*$"
 )
@@ -51,9 +71,39 @@ _BOOL_TRUE = frozenset({"true", "yes", "y", "checked", "on"})
 _BOOL_FALSE = frozenset({"false", "no", "n", "unchecked", "off"})
 
 
+def _valid_http_origin(url: str) -> str | None:
+    if not isinstance(url, str) or not url.strip():
+        return None
+    parsed = urlsplit(url.strip())
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return None
+    return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+
+
+def _valid_iso_utc(ts: str) -> bool:
+    if not isinstance(ts, str) or not ts.strip():
+        return False
+    norm = ts.strip()
+    if norm.endswith("Z"):
+        norm = norm[:-1] + "+00:00"
+    try:
+        parsed = dt.datetime.fromisoformat(norm)
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None
+
+
+def _format_decimal_plain(dec: Decimal) -> str:
+    """Format a Decimal without scientific notation (e.g. 2000 -> '2000', not '2E+3')."""
+    text = format(dec, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return "0" if text in ("", "-0") else text
+
+
 @dataclass(frozen=True)
 class ReloadProof:
-    """Evidence proving the summary page was freshly loaded after commit."""
+    """Evidence proving the summary page was freshly loaded in an independent session."""
 
     navigation_type: str
     submit_url: str
@@ -61,12 +111,48 @@ class ReloadProof:
     submit_dom_token: str
     summary_dom_token: str
     reloaded_at_utc: str = ""
+    summary_dom_sha256: str = ""
+    producer: str | ArtifactProducer = ArtifactProducer.UNKNOWN
 
     def validate(self) -> tuple[bool, str]:
+        try:
+            parsed_producer = parse_producer(self.producer)
+        except ValueError as exc:
+            return False, f"unverified_producer_provenance: {exc}"
+        if parsed_producer not in (
+            ArtifactProducer.SEPARATE_SESSION,
+            ArtifactProducer.SYSTEM_OF_RECORD,
+        ):
+            return (
+                False,
+                f"unverified_producer_provenance: producer={parsed_producer.value!r} cannot issue VERIFIED",
+            )
         if self.navigation_type not in _VALID_RELOAD_NAV_TYPES:
             return (
                 False,
                 f"stale_in_memory_dom_without_reload_proof: navigation_type={self.navigation_type!r}",
+            )
+        submit_origin = _valid_http_origin(self.submit_url)
+        summary_origin = _valid_http_origin(self.summary_url)
+        if not submit_origin or not summary_origin:
+            return (
+                False,
+                "stale_in_memory_dom_without_reload_proof: submit_url and summary_url must be valid http(s) URLs",
+            )
+        if submit_origin != summary_origin:
+            return (
+                False,
+                "stale_in_memory_dom_without_reload_proof: summary_url origin does not match submit_url origin",
+            )
+        if not _valid_iso_utc(self.reloaded_at_utc):
+            return (
+                False,
+                "stale_in_memory_dom_without_reload_proof: reloaded_at_utc must be a timezone-aware ISO-8601 timestamp",
+            )
+        if not _SHA256_RE.match(self.summary_dom_sha256.strip()):
+            return (
+                False,
+                "stale_in_memory_dom_without_reload_proof: summary_dom_sha256 must be a 64-hex SHA-256 digest",
             )
         if not self.submit_dom_token.strip() or not self.summary_dom_token.strip():
             return (
@@ -102,6 +188,8 @@ class PortalReadbackResult:
     refuted_count: int
     abstained_count: int
     artifact_sha256: str | None = None
+    receipt_verdict: ReceiptVerdict = "UNCERTAIN"
+    provenance_evidence: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -111,7 +199,7 @@ class PortalReadbackResult:
 
 
 def normalize_field_value(value: Any, *, field_type: str | None = None) -> str:
-    """Normalize currency, dates, booleans, and text without blurring identifier look-alikes."""
+    """Normalize currency, dates, booleans, and numbers without blurring look-alikes or currencies."""
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
@@ -119,7 +207,7 @@ def normalize_field_value(value: Any, *, field_type: str | None = None) -> str:
         return (
             f"{dec.quantize(Decimal('0.01'))}"
             if field_type == "currency"
-            else str(dec.normalize())
+            else _format_decimal_plain(dec)
         )
 
     text = " ".join(str(value).strip().split())
@@ -148,18 +236,49 @@ def normalize_field_value(value: Any, *, field_type: str | None = None) -> str:
     ):
         raw_num = m_cur.group(2).replace(",", "")
         try:
-            dec = Decimal(raw_num)
-            return f"{dec.quantize(Decimal('0.01'))}"
+            dec = Decimal(raw_num).quantize(Decimal("0.01"))
+            sym = m_cur.group(1)
+            if sym is not None:
+                code = _CURRENCY_SYMBOL_TO_CODE.get(sym, sym)
+                return f"{code}:{dec}"
+            return f"{dec}"
         except InvalidOperation:
             pass
 
     if field_type == "number":
         try:
-            return str(Decimal(text.replace(",", "")).normalize())
+            return _format_decimal_plain(Decimal(text.replace(",", "")))
         except InvalidOperation:
             pass
 
     return text
+
+
+def _strip_currency_code(norm: str) -> tuple[str | None, str]:
+    m = re.match(r"^([A-Z]{3}):([+-]?\d+\.\d{2})$", norm)
+    if m:
+        return m.group(1), m.group(2)
+    return None, norm
+
+
+def _values_match(norm_exp: str, norm_obs: str) -> bool:
+    if norm_exp == norm_obs:
+        return True
+    exp_code, exp_num = _strip_currency_code(norm_exp)
+    obs_code, obs_num = _strip_currency_code(norm_obs)
+    # Two explicit currencies MUST match currency code (USD:500.00 != EUR:500.00).
+    if exp_code is not None and obs_code is not None:
+        return exp_code == obs_code and exp_num == obs_num
+    # If only one side carried a currency symbol (e.g. expected int 1000 vs "$1,000.00"),
+    # compare quantized numeric amounts.
+    if (exp_code is not None) != (obs_code is not None):
+        try:
+            return Decimal(exp_num).quantize(Decimal("0.01")) == Decimal(
+                obs_num
+            ).quantize(Decimal("0.01"))
+        except InvalidOperation:
+            return False
+    return False
 
 
 def _compare_fields(
@@ -198,7 +317,6 @@ def _compare_fields(
             )
             continue
 
-        # Infer currency comparison when either side carries a currency symbol
         effective_type = ftype
         if effective_type is None and (
             (isinstance(exp_val, str) and any(c in exp_val for c in "$€£"))
@@ -208,7 +326,7 @@ def _compare_fields(
             norm_exp = normalize_field_value(exp_val, field_type="currency")
 
         norm_obs = normalize_field_value(obs_val, field_type=effective_type)
-        if norm_obs == norm_exp:
+        if _values_match(norm_exp, norm_obs):
             confirmed += 1
             status: FieldStatus = "CONFIRMED"
         else:
@@ -230,7 +348,7 @@ def _compare_fields(
 
 
 class FreshReloadSummaryOracle:
-    """Verify persisted portal summary fields after an explicit fresh reload/navigation."""
+    """Verify persisted portal summary fields after an independent fresh reload."""
 
     def verify(
         self,
@@ -243,6 +361,7 @@ class FreshReloadSummaryOracle:
         if not expected_fields:
             return PortalReadbackResult(
                 verdict="HALT",
+                receipt_verdict="UNCERTAIN",
                 channel="fresh_reload_summary",
                 reason="empty_expected_fields",
                 checks=(),
@@ -255,6 +374,7 @@ class FreshReloadSummaryOracle:
         if not ok_reload:
             return PortalReadbackResult(
                 verdict="HALT",
+                receipt_verdict="UNCERTAIN",
                 channel="fresh_reload_summary",
                 reason=reload_reason,
                 checks=(),
@@ -263,42 +383,59 @@ class FreshReloadSummaryOracle:
                 abstained_count=len(expected_fields),
             )
 
-        prov = f"fresh_reload:{reload_proof.navigation_type}:{reload_proof.summary_url}"
+        parsed_producer = parse_producer(reload_proof.producer)
+        dom_sha = reload_proof.summary_dom_sha256.strip().lower()
+        prov = f"fresh_reload:{parsed_producer.value}:{reload_proof.navigation_type}:{reload_proof.summary_url}"
         checks, confirmed, refuted, abstained = _compare_fields(
             expected_fields,
             observed_summary_fields,
             field_types=field_types,
             default_provenance=prov,
         )
+        prov_evidence = {
+            "producer": parsed_producer.value,
+            "navigation_type": reload_proof.navigation_type,
+            "reloaded_at_utc": reload_proof.reloaded_at_utc,
+            "summary_dom_sha256": dom_sha,
+        }
 
         if refuted > 0:
             return PortalReadbackResult(
                 verdict="HALT",
+                receipt_verdict="REFUTED",
                 channel="fresh_reload_summary",
                 reason="field_mismatch",
                 checks=checks,
                 confirmed_count=confirmed,
                 refuted_count=refuted,
                 abstained_count=abstained,
+                artifact_sha256=dom_sha,
+                provenance_evidence=prov_evidence,
             )
         if abstained > 0:
             return PortalReadbackResult(
                 verdict="HALT",
+                receipt_verdict="UNCERTAIN",
                 channel="fresh_reload_summary",
                 reason="missing_required_fields",
                 checks=checks,
                 confirmed_count=confirmed,
                 refuted_count=refuted,
                 abstained_count=abstained,
+                artifact_sha256=dom_sha,
+                provenance_evidence=prov_evidence,
             )
         return PortalReadbackResult(
             verdict="VERIFIED",
+            receipt_verdict="CONFIRMED",
             channel="fresh_reload_summary",
             reason="ok",
             checks=checks,
             confirmed_count=confirmed,
             refuted_count=0,
             abstained_count=0,
+            artifact_sha256=dom_sha,
+            provenance_evidence=prov_evidence,
         )
 
 
@@ -342,27 +479,36 @@ def _unescape_pdf_literal(raw: str) -> str:
 
 
 def _extract_text_from_content_stream(stream_bytes: bytes) -> list[str]:
-    """Extract text runs from PDF Tj / TJ operators in a decoded content stream."""
+    """Extract visible text runs from PDF Tj / TJ operators, skipping invisible (3 Tr) runs."""
     text = stream_bytes.decode("latin-1", errors="ignore")
     lines: list[str] = []
+    render_mode = 0
 
-    # Match both single literal `(text) Tj` and array `[(a) -20 (b)] TJ`.
+    # Match rendering mode `<d> Tr`, single literal `(text) Tj`, and array `[(a) -20 (b)] TJ`.
     # Alternatives inside the TJ array are strictly disjoint (no backtracking).
     token_re = re.compile(
-        r"\(((?:\\.|[^\\()])*)\)\s*Tj|\[((?:[^\[\]()]|\((?:\\.|[^\\()])*\))*)\]\s*TJ",
+        r"\b([0-7])\s+Tr\b"
+        r"|\(((?:\\.|[^\\()])*)\)\s*Tj"
+        r"|\[((?:[^\[\]()]|\((?:\\.|[^\\()])*\))*)\]\s*TJ",
         re.DOTALL,
     )
     literal_re = re.compile(r"\(((?:\\.|[^\\()])*)\)")
 
     for m in token_re.finditer(text):
         if m.group(1) is not None:
-            val = _unescape_pdf_literal(m.group(1)).strip()
+            render_mode = int(m.group(1))
+            continue
+        if render_mode == 3:
+            # PDF render mode 3 is invisible text (neither fill nor stroke).
+            continue
+        if m.group(2) is not None:
+            val = _unescape_pdf_literal(m.group(2)).strip()
             if val:
                 lines.append(val)
-        elif m.group(2) is not None:
+        elif m.group(3) is not None:
             parts = [
                 _unescape_pdf_literal(lm.group(1))
-                for lm in literal_re.finditer(m.group(2))
+                for lm in literal_re.finditer(m.group(3))
             ]
             joined = "".join(parts).strip()
             if joined:
@@ -371,21 +517,29 @@ def _extract_text_from_content_stream(stream_bytes: bytes) -> list[str]:
 
 
 def extract_pdf_text_stdlib(pdf_bytes: bytes) -> str:
-    """Extract readable text from uncompressed or FlateDecode PDF streams using stdlib only."""
+    """Extract readable text from uncompressed or FlateDecode PDF streams using stdlib only.
+
+    Fails closed on missing ``%PDF-`` header, missing or multiple ``%%EOF``
+    markers (incremental-update shadowing), or corrupt ``/FlateDecode`` streams.
+    """
     if not pdf_bytes.startswith(b"%PDF-"):
         raise ValueError("missing %PDF- header")
+    eof_count = pdf_bytes.count(b"%%EOF")
+    if eof_count == 0:
+        raise ValueError("missing %%EOF trailer")
+    if eof_count > 1:
+        raise ValueError("incremental PDF updates (multiple %%EOF) are not allowed")
 
     extracted_lines: list[str] = []
     stream_re = re.compile(rb"stream\r?\n(.*?)\r?\nendstream", re.DOTALL)
     for m in stream_re.finditer(pdf_bytes):
         raw_stream = m.group(1)
-        # Check whether preceding object dictionary indicates FlateDecode
         prefix = pdf_bytes[max(0, m.start() - 256) : m.start()]
         if b"/FlateDecode" in prefix:
             try:
                 decoded = zlib.decompress(raw_stream)
-            except zlib.error:
-                continue
+            except zlib.error as exc:
+                raise ValueError(f"corrupt FlateDecode stream: {exc}") from exc
             extracted_lines.extend(_extract_text_from_content_stream(decoded))
         else:
             extracted_lines.extend(_extract_text_from_content_stream(raw_stream))
@@ -399,13 +553,16 @@ def _default_labels_for_field(field_name: str) -> tuple[str, ...]:
 
 
 class ConfirmationPdfOracle:
-    """Extract and verify persisted fields from a downloaded quote confirmation PDF."""
+    """Extract and verify persisted fields from an independently obtained confirmation PDF."""
 
     def verify(
         self,
         pdf_path: str | Path,
         expected_fields: Mapping[str, Any],
         *,
+        producer: str | ArtifactProducer = ArtifactProducer.UNKNOWN,
+        acting_roots: Sequence[str | Path] | None = None,
+        expected_fetch_sha256: str | None = None,
         field_labels: Mapping[str, Sequence[str]] | None = None,
         field_patterns: Mapping[str, str] | None = None,
         field_types: Mapping[str, str] | None = None,
@@ -413,6 +570,7 @@ class ConfirmationPdfOracle:
         if not expected_fields:
             return PortalReadbackResult(
                 verdict="HALT",
+                receipt_verdict="UNCERTAIN",
                 channel="confirmation_pdf",
                 reason="empty_expected_fields",
                 checks=(),
@@ -425,6 +583,7 @@ class ConfirmationPdfOracle:
         if not p.is_file():
             return PortalReadbackResult(
                 verdict="HALT",
+                receipt_verdict="UNCERTAIN",
                 channel="confirmation_pdf",
                 reason=f"missing_pdf: {p}",
                 checks=(),
@@ -434,23 +593,93 @@ class ConfirmationPdfOracle:
             )
 
         try:
-            raw_bytes = p.read_bytes()
-            pdf_sha256 = hashlib.sha256(raw_bytes).hexdigest()
-            pdf_text = extract_pdf_text_stdlib(raw_bytes)
-        except (OSError, ValueError) as exc:
+            grade = grade_artifact(
+                producer,
+                root=p.parent,
+                acting_roots=acting_roots,
+                observe_local=True,
+            )
+        except ValueError as exc:
             return PortalReadbackResult(
                 verdict="HALT",
+                receipt_verdict="UNCERTAIN",
                 channel="confirmation_pdf",
-                reason=f"corrupt_or_unreadable_pdf: {exc}",
+                reason=f"unverified_producer_provenance: {exc}",
                 checks=(),
                 confirmed_count=0,
                 refuted_count=0,
                 abstained_count=len(expected_fields),
             )
 
+        prov_evidence = grade.evidence()
+        if not grade.independent:
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="UNCERTAIN",
+                channel="confirmation_pdf",
+                reason=(
+                    f"unverified_producer_provenance: producer={grade.producer.value!r} "
+                    f"(check_level={grade.check_level.label}) cannot issue VERIFIED"
+                ),
+                checks=(),
+                confirmed_count=0,
+                refuted_count=0,
+                abstained_count=len(expected_fields),
+                provenance_evidence=prov_evidence,
+            )
+
+        acting_reason = grade.acting_artifact([p])
+        if acting_reason:
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="UNCERTAIN",
+                channel="confirmation_pdf",
+                reason=f"unverified_producer_provenance: {acting_reason}",
+                checks=(),
+                confirmed_count=0,
+                refuted_count=0,
+                abstained_count=len(expected_fields),
+                provenance_evidence=prov_evidence,
+            )
+
+        try:
+            raw_bytes = p.read_bytes()
+            pdf_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+            if expected_fetch_sha256 is not None:
+                exp_hex = expected_fetch_sha256.strip().lower()
+                if not _SHA256_RE.match(exp_hex) or not hmac.compare_digest(
+                    pdf_sha256, exp_hex
+                ):
+                    return PortalReadbackResult(
+                        verdict="HALT",
+                        receipt_verdict="REFUTED",
+                        channel="confirmation_pdf",
+                        reason="fetch_digest_mismatch",
+                        checks=(),
+                        confirmed_count=0,
+                        refuted_count=0,
+                        abstained_count=len(expected_fields),
+                        artifact_sha256=pdf_sha256,
+                        provenance_evidence=prov_evidence,
+                    )
+            pdf_text = extract_pdf_text_stdlib(raw_bytes)
+        except (OSError, ValueError) as exc:
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="UNCERTAIN",
+                channel="confirmation_pdf",
+                reason=f"corrupt_or_unreadable_pdf: {exc}",
+                checks=(),
+                confirmed_count=0,
+                refuted_count=0,
+                abstained_count=len(expected_fields),
+                provenance_evidence=prov_evidence,
+            )
+
         if not pdf_text.strip():
             return PortalReadbackResult(
                 verdict="HALT",
+                receipt_verdict="UNCERTAIN",
                 channel="confirmation_pdf",
                 reason="corrupt_or_unreadable_pdf: no extractable text streams",
                 checks=(),
@@ -458,35 +687,68 @@ class ConfirmationPdfOracle:
                 refuted_count=0,
                 abstained_count=len(expected_fields),
                 artifact_sha256=pdf_sha256,
+                provenance_evidence=prov_evidence,
             )
 
         labels_cfg = field_labels or {}
         patterns_cfg = field_patterns or {}
+        ftypes = field_types or {}
         observed: dict[str, Any] = {}
         provenance: dict[str, str] = {}
+        ambiguous_fields: list[str] = []
 
         for fname in expected_fields:
             if fname in patterns_cfg:
-                m = re.search(
-                    patterns_cfg[fname], pdf_text, re.IGNORECASE | re.MULTILINE
+                matches = list(
+                    re.finditer(
+                        patterns_cfg[fname], pdf_text, re.IGNORECASE | re.MULTILINE
+                    )
                 )
-                if m:
-                    val = m.group(1).strip() if m.lastindex else m.group(0).strip()
-                    observed[fname] = val
-                    provenance[fname] = f"pdf:{pdf_sha256[:12]}:regex:{fname}"
+                if matches:
+                    vals = [
+                        (m.group(1).strip() if m.lastindex else m.group(0).strip())
+                        for m in matches
+                    ]
+                    norms = {
+                        normalize_field_value(v, field_type=ftypes.get(fname))
+                        for v in vals
+                    }
+                    if len(norms) > 1:
+                        ambiguous_fields.append(fname)
+                        provenance[fname] = (
+                            f"pdf:{pdf_sha256[:12]}:ambiguous_regex:{fname}"
+                        )
+                    else:
+                        observed[fname] = vals[0]
+                        provenance[fname] = f"pdf:{pdf_sha256[:12]}:regex:{fname}"
                 continue
 
             candidate_labels = labels_cfg.get(fname) or _default_labels_for_field(fname)
+            found_vals: list[str] = []
+            matched_label: str | None = None
             for lbl in candidate_labels:
                 pat = re.compile(
                     rf"(?:^|\n)\s*{re.escape(lbl)}\s*[:\-]\s*([^\n]+)",
                     re.IGNORECASE,
                 )
-                m = pat.search(pdf_text)
-                if m:
-                    observed[fname] = m.group(1).strip()
-                    provenance[fname] = f"pdf:{pdf_sha256[:12]}:label={lbl!r}"
-                    break
+                hits = [m.group(1).strip() for m in pat.finditer(pdf_text)]
+                if hits:
+                    found_vals.extend(hits)
+                    if matched_label is None:
+                        matched_label = lbl
+            if found_vals:
+                norms = {
+                    normalize_field_value(v, field_type=ftypes.get(fname))
+                    for v in found_vals
+                }
+                if len(norms) > 1:
+                    ambiguous_fields.append(fname)
+                    provenance[fname] = (
+                        f"pdf:{pdf_sha256[:12]}:ambiguous_label={matched_label!r}"
+                    )
+                else:
+                    observed[fname] = found_vals[0]
+                    provenance[fname] = f"pdf:{pdf_sha256[:12]}:label={matched_label!r}"
 
         checks, confirmed, refuted, abstained = _compare_fields(
             expected_fields,
@@ -496,9 +758,23 @@ class ConfirmationPdfOracle:
             default_provenance=f"pdf:{pdf_sha256[:12]}:missing",
         )
 
+        if ambiguous_fields:
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="UNCERTAIN",
+                channel="confirmation_pdf",
+                reason=f"ambiguous_duplicate_label: {', '.join(ambiguous_fields)}",
+                checks=checks,
+                confirmed_count=confirmed,
+                refuted_count=refuted,
+                abstained_count=abstained,
+                artifact_sha256=pdf_sha256,
+                provenance_evidence=prov_evidence,
+            )
         if refuted > 0:
             return PortalReadbackResult(
                 verdict="HALT",
+                receipt_verdict="REFUTED",
                 channel="confirmation_pdf",
                 reason="field_mismatch",
                 checks=checks,
@@ -506,10 +782,12 @@ class ConfirmationPdfOracle:
                 refuted_count=refuted,
                 abstained_count=abstained,
                 artifact_sha256=pdf_sha256,
+                provenance_evidence=prov_evidence,
             )
         if abstained > 0:
             return PortalReadbackResult(
                 verdict="HALT",
+                receipt_verdict="UNCERTAIN",
                 channel="confirmation_pdf",
                 reason="missing_required_fields",
                 checks=checks,
@@ -517,9 +795,11 @@ class ConfirmationPdfOracle:
                 refuted_count=refuted,
                 abstained_count=abstained,
                 artifact_sha256=pdf_sha256,
+                provenance_evidence=prov_evidence,
             )
         return PortalReadbackResult(
             verdict="VERIFIED",
+            receipt_verdict="CONFIRMED",
             channel="confirmation_pdf",
             reason="ok",
             checks=checks,
@@ -527,4 +807,5 @@ class ConfirmationPdfOracle:
             refuted_count=0,
             abstained_count=0,
             artifact_sha256=pdf_sha256,
+            provenance_evidence=prov_evidence,
         )
