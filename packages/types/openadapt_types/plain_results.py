@@ -105,10 +105,11 @@ class OutcomeSourceV1(str, Enum):
     EXECUTION_OUTCOME = "execution_outcome"
     AGENT_STATUS = "agent_status"
     CONNECTOR_STATUS = "connector_status"
-    #: Domain-neutral alias; v1 wire key remains ``clinic_tool_status`` for
-    #: compatibility with deployed v1 readers and schemas.
-    MANAGED_TOOL_STATUS = "clinic_tool_status"
+    #: Declared first so the member keeps its 0.24.0 name; the v1 wire key
+    #: stays ``clinic_tool_status`` for deployed v1 readers and schemas.
     CLINIC_TOOL_STATUS = "clinic_tool_status"
+    #: Domain-neutral alias for ``CLINIC_TOOL_STATUS``.
+    MANAGED_TOOL_STATUS = "clinic_tool_status"
     PROGRAM_TERMINAL_STATE = "program_terminal_state"
     OVERLAY_PHASE = "overlay_phase"
 
