@@ -27,6 +27,7 @@ from typing import Any, Optional
 import pytest
 import requests
 
+from openadapt_flow import sealed_set
 from openadapt_flow.after_stop import keep_prior_state
 from openadapt_flow.ir import (
     ActionKind,
@@ -268,7 +269,7 @@ def test_a_stop_after_a_save_is_rolled_back_and_proven(tmp_path, mockmed):
     assert _records(mockmed) == []
     # The persisted report carries it, PHI-free.
     persisted = RunReport.model_validate_json(
-        (tmp_path / "run" / "report.json").read_text()
+        sealed_set.read_text(tmp_path / "run" / "report.json")
     )
     assert persisted.rollback == rollback
     assert "p1" not in persisted.rollback.model_dump_json()
@@ -287,8 +288,9 @@ def test_an_unapproved_proposal_is_never_used(tmp_path, mockmed):
     # Nothing was undone, and the person gets the exact difference.
     assert [r["type"] for r in _records(mockmed)] == ["Triage"]
     diff_path = tmp_path / "run" / rollback.diff_path
-    assert (diff_path.stat().st_mode & 0o777) == 0o600
-    diff = json.loads(diff_path.read_text())
+    if not sealed_set.is_sealed_path(diff_path):
+        assert (diff_path.stat().st_mode & 0o777) == 0o600
+    diff = json.loads(sealed_set.read_text(diff_path))
     [added] = diff["tables"]["records"]["added"]
     assert added["row"]["type"] == "Triage"
     assert "records: 1 added" in rollback.reason
@@ -754,7 +756,7 @@ def test_a_compensation_that_leaves_a_side_record_is_named_precisely(tmp_path):
     }
     assert "history: 1 added" in rollback.reason
     assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
-    diff = json.loads((tmp_path / "run" / rollback.diff_path).read_text())
+    diff = json.loads(sealed_set.read_text(tmp_path / "run" / rollback.diff_path))
     [row] = diff["tables"]["history"]["added"]
     assert row["row"]["smoker"] == "no"
 
@@ -1757,7 +1759,7 @@ def test_a_late_write_hands_over_the_store_as_it_is(tmp_path):
     # named apart, as the stop left them.
     assert rollback.remaining_diff == {}
     assert rollback.late_diff_path
-    late = json.loads((tmp_path / "run" / rollback.late_diff_path).read_text())
+    late = json.loads(sealed_set.read_text(tmp_path / "run" / rollback.late_diff_path))
     assert "patients" in late["tables"]
 
 
@@ -2684,6 +2686,8 @@ def test_a_durable_run_with_rollback_needs_a_key_to_seal_its_state(
 
     plan = RollbackPlan(DatabaseReader(dialect="sqlite"))
     monkeypatch.delenv("OPENADAPT_BUNDLE_KEY", raising=False)
+    # Under the plaintext opt-out no key resolves (by default the local one does).
+    monkeypatch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "synthetic test data")
     with pytest.raises(SystemExit, match="OPENADAPT_BUNDLE_KEY"):
         _rollback_seal(plan, True, tmp_path)
     assert _rollback_seal(None, True, tmp_path) is None

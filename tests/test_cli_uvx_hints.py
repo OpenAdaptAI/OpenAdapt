@@ -140,3 +140,49 @@ def test_version_check_never_recurses(monkeypatch) -> None:
     monkeypatch.setattr(cli, "_launcher_conflicts", lambda: called.append(1) or [])
     cli._warn_about_launcher_conflicts()
     assert called == []
+
+
+@pytest.mark.parametrize(
+    ("prefix", "executable"),
+    [
+        (
+            "/Users/x/.cache/uv/archive-v0/kj_30_Pw78",
+            "/Users/x/.cache/uv/archive-v0/kj_30_Pw78/bin/python",
+        ),
+        (
+            "/private/tmp/oa-stranger/uv-cache/archive-v0/DkWZ9GXz6qqvpqf9",
+            "/private/tmp/oa-stranger/uv-cache/archive-v0/DkWZ9GXz6qqvpqf9/bin/python",
+        ),
+    ],
+)
+def test_doctor_recommends_uv_tool_install_under_uvx(
+    monkeypatch, prefix: str, executable: str
+) -> None:
+    """Under ``uvx``, ``doctor`` recommends ``uv tool install`` instead of ephemeral pip."""
+    monkeypatch.setattr(sys, "prefix", prefix)
+    monkeypatch.setattr(sys, "executable", executable)
+    py = (
+        f"{sys.version_info[0]}.{sys.version_info[1]}"
+        if sys.version_info[:2] in ((3, 10), (3, 11), (3, 12))
+        else "3.12"
+    )
+    assert (
+        cli._doctor_python_command('-m pip install "openadapt[capture]"')
+        == f'uv tool install --python {py} "openadapt[capture]"'
+    )
+    assert (
+        cli._doctor_python_command("-m pip install --upgrade openadapt")
+        == f"uv tool install --python {py} --upgrade openadapt"
+    )
+    # Non-pip module invocations still keep the interpreter path.
+    assert "-m playwright install chromium" in cli._doctor_python_command(
+        "-m playwright install chromium"
+    )
+
+
+def test_doctor_keeps_pip_command_outside_uvx(monkeypatch) -> None:
+    monkeypatch.setattr(sys, "prefix", "/Users/x/.venv")
+    monkeypatch.setattr(sys, "executable", "/Users/x/.venv/bin/python")
+    cmd = cli._doctor_python_command('-m pip install "openadapt[capture]"')
+    assert '-m pip install "openadapt[capture]"' in cmd
+    assert "uv tool install" not in cmd

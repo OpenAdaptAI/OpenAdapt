@@ -7,10 +7,18 @@ into one file to hand a reviewer, named after the release it describes.
 
     python scripts/build_llms_full.py          # rewrite llms-full.txt
     python scripts/build_llms_full.py --check  # fail if it is out of date
+
+A pull request does not regenerate llms-full.txt. Every page it quotes changes
+often, so a committed copy per pull request made every open pull request
+conflict whenever one merged. The refresh workflow
+(.github/workflows/refresh-generated.yml) opens a pull request that refreshes
+it after its sources change on main; on a pull request, CI only checks that
+the file was not edited by hand (scripts/build_capabilities.py --check-pr).
 """
 
 from __future__ import annotations
 
+import importlib.util
 import re
 import sys
 from pathlib import Path
@@ -60,6 +68,23 @@ def absolute_links(text: str, source: str) -> str:
     return re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", fix, text)
 
 
+def source_text(path: str) -> str:
+    """A source page as its sources describe it.
+
+    CAPABILITIES.md is assembled from capabilities/, not read from the
+    committed file, which can trail its row files until the refresh workflow
+    runs.
+    """
+    if path != "CAPABILITIES.md":
+        return (ROOT / path).read_text("utf-8")
+    script = ROOT / "scripts" / "build_capabilities.py"
+    spec = importlib.util.spec_from_file_location("build_capabilities", script)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.assemble()
+
+
 def build() -> str:
     version = flow_version()
     parts = [
@@ -73,7 +98,7 @@ def build() -> str:
         "Source: https://github.com/OpenAdaptAI/OpenAdapt",
     ]
     for path, title in SOURCES:
-        body = (ROOT / path).read_text("utf-8").strip()
+        body = source_text(path).strip()
         parts += ["", "---", "", f"<!-- {title}: {path} -->", "", absolute_links(body, path)]
     notes = latest_changelog(version)
     if notes:

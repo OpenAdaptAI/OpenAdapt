@@ -35,6 +35,10 @@ Entity binding is the standard ``Effect.match`` with ``{param: ...}`` values
 
 Fail-safe: a missing root or an unreadable candidate reads as *unreadable* ->
 INDETERMINATE (UNAVAILABLE) -> HALT.
+
+Strength follows who wrote the document (:mod:`.artifact_provenance`): a report the
+acting session saved or downloaded is at most ``same_screen``; only a declared
+``system_of_record`` producer reaches ``system_of_record``.
 """
 
 from __future__ import annotations
@@ -43,7 +47,7 @@ import json
 import re
 import time
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Iterable, Literal, Optional
 
 from openadapt_flow.runtime.effects.adapter import (
     CollateralHook,
@@ -97,6 +101,11 @@ class DocumentArrivalVerifier(VerifierAdapterBase):
         collateral_hooks: Substrate-specific collateral checks.
         poll_interval_s: Settlement poll gap within ``Effect.timeout_s``.
         clock: Injectable epoch-seconds source (tests).
+        producer: Who wrote the document (an
+            :class:`.artifact_provenance.ArtifactProducer` or its name). ``None`` is ``unknown``, graded like the acting
+            session.
+        acting_roots: Folders the acting session writes or downloads into; a
+            store overlapping one is graded as the acting session's.
     """
 
     substrate = "document"
@@ -115,7 +124,11 @@ class DocumentArrivalVerifier(VerifierAdapterBase):
         collateral_hooks: tuple[CollateralHook, ...] = (),
         poll_interval_s: float = 0.2,
         clock: Any = time.time,
+        producer: Any = None,
+        acting_roots: Optional[Iterable[Path | str]] = None,
     ) -> None:
+        from openadapt_flow.runtime.effects.artifact_provenance import grade_artifact
+
         if format == "text" and not text_pattern:
             raise ValueError(
                 "document format 'text' requires text_pattern (a regex with "
@@ -131,6 +144,16 @@ class DocumentArrivalVerifier(VerifierAdapterBase):
         self.collateral_hooks = collateral_hooks
         self.poll_interval_s = poll_interval_s
         self._clock = clock
+        self.provenance = grade_artifact(
+            producer, root=self.root, acting_roots=acting_roots
+        )
+        self.verification_tier = self.provenance.verification_tier
+        self.independent_system_of_record = (
+            self.verification_tier is VerificationTier.INDEPENDENT_SYSTEM
+        )
+        #: Why the last scan was refused (an acting-session artifact under a
+        #: strong declared producer); empty when it was not.
+        self._refused = ""
 
     # -- parsing ------------------------------------------------------------
 
@@ -161,12 +184,15 @@ class DocumentArrivalVerifier(VerifierAdapterBase):
         }
 
     def _scan(self) -> Optional[list[dict[str, Any]]]:
+        self._refused = ""
         if not self.root.is_dir():
             return None
+        paths = sorted(p for p in self.root.glob(self.pattern) if p.is_file())
+        self._refused = self.provenance.acting_artifact(paths)
+        if self._refused:
+            return None
         records: list[dict[str, Any]] = []
-        for path in sorted(self.root.glob(self.pattern)):
-            if not path.is_file():
-                continue
+        for path in paths:
             try:
                 with path.open("rb") as stream:
                     raw = stream.read(DOCUMENT_READ_LIMIT + 1)
@@ -205,6 +231,7 @@ class DocumentArrivalVerifier(VerifierAdapterBase):
                 "root": str(self.root),
                 "pattern": self.pattern,
                 "format": self.format,
+                "provenance": self.provenance.evidence(),
             },
         )
 
@@ -222,4 +249,7 @@ class DocumentArrivalVerifier(VerifierAdapterBase):
             verdict = apply_collateral_hooks(
                 verdict, before, self.capture_post_state(context), self.collateral_hooks
             )
+        from openadapt_flow.runtime.effects.artifact_provenance import with_provenance
+
+        verdict = with_provenance(verdict, self.provenance, self._refused)
         return redact_verdict(verdict, self.redaction, field=expected.field)

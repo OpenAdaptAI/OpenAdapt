@@ -17,8 +17,84 @@
 
 ## Unreleased
 
+### Encryption at rest by default
+
+- Recordings (web, the quickstart and tutorial, and desktop once converted),
+  compiled bundles and every run directory (report, step screenshots, crops,
+  frames, evidence, `REPORT.md`) are now encrypted at rest by default, with
+  no setup, as sealed-set version 3: a data key per set, wrapped with HPKE
+  (P-256, HKDF-SHA256, AES-256-GCM) to a per-set bucket key, and files as
+  Tink AES-256-GCM-HKDF 1 MiB streams. The bucket key is wrapped to the
+  device runtime key (only while the set is written; bundles keep it), the
+  device viewer key, organization keys and a recovery key.
+- Organization mode, from a machine policy (MDM profile, Group Policy, a
+  root-owned `/etc/openadapt/policy.json`): organization recipients (P-256
+  or RSA-OAEP-3072) and a key archive are required, and recording stops
+  without them. Solo users can make a recovery key
+  (`openadapt-flow at-rest recovery create`).
+- `openadapt-flow at-rest status` shows the keys and policy;
+  `at-rest shred` destroys a set's tracked bucket-key copies.
+- The device key is a software P-256 key in the OS keychain through
+  `keyring` (a 0600 file with a warning where there is none). Secure
+  Enclave, TPM, Touch ID and Windows Hello providers are interfaces with test
+  doubles, not built yet.
+- A configured `OPENADAPT_BUNDLE_KEY` or `OPENADAPT_RECORDING_KEY` still wins
+  outside organization mode (deprecated), and `~/.openadapt/keys/at-rest.key`
+  keeps working. Version 1 and 2 sets and plaintext folders still read.
+- `OPENADAPT_ENCRYPT_AT_REST=0`, or `--no-encrypt` on `record`, `compile`,
+  `run` and `replay`, turns it off with a one-line warning and a ledger line.
+- Receipts (`seal.json`, `receipt.*`, `public-seal.json`) stay plaintext and
+  are now written for encrypted runs too; their digests are over the
+  plaintext `report.json`. `seal verify`, `inspect report-run`, the receipt
+  page and the quickstart read encrypted runs. The receipt page embeds the
+  report, so beside an encrypted run it is logged as a plaintext copy.
+- Core dependency: `cryptography>=50` (HPKE). The keychain store uses `keyring`, which `pip install openadapt` includes; a bare `openadapt-flow` install needs the `keychain` extra, and otherwise keeps the device key in a 0600 file with a warning.
+- Fail-closed key lifecycle: an organization key archive counts as
+  reachable only with its `.openadapt-key-archive` marker, each record and
+  header names the archive it went to, and shredding authenticates the
+  header first and reports complete only once every tracked copy and store
+  file is gone. Organization mode requires `records: archive`. Durable
+  checkpoints in an encrypted run are keyed from the run's own data key.
+  `--no-encrypt` lasts for one command, and the Python recorders follow the
+  at-rest policy by default. A solo set opens silently only with the device
+  key that wrote it; a backup that only the recovery code opens needs
+  `openadapt-flow at-rest restore DIR --yes`. Rollback records in an
+  encrypted run stay inside its sealed set.
+
+
 ### Features
 
+- A sign-in that asks for a second factor (a code by text message or email,
+  an authenticator code, or a push approval) no longer has to stop the
+  program. A `second_factor` step (`one_time` is `code` or `approval`) waits
+  for a person through the configured source (`OPENADAPT_SECOND_FACTOR_URL`
+  for a hosted or customer-run runner's control plane, or a local
+  `OPENADAPT_SECOND_FACTOR_COMMAND`). Before anyone is asked, the focused
+  field must be an empty `autocomplete="one-time-code"` input, and the page
+  is made to draw it as dots. After the answer the same field must still have
+  focus and be empty. The code is then filled once into that element, never
+  retried, and kept nowhere: not in a model's page listing, a screenshot, a
+  log, a receipt or the recording. No source, an answer after the deadline, a
+  decline, a multi-line or malformed answer, a field that changed while the
+  person answered, an API binding on the step, or a backend that can't bind
+  the field stops the step before typing, with a closed `second_factor_*`
+  code. The action is new, so an older runtime refuses the bundle instead of
+  skipping an approval. Over the control plane the code is sealed in the
+  person's browser to a one-step P-256 key, and a cached run's child process
+  gets the run token only with the control-plane URL. The wrap recorder turns
+  a field marked `autocomplete="one-time-code"` into such a step. A code-only
+  form's submit counts as a sign-in only once, right after a
+  username-and-password sign-in. A field split into one box per character
+  is refused. See docs/SECOND_FACTOR.md.
+- An interactive run (a terminal on stdin and stderr) asks for a sign-in's
+  second factor at that terminal when no control plane or command is set. A
+  code is read without echo, under the step's deadline, in the calling
+  thread; echo comes back on when the read ends, including on a timeout, and
+  input typed before the prompt is discarded. On Windows the console is read
+  one key at a time with `msvcrt.getwch`, which never echoes, under the same
+  deadline and discard rules. A run without a terminal never
+  prompts and still stops before typing. `OPENADAPT_SECOND_FACTOR_PROMPT=off`
+  turns the prompt off.
 - Effect locations (`openadapt.effect-location/v1`,
   `openadapt_flow/effect_location/`): the place a careful person would look
   again to see an intended value, stored as pack data. Each record holds the
@@ -33,6 +109,33 @@
   `check_level.outcome_word` when it is available. The engine holds no
   application vocabulary: month names, yes and no words, currency signs and
   tables come from the pack. See docs/EFFECT_LOCATION.md.
+
+### Fixes
+
+- A FHIR searchset Bundle's `OperationOutcome` entry (`search.mode:
+  outcome`) is no longer read as a marker match. Packs can declare
+  `search_match` on the entry parent (Medplum uses `path: search.mode`,
+  `equals: match`). A non-informational outcome is an error, not a
+  found id, so recovery cannot adopt a write that never landed and an
+  outcome id does not count toward `duplicate_write`.
+- File, document, document-hash and email checks no longer claim
+  `system_of_record` (tier 1) for every file. Their strength now follows who
+  produced the artifact, set by the new `effects.artifact_producer`:
+  `acting_session` and the default, `unknown`, are at most `same_screen`;
+  `separate_session` is at most `separate_session`; `system_of_record` keeps
+  tier 1. A store that overlaps `effects.acting_roots`, the user's Downloads
+  folder or a Playwright download folder is graded as the acting session's.
+  Under a declared `separate_session` or `system_of_record` producer, a scan
+  that lists a file in a Playwright download folder beneath the store, or a
+  file whose real path leaves the store, is refused:
+  the verdict is INDETERMINATE and names why. Each verdict records the
+  producer, and whether it was declared or observed, in
+  `read_evidence.provenance`. Breaking: a deployment that relied on the old
+  tier 1 for these kinds must now declare `artifact_producer:
+  system_of_record` (one line in its `effects:` or `verifier:` section,
+  including a `record --verify` file); until it does, runs that need a
+  separate-session or system-of-record check are not `VERIFIED`. Verifier
+  identities of configs that leave both new fields unset are unchanged.
 
 ## v3.4.0 (2026-11-21)
 

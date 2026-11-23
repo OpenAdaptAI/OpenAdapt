@@ -1,0 +1,64 @@
+@import './vendor/semantic-theme/semantic-theme.css';
+@import './vendor/semantic-theme/fonts.css';
+
+/* Preserve product density and paper/phosphor meaning; share every role. */
+:root, :root[data-theme], [data-theme] {
+  --bg: var(--oa-canvas);
+  --panel: var(--oa-surface);
+  --panel-sunk: var(--oa-surface-sunken);
+  --panel-hover: var(--oa-surface-sunken);
+  --border: var(--oa-border);
+  --border-dotted: var(--oa-border-strong);
+  --text: var(--oa-text);
+  --text-strong: var(--oa-text);
+  --text-muted: var(--oa-text-muted);
+  --text-faint: var(--oa-text-muted);
+  --text-inverse: var(--oa-canvas);
+  --brand: var(--oa-link);
+  --brand-hover: var(--oa-link-hover);
+  --brand-tint: var(--oa-link-tint);
+  --action: var(--oa-action);
+  --action-hover: var(--oa-action-hover);
+  --on-action: var(--oa-on-action);
+  --focus: var(--oa-focus);
+  --ok: var(--oa-verified);
+  --attention: var(--oa-stopped);
+  --danger: var(--oa-reconcile);
+  --progress: var(--oa-link);
+  --mark-ok: var(--oa-verified);
+  --mark-warn: var(--oa-stopped);
+  --pill-neutral-bg: var(--oa-surface-sunken);
+  --pill-neutral-fg: var(--oa-text-muted);
+  --pill-ok-bg: var(--oa-verified-tint);
+  --pill-ok-fg: var(--oa-verified-strong);
+  --pill-run-bg: var(--oa-link-tint);
+  --pill-run-fg: var(--oa-link);
+  --pill-warn-bg: var(--oa-stopped-tint);
+  --pill-warn-fg: var(--oa-stopped-strong);
+  --pill-crit-bg: var(--oa-surface-sunken);
+  --pill-crit-fg: var(--oa-reconcile);
+  --font-sans: var(--oa-font-body);
+  --font-ui: var(--oa-font-body);
+  --font-heading: var(--oa-font-body);
+  --font-mono: var(--oa-font-mono);
+  --motion-fast: var(--oa-duration-fast);
+  --motion: var(--oa-duration);
+  --motion-slow: var(--oa-duration-slow);
+}
+.btn-primary { border-radius: var(--oa-radius-action); }
+
+/* The execution overlay remains a dark surface in either product theme. */
+:root, :root[data-theme], [data-theme] {
+  --slate-0: var(--oa-surface-sunken);
+  --slate-1: var(--oa-surface);
+  --slate-2: var(--oa-surface-raised);
+  --fog-0: var(--oa-text);
+  --fog-1: var(--oa-text);
+  --fog-2: var(--oa-text-muted);
+  --fog-3: var(--oa-text-muted);
+  --line-strong: var(--oa-border-strong);
+  --run-lift: var(--oa-link);
+  --success-lift: var(--oa-verified);
+  --warn-lift: var(--oa-stopped);
+  --crit-lift: var(--oa-reconcile);
+}
