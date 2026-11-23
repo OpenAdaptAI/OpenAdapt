@@ -158,6 +158,7 @@ def _isolation_env(root: Path) -> dict[str, str | None]:
         # never land inside a recording or run directory a test seals.
         "OPENADAPT_FLOW_AT_REST_HOME": _SESSION_AT_REST_HOME
         or str(root / ".at-rest-home"),
+        "OPENADAPT_FLOW_PLAINTEXT_LEDGER_DIR": None,
         "OPENADAPT_FLOW_AT_REST": None,
         # The device key goes to a file in the isolated home, never to the
         # OS keychain (no dialog, no write to the person's login keychain).
