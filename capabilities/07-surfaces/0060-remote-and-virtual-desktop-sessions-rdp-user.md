@@ -1,0 +1,1 @@
+| Remote and virtual desktop sessions (RDP user sessions, Citrix and other virtual desktops), with OpenAdapt installed inside the session (`in_session`): the same structure-first path as a local desktop | Released | The Windows path's evidence (above): a WinForms test app in a Windows 11 VM, 3 of 3 (synthetic) | [SURFACES.md](packages/flow/docs/SURFACES.md) |

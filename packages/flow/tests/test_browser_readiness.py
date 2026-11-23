@@ -322,6 +322,8 @@ def test_all_cdp_acquisitions_check_their_selected_page() -> None:
         "agent_guard/session.py": "_connect",
         "copilot_runtime.py": "main",
         "agent_test/mcp_browser.py": "__init__",
+        "readiness/runner.py": "run_one",
+        "exceptions/watch.py": "watch_browser",
     }
     observed = {}
     for path in root.rglob("*.py"):

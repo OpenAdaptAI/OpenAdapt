@@ -90,3 +90,94 @@ def test_resolve_takes_main_only_inside_the_command_list() -> None:
     # The map-row conflict is not ours to decide.
     assert "<<<<<<< HEAD\n| branch row |" in resolved
     assert resolved.count("<<<<<<<") == 1
+
+
+PAGE = """\
+# Title
+
+Intro.
+
+## Core
+
+| Capability | Status |
+| --- | --- |
+| One | Released |
+| Two | Released |
+| Three | Released |
+
+## Other
+
+Prose.
+"""
+
+
+def _git(cwd: Path, *args: str) -> str:
+    import subprocess
+
+    return subprocess.run(
+        ["git", "-C", str(cwd), "-c", "user.name=t", "-c", "user.email=t@t", *args],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+
+
+def _write(root: Path, files: dict[str, str]) -> None:
+    for name, text in files.items():
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, "utf-8")
+
+
+def test_capability_rows_move_to_row_files(tmp_path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _write(repo, {"CAPABILITIES.md": PAGE, "llms-full.txt": "brief\n"})
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "base")
+    # The branch, from before the split: adds a row after Two, edits Three.
+    _git(repo, "checkout", "-qb", "feature")
+    branch_page = PAGE.replace(
+        "| Two | Released |\n", "| Two | Released |\n| Mine | On main |\n"
+    ).replace("| Three | Released |", "| Three | Released, faster |")
+    _write(repo, {"CAPABILITIES.md": branch_page, "llms-full.txt": "brief, mine\n"})
+    _git(repo, "commit", "-qam", "feature")
+    # main: the split, and another pull request's new row (page not refreshed).
+    _git(repo, "checkout", "-q", "main")
+    _write(
+        repo,
+        {
+            "capabilities/00-title/section.md": "# Title\n\nIntro.\n\n",
+            "capabilities/01-core/section.md": (
+                "## Core\n\n| Capability | Status |\n| --- | --- |\n"
+                "<!-- capability rows -->\n\n"
+            ),
+            "capabilities/01-core/0010-one.md": "| One | Released |\n",
+            "capabilities/01-core/0020-two.md": "| Two | Released |\n",
+            "capabilities/01-core/0030-three.md": "| Three | Released |\n",
+            "capabilities/01-core/0040-four.md": "| Four | Released |\n",
+            "capabilities/02-other/section.md": "## Other\n\nProse.\n",
+        },
+    )
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "split")
+    _git(repo, "checkout", "-q", "feature")
+    _git(repo, "merge", "-q", "--no-commit", "--no-ff", "main")
+
+    monkeypatch.chdir(repo)
+    assert migrate.main([]) == 0
+    core = repo / "capabilities/01-core"
+    rows = sorted(p.name for p in core.glob("0*.md"))
+    assert rows == [
+        "0010-one.md",
+        "0020-two.md",
+        "0025-mine.md",
+        "0030-three.md",
+        "0040-four.md",
+    ]
+    assert (core / "0025-mine.md").read_text() == "| Mine | On main |\n"
+    assert (core / "0030-three.md").read_text() == "| Three | Released, faster |\n"
+    # The generated pages are main's; the refresh workflow rebuilds them.
+    assert (repo / "CAPABILITIES.md").read_text() == PAGE
+    assert (repo / "llms-full.txt").read_text() == "brief\n"

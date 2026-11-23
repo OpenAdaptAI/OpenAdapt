@@ -1,6 +1,6 @@
 {
   "name": "openadapt-desktop",
-  "version": "0.30.6",
+  "version": "0.32.0",
   "description": "Installed companion for OpenAdapt authoring, teaching, and local pairing",
   "private": true,
   "type": "module",
@@ -11,7 +11,9 @@
     "tokens:check": "node scripts/vendor-design-tokens.mjs --check",
     "capture:cockpit": "node scripts/capture-cockpit-previews.mjs",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "theme:check": "node scripts/check-semantic-theme.mjs src/styles/vendor/semantic-theme",
+    "prebuild": "npm run theme:check && node scripts/build-phone-theme.mjs --check"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

@@ -1,0 +1,1 @@
+| Settle a disagreement between recordings by trying both paths on a test copy of the app and reading the record back | Released ([#1276](https://github.com/OpenAdaptAI/OpenAdapt/pull/1276), [#1289](https://github.com/OpenAdaptAI/OpenAdapt/pull/1289)) | Synthetic (MockMed; desktop and remote test copies) | `induce --probe-on` |

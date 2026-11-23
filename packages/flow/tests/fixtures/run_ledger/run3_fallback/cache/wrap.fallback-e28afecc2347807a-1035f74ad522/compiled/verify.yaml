@@ -1,0 +1,29 @@
+# Confirmed by dana.reviewer at 2026-11-22T05:58:51Z from verify.proposed.yaml.
+schema_version: openadapt.verify/v1
+verifier:
+  kind: rest
+  records_path: /api/db
+  records_key: records
+  records_complete: true
+  base_url: http://127.0.0.1:64866
+  timeout_s: 2.0
+  poll_interval_s: 0.05
+effects:
+- kind: record_written
+  match:
+    note:
+      param: note
+    patient_id:
+      literal: p1
+    type:
+      literal: Triage
+  composite_key:
+    note:
+      param: note
+    patient_id:
+      literal: p1
+    type:
+      literal: Triage
+  count_new_only: true
+  probe: exactly one new record with note=parameter 'note', patient_id='p1', type='Triage'
+    (confirmed by dana.reviewer)

@@ -67,14 +67,22 @@ def test_wrap_help_is_discovered_as_an_actual_launcher_command():
     assert len(names) == 17
 
 
-def test_review_brief_matches_the_unmodified_canonical_generator():
+def test_review_brief_comes_from_the_unmodified_canonical_generator():
     # Use the actual generator's pure build function. Never splice or approve
-    # a manually copied README section in the generated review brief.
+    # a manually copied README section in the generated review brief. A pull
+    # request does not regenerate llms-full.txt (the refresh workflow does), so
+    # this checks the generator's output; CI's `build_capabilities.py
+    # --check-pr` fails a hand edit of the committed file.
     generator = runpy.run_path(
         str(ROOT / "scripts/build_llms_full.py"), run_name="llms_source_contract"
     )
-    assert (ROOT / "llms-full.txt").read_text(encoding="utf-8") == generator[
-        "build"
-    ](), (
-        "Run python scripts/build_llms_full.py, then --check in the qualified environment"
+    capabilities = runpy.run_path(
+        str(ROOT / "scripts/build_capabilities.py"), run_name="capabilities_contract"
     )
+    brief = generator["build"]()
+    assert generator["absolute_links"](
+        (ROOT / "README.md").read_text(encoding="utf-8").strip(), "README.md"
+    ) in brief
+    assert generator["absolute_links"](
+        capabilities["assemble"]().strip(), "CAPABILITIES.md"
+    ) in brief

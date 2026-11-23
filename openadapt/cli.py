@@ -1184,7 +1184,13 @@ def _hint(rest: str) -> str:
 
 def _under_uvx() -> bool:
     """True when this process runs from a ``uvx`` throwaway environment."""
-    return "/uv/archive-v" in sys.prefix.replace("\\", "/")
+    return any(
+        "/uv/archive-v" in path or ("uv" in path.lower() and "/archive-v" in path)
+        for path in (
+            sys.prefix.replace("\\", "/"),
+            sys.executable.replace("\\", "/"),
+        )
+    )
 
 
 def _keep_command() -> Optional[str]:
@@ -1630,6 +1636,10 @@ for _verb, _help in (
     ("record", "Record a workflow. Uses the same options as flow record."),
     ("compile", "Compile a recording. Uses the same options as flow compile."),
     ("run", "Run a bundle with its checks. Uses the same options as flow run."),
+    (
+        "handoff",
+        "Handoffs to other parties: what they recorded, and who follows up.",
+    ),
 ):
     main.add_command(
         _FlowAliasCommand(
@@ -2066,6 +2076,104 @@ def shadow(command_ctx: click.Context) -> None:
         click.echo("Upgrade with: pip install --upgrade openadapt", err=True)
         sys.exit(2)
     _run_flow(["shadow", *command_ctx.args])
+
+
+#: `openadapt flow flight` options that take a value, and flags. Click drops
+#: the "--" before CMD, so the launcher puts it back after these.
+FLIGHT_VALUE_OPTIONS = frozenset(
+    {
+        "--task-id",
+        "--out",
+        "--label",
+        "--gate",
+        "--approval-timeout",
+        "--cdp",
+        "--guard-config",
+        "--guard-task",
+        "--max-cost-usd",
+        "--safe-label",
+    }
+)
+FLIGHT_FLAGS = frozenset(
+    {
+        "--no-scrub",
+        "--i-accept-unscrubbed",
+        "--allow-unenforced-egress",
+        "--no-egress-block",
+        "--json",
+        "-h",
+        "--help",
+    }
+)
+
+
+def _flight_argv(args: list[str]) -> list[str]:
+    """``args`` with "--" restored before CMD, so CMD's options stay CMD's."""
+    out: list[str] = []
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token in FLIGHT_VALUE_OPTIONS:
+            out.extend(args[index : index + 2])
+            index += 2
+        elif token in FLIGHT_FLAGS or token.split("=", 1)[0] in FLIGHT_VALUE_OPTIONS:
+            out.append(token)
+            index += 1
+        else:
+            return [*out, "--", *args[index:]]
+    return out
+
+
+@main.command(
+    "flight",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def flight(command_ctx: click.Context) -> None:
+    """Record any agent you already run, and hold its saves for a person.
+
+    `openadapt flight [OPTIONS] -- CMD ...` meters and prices the agent's
+    model calls, scrubs text and PNG/JPEG/GIF/BMP/TIFF/WEBP screenshots before they leave the
+    machine, blocks other egress on macOS, logs its actions and writes
+    flight.json. Every argument passes to
+    `openadapt flow flight`; its options are listed by
+    `openadapt flight --help`. With an openadapt-flow older than 3.5.0 it
+    says so and exits 4.
+    """
+    if "flight" not in _flow_verbs():
+        installed = _installed_flow_version()
+        needs = (
+            f"openadapt flight needs openadapt-flow >= {FLIGHT_MIN_FLOW} "
+            f"(installed: {installed}). Upgrade with: pip install --upgrade openadapt"
+        )
+        if any(arg in ("-h", "--help") for arg in command_ctx.args):
+            # Help is always there; it says what is missing.
+            click.echo(command_ctx.get_help())
+            click.echo("\n" + needs)
+            return
+        click.echo("Error: " + needs, err=True)
+        sys.exit(FLIGHT_ENGINE_TOO_OLD_EXIT)
+    _run_flow(["flight", *_flight_argv(list(command_ctx.args))])
+
+
+#: The first openadapt-flow release with the flight verb.
+FLIGHT_MIN_FLOW = "3.5.0"
+#: Exit status of `openadapt flight` when the installed Flow has no flight
+#: verb (not argparse's 2, which means a bad option).
+FLIGHT_ENGINE_TOO_OLD_EXIT = 4
+
+
+def _installed_flow_version() -> str:
+    from importlib import metadata
+
+    try:
+        return metadata.version("openadapt-flow")
+    except metadata.PackageNotFoundError:
+        return "not installed"
 
 
 def _optional_engine_entrypoint(command_ctx: click.Context, modules: tuple[str, ...]):
@@ -3398,8 +3506,34 @@ def version():
             click.echo(f"  {name}: {number}")
 
 
+def _doctor_uv_tool_command(arguments: str) -> Optional[str]:
+    """Translate a doctor ``pip install`` hint into ``uv tool install`` under ``uvx``."""
+    prefix = "-m pip install "
+    if not arguments.startswith(prefix):
+        return None
+    spec = arguments[len(prefix) :].strip()
+    upgrade = False
+    if spec.startswith("--upgrade "):
+        upgrade = True
+        spec = spec[len("--upgrade ") :].strip()
+    if not (
+        spec == "openadapt"
+        or spec.startswith('"openadapt[')
+        or spec.startswith("'openadapt[")
+    ):
+        return None
+    major, minor = sys.version_info[:2]
+    py = f"{major}.{minor}" if (major, minor) in ((3, 10), (3, 11), (3, 12)) else "3.12"
+    flag = " --upgrade" if upgrade else ""
+    return f"uv tool install --python {py}{flag} {spec}"
+
+
 def _doctor_python_command(arguments: str) -> str:
     """Show a command for the interpreter running doctor, in the host shell."""
+    if _under_uvx():
+        uv_cmd = _doctor_uv_tool_command(arguments)
+        if uv_cmd is not None:
+            return uv_cmd
     if _host_platform() == "win32":
         powershell = "'" + sys.executable.replace("'", "''") + "'"
         return (

@@ -296,6 +296,12 @@ def main(argv: list[str] | None = None) -> int:
             handle.write(f"matrix={json.dumps(matrix)}\n")
             releases = [item for item in matrix if item["action"] == "release"]
             handle.write(f"release={json.dumps(releases)}\n")
+            mcp_registry = [
+                item
+                for item in matrix
+                if (ROOT / "packages" / item["package"] / "server.json").is_file()
+            ]
+            handle.write(f"mcp_registry={json.dumps(mcp_registry)}\n")
             handle.write(f"any={'true' if matrix else 'false'}\n")
     if args.dispatch and refused:
         print("\n".join(["Refusing:", *refused]), file=sys.stderr)

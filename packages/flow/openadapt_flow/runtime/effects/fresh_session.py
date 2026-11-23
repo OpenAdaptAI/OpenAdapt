@@ -21,7 +21,7 @@ It is not a system-of-record read: both sessions go through the same
 application. Any doubt (no session, a launch the running instance absorbed,
 the same account as the run, ``ready_text`` never shown) is INDETERMINATE.
 
-The drivers are tested against scripted backends and the MockMed fault
+The drivers are tested against scripted backends and the local fault
 server only; no live desktop app or RDP host is exercised in CI.
 """
 

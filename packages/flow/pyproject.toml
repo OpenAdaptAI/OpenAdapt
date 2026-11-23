@@ -5,9 +5,10 @@ build-backend = "hatchling.build"
 [project]
 name = "openadapt-flow"
 version = "3.4.0"
-description = "Compile demonstrated GUI workflows into deterministic local replay with governed repair and refusal"
+description = "Verified local execution layer for computer-use agents: compile web/desktop tasks into deterministic programs with read-back checks, signed DSSE receipts, and MCP/A2A support"
 readme = "README.md"
 keywords = [
+    "computer-use",
     "computer-use-agents",
     "gui-automation",
     "workflow-compiler",
@@ -15,10 +16,21 @@ keywords = [
     "read-back",
     "receipts",
     "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "codex",
+    "playwright",
     "rpa",
     "desktop",
     "citrix",
     "rdp",
+    "ehr",
+    "audit-trail",
+    "zero-egress",
+    "local-vlm",
+    "idempotency",
+    "undo",
+    "rollback",
     "gui",
     "automation",
     "workflow",
@@ -40,8 +52,11 @@ authors = [{ name = "OpenAdapt.AI" }]
 # The Python classifiers feed the PyPI "python versions" badge; keep them in
 # step with requires-python above.
 classifiers = [
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
     "Intended Audience :: Healthcare Industry",
+    "Intended Audience :: Information Technology",
     "License :: OSI Approved :: MIT License",
     "Operating System :: MacOS",
     "Operating System :: Microsoft :: Windows",
@@ -52,6 +67,9 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Office/Business",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Security :: Cryptography",
+    "Topic :: Software Development :: Testing",
     "Typing :: Typed",
 ]
 dependencies = [
@@ -157,6 +175,9 @@ dev = [
     "scikit-image>=0.22",
     # WindowsBackend tests (mock WAA server).
     "requests>=2.31",
+    # The flight scrubber's OCR pass (tests/test_flight_*); CI installs the
+    # tesseract binary next to it.
+    "pytesseract>=0.3.10",
     # VLM service + operator console tests (TestClient over the FastAPI apps);
     # uvicorn for the console's boot smoke test.
     "fastapi>=0.110",
@@ -361,10 +382,12 @@ langgraph = ["langgraph>=1.2,<2", "langchain-core>=1.7,<2"]
 # adapter works with whatever crewai the user installs.
 
 [project.urls]
-Homepage = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow"
-Repository = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow"
+Homepage = "https://openadapt.ai"
+Documentation = "https://docs.openadapt.ai"
+Proof = "https://openadapt.ai/proof"
+Pilot = "https://openadapt.ai/pilot"
+Repository = "https://github.com/OpenAdaptAI/OpenAdapt"
 Issues = "https://github.com/OpenAdaptAI/OpenAdapt/issues"
-Documentation = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/README.md"
 Changelog = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/CHANGELOG.md"
 
 [project.scripts]
