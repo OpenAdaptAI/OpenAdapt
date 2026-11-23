@@ -14,25 +14,26 @@ on:
           - webarena_verified
           - workarena
       mode:
-        description: "Execution mode (contract is deterministic offline; live requires BrowserGym servers)"
+        description: "Execution mode (contract = deterministic offline synthetic fixture)"
         required: true
         default: contract
         type: choice
         options:
           - contract
-          - live
 
 permissions:
   contents: read
 
 jobs:
   browsergym-benchmark:
-    name: BrowserGym verification (${{ inputs.suite }}, ${{ inputs.mode }})
+    name: BrowserGym contract fixture (${{ inputs.suite }}, ${{ inputs.mode }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Python 3.12
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0

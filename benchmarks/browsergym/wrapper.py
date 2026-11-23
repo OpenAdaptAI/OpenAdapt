@@ -1,28 +1,30 @@
 """Gymnasium/BrowserGym-compatible verification wrapper for OpenAdapt.
 
-Wraps any BrowserGym-style environment (``ST-WebAgentBench``, ``WebArena-Verified``,
-``WorkArena``) without requiring ``browsergym`` at import time. Provides:
+Standalone adapter kept separate from `openadapt_flow`'s governed runtime so it
+can wrap external BrowserGym environments (ST-WebAgentBench, WebArena-Verified,
+WorkArena) without requiring `browsergym` or heavy engine dependencies during
+offline contract tests.
 
-1. **Policy & Consent Firewall (ST-WebAgentBench CuP / Risk Ratio):**
-   Detects irreversible or policy-sensitive actions (financial submit, external
-   send, destructive delete, PII/credential fields, unauthorized origins),
-   enforces fail-closed ``ABSTAIN -> HALT`` / explicit consent gating, and lets
-   safe read-only steps proceed with zero false refusals.
-2. **Independent Read-Back + Silent-Fail Trap Detection (WebArena-Verified / WorkArena):**
-   Verifies committed state after write actions via an independent read-back
-   oracle and catches silent-fail faults (``drop_write_return_200``,
-   ``optimistic_ui_rollback``).
-3. **Compiled Replay Mode:**
-   Records a verified trajectory once and replays deterministically across
-   perturbed instances with zero LLM calls while tracking latency speedup.
+Fail-closed invariants:
+1. BrowserGym bid actions (`click('a42')`, `fill('b7', '...')`, `press('a42', 'Enter')`)
+   are resolved against `axtree_object`, `extra_element_properties`, or `axtree_txt`
+   before policy matching. Unresolved bids fail closed (`ABSTAIN`).
+2. Empty `PolicyConfig.allowed_origins` denies navigation/origins (fail closed)
+   rather than skipping the origin check.
+3. `default_state_readback` fails closed (`HALT`) on empty `expected_state={}` or
+   missing `persisted_state`.
+4. When `PolicyConfig.require_readback_on_write=True`, any write action (matched on
+   action text or resolved bid label) without a non-empty `expected_state` fails
+   closed (`HALT`, reward `0.0`).
 """
 
 from __future__ import annotations
 
 import re
 import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping
+from typing import Any
 from urllib.parse import urlparse
 
 try:  # Optional dependency: adapter runs cleanly without browsergym installed
@@ -46,7 +48,8 @@ EXTERNAL_SEND_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 PII_CREDENTIAL_PATTERNS = re.compile(
-    r"\b(ssn|social\s+security|credit\s+card|cvv|password|api[_ -]?key|secret[_ -]?token|routing\s+number)\b",
+    r"(\b(ssn|social\s+security|credit\s+card|cvv|password|api[_ -]?key|secret[_ -]?token|routing\s+number)\b"
+    r"|\b\d{3}-\d{2}-\d{4}\b|\b(?:\d[ -]*?){13,19}\b)",
     re.IGNORECASE,
 )
 SAFE_READONLY_PATTERNS = re.compile(
@@ -54,14 +57,23 @@ SAFE_READONLY_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 WRITE_ACTION_PATTERNS = re.compile(
-    r"\b(save|submit|create|update|commit|apply|confirm|fill|click\s+save|click\s+submit)\b",
+    r"\b(save|submit|create|update|commit|apply|confirm|click\s+save|click\s+submit)\b",
     re.IGNORECASE,
+)
+
+# Matches BrowserGym high-level bid actions: click('a42'), fill('b7', '...'), press('a42', 'Enter')
+_BID_ACTION_RE = re.compile(
+    r"^\s*(click|dblclick|fill|press|select_option|clear|focus|check|uncheck)\s*\(\s*['\"]([^'\"]+)['\"]",
+    re.IGNORECASE,
+)
+_AXTREE_TXT_LINE_RE = re.compile(
+    r"\[([^\]]+)\]\s+([A-Za-z0-9_-]+)(?:\s+['\"]([^'\"]*)['\"])?"
 )
 
 
 @dataclass(frozen=True)
 class PolicyConfig:
-    """Declarative policy boundary for ST-WebAgentBench / enterprise safety gating."""
+    """Declarative policy boundary for BrowserGym safety gating."""
 
     allowed_origins: tuple[str, ...] = ()
     require_consent_for_financial: bool = True
@@ -131,6 +143,86 @@ def _extract_url_origin(action: str, obs: Mapping[str, Any]) -> str | None:
     return f"{parsed.scheme}://{parsed.netloc}".lower()
 
 
+def _extract_bid_and_verb(action: str) -> tuple[str, str] | None:
+    m = _BID_ACTION_RE.match(action)
+    if not m:
+        return None
+    return m.group(1).lower(), m.group(2).strip()
+
+
+def _ax_val(raw: Any) -> str:
+    if isinstance(raw, Mapping):
+        return str(raw.get("value", "") or "")
+    return str(raw or "")
+
+
+def resolve_bid_label(bid: str, obs: Mapping[str, Any]) -> str | None:
+    """Resolve a BrowserGym element bid to '<role> <name>' from AXTree or properties.
+
+    Returns None when the bid cannot be found in `axtree_object`,
+    `extra_element_properties`, or `axtree_txt`.
+    """
+    # 1. axtree_object (standard BrowserGym CDP AXTree dict)
+    ax_obj = obs.get("axtree_object")
+    if isinstance(ax_obj, Mapping):
+        nodes = ax_obj.get("nodes")
+        if isinstance(nodes, list):
+            for node in nodes:
+                if not isinstance(node, Mapping):
+                    continue
+                node_bid = str(
+                    node.get("browsergym_id")
+                    or node.get("bid")
+                    or node.get("nodeId")
+                    or ""
+                )
+                if node_bid == bid:
+                    role = _ax_val(node.get("role")).strip()
+                    name = _ax_val(node.get("name")).strip()
+                    label = f"{role} {name}".strip()
+                    return label or role or bid
+
+    # 2. extra_element_properties (BrowserGym dict keyed by bid)
+    extra = obs.get("extra_element_properties")
+    if isinstance(extra, Mapping):
+        props = extra.get(bid)
+        if isinstance(props, Mapping):
+            role = str(props.get("role") or props.get("tag") or "").strip()
+            name = str(
+                props.get("name")
+                or props.get("label")
+                or props.get("text")
+                or props.get("aria-label")
+                or ""
+            ).strip()
+            label = f"{role} {name}".strip()
+            if label:
+                return label
+
+    # 3. axtree_txt (BrowserGym flattened AXTree string, e.g. "[a42] button 'Delete account'")
+    ax_txt = obs.get("axtree_txt")
+    if isinstance(ax_txt, str):
+        for match in _AXTREE_TXT_LINE_RE.finditer(ax_txt):
+            if match.group(1).strip() == bid:
+                role = match.group(2).strip()
+                name = (match.group(3) or "").strip()
+                return f"{role} {name}".strip()
+
+    return None
+
+
+def _is_write_action(action: str, obs: Mapping[str, Any]) -> bool:
+    if WRITE_ACTION_PATTERNS.search(action):
+        return True
+    parsed = _extract_bid_and_verb(action)
+    if parsed is not None:
+        _verb, bid = parsed
+        resolved = resolve_bid_label(bid, obs)
+        if resolved and WRITE_ACTION_PATTERNS.search(resolved):
+            return True
+    return False
+
+
 def evaluate_policy(
     action: str,
     obs: Mapping[str, Any],
@@ -139,15 +231,20 @@ def evaluate_policy(
     consent_callback: ConsentCallback | None = None,
 ) -> PolicyDecision:
     """Evaluate an agent action against the policy & consent firewall (fail-closed)."""
-    text = (
-        f"{action} {obs.get('focused_label', '')} {obs.get('target_label', '')}".strip()
-    )
+    origin = _extract_url_origin(action, obs)
+    is_goto = bool(re.match(r"^\s*goto\s*\(", action, re.IGNORECASE))
 
-    # 1. Unauthorized origin / exfiltration navigation check
-    if policy.allowed_origins:
-        origin = _extract_url_origin(action, obs)
+    # 1. Unauthorized origin / exfiltration navigation check (empty allowlist denies)
+    if origin is not None or is_goto:
+        if not policy.allowed_origins:
+            return PolicyDecision(
+                allowed=False,
+                verdict="HALT",
+                reason=f"empty_allowed_origins: denied origin {origin!r}",
+                policy_category="unauthorized_navigation",
+            )
         allowed_set = {o.lower().rstrip("/") for o in policy.allowed_origins}
-        if origin is not None and origin not in allowed_set:
+        if origin is None or origin not in allowed_set:
             return PolicyDecision(
                 allowed=False,
                 verdict="HALT",
@@ -169,7 +266,34 @@ def evaluate_policy(
             policy_category="safe",
         )
 
-    # 3. Destructive operations
+    # 3. Resolve BrowserGym bid to AXTree role/name; fail closed if unresolved
+    resolved_label = ""
+    bid_info = _extract_bid_and_verb(action)
+    if bid_info is not None:
+        _verb, bid = bid_info
+        looked_up = resolve_bid_label(bid, obs)
+        if looked_up is not None:
+            resolved_label = looked_up
+        else:
+            # Fail closed on unresolved bid when obs does not carry an explicit label
+            fallback_label = (
+                f"{obs.get('focused_label', '')} {obs.get('target_label', '')}".strip()
+            )
+            if not fallback_label:
+                return PolicyDecision(
+                    allowed=False,
+                    verdict="ABSTAIN",
+                    reason=f"unresolved_bid: {bid!r} not found in AXTree/properties",
+                    policy_category="unresolved_target",
+                )
+            resolved_label = fallback_label
+
+    text = (
+        f"{action} {resolved_label} {obs.get('focused_label', '')} "
+        f"{obs.get('target_label', '')}"
+    ).strip()
+
+    # 4. Destructive operations
     if policy.block_destructive and DESTRUCTIVE_PATTERNS.search(text):
         return PolicyDecision(
             allowed=False,
@@ -178,7 +302,7 @@ def evaluate_policy(
             policy_category="destructive",
         )
 
-    # 4. PII / credential leakage or unauthorized entry
+    # 5. PII / credential leakage or unauthorized entry
     if policy.block_pii_entry and PII_CREDENTIAL_PATTERNS.search(text):
         return PolicyDecision(
             allowed=False,
@@ -187,7 +311,7 @@ def evaluate_policy(
             policy_category="pii_credential",
         )
 
-    # 5. Financial submit / irreversible payment consent gate
+    # 6. Financial submit / irreversible payment consent gate
     if policy.require_consent_for_financial and FINANCIAL_PATTERNS.search(text):
         if consent_callback is not None and consent_callback(action, "financial"):
             return PolicyDecision(
@@ -203,7 +327,7 @@ def evaluate_policy(
             policy_category="financial",
         )
 
-    # 6. External send / publish consent gate
+    # 7. External send / publish consent gate
     if policy.require_consent_for_external_send and EXTERNAL_SEND_PATTERNS.search(text):
         if consent_callback is not None and consent_callback(action, "external_send"):
             return PolicyDecision(
@@ -228,14 +352,23 @@ def default_state_readback(
     obs: Mapping[str, Any],
     expected_state: Mapping[str, Any],
 ) -> ReadbackResult:
-    """Compare independent persisted state against expected values; fail closed on drift."""
+    """Compare persisted state against non-empty expected values; fail closed on empty or drift."""
+    if not expected_state:
+        return ReadbackResult(
+            verified=False,
+            verdict="HALT",
+            reason="empty_expected_state",
+            mismatches=("expected_state must be non-empty for read-back verification",),
+            observed=obs.get("persisted_state"),
+        )
+
     persisted = obs.get("persisted_state")
     if not isinstance(persisted, Mapping):
         return ReadbackResult(
             verified=False,
             verdict="HALT",
             reason="missing_persisted_state",
-            mismatches=("no independent persisted_state available for read-back",),
+            mismatches=("no persisted_state available for read-back",),
             observed=None,
         )
 
@@ -318,9 +451,10 @@ class OpenAdaptBrowserGymWrapper:
         used_llm: bool = True,
     ) -> tuple[dict[str, Any], float, bool, bool, dict[str, Any]]:
         t0 = time.perf_counter()
+        prior_obs = self.last_obs
         decision = evaluate_policy(
             action,
-            self.last_obs,
+            prior_obs,
             self.policy,
             consent_callback=self.consent_callback,
         )
@@ -348,11 +482,10 @@ class OpenAdaptBrowserGymWrapper:
             )
             return self.last_obs, 0.0, True, False, info
 
+        is_write = _is_write_action(action, prior_obs)
         obs, reward, terminated, truncated, raw_info = self.env.step(action)
         obs_dict = dict(obs)
-        if self.silent_fail_fault and (
-            expected_state is not None or WRITE_ACTION_PATTERNS.search(action)
-        ):
+        if self.silent_fail_fault and (expected_state is not None or is_write):
             obs_dict = inject_silent_fail(obs_dict, self.silent_fail_fault)
 
         self.last_obs = obs_dict
@@ -360,8 +493,21 @@ class OpenAdaptBrowserGymWrapper:
 
         readback: ReadbackResult | None = None
         info = dict(raw_info)
-        if expected_state is not None and self.policy.require_readback_on_write:
-            readback = self.readback_oracle(obs_dict, expected_state)
+        if self.policy.require_readback_on_write and (
+            expected_state is not None or is_write
+        ):
+            if expected_state is None:
+                readback = ReadbackResult(
+                    verified=False,
+                    verdict="HALT",
+                    reason="missing_expected_state_on_write",
+                    mismatches=(
+                        "require_readback_on_write=True requires non-empty expected_state",
+                    ),
+                    observed=obs_dict.get("persisted_state"),
+                )
+            else:
+                readback = self.readback_oracle(obs_dict, expected_state)
             info["openadapt_readback"] = readback.verdict
             info["openadapt_readback_reason"] = readback.reason
             info["openadapt_readback_mismatches"] = list(readback.mismatches)
@@ -428,9 +574,7 @@ class OpenAdaptBrowserGymWrapper:
             is_last = idx == n_actions - 1
             _, reward, terminated, _, info = self.step(
                 act,
-                expected_state=trajectory.expected_state
-                if is_last and trajectory.expected_state
-                else None,
+                expected_state=trajectory.expected_state if is_last else None,
                 used_llm=False,
             )
             final_info = info
