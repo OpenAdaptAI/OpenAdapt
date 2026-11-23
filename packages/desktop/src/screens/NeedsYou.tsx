@@ -41,7 +41,7 @@ interface Notice {
   text: string;
 }
 
-const FIELD_ACRONYMS = new Set(["dob", "dos", "mrn", "ssn", "npi", "id", "icd", "cpt", "zip"]);
+const FIELD_ACRONYMS = new Set(["id", "url", "api", "sku", "po", "dob", "ssn", "ein", "zip"]);
 
 // Short field names apps often use, in the words a person reads.
 const FIELD_NAMES: Record<string, string> = {

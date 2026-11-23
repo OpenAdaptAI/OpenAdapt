@@ -3,3 +3,15 @@ tests/fixtures/seal_view/** -text
 packages/seal-view/test/fixtures/** -text
 # Exact upload bytes; Cloud pins this file's SHA-256.
 packages/flow/tests/fixtures/public_seal/golden_vectors.json -text
+
+# Preserve the exact upstream license bytes, including prose whitespace.
+packages/desktop/src/styles/vendor/semantic-theme/fonts/OFL-*.txt whitespace=-blank-at-eol
+packages/desktop/openadapt_desktop/portal/shell/fonts/OFL-*.txt whitespace=-blank-at-eol
+
+# Hash-bound exports must not change when a checkout enables CRLF conversion.
+packages/desktop/src/styles/vendor/** -text
+packages/desktop/openadapt_desktop/portal/shell/fonts/** -text
+# The plain-file theme generator checks these outputs with stable LF endings.
+packages/desktop/openadapt_desktop/portal/shell/styles.css text eol=lf
+packages/desktop/openadapt_desktop/portal/shell/index.html text eol=lf
+packages/desktop/openadapt_desktop/portal/shell/manifest.webmanifest text eol=lf

@@ -1,0 +1,1 @@
+| Checked later: a save confirmed by a later report or acknowledgment, never counted as done until then | Released ([#1297](https://github.com/OpenAdaptAI/OpenAdapt/pull/1297)) | Synthetic | `SAVED_AWAITING_CHECK` |

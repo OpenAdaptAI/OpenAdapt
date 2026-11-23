@@ -11,9 +11,15 @@ emulates the ``openadapt-flow run`` exit-code contract (0 success / 1 halt /
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
+
+# Session-wide, before any fixture of any scope: no sealing under a key a
+# later test can't open, and never the person's OS keychain.
+os.environ["OPENADAPT_FLOW_KEY_STORE"] = "file"
+os.environ.setdefault("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "test suite: synthetic data")
 
 from openadapt_agent.runner import RunnerConfig
 
@@ -198,3 +204,5 @@ def _isolated_flow_at_rest(tmp_path_factory, monkeypatch):
     )
     monkeypatch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "test suite: synthetic data")
     monkeypatch.delenv("OPENADAPT_FLOW_AT_REST", raising=False)
+    # Never the OS keychain from tests: no dialog, no login-keychain write.
+    monkeypatch.setenv("OPENADAPT_FLOW_KEY_STORE", "file")

@@ -94,7 +94,7 @@ answer `score()` gave.
 | `refused` | zero or penalty | `refused_reward` (default 0.0) |
 | `rejected_policy` | zero or penalty | `rejected_policy_reward` (default 0.0) |
 | `wrong_effect` | zero or penalty | `wrong_effect_reward` (default -1.0) |
-| `escalated_after_effect` | partial credit | `escalated_after_effect_reward` (default 0.5) |
+| `escalated_after_effect` | partial credit | `escalated_after_effect_reward` (default 0) |
 | `reconciliation_required` | unscored | none |
 | `failed_platform` | unscored | none |
 
@@ -109,17 +109,19 @@ failure this contract exists to stop.
 `escalated_after_effect` is an episode where every required effect is in the
 system of record exactly as declared and no forbidden effect is, but the policy
 halted, refused, or was rejected instead of declaring the task done. It earns
-`escalated_after_effect_reward`, default 0.5. The value must be at least 0 and
-below 1, and below `verified_reward`; anything else, including NaN and
-infinity, makes the contract refuse to load.
+`escalated_after_effect_reward`, default 0: a contract that doesn't declare
+it earns nothing for this outcome, so a contract written before the outcome
+existed never starts paying for it. The value must be at least 0 and below 1,
+and below `verified_reward`; anything else, including NaN and infinity, makes
+the contract refuse to load.
 
 The value sets how sure a policy has to be before it declares done rather
 than asks a person. Declaring done earns `verified_reward` (v) when the effect
 is right and `wrong_effect_reward` (w) when it is wrong; asking earns x. Done
 pays more in expectation only when the policy's confidence p satisfies
-p * v + (1 - p) * w > x, that is p > (x - w) / (v - w). With v = 1, w = -1 and
-the default x = 0.5, the threshold is 75%. With x = 0 it is 50%, and with
-x = 0.25 it is 62.5%. A higher x makes the policy ask more often.
+p * v + (1 - p) * w > x, that is p > (x - w) / (v - w). With v = 1 and w = -1,
+the default x = 0 gives a threshold of 50%, x = 0.25 gives 62.5%, and x = 0.5
+gives 75%. A higher x makes the policy ask more often.
 
 An effect that is present but not as declared (a duplicate or a wrong value)
 after the policy stopped is still `reconciliation_required` and unscored, and a

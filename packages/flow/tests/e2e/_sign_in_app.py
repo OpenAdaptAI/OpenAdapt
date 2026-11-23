@@ -1,17 +1,25 @@
 """A synthetic notes app behind a sign-in form, for the wrap sign-in tests.
 
 ``GET /`` shows the sign-in form until the browser holds a session cookie;
-after a correct username and password it shows a notes form. ``GET
+after a correct username and password it shows a notes form. With a
+``totp_secret`` the password leads to a second page that asks for a
+six-digit authenticator code (RFC 6238, one step either side accepted)
+in a field marked ``autocomplete="one-time-code"``. ``GET
 /api/notes`` is an unauthenticated read of the saved notes, which the
 program's read-back uses. Made-up data only; it listens on 127.0.0.1.
 """
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import html
 import json
 import secrets
+import struct
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable
 from urllib.parse import parse_qs
@@ -32,10 +40,35 @@ NOTES = """<!doctype html><html><head><title>Notes</title>
 </table></fieldset></form>{msg}<ul>{items}</ul></body></html>"""
 
 
+CODE_PAGE = """<!doctype html><html><head><title>Notes sign in code</title>
+<style>td{{padding:6px 10px}}td.ctx{{padding-left:120px}}</style></head><body>
+<h1>Notes</h1>{msg}<form method="post" action="/verify"><fieldset><legend>Two-step sign in</legend><table>
+<tr><td><label for="code">Code</label></td><td><input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"></td><td class="ctx">Sign in: enter the code from your authenticator app</td></tr>
+<tr><td></td><td><button type="submit">Verify</button></td><td class="ctx">Sign in: enter the code from your authenticator app</td></tr>
+</table></fieldset></form></body></html>"""
+
+
+def totp(secret_b32: str, at: float | None = None, step: int = 30) -> str:
+    """RFC 6238 six-digit code (HMAC-SHA1)."""
+
+    key = base64.b32decode(secret_b32.upper() + "=" * (-len(secret_b32) % 8))
+    counter = int((time.time() if at is None else at) // step)
+    digest = hmac.new(key, struct.pack(">Q", counter), hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    value = struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF
+    return f"{value % 1_000_000:06d}"
+
+
 class SignInApp:
-    def __init__(self, username: str, password: str) -> None:
+    def __init__(
+        self, username: str, password: str, totp_secret: str | None = None
+    ) -> None:
         self.username = username
         self.password = password
+        self.totp_secret = totp_secret
+        self.pending: set[str] = set()
+        self.codes_accepted = 0
+        self.codes_rejected = 0
         self.records: list[dict[str, object]] = []
         self.sessions: set[str] = set()
         self.sign_ins = 0
@@ -65,13 +98,28 @@ class SignInApp:
                 self.end_headers()
                 self.wfile.write(data)
 
-            def _signed_in(self) -> bool:
+            def _cookie(self, wanted: str) -> str:
                 cookie = self.headers.get("cookie") or ""
                 for part in cookie.split(";"):
                     name, _, value = part.strip().partition("=")
-                    if name == "session" and value in app.sessions:
-                        return True
-                return False
+                    if name == wanted:
+                        return value
+                return ""
+
+            def _signed_in(self) -> bool:
+                return self._cookie("session") in app.sessions
+
+            def _start_session(self) -> None:
+                token = secrets.token_hex(16)
+                with app._lock:
+                    app.sessions.add(token)
+                    app.sign_ins += 1
+                self._send(
+                    303,
+                    "",
+                    location="/",
+                    set_cookie=f"session={token}; Path=/; HttpOnly",
+                )
 
             def _form(self) -> dict[str, str]:
                 length = int(self.headers.get("content-length") or 0)
@@ -93,6 +141,8 @@ class SignInApp:
                     )
                 elif self._signed_in():
                     self._notes()
+                elif self._cookie("pending") in app.pending:
+                    self._send(200, CODE_PAGE.format(msg=""))
                 else:
                     self._send(200, SIGN_IN.format(msg=""))
 
@@ -103,20 +153,44 @@ class SignInApp:
                         form.get("user") == app.username
                         and form.get("pass") == app.password
                     ):
+                        if app.totp_secret is None:
+                            self._start_session()
+                            return
                         token = secrets.token_hex(16)
                         with app._lock:
-                            app.sessions.add(token)
-                            app.sign_ins += 1
+                            app.pending.add(token)
                         self._send(
                             303,
                             "",
                             location="/",
-                            set_cookie=f"session={token}; Path=/; HttpOnly",
+                            set_cookie=f"pending={token}; Path=/; HttpOnly",
                         )
                     else:
                         self._send(
                             401,
                             SIGN_IN.format(msg="<p>Wrong username or password.</p>"),
+                        )
+                elif (
+                    self.path == "/verify"
+                    and app.totp_secret is not None
+                    and self._cookie("pending") in app.pending
+                ):
+                    now = time.time()
+                    code = form.get("code", "")
+                    valid = any(
+                        hmac.compare_digest(code, totp(app.totp_secret, now + d))
+                        for d in (-30, 0, 30)
+                    )
+                    if valid:
+                        with app._lock:
+                            app.pending.discard(self._cookie("pending"))
+                            app.codes_accepted += 1
+                        self._start_session()
+                    else:
+                        with app._lock:
+                            app.codes_rejected += 1
+                        self._send(
+                            401, CODE_PAGE.format(msg="<p>That code is not valid.</p>")
                         )
                 elif self.path == "/save" and self._signed_in():
                     note = form.get("note", "")[:200]
@@ -136,8 +210,10 @@ class SignInApp:
         return Handler
 
 
-def serve(username: str, password: str) -> tuple[str, SignInApp, Callable[[], None]]:
-    app = SignInApp(username, password)
+def serve(
+    username: str, password: str, totp_secret: str | None = None
+) -> tuple[str, SignInApp, Callable[[], None]]:
+    app = SignInApp(username, password, totp_secret)
     server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler())
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

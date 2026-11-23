@@ -120,7 +120,20 @@ def _private_dir(path: Path) -> None:
     os.chmod(path, 0o700)
 
 
+def _in_sealed_run(path: Path) -> bool:
+    from openadapt_flow import sealed_set
+
+    return sealed_set.is_sealed_path(path)
+
+
 def _write_private(path: Path, payload: dict[str, Any]) -> None:
+    if _in_sealed_run(path):
+        # An encrypted run (the default): through its sealed set, ciphertext only.
+        from openadapt_flow import sealed_set
+
+        text = json.dumps(payload, indent=2, sort_keys=True, default=str)
+        sealed_set.write_text(path, text)
+        return
     _private_dir(path.parent)
     staging = path.with_name(f".{path.name}.{os.getpid()}")
     # A leftover staging file would keep its own mode: start from nothing.
@@ -133,6 +146,19 @@ def _write_private(path: Path, payload: dict[str, Any]) -> None:
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, sort_keys=True, default=str)
     os.replace(staging, path)
+
+
+def _mark_compensated(run_dir: Path) -> None:
+    """The store may change from here: the run can't be resumed. Inside an
+    encrypted run the marker goes through its sealed set, never as a stray
+    plaintext file its readers would refuse."""
+    marker = run_dir / COMPENSATED_MARKER
+    if _in_sealed_run(run_dir):
+        from openadapt_flow import sealed_set
+
+        sealed_set.write_bytes(marker, b"")
+        return
+    marker.touch()
 
 
 # ---------------------------------------------------------------------------
@@ -911,7 +937,7 @@ def roll_back(
             break
         sub_dir = run_dir / ROLLBACK_DIRNAME / undo.id
         # From here the store may change: the run can't be resumed.
-        (run_dir / COMPENSATED_MARKER).touch()
+        _mark_compensated(run_dir)
         try:
             if journal is not None:
                 journal.step(entry.step_id, "started")

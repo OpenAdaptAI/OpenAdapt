@@ -1,0 +1,29 @@
+{
+  "case_id": "cr-s04",
+  "facts": {
+    "applicant.date_of_birth": "1986-05-30",
+    "applicant.email": "maren.lindqvist@example.test",
+    "applicant.first_name": "Maren",
+    "applicant.last_name": "Lindqvist",
+    "applicant.license_state": "ID",
+    "applicant.marital_status": "Married",
+    "coverage.bi_limits": "250/500",
+    "coverage.collision_deductible": 500,
+    "coverage.comprehensive_deductible": 500,
+    "driver2.date_of_birth": "1984-02-28",
+    "driver2.first_name": "Tobias",
+    "driver2.last_name": "Lindqvist",
+    "driver2.relationship": "Spouse",
+    "garaging.city": "Brindle Falls",
+    "garaging.state": "ID",
+    "garaging.zip": "83814",
+    "household.driver_count": 2,
+    "vehicle.annual_miles": 11000,
+    "vehicle.commute_miles_one_way": 8,
+    "vehicle.make": "Solenne",
+    "vehicle.model": "Lune",
+    "vehicle.ownership": "own",
+    "vehicle.primary_use": "commute",
+    "vehicle.year": 2020
+  }
+}

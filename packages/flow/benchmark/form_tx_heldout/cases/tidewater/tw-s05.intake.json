@@ -1,0 +1,22 @@
+{
+  "case_id": "tw-s05",
+  "facts": {
+    "applicant.date_of_birth": "1990-03-23",
+    "applicant.email": "delphine.ashgrove@example.test",
+    "applicant.first_name": "Delphine",
+    "applicant.last_name": "Ashgrove",
+    "history.prior_claims_3yr": 2,
+    "household.driver_count": 1,
+    "property.address_line1": "52 Breakwater Ave",
+    "property.city": "Newport",
+    "property.occupancy": "Owner occupied",
+    "property.roof_year": 2015,
+    "property.square_feet": 1660,
+    "property.state": "RI",
+    "property.year_built": 1972,
+    "property.zip": "02840",
+    "vehicle.make": "Solenne",
+    "vehicle.model": "Vida",
+    "vehicle.year": 2024
+  }
+}

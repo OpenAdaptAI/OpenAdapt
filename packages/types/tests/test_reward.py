@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from importlib.resources import files
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -42,7 +43,7 @@ _SIGNATURE = "A" * 86 + "=="
 # Pinned once from the payload below. A change here means the canonical form
 # changed, which breaks every digest a consumer has stored.
 _PINNED_CONTRACT_DIGEST = (
-    "sha256:52eb5a011dabede8b11fdef0da7b0d34ee52a33e3ca9a231e075ff51f67a84ea"
+    "sha256:4dd42acff78802d1815798dfe04b95fe27847b972d348dcdafa7bbabc5d6be15"
 )
 
 
@@ -704,7 +705,7 @@ def test_default_scalar_for_each_scored_outcome() -> None:
     contract = _contract()
     expected = {
         RewardOutcomeV1.VERIFIED: 1.0,
-        RewardOutcomeV1.ESCALATED_AFTER_EFFECT: 0.5,
+        RewardOutcomeV1.ESCALATED_AFTER_EFFECT: 0.0,
         RewardOutcomeV1.HALTED_BEFORE_EFFECT: 0.0,
         RewardOutcomeV1.REFUSED: 0.0,
         RewardOutcomeV1.REJECTED_POLICY: 0.0,
@@ -736,18 +737,86 @@ def test_escalated_after_effect_reward_out_of_range_is_refused(value: float) -> 
 
 def test_escalated_after_effect_reward_must_stay_below_verified() -> None:
     with pytest.raises(ValidationError, match="below verified_reward"):
-        _contract_with_scoring(verified_reward=0.5, escalated_after_effect_reward=0.5)
+        _contract_with_scoring(verified_reward=0.5, escalated_after_effect_reward=0.6)
     contract = _contract_with_scoring(
         verified_reward=0.8, escalated_after_effect_reward=0.4
     )
     assert contract.scoring.escalated_after_effect_reward == 0.4
 
 
+def test_an_undeclared_escalation_earns_nothing() -> None:
+    # A contract written without the field never pays for the new outcome.
+    escalated = RewardOutcomeV1.ESCALATED_AFTER_EFFECT
+    assert _contract().scoring.escalated_after_effect_reward == 0.0
+    assert _contract().scoring.scalar_for(escalated) == 0.0
+    # 0.24.0 accepted any positive verified_reward; 0.24.1 still does.
+    low = _contract_with_scoring(verified_reward=0.5)
+    assert low.scoring.scalar_for(escalated) == 0.0
+    declared = _contract_with_scoring(escalated_after_effect_reward=0.25)
+    assert declared.scoring.escalated_after_effect_credit == 0.25
+    assert declared.scoring.scalar_for(escalated) == 0.25
+    with pytest.raises(ValidationError, match="below verified_reward"):
+        _contract_with_scoring(verified_reward=0.5, escalated_after_effect_reward=0.5)
+
+
+_ISSUED_0_24_0 = Path(__file__).parent / "fixtures" / "reward_issued_0_24_0.json"
+
+
+@pytest.mark.parametrize(
+    "case",
+    json.loads(_ISSUED_0_24_0.read_text(encoding="utf-8"))["cases"],
+    ids=lambda case: case["contract"]["contract_id"],
+)
+def test_contracts_and_certificates_issued_under_0_24_0_verify_unchanged(
+    case: dict[str, object],
+) -> None:
+    """Contracts and certificates openadapt-types 0.24.0 issued (from PyPI).
+
+    A patch release must not move a stored digest: each one parses, hashes
+    to the digest 0.24.0 computed, and its certificate still binds it.
+    """
+
+    contract = RewardContractV1.model_validate(case["contract"])
+    certificate = RewardCertificateV1.model_validate(case["certificate"])
+    assert contract.digest == case["contract_digest"]
+    assert certificate.digest == case["certificate_digest"]
+    assert certificate.reward_contract_digest == contract.digest
+    assert (
+        certificate_state(certificate, 120).value
+        == case["certificate_state_at_update_120"]
+    )
+    # Every outcome 0.24.0 knew scores as it did, and the one it didn't
+    # earns nothing under a contract that never declared it.
+    for outcome, expected in case["scores_tier_2_update_120"].items():
+        scored = score(RewardOutcomeV1(outcome), 2, certificate, 120, contract=contract)
+        assert scored.scalar == expected["scalar"], outcome
+        assert scored.certified == expected["certified"], outcome
+        assert scored.development_only == expected["development_only"], outcome
+        assert list(scored.certification_refusals) == (
+            expected["certification_refusals"]
+        ), outcome
+    escalated = score(
+        RewardOutcomeV1.ESCALATED_AFTER_EFFECT, 2, certificate, 120, contract=contract
+    )
+    assert escalated.scalar == 0.0
+
+
+def test_a_default_contract_serializes_as_0_24_0_did() -> None:
+    # 0.24.0 forbids unknown fields, so a file this version writes must not
+    # carry the new field at its default.
+    case = json.loads(_ISSUED_0_24_0.read_text(encoding="utf-8"))["cases"][0]
+    contract = RewardContractV1.model_validate(case["contract"])
+    assert contract.model_dump(mode="json") == case["contract"]
+    assert "escalated_after_effect_reward" not in contract.scoring.model_dump()
+    custom = _contract_with_scoring(escalated_after_effect_reward=0.25)
+    assert custom.scoring.model_dump()["escalated_after_effect_reward"] == 0.25
+
+
 def test_escalated_after_effect_reward_is_part_of_the_contract_digest() -> None:
-    half = _contract_with_scoring(escalated_after_effect_reward=0.5)
+    zero = _contract_with_scoring(escalated_after_effect_reward=0.0)
     quarter = _contract_with_scoring(escalated_after_effect_reward=0.25)
-    assert half.digest == _contract().digest
-    assert quarter.digest != half.digest
+    assert zero.digest == _contract().digest
+    assert quarter.digest != zero.digest
 
 
 def test_receipt_partial_credit_is_never_negative_or_uncertain() -> None:

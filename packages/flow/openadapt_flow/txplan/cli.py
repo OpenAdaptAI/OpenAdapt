@@ -206,7 +206,8 @@ def cmd_plan(args: argparse.Namespace) -> int:
         )
         return (
             0
-            if result["outcome"] in ("VERIFIED", "ROLLED_BACK", "COMPLETED_UNVERIFIED")
+            if result["outcome"]
+            in ("VERIFIED", "ROLLED_BACK", "COMPLETED_UNVERIFIED", "STOPPED")
             else 1
         )
     except engine.TxRefused as exc:

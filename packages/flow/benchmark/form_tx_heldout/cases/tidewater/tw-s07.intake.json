@@ -1,0 +1,22 @@
+{
+  "case_id": "tw-s07",
+  "facts": {
+    "applicant.date_of_birth": "1972-09-14",
+    "applicant.email": "lucan.abernethy@example.test",
+    "applicant.first_name": "Lucan",
+    "applicant.last_name": "Abernethy",
+    "history.prior_claims_3yr": 0,
+    "household.driver_count": 1,
+    "property.address_line1": "40 Dune Grass Ln",
+    "property.city": "Cannon Beach",
+    "property.occupancy": "Seasonal",
+    "property.roof_year": 2018,
+    "property.square_feet": 1580,
+    "property.state": "OR",
+    "property.year_built": 1999,
+    "property.zip": "97110",
+    "vehicle.make": "Norvik",
+    "vehicle.model": "Polar",
+    "vehicle.year": 2023
+  }
+}
