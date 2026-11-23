@@ -67,7 +67,10 @@ class SealedRollback:
         if not key:
             raise SealedStateError("sealed rollback state needs a key")
         self.run_dir = Path(run_dir)
-        self.key = key
+        from openadapt_flow import sealed_set
+
+        # Inside a version 3 run, the run's own store key (a shred reaches it).
+        self.key = sealed_set.store_passphrase(self.run_dir) or key
         self.dir = self.run_dir / ROLLBACK_DIRNAME
 
     # -- files ------------------------------------------------------------

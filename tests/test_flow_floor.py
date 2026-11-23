@@ -90,6 +90,7 @@ def test_doctor_and_deploy_accept_the_fixed_release() -> None:
     assert Requirement(f"openadapt-flow{_SUPPORTED_FLOW_RANGE}").specifier.contains(
         ACCEPTED
     )
-    # Later Flow 3 releases are accepted; 4 is unknown.
+    # Later Flow 3 and Flow 4 releases are accepted; 5 is unknown.
     assert _supported_flow_version("3.99.0")
-    assert not _supported_flow_version("4.0.0")
+    assert _supported_flow_version("4.0.0")
+    assert not _supported_flow_version("5.0.0")

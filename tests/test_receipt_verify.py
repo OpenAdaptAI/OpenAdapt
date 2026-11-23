@@ -16,6 +16,7 @@ import pytest
 from click.testing import CliRunner
 
 pytest.importorskip("openadapt_flow.receipt_record")
+pytest.importorskip("openadapt_types.receipt")
 
 from openadapt_flow.receipt_record import (  # noqa: E402
     ReceiptRecordError,

@@ -81,7 +81,7 @@
     {
       "source": "clinic_tool_status",
       "repository": "OpenAdaptAI/openadapt-types",
-      "symbol": "openadapt_types/clinic_job.py ClinicToolStatusV1",
+      "symbol": "openadapt_types/managed_job.py ManagedToolStatusV1",
       "read_at": "origin/main 07b8b0c, read 2026-10-09",
       "values": ["VERIFIED", "HALTED", "RECONCILIATION_REQUIRED"]
     },
@@ -459,7 +459,7 @@
       }
     },
     "clinic_tool_status": {
-      "meaning": "The status on a clinic tool result. HALTED here is coarse.",
+      "meaning": "The status on a managed tool result. HALTED here is coarse.",
       "values": {
         "VERIFIED": {
           "result": "done",

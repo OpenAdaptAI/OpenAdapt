@@ -1,7 +1,7 @@
 {
   "manifest_kind": "openadapt-platform-release-manifest",
   "schema_version": "2.0.0",
-  "generated_at": "2026-11-22T14:59:22+00:00",
+  "generated_at": "2026-11-23T15:41:13+00:00",
   "generation": {
     "files": [
       {
@@ -15,16 +15,8 @@
     ]
   },
   "release_selection": {
-    "mode": "explicit-published",
-    "component_versions": {
-      "agent": "2.2.2",
-      "capture": "1.4.0",
-      "desktop": "0.30.6",
-      "flow": "3.4.0",
-      "launcher": "1.23.0",
-      "privacy": "1.1.4",
-      "types": "0.24.0"
-    }
+    "mode": "latest-published",
+    "component_versions": {}
   },
   "components": {
     "launcher": {
@@ -481,7 +473,7 @@
     },
     "desktop": {
       "package": "openadapt-desktop",
-      "version": "0.30.6",
+      "version": "0.31.3",
       "source": "pypi",
       "requires_python": ">=3.11",
       "requires": {
@@ -526,30 +518,30 @@
       ],
       "provenance": {
         "repository": "OpenAdaptAI/OpenAdapt",
-        "release_ref": "openadapt-desktop-v0.30.6",
-        "commit": "36b9a40f9067f42853dc5080187af45d229a6270",
-        "tree": "f05a1ab8bfd91ef2117315405160c60c26bdb120",
-        "url": "https://github.com/OpenAdaptAI/OpenAdapt/tree/openadapt-desktop-v0.30.6/packages/desktop",
+        "release_ref": "openadapt-desktop-v0.31.3",
+        "commit": "6408a90ba79d1295b17a63d9ac806b8dce45f0d8",
+        "tree": "a6ff42dd429a63ef9cab79ad2e49e2a3d013ae0f",
+        "url": "https://github.com/OpenAdaptAI/OpenAdapt/tree/openadapt-desktop-v0.31.3/packages/desktop",
         "source_root": "packages/desktop"
       },
       "artifacts": [
         {
           "type": "bdist_wheel",
-          "filename": "openadapt_desktop-0.30.6-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/4c/39/61b59666565b5cfecccbce3d672554fde010eb5e2547295c9cdaf59a0d1c/openadapt_desktop-0.30.6-py3-none-any.whl",
-          "sha256": "ed14c3debc1f18012d7d77a5ff9fd9a040b11945aaa2e6d755bd8024214ef8d9"
+          "filename": "openadapt_desktop-0.31.3-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/b2/16/c16ff3da422b4746f821097a0ccbaa36dea3d955f9b63c76a8375fd8603d/openadapt_desktop-0.31.3-py3-none-any.whl",
+          "sha256": "720022d24c09a304b29856720aa1fa38c1fe958e9ab35c628a94a7a8a010a89a"
         },
         {
           "type": "sdist",
-          "filename": "openadapt_desktop-0.30.6.tar.gz",
-          "url": "https://files.pythonhosted.org/packages/24/da/1bf224580f287554df94dc0ea46d90b1c90882f82ddafb120aa1fb64649b/openadapt_desktop-0.30.6.tar.gz",
-          "sha256": "abd391fd86d67d6eb4af37a8e7d6e4208c64d9356560d6eaa391c2fc6264d8da"
+          "filename": "openadapt_desktop-0.31.3.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/81/46/e71540fe55d0ae6b479fe38ed21c547e9d4f2dac130d715a6c87aba16e3b/openadapt_desktop-0.31.3.tar.gz",
+          "sha256": "ab4d2a1b53cb4568d5af7b27a5ac8141a80a236543b392fc22de36fd7f0e37f1"
         }
       ]
     },
     "agent": {
       "package": "openadapt-agent",
-      "version": "2.2.2",
+      "version": "2.2.3",
       "source": "pypi",
       "requires_python": "<3.13,>=3.10",
       "requires": {
@@ -582,24 +574,24 @@
       ],
       "provenance": {
         "repository": "OpenAdaptAI/OpenAdapt",
-        "release_ref": "openadapt-agent-v2.2.2",
-        "commit": "d243847de553e737ae18d98f48ecc9dd08bfb3e7",
-        "tree": "f02ccee2c05b599ad2664f1fbce526734b67a659",
-        "url": "https://github.com/OpenAdaptAI/OpenAdapt/tree/openadapt-agent-v2.2.2/packages/agent",
+        "release_ref": "openadapt-agent-v2.2.3",
+        "commit": "26fedfb23459b6b552cca2c7dd13cb35dd1ab6e5",
+        "tree": "12091de4f3ba0fa76dd47ca7465e4d21ed7b1a9d",
+        "url": "https://github.com/OpenAdaptAI/OpenAdapt/tree/openadapt-agent-v2.2.3/packages/agent",
         "source_root": "packages/agent"
       },
       "artifacts": [
         {
           "type": "bdist_wheel",
-          "filename": "openadapt_agent-2.2.2-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/85/40/0b19d42a4254a7f1ad7f74f4eddd97522130f92999e7ae579c961c307e59/openadapt_agent-2.2.2-py3-none-any.whl",
-          "sha256": "a75b7e27cb05559202bcd70529b9a69e5ef787663fa05e4204e26104c0ea697d"
+          "filename": "openadapt_agent-2.2.3-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/90/b7/581c63a25f13417d86e35b41227a85ad88977a3a491a12107076238275ec/openadapt_agent-2.2.3-py3-none-any.whl",
+          "sha256": "9f8e318052fc2df614d43e4ac6fdeeadc83e308e853c1d1376be550356981c8f"
         },
         {
           "type": "sdist",
-          "filename": "openadapt_agent-2.2.2.tar.gz",
-          "url": "https://files.pythonhosted.org/packages/42/16/1b663f7f56f0808f28651f80ccca5674f813aa7ef7adab361e72f39e794e/openadapt_agent-2.2.2.tar.gz",
-          "sha256": "52e94b6f8a30cbb8a78ae363a7a9e224136b045ac8a3f68ec42a93d30daa3cfa"
+          "filename": "openadapt_agent-2.2.3.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/f0/11/63288dc17070b53cb00c110c76d91115bf283ac29fac948e09814b1820b2/openadapt_agent-2.2.3.tar.gz",
+          "sha256": "1ef132277fd24b392e3d7caa2ef603679348a34e02c86d5fa6810da13c5b6573"
         }
       ]
     }
@@ -635,11 +627,11 @@
     },
     "desktop_sidecar": {
       "kind": "frozen-desktop-sidecar",
-      "version": "0.30.6",
+      "version": "0.31.3",
       "source_component": "desktop",
-      "source_ref": "openadapt-desktop-v0.30.6",
-      "lock_url": "https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/openadapt-desktop-v0.30.6/packages/desktop/uv.lock",
-      "lock_sha256": "55a9cb27a7b6e1a5992b424eccb7fc43e358ef924f044665c4927c65d631dd4c",
+      "source_ref": "openadapt-desktop-v0.31.3",
+      "lock_url": "https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/openadapt-desktop-v0.31.3/packages/desktop/uv.lock",
+      "lock_sha256": "b2b7f30f67c5dcc2aee1fefa246be8ca477adad9b099da146cc6eb3a7a13b413",
       "binary": "openadapt-engine",
       "requirements": {
         "openadapt-flow": "==2.4.1",
@@ -656,15 +648,15 @@
     },
     "agent_bridge": {
       "kind": "governed-agent-bridge",
-      "version": "2.2.2",
+      "version": "2.2.3",
       "source_component": "agent",
       "entry_point": "openadapt-agent",
       "requirements": {
-        "openadapt-agent": "==2.2.2",
+        "openadapt-agent": "==2.2.3",
         "openadapt-flow": "<4,>=2.2.0"
       },
       "selected": {
-        "openadapt-agent": "2.2.2",
+        "openadapt-agent": "2.2.3",
         "openadapt-flow": "3.4.0"
       }
     }
@@ -674,7 +666,7 @@
       "scope": "desktop-sidecar-lock",
       "source_role": "desktop",
       "source_package": "openadapt-desktop",
-      "source_version": "0.30.6",
+      "source_version": "0.31.3",
       "target_role": "capture",
       "target_package": "openadapt-capture",
       "requires": ">=1.3.0",
@@ -690,7 +682,7 @@
       "scope": "desktop-sidecar-lock",
       "source_role": "desktop",
       "source_package": "openadapt-desktop",
-      "source_version": "0.30.6",
+      "source_version": "0.31.3",
       "target_role": "flow",
       "target_package": "openadapt-flow",
       "requires": "==2.4.1",
@@ -706,7 +698,7 @@
       "scope": "desktop-sidecar-lock",
       "source_role": "desktop",
       "source_package": "openadapt-desktop",
-      "source_version": "0.30.6",
+      "source_version": "0.31.3",
       "target_role": "privacy",
       "target_package": "openadapt-privacy",
       "requires": ">=1.0.0",
@@ -722,7 +714,7 @@
       "scope": "desktop-sidecar-lock",
       "source_role": "desktop",
       "source_package": "openadapt-desktop",
-      "source_version": "0.30.6",
+      "source_version": "0.31.3",
       "target_role": "types",
       "target_package": "openadapt-types",
       "requires": "<0.25.0,>=0.24.0",
@@ -738,7 +730,7 @@
       "scope": "selected-platform",
       "source_role": "agent",
       "source_package": "openadapt-agent",
-      "source_version": "2.2.2",
+      "source_version": "2.2.3",
       "target_role": "flow",
       "target_package": "openadapt-flow",
       "requires": "<4,>=2.2.0",
@@ -758,7 +750,7 @@
       "scope": "selected-platform",
       "source_role": "agent",
       "source_package": "openadapt-agent",
-      "source_version": "2.2.2",
+      "source_version": "2.2.3",
       "target_role": "privacy",
       "target_package": "openadapt-privacy",
       "requires": ">=1.1.2",
@@ -846,7 +838,7 @@
       "target_role": "agent",
       "target_package": "openadapt-agent",
       "requires": "<3,>=2.1.0",
-      "resolved": "2.2.2",
+      "resolved": "2.2.3",
       "activations": [
         {
           "extras": null,
@@ -1173,7 +1165,7 @@
         ">=0.1.0"
       ],
       "openadapt-flow": [
-        ">=3.4.0,<4.0.0"
+        ">=3.4.0,<5.0.0"
       ],
       "openadapt-grounding": [
         ">=0.1.0"

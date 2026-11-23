@@ -1423,7 +1423,9 @@ def test_program_resume_refuses_a_noncontiguous_checkpoint_history(tmp_path):
     store = CheckpointStore(run_dir)
     checkpoint = store.program_checkpoints()[0]
     path = run_dir / "checkpoints" / "pstate_0001.json"
-    path.write_text(checkpoint.model_copy(update={"seq": 2}).model_dump_json(indent=2))
+    # Through the store's own writer, so the tampered checkpoint replaces the
+    # real one in either form (sealed in an encrypted run, the default).
+    store._write_model(path, checkpoint.model_copy(update={"seq": 2}))
 
     backend = FakeBackend()
     calls_before = verifier.capture_calls
