@@ -276,6 +276,12 @@ RUN_FILES: Final[tuple[FileKind, ...]] = (
     ),
     FileKind(".attended_action.lease", "structural", "an action lease marker"),
     FileKind(
+        "item-approval/approver-root.json",
+        "structural",
+        "the run's approver-root pin: a key fingerprint, key directory and "
+        "roster head, written before the run (no record data)",
+    ),
+    FileKind(
         ".report_run_id",
         "structural",
         "the random UUID that makes reporting this run to Cloud idempotent",

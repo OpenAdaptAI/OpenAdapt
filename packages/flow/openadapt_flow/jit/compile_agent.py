@@ -533,6 +533,10 @@ class Recording:
         self.guard: Optional["TeachGuard"] = None
         self.dispatcher: Optional[RecordingDispatcher] = None
         self._baseline: Optional[list[dict[str, Any]]] = None
+        from contextlib import ExitStack
+
+        #: The capture's plaintext opt-out (see ``__enter__``).
+        self._plaintext = ExitStack()
 
     def __enter__(self) -> "Recording":
         """The JIT cache (recording, draft bundle, signed records) is
@@ -541,15 +545,12 @@ class Recording:
         capture is named on stderr and in the plaintext ledger, and strict
         mode refuses it before anything is recorded. The opt-out lasts for
         this capture only."""
-        from contextlib import ExitStack
-
         from openadapt_flow import at_rest
 
         at_rest.unsealed_write(
             "a JIT draft (its recording and bundle are plaintext by design)",
             self._owner.program_dir,
         )
-        self._plaintext = ExitStack()
         self._plaintext.enter_context(at_rest.opted_out("a JIT draft"))
         try:
             return self._enter_capture()
@@ -566,7 +567,9 @@ class Recording:
         try:
             return self._exit_capture(exc_type, exc, tb)
         finally:
-            self._plaintext.close()
+            plaintext = getattr(self, "_plaintext", None)
+            if plaintext is not None:
+                plaintext.close()
 
     def _enter_capture(self) -> "Recording":
         from openadapt_flow.authoring import AuthoringSession
