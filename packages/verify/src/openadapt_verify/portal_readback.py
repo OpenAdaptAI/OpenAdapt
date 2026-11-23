@@ -51,9 +51,9 @@ _VALID_RELOAD_NAV_TYPES = frozenset({"reload", "fresh_navigation", "new_session"
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 
 _CURRENCY_SYMBOL_TO_CODE = {
-    "$": "USD",
-    "€": "EUR",
-    "£": "GBP",
+    "$": "$",
+    "€": "€",
+    "£": "£",
 }
 _CURRENCY_RE = re.compile(
     r"^\s*([$€£])?\s*([+-]?\d{1,3}(?:,\d{3})*(?:\.\d+)?|[+-]?\d+(?:\.\d+)?)\s*$"
@@ -255,30 +255,48 @@ def normalize_field_value(value: Any, *, field_type: str | None = None) -> str:
 
 
 def _strip_currency_code(norm: str) -> tuple[str | None, str]:
-    m = re.match(r"^([A-Z]{3}):([+-]?\d+\.\d{2})$", norm)
+    m = re.match(r"^([$€£]|[A-Z]{3}):([+-]?\d+\.\d{2})$", norm)
     if m:
         return m.group(1), m.group(2)
     return None, norm
 
 
-def _values_match(norm_exp: str, norm_obs: str) -> bool:
+def _compare_normalized_values(norm_exp: str, norm_obs: str) -> FieldStatus:
+    """Compare normalized values, returning CONFIRMED, REFUTED, or ABSTAIN.
+
+    - Two explicit currencies MUST match currency symbol/code (``$:500.00`` != ``€:500.00``).
+    - When the expected value explicitly names a currency (e.g. ``€:500.00``) and the
+      observed value is bare (``500.00``), return ``ABSTAIN`` rather than blurring currency.
+    - When only the observed value carries a currency symbol (e.g. expected bare ``1000``
+      vs observed ``$:1000.00``), compare quantized numeric amounts.
+    """
     if norm_exp == norm_obs:
-        return True
+        return "CONFIRMED"
     exp_code, exp_num = _strip_currency_code(norm_exp)
     obs_code, obs_num = _strip_currency_code(norm_obs)
-    # Two explicit currencies MUST match currency code (USD:500.00 != EUR:500.00).
     if exp_code is not None and obs_code is not None:
-        return exp_code == obs_code and exp_num == obs_num
-    # If only one side carried a currency symbol (e.g. expected int 1000 vs "$1,000.00"),
-    # compare quantized numeric amounts.
-    if (exp_code is not None) != (obs_code is not None):
+        return (
+            "CONFIRMED" if (exp_code == obs_code and exp_num == obs_num) else "REFUTED"
+        )
+    if exp_code is not None and obs_code is None:
         try:
-            return Decimal(exp_num).quantize(Decimal("0.01")) == Decimal(
-                obs_num
-            ).quantize(Decimal("0.01"))
+            if Decimal(exp_num).quantize(Decimal("0.01")) == Decimal(obs_num).quantize(
+                Decimal("0.01")
+            ):
+                return "ABSTAIN"
         except InvalidOperation:
-            return False
-    return False
+            pass
+        return "REFUTED"
+    if exp_code is None and obs_code is not None:
+        try:
+            if Decimal(exp_num).quantize(Decimal("0.01")) == Decimal(obs_num).quantize(
+                Decimal("0.01")
+            ):
+                return "CONFIRMED"
+        except InvalidOperation:
+            pass
+        return "REFUTED"
+    return "REFUTED"
 
 
 def _compare_fields(
@@ -326,12 +344,13 @@ def _compare_fields(
             norm_exp = normalize_field_value(exp_val, field_type="currency")
 
         norm_obs = normalize_field_value(obs_val, field_type=effective_type)
-        if _values_match(norm_exp, norm_obs):
+        status = _compare_normalized_values(norm_exp, norm_obs)
+        if status == "CONFIRMED":
             confirmed += 1
-            status: FieldStatus = "CONFIRMED"
-        else:
+        elif status == "REFUTED":
             refuted += 1
-            status = "REFUTED"
+        else:
+            abstained += 1
         checks.append(
             FieldCheck(
                 field=fname,
@@ -348,7 +367,7 @@ def _compare_fields(
 
 
 class FreshReloadSummaryOracle:
-    """Verify persisted portal summary fields after an independent fresh reload."""
+    """Verify persisted portal summary fields against freshly reloaded DOM bytes."""
 
     def verify(
         self,
@@ -356,6 +375,7 @@ class FreshReloadSummaryOracle:
         observed_summary_fields: Mapping[str, Any],
         reload_proof: ReloadProof,
         *,
+        summary_dom_bytes: bytes | None = None,
         field_types: Mapping[str, str] | None = None,
     ) -> PortalReadbackResult:
         if not expected_fields:
@@ -383,20 +403,66 @@ class FreshReloadSummaryOracle:
                 abstained_count=len(expected_fields),
             )
 
+        if (
+            not isinstance(summary_dom_bytes, (bytes, bytearray))
+            or not summary_dom_bytes
+        ):
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="UNCERTAIN",
+                channel="fresh_reload_summary",
+                reason="missing_summary_dom_bytes: oracle must compute digest over reloaded DOM bytes",
+                checks=(),
+                confirmed_count=0,
+                refuted_count=0,
+                abstained_count=len(expected_fields),
+            )
+
+        computed_dom_sha = hashlib.sha256(bytes(summary_dom_bytes)).hexdigest()
+        claimed_dom_sha = reload_proof.summary_dom_sha256.strip().lower()
+        if not hmac.compare_digest(computed_dom_sha, claimed_dom_sha):
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="REFUTED",
+                channel="fresh_reload_summary",
+                reason="summary_dom_digest_mismatch",
+                checks=(),
+                confirmed_count=0,
+                refuted_count=0,
+                abstained_count=len(expected_fields),
+                artifact_sha256=computed_dom_sha,
+            )
+
+        dom_text = bytes(summary_dom_bytes).decode("utf-8", errors="replace")
+        dom_text_compact = " ".join(dom_text.split())
+        verified_observed: dict[str, Any] = {}
+        missing_in_dom: dict[str, str] = {}
+        for fname in expected_fields:
+            val = observed_summary_fields.get(fname)
+            if val is None or (isinstance(val, str) and not val.strip()):
+                continue
+            compact_val = " ".join(str(val).strip().split())
+            if compact_val in dom_text_compact:
+                verified_observed[fname] = val
+            else:
+                missing_in_dom[fname] = (
+                    "observed_value_not_present_in_summary_dom_bytes"
+                )
+
         parsed_producer = parse_producer(reload_proof.producer)
-        dom_sha = reload_proof.summary_dom_sha256.strip().lower()
         prov = f"fresh_reload:{parsed_producer.value}:{reload_proof.navigation_type}:{reload_proof.summary_url}"
         checks, confirmed, refuted, abstained = _compare_fields(
             expected_fields,
-            observed_summary_fields,
+            verified_observed,
             field_types=field_types,
+            provenance_map=missing_in_dom,
             default_provenance=prov,
         )
         prov_evidence = {
             "producer": parsed_producer.value,
             "navigation_type": reload_proof.navigation_type,
             "reloaded_at_utc": reload_proof.reloaded_at_utc,
-            "summary_dom_sha256": dom_sha,
+            "summary_dom_sha256": computed_dom_sha,
         }
 
         if refuted > 0:
@@ -409,20 +475,25 @@ class FreshReloadSummaryOracle:
                 confirmed_count=confirmed,
                 refuted_count=refuted,
                 abstained_count=abstained,
-                artifact_sha256=dom_sha,
+                artifact_sha256=computed_dom_sha,
                 provenance_evidence=prov_evidence,
             )
         if abstained > 0:
+            reason = (
+                "observed_value_not_in_dom_bytes"
+                if missing_in_dom
+                else "missing_required_fields"
+            )
             return PortalReadbackResult(
                 verdict="HALT",
                 receipt_verdict="UNCERTAIN",
                 channel="fresh_reload_summary",
-                reason="missing_required_fields",
+                reason=reason,
                 checks=checks,
                 confirmed_count=confirmed,
                 refuted_count=refuted,
                 abstained_count=abstained,
-                artifact_sha256=dom_sha,
+                artifact_sha256=computed_dom_sha,
                 provenance_evidence=prov_evidence,
             )
         return PortalReadbackResult(
@@ -434,7 +505,7 @@ class FreshReloadSummaryOracle:
             confirmed_count=confirmed,
             refuted_count=0,
             abstained_count=0,
-            artifact_sha256=dom_sha,
+            artifact_sha256=computed_dom_sha,
             provenance_evidence=prov_evidence,
         )
 
@@ -479,15 +550,27 @@ def _unescape_pdf_literal(raw: str) -> str:
 
 
 def _extract_text_from_content_stream(stream_bytes: bytes) -> list[str]:
-    """Extract visible text runs from PDF Tj / TJ operators, skipping invisible (3 Tr) runs."""
+    """Extract visible text runs from PDF Tj / TJ operators.
+
+    Tracks ``q``/``Q`` graphics-state save/restore for text rendering mode
+    (``Tr``) and skips invisible text modes ``3 Tr`` (neither fill nor stroke)
+    and ``7 Tr`` (clip-only).
+
+    Known limitation: the stdlib parser does not evaluate fill colour (e.g.
+    white-on-white), size-0 fonts, or off-page coordinates; ``ConfirmationPdfOracle``
+    relies on the independent producer provenance gate to prevent untrusted
+    caller-authored PDFs from reaching ``VERIFIED``.
+    """
     text = stream_bytes.decode("latin-1", errors="ignore")
     lines: list[str] = []
     render_mode = 0
+    state_stack: list[int] = []
 
-    # Match rendering mode `<d> Tr`, single literal `(text) Tj`, and array `[(a) -20 (b)] TJ`.
+    # Match `q`/`Q`, `<d> Tr`, `(text) Tj`, and `[(a) -20 (b)] TJ`.
     # Alternatives inside the TJ array are strictly disjoint (no backtracking).
     token_re = re.compile(
-        r"\b([0-7])\s+Tr\b"
+        r"(?<![A-Za-z0-9_])([qQ])(?![A-Za-z0-9_])"
+        r"|\b([0-7])\s+Tr\b"
         r"|\(((?:\\.|[^\\()])*)\)\s*Tj"
         r"|\[((?:[^\[\]()]|\((?:\\.|[^\\()])*\))*)\]\s*TJ",
         re.DOTALL,
@@ -496,19 +579,25 @@ def _extract_text_from_content_stream(stream_bytes: bytes) -> list[str]:
 
     for m in token_re.finditer(text):
         if m.group(1) is not None:
-            render_mode = int(m.group(1))
-            continue
-        if render_mode == 3:
-            # PDF render mode 3 is invisible text (neither fill nor stroke).
+            if m.group(1) == "q":
+                state_stack.append(render_mode)
+            else:
+                render_mode = state_stack.pop() if state_stack else 0
             continue
         if m.group(2) is not None:
-            val = _unescape_pdf_literal(m.group(2)).strip()
+            render_mode = int(m.group(2))
+            continue
+        if render_mode in (3, 7):
+            # PDF render mode 3 (invisible) and 7 (clip-only) draw no visible glyphs.
+            continue
+        if m.group(3) is not None:
+            val = _unescape_pdf_literal(m.group(3)).strip()
             if val:
                 lines.append(val)
-        elif m.group(3) is not None:
+        elif m.group(4) is not None:
             parts = [
                 _unescape_pdf_literal(lm.group(1))
-                for lm in literal_re.finditer(m.group(3))
+                for lm in literal_re.finditer(m.group(4))
             ]
             joined = "".join(parts).strip()
             if joined:
@@ -758,12 +847,17 @@ class ConfirmationPdfOracle:
             default_provenance=f"pdf:{pdf_sha256[:12]}:missing",
         )
 
-        if ambiguous_fields:
+        if refuted > 0:
+            reason = (
+                f"field_mismatch; ambiguous_duplicate_label: {', '.join(ambiguous_fields)}"
+                if ambiguous_fields
+                else "field_mismatch"
+            )
             return PortalReadbackResult(
                 verdict="HALT",
-                receipt_verdict="UNCERTAIN",
+                receipt_verdict="REFUTED",
                 channel="confirmation_pdf",
-                reason=f"ambiguous_duplicate_label: {', '.join(ambiguous_fields)}",
+                reason=reason,
                 checks=checks,
                 confirmed_count=confirmed,
                 refuted_count=refuted,
@@ -771,12 +865,12 @@ class ConfirmationPdfOracle:
                 artifact_sha256=pdf_sha256,
                 provenance_evidence=prov_evidence,
             )
-        if refuted > 0:
+        if ambiguous_fields:
             return PortalReadbackResult(
                 verdict="HALT",
-                receipt_verdict="REFUTED",
+                receipt_verdict="UNCERTAIN",
                 channel="confirmation_pdf",
-                reason="field_mismatch",
+                reason=f"ambiguous_duplicate_label: {', '.join(ambiguous_fields)}",
                 checks=checks,
                 confirmed_count=confirmed,
                 refuted_count=refuted,

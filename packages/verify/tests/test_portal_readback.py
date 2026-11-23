@@ -15,7 +15,12 @@ from openadapt_verify.portal_readback import (
     normalize_field_value,
 )
 
-_SAMPLE_DOM_SHA = hashlib.sha256(b"<html>summary</html>").hexdigest()
+_SAMPLE_DOM_BYTES = (
+    b"<html><body>"
+    b"Jordan Rivera 03/14/2026 $1,000.00 2000 0 Yes MRN-88041 MRN-88O41 2 \xe2\x82\xac500 500.00"
+    b"</body></html>"
+)
+_SAMPLE_DOM_SHA = hashlib.sha256(_SAMPLE_DOM_BYTES).hexdigest()
 
 
 def _escape_pdf_text(text: str) -> str:
@@ -107,7 +112,9 @@ class TestFreshReloadSummaryOracle:
             "quote_id": "MRN-88041",
         }
 
-        res = oracle.verify(expected, observed, proof)
+        res = oracle.verify(
+            expected, observed, proof, summary_dom_bytes=_SAMPLE_DOM_BYTES
+        )
 
         assert res.verdict == "VERIFIED"
         assert res.receipt_verdict == "CONFIRMED"
@@ -120,6 +127,32 @@ class TestFreshReloadSummaryOracle:
         assert all(c.status == "CONFIRMED" for c in res.checks)
         payload = json.dumps(res.to_dict())
         assert "VERIFIED" in payload
+
+        # Missing summary_dom_bytes, fabricated digest, or value absent from DOM bytes -> HALT
+        res_no_dom = oracle.verify(expected, observed, proof)
+        assert res_no_dom.verdict == "HALT"
+        assert res_no_dom.receipt_verdict == "UNCERTAIN"
+        assert res_no_dom.artifact_sha256 is None
+
+        res_fake_sha = oracle.verify(
+            {"prior_losses": 0},
+            {"prior_losses": 0},
+            _valid_reload_proof(summary_dom_sha256="0" * 64),
+            summary_dom_bytes=_SAMPLE_DOM_BYTES,
+        )
+        assert res_fake_sha.verdict == "HALT"
+        assert res_fake_sha.receipt_verdict == "REFUTED"
+        assert res_fake_sha.reason == "summary_dom_digest_mismatch"
+
+        res_not_in_dom = oracle.verify(
+            {"insured_name": "Phantom Name"},
+            {"insured_name": "Phantom Name"},
+            proof,
+            summary_dom_bytes=_SAMPLE_DOM_BYTES,
+        )
+        assert res_not_in_dom.verdict == "HALT"
+        assert res_not_in_dom.receipt_verdict == "UNCERTAIN"
+        assert res_not_in_dom.reason == "observed_value_not_in_dom_bytes"
 
     def test_untrusted_producer_and_missing_url_or_digest_halt(self) -> None:
         oracle = FreshReloadSummaryOracle()
@@ -161,15 +194,32 @@ class TestFreshReloadSummaryOracle:
         oracle = FreshReloadSummaryOracle()
         proof = _valid_reload_proof(navigation_type="new_session")
         # $500 vs €500 must NOT compare equal
-        res_cur = oracle.verify({"premium": "$500"}, {"premium": "€500"}, proof)
+        res_cur = oracle.verify(
+            {"premium": "$500"},
+            {"premium": "€500"},
+            proof,
+            summary_dom_bytes=_SAMPLE_DOM_BYTES,
+        )
         assert res_cur.verdict == "HALT"
         assert res_cur.receipt_verdict == "REFUTED"
         assert res_cur.refuted_count == 1
+
+        # One-sided currency: expected €500 vs bare 500.00 -> ABSTAIN (HALT / UNCERTAIN), never VERIFIED
+        res_one_sided = oracle.verify(
+            {"premium": "€500"},
+            {"premium": "500.00"},
+            proof,
+            summary_dom_bytes=_SAMPLE_DOM_BYTES,
+        )
+        assert res_one_sided.verdict == "HALT"
+        assert res_one_sided.receipt_verdict == "UNCERTAIN"
+        assert res_one_sided.abstained_count == 1
 
         res = oracle.verify(
             {"prior_losses": 0, "deductible": 1000},
             {"prior_losses": 2, "deductible": "$1,000.00"},
             proof,
+            summary_dom_bytes=_SAMPLE_DOM_BYTES,
         )
         assert res.verdict == "HALT"
         assert res.receipt_verdict == "REFUTED"
@@ -183,6 +233,7 @@ class TestFreshReloadSummaryOracle:
             {"prior_losses": 0, "roof_year": 2018},
             {"prior_losses": 0},
             _valid_reload_proof(),
+            summary_dom_bytes=_SAMPLE_DOM_BYTES,
         )
         assert res.verdict == "HALT"
         assert res.receipt_verdict == "UNCERTAIN"
@@ -195,6 +246,7 @@ class TestFreshReloadSummaryOracle:
             {"policy_ref": "MRN-88041"},
             {"policy_ref": "MRN-88O41"},
             _valid_reload_proof(),
+            summary_dom_bytes=_SAMPLE_DOM_BYTES,
         )
         assert res.verdict == "HALT"
         assert res.receipt_verdict == "REFUTED"
@@ -346,7 +398,22 @@ class TestConfirmationPdfOracle:
         assert res_dup.receipt_verdict == "UNCERTAIN"
         assert "ambiguous_duplicate_label" in res_dup.reason
 
-        # Invisible text (3 Tr) must be ignored and cannot spoof VERIFIED
+        # Refuted + ambiguous MUST report receipt_verdict="REFUTED", never downgrade to UNCERTAIN
+        ref_amb_pdf = store / "ref_amb.pdf"
+        ref_amb_pdf.write_bytes(
+            _make_synthetic_pdf(["Premium: $600", "Policy: P1", "Policy: P2"])
+        )
+        res_ref_amb = oracle.verify(
+            ref_amb_pdf,
+            {"premium": "$500", "policy": "P1"},
+            producer="separate_session",
+        )
+        assert res_ref_amb.verdict == "HALT"
+        assert res_ref_amb.receipt_verdict == "REFUTED"
+        assert res_ref_amb.refuted_count == 1
+        assert "ambiguous_duplicate_label" in res_ref_amb.reason
+
+        # Invisible text (3 Tr and 7 Tr) must be ignored; q/Q restores visible mode after 3 Tr
         inv_pdf = store / "inv.pdf"
         inv_pdf.write_bytes(
             _make_synthetic_pdf(
@@ -358,6 +425,26 @@ class TestConfirmationPdfOracle:
         )
         assert res_inv.verdict == "HALT"
         assert res_inv.receipt_verdict == "REFUTED"
+
+        clip_only_pdf = store / "clip7.pdf"
+        clip_only_pdf.write_bytes(
+            b"%PDF-1.4\n1 0 obj << /Length 36 >>\nstream\nBT 7 Tr (Premium: $500) Tj ET\nendstream\nendobj\n%%EOF\n"
+        )
+        res_clip = oracle.verify(
+            clip_only_pdf, {"premium": "$500"}, producer="separate_session"
+        )
+        assert res_clip.verdict == "HALT"
+        assert "no extractable text streams" in res_clip.reason
+
+        qq_pdf = store / "qq.pdf"
+        qq_pdf.write_bytes(
+            b"%PDF-1.4\n1 0 obj << /Length 64 >>\nstream\n"
+            b"BT q 3 Tr (Premium: $999) Tj Q (Premium: $500) Tj ET\n"
+            b"endstream\nendobj\n%%EOF\n"
+        )
+        res_qq = oracle.verify(qq_pdf, {"premium": "$500"}, producer="separate_session")
+        assert res_qq.verdict == "VERIFIED"
+        assert res_qq.receipt_verdict == "CONFIRMED"
 
     def test_incremental_update_corrupt_flate_and_fetch_digest_mismatch_halt(
         self, tmp_path: Path
@@ -433,8 +520,8 @@ class TestConfirmationPdfOracle:
 
 
 def test_normalize_and_extract_helpers() -> None:
-    assert normalize_field_value("$1,200.50") == "USD:1200.50"
-    assert normalize_field_value("€500") == "EUR:500.00"
+    assert normalize_field_value("$1,200.50") == "$:1200.50"
+    assert normalize_field_value("€500") == "€:500.00"
     assert normalize_field_value(2000) == "2000"
     assert normalize_field_value("03/14/2026") == "2026-03-14"
     assert normalize_field_value("Yes") == "true"
