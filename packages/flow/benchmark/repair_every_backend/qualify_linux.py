@@ -205,7 +205,7 @@ def _record(root: Path, db: Path) -> tuple[Path, dict]:
     save.risk = "irreversible"
     for step in workflow.steps[:-1]:
         step.risk = "reversible"
-    (bundle / "manifest.json").unlink(missing_ok=True)
+    _sealed.unlink(bundle / "manifest.json", missing_ok=True)
     workflow.save(bundle, encrypt=bool(workflow.encrypted))
     workflow = Workflow.load(bundle)
     report = evaluate_policy(workflow, load_policy("clinical-write"))
