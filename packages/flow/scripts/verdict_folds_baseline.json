@@ -773,7 +773,11 @@
     "bool_fold": 2
   },
   "packages/flow/openadapt_flow/learn.py": {
-    "cmp_literal": 3
+    "cmp_literal": 4
+  },
+  "packages/flow/openadapt_flow/learn_probe.py": {
+    "cmp_literal": 1,
+    "bool_fold": 1
   },
   "packages/flow/openadapt_flow/learning/branch_teach.py": {
     "bool_fold": 3
