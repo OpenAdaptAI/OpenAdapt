@@ -673,10 +673,11 @@ jobs:
             openadapt_flow/compiler/loop_authoring.py
 
   flow-default-at-rest:
-    # TEMPORARY (#2423): the whole flow suite under the product default,
-    # encryption at rest on (no plaintext opt-out). Informational while the
-    # results are triaged; it gates nothing.
-    name: flow default at rest (shard ${{ matrix.shard }}/${{ matrix.of }}, informational)
+    # The whole flow suite under the product default: encryption at rest on
+    # (no plaintext opt-out). Required on pull requests. Tests that read or
+    # plant plaintext files directly, and known open limitations, are skipped
+    # in this mode with their reason (tests/default_at_rest_skips.txt, #2423).
+    name: flow default at rest (shard ${{ matrix.shard }}/${{ matrix.of }})
     needs: scope
     # PR and post-merge tiers. The merge queue skips it: a pull request can
     # enter the queue only after packages-gate passed with these shards green
@@ -826,7 +827,6 @@ jobs:
             | python ../../scripts/ci/flow_shards.py --shard "$SHARD" --of "$SHARDS" > "$RUNNER_TEMP/shard.txt"
           wc -l < "$RUNNER_TEMP/shard.txt"
       - name: Test under the default (encrypted) mode
-        continue-on-error: true
         env:
           OPENADAPT_TEST_DEFAULT_AT_REST: "1"
           OPENADAPT_TEST_LANE: fast
@@ -2099,6 +2099,7 @@ jobs:
       - verify-clean-install
       - flow-lint
       - flow-unit
+      - flow-default-at-rest
       - flow-critical
       - flow-onprem-offline
       - flow-agent-frameworks
@@ -2156,6 +2157,7 @@ jobs:
               "verify-clean-install": "verify",
               "flow-lint": "flow",
               "flow-unit": "flow",
+              "flow-default-at-rest": "flow",
               "flow-critical": "flow",
               "flow-onprem-offline": "flow",
               "flow-agent-frameworks": "flow",
@@ -2190,7 +2192,7 @@ jobs:
           # it on its merge with main (packages-gate is required there).
           not_in_queue = {"flow-unit"}
           # PR tier only: checks a pull request's own diff.
-          pr_only = {"desktop-release-intent"}
+          pr_only = {"desktop-release-intent", "flow-default-at-rest"}
           scope = needs["scope"]
           outputs = scope.get("outputs", {})
           bad = {}

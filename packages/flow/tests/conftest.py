@@ -45,20 +45,19 @@ def _skip_default_at_rest(items: list[pytest.Item]) -> None:
     is ``<node id prefix> | <reason>``; a prefix may name a whole file."""
     if not _DEFAULT_AT_REST_SKIPS.is_file():
         return
-    rules: list[tuple[str, str]] = []
+    rules: dict[str, str] = {}
     for line in _DEFAULT_AT_REST_SKIPS.read_text(encoding="utf-8").splitlines():
         if not line.strip() or line.startswith("#"):
             continue
         prefix, _, reason = line.partition(" | ")
-        rules.append((prefix.strip(), reason.strip()))
+        rules[prefix.strip()] = reason.strip()
     for item in items:
-        nodeid = item.nodeid.removeprefix("packages/flow/")
-        for prefix, reason in rules:
-            if (
-                nodeid == prefix
-                or nodeid.startswith(prefix + "::")
-                or (prefix.endswith(".py") and nodeid.startswith(prefix))
-            ):
+        nodeid = item.nodeid.removeprefix("packages/flow/").split("[", 1)[0]
+        parts = nodeid.split("::")
+        # The test itself, its class, or its whole file.
+        for depth in range(len(parts), 0, -1):
+            reason = rules.get("::".join(parts[:depth]))
+            if reason is not None:
                 item.add_marker(pytest.mark.skip(reason=f"default at rest: {reason}"))
                 break
 
