@@ -180,21 +180,21 @@ jobs:
           # Flow depends on the in-tree types, and its `capture` extra is tested
           # against the in-tree capture.
           flow="$(hit "^packages/(flow|capture|types)/|$browser_support|$wf")"
-          # Sub-package path gates on pull requests & queue groups: post-merge
-          # pushes to main, schedules, and dispatches always run the full Flow
-          # surface when flow is selected.
+          # Sub-package gates on pull requests and queue groups; pushes to main,
+          # schedules and dispatches follow `flow`. Encryption at rest is the
+          # default for every store, so any Flow, Types or Capture code change can
+          # regress it; only prose (docs/ and top-level *.md) skips these jobs.
           if [ "$EVENT_NAME" != pull_request ] && [ "$EVENT_NAME" != merge_group ]; then
             flow_at_rest="$flow"
             flow_onprem="$flow"
             flow_agent_frameworks="$flow"
           else
-            # Full 4-shard encrypted suite runs on PRs touching encryption,
-            # storage, recorder, ledger, receipts, rollback, checkpoints, or
-            # durable authority (shard 1 of flow-unit still runs the 21 core
-            # rollback/checkpoint/key/durable tests encrypted on every flow PR).
-            flow_at_rest="$(hit "^packages/flow/.*(sealed_set|at_rest|recorder|ledger|receipt|private_file|encryption|key_hierarchy|rollback|checkpoint|durable|default_at_rest)|^packages/flow/tests/test_.*(at_rest|sealed|encrypt|key_hierarchy|rollback|checkpoint|durable)|$wf")"
-            flow_onprem="$(hit "^packages/flow/(deploy/on-prem/|pyproject\.toml|uv\.lock)|^scripts/ci/locked_install\.py$|$wf")"
-            flow_agent_frameworks="$(hit "^packages/flow/(openadapt_flow/(integrations/agents|agent/|mcp|skill)|ci/crewai|pyproject\.toml|uv\.lock|tests/(test_agent_write_guard|test_agent_framework_|e2e/test_skill_cache_e2e))|^packages/agent/|$wf")"
+            code_changed="$(grep -Ev '^packages/(flow|capture|types)/(docs/|[^/]*\.md$)' <<<"$changed" || true)"
+            hit_code() { if grep -Eq "$1" <<<"$code_changed"; then echo true; else echo false; fi; }
+            flow_code="$(hit_code "^packages/(flow|capture|types)/|$browser_support|$wf")"
+            flow_at_rest="$flow_code"
+            flow_onprem="$flow_code"
+            flow_agent_frameworks="$flow_code"
           fi
           # The types package is the leaf: only its own files re-run it.
           types="$(hit "^packages/types/|$wf")"
@@ -696,15 +696,14 @@ jobs:
 
   flow-default-at-rest:
     # The whole flow suite under the product default: encryption at rest on
-    # (no plaintext opt-out). Path-gated on pull requests to encryption,
-    # storage, recorder, ledger, receipt, rollback, checkpoint, and durable
-    # paths; runs in full on push to main, schedule, and dispatch. Tests that
-    # read or plant plaintext files directly, and known open limitations, are
-    # skipped in this mode with their reason (tests/default_at_rest_skips.txt, #2423).
+    # (no plaintext opt-out). Required on code-changing pull requests (prose-only
+    # Flow PRs skip it via flow_at_rest). Tests that read or plant plaintext files
+    # directly, and known open limitations, are skipped in this mode with their
+    # reason (tests/default_at_rest_skips.txt, #2423).
     name: flow default at rest (shard ${{ matrix.shard }}/${{ matrix.of }})
     needs: scope
-    # Path-gated PR tier + post-merge tier. The merge queue skips it.
-    if: github.event.pull_request.draft != true && github.event_name != 'merge_group' && needs.scope.outputs.flow_at_rest == 'true'
+    # PR tier only (as on main): avoids untriaged nightly e2e under encrypted mode.
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft != true && needs.scope.outputs.flow_at_rest == 'true'
     runs-on: ubuntu-latest
     # The nightly tier (a schedule or a dispatch) also measures coverage,
     # which slows the suite by about a third; it gets 60 minutes.
@@ -715,8 +714,8 @@ jobs:
         # Each shard runs one pytest-xdist worker per vCPU (four on
         # ubuntu-latest) and pays about 35 s of setup. Files are packed by
         # measured time (scripts/ci/flow_shards.py), so the shards finish
-        # together. Pull requests take four shards; main and nightly take two.
-        include: ${{ fromJSON(needs.scope.outputs.flow_unit_shards == '4' && '[{"shard":1,"of":4},{"shard":2,"of":4},{"shard":3,"of":4},{"shard":4,"of":4}]' || '[{"shard":1,"of":2},{"shard":2,"of":2}]') }}
+        # together.
+        include: [{"shard":1,"of":4},{"shard":2,"of":4},{"shard":3,"of":4},{"shard":4,"of":4}]
     defaults:
       run:
         working-directory: packages/flow
@@ -1088,7 +1087,7 @@ jobs:
         # The durable and authority files whose tests read files directly
         # as plaintext are not listed yet (#2423 lists them).
         run: >-
-          pytest -n logical --dist loadfile -q --basetemp=runs/ci-default-at-rest
+          pytest -n logical --dist loadscope -q --basetemp=runs/ci-default-at-rest
           tests/test_rollback.py tests/test_rollback_qualify.py
           tests/test_checkpoint_key_derivations.py tests/test_key_hierarchy.py
           tests/test_at_rest_review_round3.py
@@ -2223,9 +2222,8 @@ jobs:
           # Skipped in the merge queue only: the pull request already passed
           # it on its merge with main (packages-gate is required there).
           not_in_queue = {"flow-unit"}
-          queue_skipped = not_in_queue | {"flow-default-at-rest"}
           # PR tier only: checks a pull request's own diff.
-          pr_only = {"desktop-release-intent"}
+          pr_only = {"desktop-release-intent", "flow-default-at-rest"}
           scope = needs["scope"]
           outputs = scope.get("outputs", {})
           bad = {}
@@ -2243,7 +2241,7 @@ jobs:
               selected = name in selects and outputs.get(selects[name]) == "true"
               off_tier = (
                   ((pr_tier or queue_tier) and name in post_merge_only)
-                  or (queue_tier and name in queue_skipped)
+                  or (queue_tier and name in not_in_queue)
                   or (not pr_tier and name in pr_only)
               )
               if result == "skipped" and selected and not off_tier:

@@ -1,8 +1,8 @@
 name: CodeQL
 
-# SOC 2: SAST (OA-C-24). Static analysis on push to main, weekly schedule, and manual dispatch.
-# Removed from pull_request so PR pushes do not burn 3 runner slots per push on GitHub Free;
-# main pushes, merge_group, weekly schedule, and workflow_dispatch retain full SAST coverage.
+# SOC 2: SAST (OA-C-24). Static analysis on push to main, a weekly schedule and
+# manual dispatch. Not on pull requests: findings surface after merge. The merge
+# queue is disabled, so merge_group does not run today.
 on:
   push:
     branches: [main]
