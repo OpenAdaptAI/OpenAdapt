@@ -26,7 +26,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Callable, Final, Literal, Mapping, Optional
+from typing import Annotated, Any, Callable, Final, Literal, Mapping, Optional
 
 from pydantic import (
     BaseModel,
@@ -39,6 +39,7 @@ from pydantic import (
     model_validator,
 )
 
+from openadapt_flow.local_state_sources import LocalStateSource
 from openadapt_flow.lookup_capabilities import (
     DeclaredSurface,
     declared_surface_problem,
@@ -225,6 +226,8 @@ BUILTIN_EFFECT_KINDS = frozenset(
         "email",
         "document",
         "document-hash",
+        "local-state",
+        "local_state",
         "desktop_readback",
         "desktop-readback",
         "deferred_report",
@@ -306,7 +309,7 @@ class EffectsConfig(BaseModel):
 
     #: ``none`` | ``onscreen`` | ``ui_readback`` | ``rest`` | ``graphql`` |
     #: ``fhir`` | ``sql`` | ``file`` | ``email`` | ``document`` |
-    #: ``document-hash``, or a PLUGIN
+    #: ``document-hash`` | ``local-state``, or a PLUGIN
     #: kind registered under the
     #: ``openadapt_flow.effect_verifiers`` entry-point group (the customer
     #: adapter SDK seam -- see docs/EFFECT_KIT.md). ``onscreen`` is the no-API
@@ -538,6 +541,15 @@ class EffectsConfig(BaseModel):
     root: Optional[str] = None
     glob: str = "*"
 
+    # -- local-state (files and OS settings on this computer) ----------------
+    #: The typed, read-only sources ``kind: local-state`` reads: ``file``
+    #: (contents and SHA-256), ``macos_defaults`` (a preference key) and
+    #: ``windows_registry`` (a registry value). There is no free-form command;
+    #: see :mod:`openadapt_flow.runtime.effects.local_state`.
+    local_state: list[Annotated[LocalStateSource, Field(discriminator="type")]] = Field(
+        default_factory=list
+    )
+
     # -- plugin record-check packs (registered kinds only) --------------------
     #: Non-secret settings for a PLUGIN verifier kind: the per-system record
     #: check a private pack implements (which read endpoint, which record
@@ -690,6 +702,8 @@ class EffectsConfig(BaseModel):
         ):
             if data.get(added, "") is None:
                 data.pop(added, None)
+        if not data.get("local_state"):
+            data.pop("local_state", None)
         return data
 
     @model_validator(mode="after")
@@ -2403,6 +2417,11 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
         ):
             if isinstance(candidate, dict) and candidate.get(added) is None:
                 candidate.pop(added, None)
+    # ``local_state`` defaults to an empty list; omit it unless configured so
+    # existing verifier identities stay unchanged.
+    for holder in [config, *(config.get("candidates") or [])]:
+        if isinstance(holder, dict) and not holder.get("local_state"):
+            holder.pop("local_state", None)
     # The same rule one level down: ``ui_readback.reference`` came later.
     for holder in [config, *(config.get("candidates") or [])]:
         section = holder.get("ui_readback") if isinstance(holder, dict) else None
@@ -2705,6 +2724,18 @@ def _build_effect_verifier_unredacted(
             glob=cfg.glob,
             producer=cfg.artifact_producer,
             acting_roots=cfg.acting_roots,
+        )
+
+    if kind in ("local-state", "local_state"):
+        if not cfg.local_state:
+            raise ValueError(
+                "effects.kind 'local-state' requires effects.local_state "
+                "(the files or settings to read)"
+            )
+        from openadapt_flow.runtime import LocalStateVerifier
+
+        return LocalStateVerifier(
+            list(cfg.local_state), poll_interval_s=cfg.poll_interval_s
         )
 
     if kind == "graphql":

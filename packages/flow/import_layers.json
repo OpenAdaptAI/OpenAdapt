@@ -66,6 +66,7 @@
         "openadapt_flow.deployment",
         "openadapt_flow.form_tx.receipt",
         "openadapt_flow.key_rotation",
+        "openadapt_flow.local_state_sources",
         "openadapt_flow.model_call_evidence",
         "openadapt_flow.model_transport",
         "openadapt_flow.offline_seal",

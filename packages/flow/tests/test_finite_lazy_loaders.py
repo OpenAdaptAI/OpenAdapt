@@ -30,6 +30,11 @@ EXPORTS = (
     ("openadapt_flow.runtime", "is_below_ocr", "openadapt_flow.runtime.resolver"),
     ("openadapt_flow.runtime", "resolve", "openadapt_flow.runtime.resolver"),
     (
+        "openadapt_flow.runtime",
+        "LocalStateVerifier",
+        "openadapt_flow.runtime.effects.local_state",
+    ),
+    (
         "openadapt_flow.runtime.durable",
         "ApprovalRecord",
         "openadapt_flow.runtime.durable.approval",
