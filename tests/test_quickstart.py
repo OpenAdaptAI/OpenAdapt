@@ -330,7 +330,14 @@ def test_finale_has_one_next_step_and_the_rest_behind_more(root):
         "  claude mcp add openadapt -- openadapt agent serve --allow-run"
     )
     assert sum(1 for line in finale if line.startswith("Next: ")) == 1
-    assert "flow record" not in output
+    assert (
+        "  Your own app: openadapt record --backend web --url "
+        "https://your-app.example --out my-task" in finale
+    )
+    assert (
+        '  Playwright/CUA drop-in: with checked_write("verify.yaml", values): ...'
+        "  # from openadapt_verify" in finale
+    )
     assert "More next steps: openadapt quickstart --more" in finale
     assert sum(1 for line in finale if line.startswith("Done in ")) == 1
 
@@ -343,10 +350,9 @@ def test_more_lists_every_other_next_step(root):
         "openadapt -- openadapt agent serve --allow-run"
     )
     joined = "\n".join(lines)
-    assert "Try it on your own app: openadapt flow record --backend web" in joined
-    assert (
-        "Check every receipt again: openadapt verify openadapt-quickstart" in joined
-    )
+    assert "Try it on your own app: openadapt record --backend web" in joined
+    assert 'checked_write("verify.yaml", values)' in joined
+    assert "Check every receipt again: openadapt verify openadapt-quickstart" in joined
     assert "Open your receipt (offline): openadapt-quickstart/run-1/seal.html" in joined
     assert "https://openadapt.ai/seals" in joined
 
@@ -503,7 +509,8 @@ def test_the_finale_names_the_persons_own_seal_then_the_real_ones(root):
         "offline; nothing is uploaded"
     )
     assert (
-        finale[at + 2] == "  Real receipts from OpenEMR runs: https://openadapt.ai/seals"
+        finale[at + 2]
+        == "  Real receipts from OpenEMR runs: https://openadapt.ai/seals"
     )
     # The person's own Seal opens; the side-by-side page does not.
     assert opened == [root / "run-1" / "seal.html"]
@@ -718,14 +725,14 @@ def test_terminal_finale_is_short_with_every_optional_line(root, monkeypatch):
     outcome.runs = [_run(root, index) for index in range(1, 6)]
     steps = NextSteps(
         verify="openadapt seal verify qs",
-        record="openadapt flow record",
+        record="openadapt record --backend web --url https://your-app.example --out my-task",
         agent="openadapt agent serve --allow-run",
         keep="uv tool install --python 3.12 openadapt",
         shadow="Your shell's openadapt is 1.5.1 at /opt/x; the commands above use uvx.",
     )
     RichView(stream, environ={}, width=110, animate=False).finale(outcome, steps)
     lines = [line for line in _visible(stream.getvalue()).splitlines() if line.strip()]
-    assert len(lines) <= 20, lines
+    assert len(lines) <= 22, lines
     assert lines[-1].startswith("Your shell's openadapt is 1.5.1")
     assert "uv tool install" not in "\n".join(lines)
 
@@ -747,7 +754,8 @@ def test_terminal_view_tells_the_story_with_boxes_and_one_next_step(root):
     assert "◆ Your receipt" in text and "●─●─●─●─●─◆" in text
     assert "claude mcp add openadapt -- openadapt agent serve --allow-run" in text
     assert text.count("Next  ") == 1
-    assert "flow record" not in text
+    assert "Your own app: openadapt record --backend web" in text
+    assert 'Playwright/CUA drop-in: with checked_write("verify.yaml", values)' in text
     assert "\x1b]1337;" not in output and "\x1b_G" not in output
 
 
@@ -955,7 +963,11 @@ def test_no_key_is_created_under_the_opt_out(root, monkeypatch, tmp_path):
         ({"LC_TERMINAL": "iTerm2"}, True, ITERM2),
         # WezTerm drew blank rows for the iTerm2 protocol: text unless asked.
         ({"TERM_PROGRAM": "WezTerm"}, True, None),
-        ({"TERM_PROGRAM": "WezTerm", "OPENADAPT_INLINE_IMAGES": "iterm2"}, True, ITERM2),
+        (
+            {"TERM_PROGRAM": "WezTerm", "OPENADAPT_INLINE_IMAGES": "iterm2"},
+            True,
+            ITERM2,
+        ),
         ({"KITTY_WINDOW_ID": "3"}, True, KITTY),
         ({"TERM": "xterm-kitty"}, True, KITTY),
         ({"TERM_PROGRAM": "ghostty"}, True, KITTY),
@@ -1337,3 +1349,78 @@ def test_a_captured_stream_never_opens_the_seal_page():
     assert quickstart._shown(io.StringIO(), lambda: True) is False
     assert quickstart._shown(_Terminal(), lambda: True) is True
     assert quickstart._shown(_Terminal(), lambda: False) is False
+
+
+def test_flow_engine_reports_four_startup_stages(tmp_path, monkeypatch):
+    """FlowEngine emits [1/4]..[4/4] startup milestones so cold starts stay transparent."""
+
+    import contextlib
+    import types
+
+    from openadapt.quickstart.engine import FlowEngine
+
+    stopped = []
+    prewarm_mod = types.ModuleType("openadapt_flow._prewarm")
+    prewarm_mod.start = lambda: None  # type: ignore[attr-defined]
+    browser_mod = types.ModuleType("openadapt_flow.backends._browser_process")
+    browser_mod.shared_browser = (  # type: ignore[attr-defined]
+        lambda *, headless: contextlib.nullcontext()
+    )
+    fault_mod = types.ModuleType("openadapt_flow.mockmed.fault_server")
+    fault_mod.serve = lambda: (  # type: ignore[attr-defined]
+        "http://127.0.0.1:9999",
+        None,
+        lambda: stopped.append(True),
+    )
+
+    flow_pkg = types.ModuleType("openadapt_flow")
+    flow_pkg._prewarm = prewarm_mod  # type: ignore[attr-defined]
+    backends_pkg = types.ModuleType("openadapt_flow.backends")
+    mockmed_pkg = types.ModuleType("openadapt_flow.mockmed")
+
+    for name, mod in (
+        ("openadapt_flow", flow_pkg),
+        ("openadapt_flow._prewarm", prewarm_mod),
+        ("openadapt_flow.backends", backends_pkg),
+        ("openadapt_flow.backends._browser_process", browser_mod),
+        ("openadapt_flow.mockmed", mockmed_pkg),
+        ("openadapt_flow.mockmed.fault_server", fault_mod),
+    ):
+        monkeypatch.setitem(sys.modules, name, mod)
+
+    seen: list[tuple[str, bool]] = []
+    stream = io.StringIO()
+    view = PlainView(stream)
+
+    def record_progress(text: str, milestone: bool) -> None:
+        seen.append((text, milestone))
+        view.setup_progress(text, milestone)
+
+    engine = FlowEngine(tmp_path / "qs", visible=False)
+    engine.set_progress(record_progress)
+    engine._start_runtime()
+    try:
+        assert engine._base_url == "http://127.0.0.1:9999"
+    finally:
+        engine.__exit__(None, None, None)
+
+    assert [m for _, m in seen] == [True, True, True, True]
+    assert [t.split(" ", 1)[0] for t, _ in seen] == ["[1/4]", "[2/4]", "[3/4]", "[4/4]"]
+    rendered = stream.getvalue()
+    assert "[1/4] Loading OpenAdapt runtime" in rendered
+    assert "[4/4] Starting synthetic clinic app" in rendered
+    assert stopped == [True]
+
+
+def test_next_steps_bridge_uses_record_and_checked_write(root):
+    uvx_steps = next_steps(
+        lambda rest: f"uvx --python 3.12 openadapt@latest {rest}",
+        cli._shell_quote,
+        True,
+    )(Outcome(root=root))
+    assert (
+        uvx_steps.record
+        == "uvx --python 3.12 openadapt@latest record --backend web --url "
+        "https://your-app.example --out my-task"
+    )
+    assert 'checked_write("verify.yaml", values)' in uvx_steps.verify_snippet

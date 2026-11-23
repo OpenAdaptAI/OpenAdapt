@@ -443,19 +443,28 @@ class FlowEngine:
         self._base_url: Optional[str] = None
         self._pool: Any = None
         self._starter: Any = None
+        self._progress: Callable[[str, bool], None] = lambda _text, _milestone: None
 
     # -- lifetime ---------------------------------------------------------
 
-    def __enter__(self) -> "FlowEngine":
+    def set_progress(self, progress: Callable[[str, bool], None]) -> None:
+        """Report startup stages while the runtime and browser come up."""
+        self._progress = progress
+
+    def _start_runtime(self) -> "FlowEngine":
+        self._progress("[1/4] Loading OpenAdapt runtime", True)
         from openadapt_flow import _prewarm
         from openadapt_flow.backends._browser_process import shared_browser
         from openadapt_flow.mockmed.fault_server import serve
 
         # Load OCR while the browser starts; compiling and every run use it.
+        self._progress("[2/4] Prewarming OCR engine", True)
         _prewarm.start()
         self.root.mkdir(parents=True, exist_ok=True)
         try:
+            self._progress("[3/4] Starting browser engine", True)
             self._stack.enter_context(shared_browser(headless=not self.visible))
+            self._progress("[4/4] Starting synthetic clinic app", True)
             base_url, _db, stop = serve()
             self._stack.callback(stop)
         except BaseException:
@@ -463,6 +472,9 @@ class FlowEngine:
             raise
         self._base_url = base_url
         return self
+
+    def __enter__(self) -> "FlowEngine":
+        return self._start_runtime()
 
     def __exit__(self, *exc: object) -> None:
         self._stack.close()

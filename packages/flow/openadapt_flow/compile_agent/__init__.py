@@ -39,6 +39,7 @@ from openadapt_flow.compile_agent.pipeline import (
     compile_first_run,
     run_compiled,
     run_compiled_params,
+    run_compiled_tool,
 )
 
 __all__ = [
@@ -63,4 +64,5 @@ __all__ = [
     "compile_first_run",
     "run_compiled",
     "run_compiled_params",
+    "run_compiled_tool",
 ]
