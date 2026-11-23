@@ -241,6 +241,9 @@
     "swallow": 16,
     "swallow_wide": 1
   },
+  "packages/flow/openadapt_flow/backends/one_time_field.py": {
+    "swallow": 6
+  },
   "packages/flow/openadapt_flow/backends/parallels_vm.py": {
     "swallow": 2
   },
@@ -470,7 +473,7 @@
     "cmp_literal": 1
   },
   "packages/flow/openadapt_flow/connector/executor.py": {
-    "cmp_literal": 15,
+    "cmp_literal": 16,
     "swallow": 6,
     "swallow_wide": 1
   },
@@ -1226,6 +1229,12 @@
   "packages/flow/openadapt_flow/runtime/effects/adapter.py": {
     "swallow": 2
   },
+  "packages/flow/openadapt_flow/runtime/effects/api_recheck.py": {
+    "says_success": 4,
+    "cmp_literal": 5,
+    "swallow": 1,
+    "swallow_wide": 1
+  },
   "packages/flow/openadapt_flow/runtime/effects/compensation.py": {
     "swallow": 1
   },
@@ -1356,11 +1365,15 @@
   "packages/flow/openadapt_flow/runtime/remote_vlm.py": {
     "swallow": 4
   },
+  "packages/flow/openadapt_flow/runtime/replay/settling.py": {
+    "swallow": 5,
+    "swallow_wide": 1
+  },
   "packages/flow/openadapt_flow/runtime/replayer.py": {
     "cmp_literal": 26,
     "bool_fold": 12,
-    "swallow": 62,
-    "swallow_wide": 47,
+    "swallow": 57,
+    "swallow_wide": 46,
     "slice_count": 1,
     "empty_change_set": 3
   },
@@ -1368,6 +1381,11 @@
     "cmp_literal": 1,
     "swallow": 3,
     "swallow_wide": 1
+  },
+  "packages/flow/openadapt_flow/runtime/second_factor_step.py": {
+    "says_success": 1,
+    "swallow": 1,
+    "swallow_wide": 3
   },
   "packages/flow/openadapt_flow/runtime/surfaces.py": {
     "swallow": 9,
@@ -1399,6 +1417,13 @@
   },
   "packages/flow/openadapt_flow/seal_timestamp.py": {
     "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/second_factor.py": {
+    "swallow": 2,
+    "swallow_wide": 1
+  },
+  "packages/flow/openadapt_flow/second_factor_terminal.py": {
+    "swallow": 1
   },
   "packages/flow/openadapt_flow/secret_inputs.py": {
     "swallow_wide": 1
@@ -1689,7 +1714,7 @@
   },
   "scripts/ci/check_windows_governed_safety.py": {
     "says_success": 2,
-    "cmp_literal": 5
+    "cmp_literal": 1
   },
   "scripts/ci/flow_shard_measurement.py": {
     "cmp_literal": 1,
