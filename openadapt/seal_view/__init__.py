@@ -62,6 +62,40 @@ def _text(path: Path) -> Optional[str]:
         return None
 
 
+def _artifact_is_file(path: Path) -> bool:
+    """Whether ``path`` exists, inside an encrypted folder too."""
+    from openadapt_flow import sealed_set
+
+    try:
+        return sealed_set.is_file(path)
+    except sealed_set.SealedSetError:
+        return False
+
+
+def _report_bytes(path: Path) -> bytes:
+    """The run report's plaintext bytes: decrypted in memory when the run
+    folder is encrypted. The receipt is over these bytes."""
+    from openadapt_flow import sealed_set
+
+    try:
+        return sealed_set.read_bytes(path)
+    except sealed_set.SealedSetError as exc:
+        raise OSError(str(exc)) from exc
+
+
+def _note_plaintext_page(run_dir: Path, target: Path) -> None:
+    """The page embeds report.json. Beside an encrypted run it is a plaintext
+    copy of the run's inputs: say so and record it (strict mode refuses)."""
+    from openadapt_flow import at_rest, sealed_set
+
+    if not sealed_set.is_sealed_path(run_dir):
+        return
+    try:
+        at_rest.unsealed_write("a receipt page (it embeds the run report)", target)
+    except at_rest.AtRestRefused as exc:
+        raise SealViewError(str(exc)) from exc
+
+
 def _b64(path: Path) -> Optional[str]:
     try:
         return base64.b64encode(path.read_bytes()).decode("ascii")
@@ -121,7 +155,7 @@ def find_program(
     digest = report.get("bundle_content_digest")
     candidates = [Path(bundle_dir)] if bundle_dir else _bundle_candidates(run_dir)
     for candidate in candidates:
-        if not (candidate / "workflow.json").is_file():
+        if not _artifact_is_file(candidate / "workflow.json"):
             continue
         try:
             spec = bundle_graph(candidate)
@@ -238,7 +272,7 @@ def page_data(
     """What the viewer reads: the run's files exactly as they are on disk."""
 
     run_dir = Path(run_dir)
-    report = (run_dir / "report.json").read_bytes()
+    report = _report_bytes(run_dir / "report.json")
     seal = _text(run_dir / "seal.json")
     if seal is None:
         raise SealViewError(f"{run_dir} has no seal.json")
@@ -301,7 +335,7 @@ def write_seal_page(
     if not (run_dir / "seal.json").is_file():
         raise SealViewError(f"{run_dir} is not a sealed run (no seal.json)")
     try:
-        report = json.loads(report_path.read_bytes())
+        report = json.loads(_report_bytes(report_path))
     except (OSError, ValueError) as exc:
         raise SealViewError(f"{report_path} can't be read") from exc
     own_keys = keys is None
@@ -325,6 +359,7 @@ def write_seal_page(
         own_keys=own_keys,
     )
     target = Path(out) if out else run_dir / PAGE_NAME
+    _note_plaintext_page(run_dir, target)
     target.write_text(render_page(data), encoding="utf-8")
     return target
 

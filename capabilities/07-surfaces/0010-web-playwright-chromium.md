@@ -1,0 +1,1 @@
+| Web (Playwright, Chromium) | Released | Real apps on local test copies (OpenEMR, Odoo, Frappe Lending, openIMIS) and Medplum; CI runs in-tree apps on every build | [SURFACES.md](packages/flow/docs/SURFACES.md) |

@@ -1109,8 +1109,24 @@ def _set_aside(compiler: Any) -> Optional[Path]:
     return target
 
 
+def _child_errlog() -> Any:
+    """A live, fd-backed stderr stream for an MCP child, or None if unavailable."""
+
+    for stream in (sys.stderr, sys.__stderr__):
+        if stream is None or getattr(stream, "closed", False):
+            continue
+        try:
+            stream.fileno()
+        except (AttributeError, OSError, ValueError):
+            continue
+        return stream
+    return None
+
+
 async def _call_skill(python: str, server: Path, params: dict[str, Any]) -> dict:
     """Call the compiled task's one tool over MCP (stdio), as a client would."""
+
+    from contextlib import ExitStack
 
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import get_default_environment, stdio_client
@@ -1121,23 +1137,28 @@ async def _call_skill(python: str, server: Path, params: dict[str, Any]) -> dict
     # factor source (and its run token) is what the cached run needs too.
     env = {**get_default_environment(), **source_env()}
     target = StdioServerParameters(command=python, args=[str(server)], env=env)
-    # The child's stderr goes to the stderr in use now. The client's default
-    # is the stream bound when mcp was first imported, which a host (or a
-    # test capture) may have closed since; spawning then fails.
-    async with stdio_client(target, errlog=sys.stderr) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            tools = (await session.list_tools()).tools
-            if len(tools) != 1:
-                raise RuntimeError("a compiled skill's server has exactly one tool")
-            from openadapt_flow.request_binding import request_meta
+    # The child's stderr goes to a live fd-backed stderr stream when one exists
+    # (never a closed stream or an in-memory StringIO such as pytest capsys).
+    with ExitStack() as stack:
+        errlog = _child_errlog()
+        if errlog is None:
+            errlog = stack.enter_context(open(os.devnull, "w", encoding="utf-8"))
+        async with stdio_client(target, errlog=errlog) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                tools = (await session.list_tools()).tools
+                if len(tools) != 1:
+                    raise RuntimeError("a compiled skill's server has exactly one tool")
+                from openadapt_flow.request_binding import request_meta
 
-            metadata = request_meta()
-            if metadata is None:
-                result = await session.call_tool(tools[0].name, params)
-            else:
-                # Unsupported metadata APIs refuse; never retry without context.
-                result = await session.call_tool(tools[0].name, params, meta=metadata)
+                metadata = request_meta()
+                if metadata is None:
+                    result = await session.call_tool(tools[0].name, params)
+                else:
+                    # Unsupported metadata APIs refuse; never retry without context.
+                    result = await session.call_tool(
+                        tools[0].name, params, meta=metadata
+                    )
     # mcp 2 names these fields in snake case, mcp 1 in camel case.
     if getattr(result, "is_error", None) or getattr(result, "isError", None):
         text = " ".join(getattr(c, "text", "") for c in result.content)

@@ -488,6 +488,12 @@ What the wire check doesn't see:
   still held until the page closes, but the run, already over, doesn't
   report it.
 
+The wire check is evidence about what left the browser. It is not a check
+level: a request that matched the declaration says nothing about what the
+server stored, so a run is never `VERIFIED` on the wire check alone. Its
+scope is the channel it observed (the browser context's routes) and the
+request shapes it parsed (form fields and flat JSON).
+
 A page whose own listener changes a field as the form is sent changes what is
 sent after the check, so its save halts even when the demonstration did the
 same: a false halt, in the safe direction. The compiler treats a click on the
@@ -656,6 +662,46 @@ effect path refused. See
 [`EFFECT_VERIFIER.md`](design/EFFECT_VERIFIER.md). This is evidence for the
 mechanism, not proof that a customer-specific effect binding is correct.
 
+The 72-fault table in the README
+([`EFFECT_E2E.md`](../benchmark/effect_e2e/EFFECT_E2E.md)) has two limits
+of its own. Its database is SQLite with two record tables (encounters and
+billing), so "a read of every table" there means two tables; a production
+system has hundreds, and a read path rarely covers them all. And 9 of the 18
+correct saves stopped in every arm: the `timeout` case commits the save but
+the client never learns it, so the write step halts before any read-back
+runs. That is a safe false stop, but it is a false stop, and it counts end-to-end
+run outcomes rather than any one check.
+
+The openIMIS claims result (148 of 149 read back correct) was checked by SQL,
+through a read-only database role on a test copy. It shows the program and
+the check on a real application with database access; it is not evidence for
+a deployment without it.
+
+#### What the guarantee covers without database access
+
+Most deployments give no database or API access. Where the application's own
+screens are then the only independent read (no readable log or export of
+committed data, which can still give level 4; see
+[`RECORDS.md`](RECORDS.md)), the strongest read is a separate session
+(`separate_session`, level 3 in
+[`check_level.py`](../../types/openadapt_types/check_level.py)), and the
+guarantee is narrower:
+
+- it covers the target record, read back in that session;
+- where the application shows an activity or audit log and the program is
+  set up to read it, it also covers the same actor's logged changes within a
+  stated window (with no audit view declared, a collateral edit to another
+  record is not seen);
+- it does not cover other records the log doesn't show, server-side jobs that
+  run after the read, or outbound effects (HL7, message queues, email, a
+  downstream service).
+
+`VERIFIED` there means "as of the read-back time, the separate session showed
+this value". It is not a claim that the value persisted, or that the run
+caused nothing else. The run report names the check level for every save
+with a declared read-back. A legacy step with no declared effect is checked
+only by its screen postcondition and is not graded on the ladder.
+
 #### On-screen read-back (the no-API default oracle) is a consistency signal, not transactional proof
 
 For a GUI-only recording (Citrix / legacy EMR with no reachable read API), the
@@ -702,9 +748,9 @@ grade is `screen_readback`, never `independent_readback`.
 
 **Without a read that is independent of the acting session, the run cannot
 be `VERIFIED`.** That read is either a system-of-record read (REST, FHIR, SQL,
-file; tier 1) or the application's own screens read in a separate signed-in
-session (tier 2): a record page in a separate browser (`ui_readback`), a
-relaunched desktop app or a second RDP session (`fresh_session`, tested on
+or a file the system itself wrote; tier 1) or the application's own screens
+read in a separate signed-in session (tier 2): a record page in a separate
+browser (`ui_readback`), a relaunched desktop app or a second RDP session (`fresh_session`, tested on
 mocks only), or a look-up in a separate desktop, RDP or Citrix session
 (`desktop_readback`, tier 2 with its own RDP logon). None of them goes around
 the application, so none is a system-of-record read, and each has its own
@@ -728,6 +774,14 @@ never `VERIFIED`. Halt-on-doubt is unchanged. This is not live Citrix
 Production evidence; a live ICA/HDX session is a deployment-specific
 qualification. Wire the independent read before paying a sprint for a
 `VERIFIED` outcome.
+
+**A file's producer is declared, not proven.** File, PDF and email checks
+reach tier 1 or 2 only when the configuration declares who wrote the store
+(`artifact_producer`). Flow lowers that claim when it sees a browser download
+folder or a declared acting folder in or around the store, or a symlink out
+of it. It cannot tell a file the acting session saved straight into the store
+under an ordinary name from one the system wrote. The evidence then says
+`producer_source: declared`: the level rests on the configuration.
 
 The reopen itself has limits. It earns the `reopened` level only when its
 navigation contains a recognized state reset; without one it is
@@ -1003,6 +1057,14 @@ postconditions, model requests, effect queries, logs, and reports. Keep those
 observations inside the declared execution boundary and apply storage,
 retention, access, and egress controls there.
 
+Encryption at rest is on by default: recordings, bundles and run
+directories (screenshots, frames, typed values, reports) are ciphertext on
+disk, each under its own data key, wrapped through a per-set bucket key to
+this computer's device key and, in organization mode, the organization's key
+([`phi_at_rest.md`](phi_at_rest.md)). It protects
+files at rest, not a running session: anyone who can run commands as the
+signed-in person can read them, as Flow does.
+
 See [`SANITIZED_ARTIFACTS.md`](SANITIZED_ARTIFACTS.md) for the review and
 exact-hash workflow, [`PRIVACY.md`](PRIVACY.md) for the field-level data map,
 and [`ENTERPRISE_ARCHITECTURE.md`](ENTERPRISE_ARCHITECTURE.md) for component
@@ -1027,13 +1089,19 @@ host hardening, storage encryption, backups, retention, access control,
 monitoring, effect-verifier integration, update validation, and disaster
 recovery.
 
-The repository supplies integrity manifests, optional encryption at rest for
-bundles, web recordings and the run directories of sealed bundles, destination
-policy, local egress checks, and audit primitives. Encryption at rest does not
-cover data in process memory, the target application's own storage, file names
-and sizes, desktop recordings, or commands outside the list in
-[`phi_at_rest.md`](phi_at_rest.md), which refuse sealed input; the key is a
-passphrase in the environment, not a KMS. A content digest
+The repository supplies integrity manifests, encryption at rest by default
+for recordings, bundles and run directories, destination policy, local egress
+checks, and audit primitives. Encryption at rest does not cover data in
+process memory, the target application's own storage, file names and sizes, a
+desktop recording's raw capture session while it records, cross-window
+(`record --surface`) recordings, the receipt page, the logged artifacts in
+[`phi_at_rest.md`](phi_at_rest.md), or commands outside its list, which refuse
+sealed input. Without an organization policy only this computer's device key
+(and a recovery key, if made) opens what it wrote. The device key is a
+software key in the OS keychain (or a 0600 file where there is none) until the
+Secure Enclave and TPM providers are built: code running as the signed-in
+person can use it. Losing it loses the data unless an organization policy or a
+recovery key exists. A content digest
 proves byte identity, not publisher identity. A local hash chain is tamper
 evident against ordinary changes, not tamper proof against an administrator who
 can rewrite it. Local approvals record provenance but are not enterprise-IdP

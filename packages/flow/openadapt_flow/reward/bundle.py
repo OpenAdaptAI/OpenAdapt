@@ -148,7 +148,13 @@ def write_bundle(
             "components": [{"name": "terminal_effect", "weight": 1.0}],
             # The synthetic banner lie yields 0, not the default -1 penalty:
             # this fixture demonstrates "no reward", not a tuned penalty.
-            "scoring": {"wrong_effect_reward": 0.0},
+            # Asking a person after the right record landed earns half the
+            # verified reward. The contract declares it: an undeclared
+            # escalation earns nothing (openadapt-types 0.24.1).
+            "scoring": {
+                "wrong_effect_reward": 0.0,
+                "escalated_after_effect_reward": 0.5,
+            },
             "certificate_policy": {
                 "epsilon": 0.05,
                 "delta": 0.05,

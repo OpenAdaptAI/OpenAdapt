@@ -762,6 +762,7 @@ class FrameVerdict:
                     "learned": {
                         "proposal_sha256": spec.learned.proposal_sha256,
                         "excuses": len(spec.learned.excuses),
+                        "source": spec.learned.source,
                         "used": sorted(self.learned_used),
                     }
                 }
