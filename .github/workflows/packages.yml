@@ -183,11 +183,12 @@ jobs:
           flow="$(hit "^packages/(flow|capture|types)/|$browser_support|$wf")"
           # Sub-package gates on pull requests and queue groups; pushes to main,
           # schedules and dispatches follow `flow`.
-          # On PRs, `flow-unit` already runs all 4 shards + shard-1 encrypted
-          # rollback/checkpoint/key/durable checks. Run the second full 4-shard
-          # `flow-default-at-rest` suite on PRs only when encryption, storage,
-          # durability, sealing, test harness, lockfiles, types, or workflow
-          # files change (and always on push to main for Flow changes).
+          # On PRs, `flow_at_rest` uses a fail-closed deny-list: every code path
+          # under packages/{flow,capture,types}/ selects `flow-default-at-rest`
+          # EXCEPT paths provably outside store/sealing code (chrome_extension,
+          # docs, benchmarks, examples, paper, cli_tasks.py). An AST test in
+          # tests/test_ci_efficiency_gating.py enforces that 100% of importers of
+          # at_rest/sealed_set/crypto/stream_aead/key_hierarchy select true.
           if [ "$EVENT_NAME" != pull_request ] && [ "$EVENT_NAME" != merge_group ]; then
             flow_at_rest="$flow"
             flow_onprem="$flow"
@@ -196,8 +197,10 @@ jobs:
             code_changed="$(grep -Ev '^packages/(flow|capture|types)/(docs/|[^/]*\.md$)' <<<"$changed" || true)"
             hit_code() { if grep -Eq "$1" <<<"$code_changed"; then echo true; else echo false; fi; }
             flow_code="$(hit_code "^packages/(flow|capture|types)/|$browser_support|$wf")"
-            at_rest_paths='^packages/flow/(openadapt_flow/(crypto|stream_aead|key_hierarchy|key_rotation|sealed_set|at_rest|cli_at_rest|cli_local_seal|offline_seal|public_seal|retention|rollback|rollback_durable|recorder|desktop_record|interactive_recorder|receipt_record|bundle_validation|bundle_persistence|bundle_sealing|connector/storage|connector/secrets|runtime/durable/).*|tests/(conftest\.py|default_at_rest_skips\.txt|test_.*(at_rest|crypto|stream_aead|key_hierarchy|key_rotation|sealed|rollback|durable).*)|uv\.lock|pyproject\.toml)$|^packages/types/|^\.github/workflows/packages\.yml$'
-            flow_at_rest="$(hit_code "$at_rest_paths")"
+            at_rest_excluded='^packages/flow/(chrome_extension/|benchmark/|examples/|paper/|docs/|[^/]*\.md$|tests/test_chrome_extension_.*\.py$|openadapt_flow/cli_tasks\.py$)'
+            at_rest_changed="$(grep -Ev "$at_rest_excluded" <<<"$code_changed" || true)"
+            hit_at_rest() { if grep -Eq "$1" <<<"$at_rest_changed"; then echo true; else echo false; fi; }
+            flow_at_rest="$(hit_at_rest "^packages/(flow|capture|types)/|$browser_support|$wf")"
             flow_onprem="$flow_code"
             flow_agent_frameworks="$flow_code"
           fi

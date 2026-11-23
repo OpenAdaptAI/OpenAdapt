@@ -37,6 +37,14 @@ on:
       - packages/flow/openadapt_flow/qualification/**
       - packages/flow/openadapt_flow/ir.py
       - packages/flow/openadapt_flow/contracts.py
+      - packages/flow/openadapt_flow/identity_signals.py
+      - packages/flow/openadapt_flow/record_check_identity.py
+      - packages/flow/openadapt_flow/submit_binding.py
+      - packages/flow/openadapt_flow/verify.py
+      - packages/flow/openadapt_flow/verify_run.py
+      - packages/flow/openadapt_flow/verifier.py
+      - packages/flow/openadapt_flow/action_evidence.py
+      - packages/flow/openadapt_flow/choice_capture.py
       - packages/flow/openadapt_flow/_windows_directory.py
       - packages/flow/openadapt_flow/crypto.py
       - packages/flow/openadapt_flow/at_rest.py

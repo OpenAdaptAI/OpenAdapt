@@ -103,8 +103,16 @@ jobs:
           enable-cache: true
           cache-dependency-glob: .github/ci-tools/uv.lock
 
-      # Cheapest decisive check first: structure, signature honesty, and
-      # repo agreement need no network and cannot be flaky.
+      # Run the offline source-boundary check BEFORE networked manifest checks
+      # so remote manifest drift can never mask a source-boundary violation.
+      # The guard reads its rules from source-policy.public.json (rendered from
+      # the canonical private manifest) and fails closed when that file is
+      # missing or incomplete. Stdlib only: no dependency install.
+      - name: Check open-core source boundary
+        run: python scripts/check_source_boundary.py
+
+      # Cheapest decisive manifest check first: structure, signature honesty,
+      # and repo agreement need no network and cannot be flaky.
       - name: Validate platform manifest structure (offline)
         if: steps.scope.outputs.run == 'true'
         run: python scripts/validate_platform_manifest.py --offline
@@ -115,12 +123,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/validate_platform_manifest.py
-
-      # The guard reads its rules from source-policy.public.json (rendered from
-      # the canonical private manifest) and fails closed when that file is
-      # missing or incomplete. Stdlib only: no dependency install.
-      - name: Check open-core source boundary
-        run: python scripts/check_source_boundary.py
 
       - name: Prove the manifest drift and source boundary guards fail when they should
         # The daily/dispatched production check is intentionally stdlib-only.

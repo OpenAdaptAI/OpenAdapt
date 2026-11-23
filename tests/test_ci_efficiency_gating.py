@@ -127,7 +127,7 @@ def test_packages_workflow_enables_loadscope_and_caches() -> None:
 @pytest.mark.parametrize(
     ("changed_files", "expect_flow", "expect_at_rest", "expect_code"),
     [
-        # Encryption/storage/durable/seal/harness/lock/types/workflow paths MUST select flow_at_rest
+        # Fail-closed deny-list: all Flow/Capture/Types code selects flow_at_rest=true
         (["packages/flow/openadapt_flow/crypto.py"], "true", "true", "true"),
         (["packages/flow/openadapt_flow/stream_aead.py"], "true", "true", "true"),
         (["packages/flow/openadapt_flow/key_rotation.py"], "true", "true", "true"),
@@ -139,16 +139,28 @@ def test_packages_workflow_enables_loadscope_and_caches() -> None:
             "true",
             "true",
         ),
+        (["packages/flow/openadapt_flow/api.py"], "true", "true", "true"),
+        (["packages/flow/openadapt_flow/compiler/distill.py"], "true", "true", "true"),
+        (["packages/capture/openadapt_capture/recorder.py"], "true", "true", "true"),
         (["packages/flow/tests/conftest.py"], "true", "true", "true"),
         (["packages/flow/uv.lock"], "true", "true", "true"),
         (["packages/types/openadapt_types/models.py"], "true", "true", "true"),
         ([".github/workflows/packages.yml"], "true", "true", "true"),
-        # Unrelated Flow code PRs skip the duplicate 4-shard flow-default-at-rest run
-        # (flow-unit shard 1 still runs the 21 core encrypted tests, and push to main runs full suite)
-        (["packages/flow/openadapt_flow/api.py"], "true", "false", "true"),
-        (["packages/flow/openadapt_flow/compiler/distill.py"], "true", "false", "true"),
+        # Provably non-storage Flow paths skip the duplicate 4-shard flow-default-at-rest run
         (["packages/flow/chrome_extension/content.js"], "true", "false", "true"),
-        (["packages/capture/openadapt_capture/recorder.py"], "true", "false", "true"),
+        (
+            ["packages/flow/tests/test_chrome_extension_cws.py"],
+            "true",
+            "false",
+            "true",
+        ),
+        (
+            ["packages/flow/benchmark/canvas_ladder/results.json"],
+            "true",
+            "false",
+            "true",
+        ),
+        (["packages/flow/openadapt_flow/cli_tasks.py"], "true", "false", "true"),
         # Prose-only Flow PRs skip all heavy sub-package jobs
         (["packages/flow/docs/LIMITS.md"], "true", "false", "false"),
         (
@@ -158,11 +170,11 @@ def test_packages_workflow_enables_loadscope_and_caches() -> None:
             "false",
         ),
         (["packages/flow/docs/commands/run.md"], "true", "false", "false"),
-        # Mixed prose + non-storage code selects flow_onprem/agent_frameworks but not flow_at_rest
+        # Mixed prose + code MUST select
         (
             ["packages/flow/docs/LIMITS.md", "packages/flow/openadapt_flow/api.py"],
             "true",
-            "false",
+            "true",
             "true",
         ),
         # Unrelated package PR selects none
@@ -181,6 +193,54 @@ def test_classifier_selects_all_flow_code_and_skips_prose_only_prs(
     assert out["flow_at_rest"] == expect_at_rest
     assert out["flow_onprem"] == expect_code
     assert out["flow_agent_frameworks"] == expect_code
+
+
+def test_every_at_rest_importer_selects_flow_at_rest(tmp_path: Path) -> None:
+    """AST proof: 100% of files importing at-rest/sealing modules select flow_at_rest=true."""
+    import ast
+
+    sensitive = {"at_rest", "sealed_set", "crypto", "stream_aead", "key_hierarchy"}
+    importers: list[str] = []
+    for base in (
+        ROOT / "packages/flow/openadapt_flow",
+        ROOT / "packages/capture/openadapt_capture",
+    ):
+        for py_file in sorted(base.rglob("*.py")):
+            tree = ast.parse(py_file.read_text(encoding="utf-8"))
+            hits = False
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom):
+                    mod_parts = set((node.module or "").split("."))
+                    alias_names = {a.name for a in node.names}
+                    if mod_parts & sensitive or alias_names & sensitive:
+                        hits = True
+                        break
+                elif isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if set(alias.name.split(".")) & sensitive:
+                            hits = True
+                            break
+                    if hits:
+                        break
+            if hits:
+                importers.append(py_file.relative_to(ROOT).as_posix())
+
+    assert importers, "expected at least one at-rest/sealing importer"
+    # Verify every single importer individually selects flow_at_rest=true
+    classify_step = next(
+        s
+        for s in _load("packages.yml")["jobs"]["scope"]["steps"]
+        if s.get("name") == "Classify the change"
+    )
+    m = re.search(r"at_rest_excluded='([^']+)'", classify_step["run"])
+    assert m is not None
+    excluded_re = re.compile(m.group(1))
+    missed = [p for p in importers if excluded_re.search(p)]
+    assert missed == [], f"at-rest importers excluded by deny-list: {missed}"
+    # Spot-check through the full bash classifier on the first, middle, and last importer
+    for sample in {importers[0], importers[len(importers) // 2], importers[-1]}:
+        out = _run_classifier([sample], event_name="pull_request", tmp_path=tmp_path)
+        assert out["flow_at_rest"] == "true", f"{sample} did not select flow_at_rest"
 
 
 @pytest.mark.parametrize(
@@ -393,6 +453,18 @@ def test_desktop_replay_link_check_and_protected_safety_phase2_invariants() -> N
     assert "check-source-boundary" not in pm_jobs
     step_names = [s.get("name") for s in pm_jobs["validate-platform-manifest"]["steps"]]
     assert "Check open-core source boundary" in step_names
+    assert step_names.index("Check open-core source boundary") < step_names.index(
+        "Validate platform manifest against published artifacts"
+    )
+
+    # Safety-core modules stay covered by desktop-replay.yml
+    for safety_mod in (
+        "packages/flow/openadapt_flow/identity_signals.py",
+        "packages/flow/openadapt_flow/verify.py",
+        "packages/flow/openadapt_flow/verify_run.py",
+        "packages/flow/openadapt_flow/record_check_identity.py",
+    ):
+        assert safety_mod in dr_paths
 
 
 def test_fast_checks_classifier_selection(tmp_path: Path) -> None:
