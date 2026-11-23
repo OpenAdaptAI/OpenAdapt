@@ -1,0 +1,1 @@
+| Each package installs on its own within a size budget, checked in CI (privacy without desktop, capture without plotting) | Released ([#1270](https://github.com/OpenAdaptAI/OpenAdapt/pull/1270), [#1271](https://github.com/OpenAdaptAI/OpenAdapt/pull/1271), [#1279](https://github.com/OpenAdaptAI/OpenAdapt/pull/1279)) | CI | `.github/workflows/packages.yml` |

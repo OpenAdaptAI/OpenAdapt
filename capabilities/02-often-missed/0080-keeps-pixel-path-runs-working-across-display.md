@@ -1,0 +1,1 @@
+| Keeps pixel-path runs working across display scaling from 100% to 175% and font smoothing on or off, and stops rather than saves when the record changed. | [benchmark/pixel_scale](packages/flow/benchmark/pixel_scale/README.md) |

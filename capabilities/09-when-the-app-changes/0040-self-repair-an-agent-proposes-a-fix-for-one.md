@@ -1,0 +1,1 @@
+| Self-repair: an agent proposes a fix for one halted click, Flow probes it up to the save without saving, a person approves | Released ([#1265](https://github.com/OpenAdaptAI/OpenAdapt/pull/1265)) | Synthetic (MockMed redesign) | `run --self-repair`, [#1265](https://github.com/OpenAdaptAI/OpenAdapt/pull/1265) |

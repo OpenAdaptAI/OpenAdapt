@@ -1,0 +1,12 @@
+{
+  "note": "Synthetic wire-format vector: secondFactorSeal.ts seals, openadapt_flow.second_factor.open_sealed_code opens. The run key is the P-256 scalar SHA-256(run_key_seed), a public test value.",
+  "run_key_seed": "openadapt second-factor synthetic test vector",
+  "run_public_key": "BCySf7D-DhwAQHNR2R-J_crpTxIR5qzmFOr5uvpqtaXtbuLLUELDofMbLJP3HfgNa_OpUEJCJjLU-eYvQjcMMfc",
+  "request_id": "00000000-0000-4000-8000-0000000000e1",
+  "code": "482913",
+  "sealed": {
+    "epk": "BP0xFqpAGEbwyVaGyOCc-D1ZwPlgcJX-j59awdxgeJ-WE9UaEbCL12YoEs7gONn57C5KT099YyEQcnG0oHEeBs0",
+    "iv": "FnClKR5AzLFoiIqJ",
+    "ciphertext": "VRAiPy3DGbYfhcXGb9p93137b-d7ow"
+  }
+}
