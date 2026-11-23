@@ -134,8 +134,8 @@ class OnlineSubroutineCompiler:
         self.min_repeats = min_repeats
         self.human_demos_used = 0
         self._trace: list[AgentAction] = []
-        self._pattern_counts: dict[tuple[tuple[str, str, str], ...], int] = {}
-        self._compiled_patterns: dict[tuple[tuple[str, str, str], ...], str] = {}
+        self._pattern_counts: dict[tuple[tuple[str, str, str, str], ...], int] = {}
+        self._compiled_patterns: dict[tuple[tuple[str, str, str, str], ...], str] = {}
 
     @property
     def compiled_count(self) -> int:
@@ -159,7 +159,7 @@ class OnlineSubroutineCompiler:
             return None
 
         window = self._trace[-self.min_len :]
-        signature = tuple((a.kind, a.target, a.source_trust) for a in window)
+        signature = tuple((a.kind, a.target, a.payload, a.source_trust) for a in window)
         count = self._pattern_counts.get(signature, 0) + 1
         self._pattern_counts[signature] = count
 

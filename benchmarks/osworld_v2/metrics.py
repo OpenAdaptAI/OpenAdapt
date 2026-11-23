@@ -406,7 +406,10 @@ def _evaluate_two_track_contract() -> TwoTrackContractSummary:
         track_a_human_demos=compiler.human_demos_used,
         track_a_self_compiled_subroutines=compiler.compiled_count,
         track_a_replayed_with_real_checkpoint=replayed_ok,
-        track_b_disjoint_split_verified=True,
+        track_b_disjoint_split_verified=(
+            split.demo_instance_id not in split.eval_instance_ids
+            and len(set(split.eval_instance_ids)) == len(split.eval_instance_ids)
+        ),
         track_b_adaptation=track_b_cfg.to_dict(),
     )
 

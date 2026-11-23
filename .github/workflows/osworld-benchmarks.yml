@@ -13,13 +13,12 @@ on:
           - osworld2
           - os_harm
       mode:
-        description: "Execution mode (contract = deterministic offline, live = OSWorld VM)"
+        description: "Execution mode (contract = deterministic offline synthetic fixture)"
         required: true
         default: contract
         type: choice
         options:
           - contract
-          - live
 
 permissions:
   contents: read

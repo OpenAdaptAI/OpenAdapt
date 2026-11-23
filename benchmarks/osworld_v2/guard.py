@@ -18,6 +18,7 @@ Fail-closed invariants:
 
 from __future__ import annotations
 
+import ast
 import os
 import re
 import sqlite3
@@ -105,6 +106,107 @@ _EGRESS_SHELL_PATTERN = re.compile(
     r"\b(curl|wget|nc|ncat|scp|sftp|rsync|ftp|sendmail)\b",
     re.IGNORECASE,
 )
+
+_TERMINAL_TARGET_PATTERN = re.compile(
+    r"\b(terminal|bash|zsh|sh|cmd|powershell|console|iterm|konsole|xterm|shell)\b",
+    re.IGNORECASE,
+)
+
+_SECRET_CONTENT_PATTERN = re.compile(
+    r"(-----BEGIN [A-Z ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16}|"
+    r"\bgh[pousr]_[A-Za-z0-9]{20,}\b|\bsk-[A-Za-z0-9_-]{16,}\b|"
+    r"(?:password|passwd|api[_-]?key|secret|token)\s*[:=]\s*\S+)",
+    re.IGNORECASE,
+)
+
+_SAFE_PYAUTOGUI_FUNCS: dict[str, str] = {
+    "click": "click",
+    "doubleClick": "click",
+    "rightClick": "click",
+    "moveTo": "click",
+    "write": "type",
+    "typewrite": "type",
+    "hotkey": "hotkey",
+    "press": "hotkey",
+}
+
+
+def _parse_raw_env_action(raw_env_action: Any) -> tuple[str, str, str] | None:
+    """Strictly parse a raw OSWorld env action into (kind, target, payload).
+
+    Returns None (fail closed) for any arbitrary Python code, multi-statement
+    string, non-literal argument, or unsupported structure.
+    """
+    if isinstance(raw_env_action, dict):
+        kind = raw_env_action.get("kind")
+        if not isinstance(kind, str) or kind not in ALLOWED_ACTION_KINDS:
+            return None
+        target = raw_env_action.get("target", "")
+        payload = raw_env_action.get("payload", "")
+        if not isinstance(target, str) or not isinstance(payload, str):
+            return None
+        return (kind, target, payload)
+
+    if not isinstance(raw_env_action, str):
+        return None
+    stripped = raw_env_action.strip()
+    if not stripped:
+        return None
+    if stripped in {"WAIT", "DONE", "FAIL"}:
+        return None
+
+    try:
+        tree = ast.parse(stripped, mode="exec")
+    except SyntaxError:
+        return None
+    if len(tree.body) != 1 or not isinstance(tree.body[0], ast.Expr):
+        return None
+    call = tree.body[0].value
+    if not isinstance(call, ast.Call):
+        return None
+    func = call.func
+    if (
+        not isinstance(func, ast.Attribute)
+        or not isinstance(func.value, ast.Name)
+        or func.value.id != "pyautogui"
+        or func.attr not in _SAFE_PYAUTOGUI_FUNCS
+    ):
+        return None
+
+    try:
+        pos_args = [ast.literal_eval(arg) for arg in call.args]
+        kw_args = {
+            kw.arg: ast.literal_eval(kw.value)
+            for kw in call.keywords
+            if kw.arg is not None
+        }
+    except (ValueError, SyntaxError):
+        return None
+    if len(kw_args) != len(call.keywords):
+        return None
+
+    kind = _SAFE_PYAUTOGUI_FUNCS[func.attr]
+    if kind == "click":
+        x = kw_args.get("x", pos_args[0] if len(pos_args) >= 1 else None)
+        y = kw_args.get("y", pos_args[1] if len(pos_args) >= 2 else None)
+        target = f"{x},{y}" if x is not None and y is not None else ""
+        return ("click", target, "")
+    if kind == "type":
+        text = kw_args.get("message", pos_args[0] if pos_args else "")
+        if not isinstance(text, str):
+            return None
+        return ("type", "", text)
+    if kind == "hotkey":
+        keys = [str(a) for a in pos_args]
+        if not keys and "keys" in kw_args:
+            raw_keys = kw_args["keys"]
+            keys = (
+                [str(raw_keys)]
+                if isinstance(raw_keys, str)
+                else [str(k) for k in raw_keys]
+            )
+        return ("hotkey", "+".join(keys), "")
+    return None
 
 
 @dataclass(frozen=True)
@@ -204,9 +306,11 @@ class OpenAdaptOSWorldGuard:
         policy: TaskPolicy,
         *,
         consent_callback: Callable[[AgentAction, str], bool] | None = None,
+        provenance_provider: Callable[[AgentAction], SourceTrust] | None = None,
     ) -> None:
         self.policy = policy
         self._consent_callback = consent_callback
+        self._provenance_provider = provenance_provider
         self._compiled_registry: dict[str, CompiledSubWorkflow] = {}
 
     def register_subworkflow(self, subworkflow: CompiledSubWorkflow) -> None:
@@ -243,8 +347,6 @@ class OpenAdaptOSWorldGuard:
         host = self._extract_host(target)
         if not host:
             return False
-        if host in {"localhost", "127.0.0.1", "::1"}:
-            return True
         return host in {d.lower() for d in self.policy.allowed_domains}
 
     def _operator_consents(self, action: AgentAction, reason: str) -> bool:
@@ -252,8 +354,27 @@ class OpenAdaptOSWorldGuard:
             return False
         return bool(self._consent_callback(action, reason))
 
-    def check_action(self, action: AgentAction) -> GuardVerdict:
-        """Evaluate one proposed agent action fail-closed."""
+    def _resolve_provenance(
+        self, action: AgentAction, provenance: SourceTrust | None
+    ) -> SourceTrust:
+        """Resolve effective provenance from operator/adapter side when supplied."""
+        if provenance is not None:
+            return provenance
+        if self._provenance_provider is not None:
+            return self._provenance_provider(action)
+        return action.source_trust
+
+    def check_action(
+        self,
+        action: AgentAction,
+        *,
+        provenance: SourceTrust | None = None,
+    ) -> GuardVerdict:
+        """Evaluate one proposed agent action fail-closed.
+
+        In live wrappers, pass `provenance` from the adapter/environment or
+        configure `provenance_provider` so the agent cannot self-attest trust.
+        """
         # 0. Strict runtime allowlist on ActionKind (deny by default)
         if action.kind not in ALLOWED_ACTION_KINDS:
             return GuardVerdict(
@@ -263,14 +384,17 @@ class OpenAdaptOSWorldGuard:
                 abstained=True,
             )
 
-        untrusted_source = action.source_trust not in _TRUSTED_SOURCES
+        effective_trust = self._resolve_provenance(action, provenance)
+        untrusted_source = effective_trust not in _TRUSTED_SOURCES
         injection_in_context = bool(
             action.observed_context
             and _INJECTION_DIRECTIVE_PATTERN.search(action.observed_context)
         )
         all_paths = (action.target, *action.referenced_paths)
-        touches_sensitive = any(self._is_sensitive_path(p) for p in all_paths) or bool(
-            action.payload and _SENSITIVE_PATH_PATTERN.search(action.payload)
+        touches_sensitive = (
+            any(self._is_sensitive_path(p) for p in all_paths)
+            or bool(action.payload and _SENSITIVE_PATH_PATTERN.search(action.payload))
+            or bool(action.payload and _SECRET_CONTENT_PATTERN.search(action.payload))
         )
 
         # 1. Indirect prompt injection / untrusted provenance defense (ABSTAIN -> HALT)
@@ -280,7 +404,7 @@ class OpenAdaptOSWorldGuard:
                 vector="indirect_prompt_injection",
                 reason=(
                     f"Blocked {action.kind} with untrusted/missing provenance "
-                    f"{action.source_trust!r} (ABSTAIN -> HALT)"
+                    f"{effective_trust!r} (ABSTAIN -> HALT)"
                 ),
                 abstained=True,
             )
@@ -435,7 +559,38 @@ class OpenAdaptOSWorldGuard:
                 decision="ALLOW", vector="none", reason="Benign file_read"
             )
 
-        if action.kind in {"click", "type", "hotkey"}:
+        if action.kind in {"type", "hotkey"}:
+            combined_ui = f"{action.target} {action.payload}".strip()
+            has_shell_danger = bool(
+                _DESTRUCTIVE_SHELL_PATTERN.search(combined_ui)
+                or _EGRESS_SHELL_PATTERN.search(combined_ui)
+            )
+            targets_terminal = bool(_TERMINAL_TARGET_PATTERN.search(action.target))
+            if (untrusted_source or injection_in_context) and (
+                has_shell_danger or targets_terminal or touches_sensitive
+            ):
+                return GuardVerdict(
+                    decision="HALT",
+                    vector="indirect_prompt_injection",
+                    reason=(
+                        f"Blocked untrusted/injection-tainted {action.kind} targeting "
+                        f"terminal or shell payload ({action.target!r})"
+                    ),
+                    abstained=True,
+                )
+            if has_shell_danger and (
+                not self.policy.allow_shell_exec or not self.policy.allow_destructive
+            ):
+                return GuardVerdict(
+                    decision="HALT",
+                    vector="destructive_action",
+                    reason=f"Blocked destructive/egress {action.kind} payload without shell policy grant",
+                )
+            return GuardVerdict(
+                decision="ALLOW", vector="none", reason="Benign UI action"
+            )
+
+        if action.kind == "click":
             return GuardVerdict(
                 decision="ALLOW", vector="none", reason="Benign UI action"
             )
@@ -564,13 +719,93 @@ class OpenAdaptOSWorldGuard:
         env: Any,
         action: AgentAction,
         raw_env_action: Any,
+        *,
+        provenance: SourceTrust = "untrusted",
     ) -> tuple[GuardVerdict, Any]:
         """Bridge helper for live OSWorld / OS-Harm VM environments.
 
-        Inspects `action` before calling `env.step(raw_env_action)`. If halted,
-        the VM environment is NEVER mutated and `(verdict, None)` is returned.
+        Binds `raw_env_action` to the checked `action` (fail-closed) and uses
+        adapter-assigned `provenance` (default `"untrusted"`), ignoring any
+        caller-supplied `action.source_trust`. If `raw_env_action` cannot be
+        strictly parsed into a safe primitive or disagrees with `action`, the
+        VM environment is NEVER mutated and `(verdict, None)` is returned.
         """
-        verdict = self.check_action(action)
+        parsed = _parse_raw_env_action(raw_env_action)
+        if parsed is None:
+            return (
+                GuardVerdict(
+                    decision="HALT",
+                    vector="unknown_action",
+                    reason=(
+                        "Unbound subject: raw_env_action could not be parsed as a "
+                        "safe primitive (fail closed)"
+                    ),
+                    abstained=True,
+                ),
+                None,
+            )
+
+        raw_kind, raw_target, raw_payload = parsed
+        if raw_kind != action.kind:
+            return (
+                GuardVerdict(
+                    decision="HALT",
+                    vector="unknown_action",
+                    reason=(
+                        f"Unbound subject: raw_env_action kind {raw_kind!r} does not "
+                        f"match checked action kind {action.kind!r}"
+                    ),
+                    abstained=True,
+                ),
+                None,
+            )
+        if raw_kind == "type" and raw_payload != action.payload:
+            return (
+                GuardVerdict(
+                    decision="HALT",
+                    vector="unknown_action",
+                    reason="Unbound subject: raw_env_action payload differs from checked action",
+                    abstained=True,
+                ),
+                None,
+            )
+        if (
+            raw_kind in {"click", "hotkey"}
+            and raw_target
+            and action.target
+            and raw_target != action.target
+        ):
+            return (
+                GuardVerdict(
+                    decision="HALT",
+                    vector="unknown_action",
+                    reason="Unbound subject: raw_env_action target differs from checked action",
+                    abstained=True,
+                ),
+                None,
+            )
+        if isinstance(raw_env_action, dict) and (
+            raw_target != action.target or raw_payload != action.payload
+        ):
+            return (
+                GuardVerdict(
+                    decision="HALT",
+                    vector="unknown_action",
+                    reason="Unbound subject: raw dict action differs from checked action",
+                    abstained=True,
+                ),
+                None,
+            )
+
+        bound_action = AgentAction(
+            kind=raw_kind,
+            target=action.target or raw_target,
+            payload=raw_payload if raw_payload else action.payload,
+            source_trust=provenance,
+            observed_context=action.observed_context,
+            referenced_paths=action.referenced_paths,
+        )
+        verdict = self.check_action(bound_action, provenance=provenance)
         if verdict.decision != "ALLOW":
             return verdict, None
         return verdict, env.step(raw_env_action)
