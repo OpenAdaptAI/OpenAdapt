@@ -1,0 +1,19 @@
+# Check a macOS Calendar event through a fixed, read-only AppleScript probe.
+# Verifies whether an event matching (calendar_name, title, start_iso) exists.
+schema_version: openadapt.verify/v1
+minimum_effect_strength: independent_system_of_record
+verifier:
+  kind: local-state
+  local_state:
+    - type: macos_calendar_event
+      id: calendar_block
+      calendar_name: Calendar
+      title: OpenAdapt Focus Block
+      start_iso: "2026-11-24T10:00:00"
+frame:
+  target_fields: [present, exists, value]
+effects:
+  - kind: field_equals
+    match: {id: calendar_block}
+    field: value
+    value: "true"

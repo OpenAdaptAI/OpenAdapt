@@ -880,6 +880,52 @@ def _quickstart_own(root: Path, url: Optional[str], watch: bool) -> None:
     default=None,
     help="With --own: your web app's address. Recording opens a browser window.",
 )
+@click.option(
+    "--task",
+    type=click.Choice(["night-shift", "calendar-block"]),
+    default=None,
+    help=(
+        "Built-in OS everyday task (no sample app, no login): "
+        "night-shift (macOS Night Shift / Windows Night Light) or "
+        "calendar-block (parameterized recurring Calendar block)."
+    ),
+)
+@click.option(
+    "--title",
+    default=None,
+    help="With --task calendar-block: Calendar event title.",
+)
+@click.option(
+    "--calendar",
+    "calendar_name",
+    default=None,
+    help="With --task calendar-block: macOS Calendar name (default: Calendar).",
+)
+@click.option(
+    "--start",
+    "start_iso",
+    default=None,
+    help="With --task calendar-block: ISO-8601 start timestamp.",
+)
+@click.option(
+    "--duration",
+    "duration_minutes",
+    type=int,
+    default=None,
+    help="With --task calendar-block: duration in minutes (default: 30).",
+)
+@click.option(
+    "--recurrence",
+    type=click.Choice(["none", "daily", "weekly", "weekdays"]),
+    default=None,
+    help="With --task calendar-block: recurrence cadence (default: weekly).",
+)
+@click.option(
+    "--revert/--no-revert",
+    default=True,
+    show_default=True,
+    help="With --task: emit a revert/undo verification contract to leave the machine clean.",
+)
 @click.option("--headed", is_flag=True, hidden=True)
 @click.option("--headless", is_flag=True, hidden=True)
 @click.option("--break-it", "break_it", is_flag=True, hidden=True)
@@ -895,6 +941,13 @@ def quickstart(
     more: bool,
     own: bool,
     url: Optional[str],
+    task: Optional[str],
+    title: Optional[str],
+    calendar_name: Optional[str],
+    start_iso: Optional[str],
+    duration_minutes: Optional[int],
+    recurrence: Optional[str],
+    revert: bool,
     headed: bool,
     headless: bool,
     break_it: bool,
@@ -923,6 +976,53 @@ def quickstart(
     _require_supported_python()
     if url is not None and not own:
         raise click.UsageError("--url works with --own.")
+    calendar_opts_used = any(
+        opt is not None
+        for opt in (title, calendar_name, start_iso, duration_minutes, recurrence)
+    )
+    if calendar_opts_used and task != "calendar-block":
+        raise click.UsageError(
+            "--title, --calendar, --start, --duration, and --recurrence require "
+            "--task calendar-block."
+        )
+    if task is not None:
+        if own:
+            raise click.UsageError("--task cannot be combined with --own.")
+        from openadapt.quickstart.everyday import (
+            DEFAULT_CALENDAR_NAME,
+            DEFAULT_CALENDAR_TITLE,
+            DEFAULT_DURATION_MINUTES,
+            DEFAULT_RECURRENCE,
+            EverydayTaskError,
+            run_everyday_task,
+        )
+
+        root = _quickstart_root(out)
+        try:
+            run_everyday_task(
+                task,
+                root,
+                title=title if title is not None else DEFAULT_CALENDAR_TITLE,
+                calendar_name=(
+                    calendar_name
+                    if calendar_name is not None
+                    else DEFAULT_CALENDAR_NAME
+                ),
+                start_iso=start_iso,
+                duration_minutes=(
+                    duration_minutes
+                    if duration_minutes is not None
+                    else DEFAULT_DURATION_MINUTES
+                ),
+                recurrence=(
+                    recurrence if recurrence is not None else DEFAULT_RECURRENCE
+                ),
+                revert=revert,
+                say=click.echo,
+            )
+        except EverydayTaskError as error:
+            raise click.ClickException(str(error)) from error
+        return
     if own:
         _quickstart_own(_quickstart_root(out), url, watch or headed)
         return

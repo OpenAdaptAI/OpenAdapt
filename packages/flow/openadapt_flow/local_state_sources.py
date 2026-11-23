@@ -9,6 +9,7 @@ importing the verifier. The verifier is
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from typing import Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -16,7 +17,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 __all__ = [
     "FileSource",
     "LocalStateSource",
+    "MacosCalendarEventSource",
     "MacosDefaultsSource",
+    "MacosNightShiftSource",
+    "WindowsNightLightSource",
     "WindowsRegistrySource",
 ]
 
@@ -93,4 +97,54 @@ class WindowsRegistrySource(_Source):
         return value
 
 
-LocalStateSource = Union[FileSource, MacosDefaultsSource, WindowsRegistrySource]
+class MacosNightShiftSource(_Source):
+    """Current macOS Night Shift enabled state via CoreBrightness (read-only)."""
+
+    type: Literal["macos_night_shift"] = "macos_night_shift"
+
+
+class WindowsNightLightSource(_Source):
+    """Current Windows Night Light enabled state via CloudStore registry Data bytes."""
+
+    type: Literal["windows_night_light"] = "windows_night_light"
+
+
+class MacosCalendarEventSource(_Source):
+    """Read-only check for a macOS Calendar event matching calendar, title, and start."""
+
+    type: Literal["macos_calendar_event"] = "macos_calendar_event"
+    calendar_name: str = Field(min_length=1, max_length=255)
+    title: str = Field(min_length=1, max_length=255)
+    #: ISO-8601 start timestamp (e.g. ``2026-11-24T10:00:00``).
+    start_iso: str = Field(min_length=10, max_length=64)
+
+    @field_validator("calendar_name", "title")
+    @classmethod
+    def _check_safe_text(cls, value: str) -> str:
+        if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in value):
+            raise ValueError(
+                "macos_calendar_event text fields must not contain control characters"
+            )
+        return value
+
+    @field_validator("start_iso")
+    @classmethod
+    def _check_start_iso(cls, value: str) -> str:
+        normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+        try:
+            datetime.fromisoformat(normalized)
+        except ValueError as exc:
+            raise ValueError(
+                "macos_calendar_event start_iso must be a valid ISO-8601 timestamp"
+            ) from exc
+        return value
+
+
+LocalStateSource = Union[
+    FileSource,
+    MacosDefaultsSource,
+    WindowsRegistrySource,
+    MacosNightShiftSource,
+    WindowsNightLightSource,
+    MacosCalendarEventSource,
+]

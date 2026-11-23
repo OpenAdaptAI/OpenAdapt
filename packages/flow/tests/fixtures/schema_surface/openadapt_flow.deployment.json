@@ -1069,7 +1069,7 @@
       "type": "object"
      },
      "AuthRef": {
-      "description": "A reference to an HTTP credential held OUTSIDE the config.\n\nExactly one auth style may be set:\n\n- ``bearer_env`` -- name of an env var holding a bearer token; resolves to\n  ``Authorization: Bearer <token>``.\n- ``header`` + ``value_env`` -- an arbitrary auth header (e.g.\n  ``X-API-Key``) whose VALUE comes from the named env var. Frappe-style\n  ``Authorization: token <key>:<secret>`` fits here too (put the whole\n  value in the env var).\n- ``basic_env`` -- name of an env var holding ``user:password``; resolves\n  to ``Authorization: Basic <base64>``.\n\nNo field ever holds the secret itself -- only the env var NAME.",
+      "description": "A reference to an HTTP credential held OUTSIDE the config.\n\nExactly one auth style may be set:\n\n- ``bearer_env`` -- name of an env var holding a bearer token; resolves to\n  ``Authorization: Bearer <token>``.\n- ``header`` + ``value_env`` -- an arbitrary auth header (e.g.\n  ``X-API-Key``) whose VALUE comes from the named env var. Token-pair\n  ``Authorization: token <key>:<secret>`` fits here too (put the whole\n  value in the env var).\n- ``basic_env`` -- name of an env var holding ``user:password``; resolves\n  to ``Authorization: Basic <base64>``.\n\nNo field ever holds the secret itself -- only the env var NAME.",
       "properties": {
        "bearer_env": {
         "anyOf": [
@@ -2413,7 +2413,10 @@
          "discriminator": {
           "mapping": {
            "file": "#/$defs/FileSource",
+           "macos_calendar_event": "#/$defs/MacosCalendarEventSource",
            "macos_defaults": "#/$defs/MacosDefaultsSource",
+           "macos_night_shift": "#/$defs/MacosNightShiftSource",
+           "windows_night_light": "#/$defs/WindowsNightLightSource",
            "windows_registry": "#/$defs/WindowsRegistrySource"
           },
           "propertyName": "type"
@@ -2427,6 +2430,15 @@
           },
           {
            "$ref": "#/$defs/WindowsRegistrySource"
+          },
+          {
+           "$ref": "#/$defs/MacosNightShiftSource"
+          },
+          {
+           "$ref": "#/$defs/WindowsNightLightSource"
+          },
+          {
+           "$ref": "#/$defs/MacosCalendarEventSource"
           }
          ]
         },
@@ -3247,6 +3259,48 @@
       "title": "IdentitySection",
       "type": "object"
      },
+     "MacosCalendarEventSource": {
+      "additionalProperties": false,
+      "description": "Read-only check for a macOS Calendar event matching calendar, title, and start.",
+      "properties": {
+       "id": {
+        "title": "Id",
+        "type": "string"
+       },
+       "type": {
+        "const": "macos_calendar_event",
+        "default": "macos_calendar_event",
+        "title": "Type",
+        "type": "string"
+       },
+       "calendar_name": {
+        "maxLength": 255,
+        "minLength": 1,
+        "title": "Calendar Name",
+        "type": "string"
+       },
+       "title": {
+        "maxLength": 255,
+        "minLength": 1,
+        "title": "Title",
+        "type": "string"
+       },
+       "start_iso": {
+        "maxLength": 64,
+        "minLength": 10,
+        "title": "Start Iso",
+        "type": "string"
+       }
+      },
+      "required": [
+       "id",
+       "calendar_name",
+       "title",
+       "start_iso"
+      ],
+      "title": "MacosCalendarEventSource",
+      "type": "object"
+     },
      "MacosDefaultsSource": {
       "additionalProperties": false,
       "description": "One key in a macOS preferences domain.",
@@ -3278,6 +3332,27 @@
        "key"
       ],
       "title": "MacosDefaultsSource",
+      "type": "object"
+     },
+     "MacosNightShiftSource": {
+      "additionalProperties": false,
+      "description": "Current macOS Night Shift enabled state via CoreBrightness (read-only).",
+      "properties": {
+       "id": {
+        "title": "Id",
+        "type": "string"
+       },
+       "type": {
+        "const": "macos_night_shift",
+        "default": "macos_night_shift",
+        "title": "Type",
+        "type": "string"
+       }
+      },
+      "required": [
+       "id"
+      ],
+      "title": "MacosNightShiftSource",
       "type": "object"
      },
      "OpenStep": {
@@ -4811,6 +4886,27 @@
       "title": "ValueExpr",
       "type": "object"
      },
+     "WindowsNightLightSource": {
+      "additionalProperties": false,
+      "description": "Current Windows Night Light enabled state via CloudStore registry Data bytes.",
+      "properties": {
+       "id": {
+        "title": "Id",
+        "type": "string"
+       },
+       "type": {
+        "const": "windows_night_light",
+        "default": "windows_night_light",
+        "title": "Type",
+        "type": "string"
+       }
+      },
+      "required": [
+       "id"
+      ],
+      "title": "WindowsNightLightSource",
+      "type": "object"
+     },
      "WindowsRegistrySource": {
       "additionalProperties": false,
       "description": "One value in the Windows registry.",
@@ -5110,7 +5206,7 @@
    "validation": {
     "$defs": {
      "AuthRef": {
-      "description": "A reference to an HTTP credential held OUTSIDE the config.\n\nExactly one auth style may be set:\n\n- ``bearer_env`` -- name of an env var holding a bearer token; resolves to\n  ``Authorization: Bearer <token>``.\n- ``header`` + ``value_env`` -- an arbitrary auth header (e.g.\n  ``X-API-Key``) whose VALUE comes from the named env var. Frappe-style\n  ``Authorization: token <key>:<secret>`` fits here too (put the whole\n  value in the env var).\n- ``basic_env`` -- name of an env var holding ``user:password``; resolves\n  to ``Authorization: Basic <base64>``.\n\nNo field ever holds the secret itself -- only the env var NAME.",
+      "description": "A reference to an HTTP credential held OUTSIDE the config.\n\nExactly one auth style may be set:\n\n- ``bearer_env`` -- name of an env var holding a bearer token; resolves to\n  ``Authorization: Bearer <token>``.\n- ``header`` + ``value_env`` -- an arbitrary auth header (e.g.\n  ``X-API-Key``) whose VALUE comes from the named env var. Token-pair\n  ``Authorization: token <key>:<secret>`` fits here too (put the whole\n  value in the env var).\n- ``basic_env`` -- name of an env var holding ``user:password``; resolves\n  to ``Authorization: Basic <base64>``.\n\nNo field ever holds the secret itself -- only the env var NAME.",
       "properties": {
        "bearer_env": {
         "anyOf": [
@@ -6133,7 +6229,10 @@
          "discriminator": {
           "mapping": {
            "file": "#/$defs/FileSource",
+           "macos_calendar_event": "#/$defs/MacosCalendarEventSource",
            "macos_defaults": "#/$defs/MacosDefaultsSource",
+           "macos_night_shift": "#/$defs/MacosNightShiftSource",
+           "windows_night_light": "#/$defs/WindowsNightLightSource",
            "windows_registry": "#/$defs/WindowsRegistrySource"
           },
           "propertyName": "type"
@@ -6147,6 +6246,15 @@
           },
           {
            "$ref": "#/$defs/WindowsRegistrySource"
+          },
+          {
+           "$ref": "#/$defs/MacosNightShiftSource"
+          },
+          {
+           "$ref": "#/$defs/WindowsNightLightSource"
+          },
+          {
+           "$ref": "#/$defs/MacosCalendarEventSource"
           }
          ]
         },
@@ -6563,6 +6671,48 @@
       "title": "HistoryView",
       "type": "object"
      },
+     "MacosCalendarEventSource": {
+      "additionalProperties": false,
+      "description": "Read-only check for a macOS Calendar event matching calendar, title, and start.",
+      "properties": {
+       "id": {
+        "title": "Id",
+        "type": "string"
+       },
+       "type": {
+        "const": "macos_calendar_event",
+        "default": "macos_calendar_event",
+        "title": "Type",
+        "type": "string"
+       },
+       "calendar_name": {
+        "maxLength": 255,
+        "minLength": 1,
+        "title": "Calendar Name",
+        "type": "string"
+       },
+       "title": {
+        "maxLength": 255,
+        "minLength": 1,
+        "title": "Title",
+        "type": "string"
+       },
+       "start_iso": {
+        "maxLength": 64,
+        "minLength": 10,
+        "title": "Start Iso",
+        "type": "string"
+       }
+      },
+      "required": [
+       "id",
+       "calendar_name",
+       "title",
+       "start_iso"
+      ],
+      "title": "MacosCalendarEventSource",
+      "type": "object"
+     },
      "MacosDefaultsSource": {
       "additionalProperties": false,
       "description": "One key in a macOS preferences domain.",
@@ -6594,6 +6744,27 @@
        "key"
       ],
       "title": "MacosDefaultsSource",
+      "type": "object"
+     },
+     "MacosNightShiftSource": {
+      "additionalProperties": false,
+      "description": "Current macOS Night Shift enabled state via CoreBrightness (read-only).",
+      "properties": {
+       "id": {
+        "title": "Id",
+        "type": "string"
+       },
+       "type": {
+        "const": "macos_night_shift",
+        "default": "macos_night_shift",
+        "title": "Type",
+        "type": "string"
+       }
+      },
+      "required": [
+       "id"
+      ],
+      "title": "MacosNightShiftSource",
       "type": "object"
      },
      "OpenStep": {
@@ -7454,6 +7625,27 @@
        }
       },
       "title": "ValueExpr",
+      "type": "object"
+     },
+     "WindowsNightLightSource": {
+      "additionalProperties": false,
+      "description": "Current Windows Night Light enabled state via CloudStore registry Data bytes.",
+      "properties": {
+       "id": {
+        "title": "Id",
+        "type": "string"
+       },
+       "type": {
+        "const": "windows_night_light",
+        "default": "windows_night_light",
+        "title": "Type",
+        "type": "string"
+       }
+      },
+      "required": [
+       "id"
+      ],
+      "title": "WindowsNightLightSource",
       "type": "object"
      },
      "WindowsRegistrySource": {
