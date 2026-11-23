@@ -75,6 +75,8 @@ def registration_app(
     error_after: bool = False,
     fetch_writes: bool = False,
     redirect: str = "",
+    saves: Optional[bool] = None,
+    first_id: int = 101,
 ) -> App:
     """Contact details, then a ticket, then Register. "Continue" is a link that
     keeps the values in session storage. ``next_writes`` makes the link also
@@ -85,7 +87,12 @@ def registration_app(
     navigates; ``fetch_writes`` sends them with ``fetch()`` instead, which the
     navigation aborts. ``redirect="/done"`` saves and answers 302 to the
     confirmation page; ``redirect="/login"`` saves nothing and answers 302 to
-    a plain sign-in page (an expired session), with no alert."""
+    a plain sign-in page (an expired session), with no alert. ``saves`` says
+    whether Register saves (by default, unless the redirect is ``/login``).
+    ``{id}`` in ``redirect`` is the new record's id, counted from
+    ``first_id`` (a post-redirect-get to the record just created)."""
+
+    keeps = redirect != "/login" if saves is None else saves
 
     def _post(path: str, body: str) -> str:
         if fetch_writes:
@@ -131,13 +138,12 @@ function fill(){{hn.value=sessionStorage.getItem('nm');he.value=sessionStorage.g
         )
 
     def register(app: App, path: str, method: str, form: dict) -> tuple[int, str]:
-        if redirect == "/login":
-            return 302, "/login"
-        app.state.setdefault("records", []).append(
-            {k: v[0] for k, v in form.items() if v}
-        )
+        if not keeps:
+            return 302, redirect or "/login"
+        records = app.state.setdefault("records", [])
+        records.append({k: v[0] for k, v in form.items() if v})
         if redirect:
-            return 302, redirect
+            return 302, redirect.replace("{id}", str(first_id + len(records) - 1))
         return done(app, path, method, form)
 
     def login(app: App, path: str, method: str, form: dict) -> tuple[int, str]:
@@ -152,6 +158,11 @@ function fill(){{hn.value=sessionStorage.getItem('nm');he.value=sessionStorage.g
         alert = '<p role="alert">Payment could not be taken</p>' if error_after else ""
         return 200, page("Done", f"<main><h1>Registration received</h1>{alert}</main>")
 
+    def landing(app: App, path: str, method: str, form: dict) -> tuple[int, str]:
+        # Any other page a redirect lands on: a record, or a status page.
+        status = form.get("status", [""])[0]
+        return 200, page("Result", f"<main><h1>{path}</h1><p>{status}</p></main>")
+
     def draft_ok(app: App, path: str, method: str, form: dict) -> tuple[int, str]:
         return 200, "{}"
 
@@ -164,6 +175,7 @@ function fill(){{hn.value=sessionStorage.getItem('nm');he.value=sessionStorage.g
             ("GET", "/done"): done,
             ("GET", "/login"): login,
             ("POST", "/draft"): draft_ok,
+            ("GET", "*"): landing,
         },
     )
 

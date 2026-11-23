@@ -310,7 +310,7 @@ class DemoStep:
     writes the backend counted between ``before`` and ``after`` (requests that
     change state, a file save, a cell committed), or None when it could not
     count them. ``write_outcomes`` is what each of those writes returned
-    (``"2xx"``, ``"3xx /done"``), or None when the backend does not say."""
+    (``"2xx"``, ``"redirect /done"``), or None when the backend does not say."""
 
     action: ActionKind
     target: Control
