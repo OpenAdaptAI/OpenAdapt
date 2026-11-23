@@ -66,8 +66,7 @@ document.getElementById('open-est').addEventListener('click', () => {{ {opener} 
 document.getElementById('submit').addEventListener('click', async () => {{
   const body = {{first: document.getElementById('first').value,
                  dwelling: document.getElementById('dwelling').value}};
-  // Read the reply before leaving the page, so the request is not cut off.
-  await (await fetch('/submit', {{method: 'POST', body: JSON.stringify(body)}})).text();
+  await fetch('/submit', {{method: 'POST', body: JSON.stringify(body)}});
   location.href = '/summary';
 }});
 </script>

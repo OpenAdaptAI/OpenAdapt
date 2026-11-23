@@ -232,6 +232,10 @@ class ReconcilerSession:
         self._optional_blank: set[str] = set()
         # Review read-backs that could not be compared, and why.
         self._review_skipped: dict[str, str] = {}
+        # Every control this run actuated, with the selectors that may stand
+        # for it in the write ledger (a radio option or its group's peers).
+        # Checked against the ledger before signing, independently of it.
+        self._actuations: list[tuple[str, frozenset[str]]] = []
 
     def record_write(
         self,
@@ -897,6 +901,30 @@ def _is_valid_non_zero_return_value(
     return norm is not None
 
 
+def _ledger_aliases(ctrl: ObservedControl, snapshot: FormSnapshot) -> frozenset[str]:
+    """Selectors that can stand for ``ctrl`` in the write ledger.
+
+    A native radio option is one field with its group: the ledger may name the
+    group by any of its options.
+    """
+    aliases = {ctrl.dom_selector}
+    if ctrl.input_type.casefold() == "radio" and ctrl.name_attr:
+        aliases.update(
+            c.dom_selector
+            for c in snapshot.controls
+            if c.input_type.casefold() == "radio" and c.name_attr == ctrl.name_attr
+        )
+    return frozenset(aliases)
+
+
+def _unrecorded_actuations(session: "ReconcilerSession") -> list[str]:
+    """Actuated controls that no write-ledger entry accounts for."""
+    recorded = {w.selector for w in session.writes if w.selector}
+    return sorted(
+        {sel for sel, aliases in session._actuations if not (aliases & recorded)}
+    )
+
+
 class FormReconciler:
     """Deterministic governed execution engine for multi-screen forms and wizards."""
 
@@ -1090,6 +1118,42 @@ class FormReconciler:
         return None
 
     def _actuate_control(
+        self,
+        surface: FormSurfaceBackend,
+        snapshot: FormSnapshot,
+        ctrl: ObservedControl,
+        intended_value: Any,
+        *,
+        session: "ReconcilerSession",
+        control_kind: ControlKind,
+        codec: FieldCodecSpec,
+        placeholder_values: Sequence[str] = _DEFAULT_PLACEHOLDERS,
+        dossier_key: Optional[str] = None,
+        run_id: str = "",
+    ) -> Optional[FormHaltItem]:
+        """Actuate ``ctrl`` and note the actuation on ``session``.
+
+        The note is kept apart from the write ledger, so signing can check that
+        every control the run changed is in the ledger it signs.
+        """
+        halt = self._actuate_control_once(
+            surface,
+            snapshot,
+            ctrl,
+            intended_value,
+            control_kind=control_kind,
+            codec=codec,
+            placeholder_values=placeholder_values,
+            dossier_key=dossier_key,
+            run_id=run_id,
+        )
+        if halt is None:
+            session._actuations.append(
+                (ctrl.dom_selector, _ledger_aliases(ctrl, snapshot))
+            )
+        return halt
+
+    def _actuate_control_once(
         self,
         surface: FormSurfaceBackend,
         snapshot: FormSnapshot,
@@ -1573,6 +1637,7 @@ class FormReconciler:
                         snapshot,
                         ctrl,
                         fact.value,
+                        session=session,
                         control_kind=binding.control_kind,
                         codec=binding.codec,
                         placeholder_values=binding.placeholder_values,
@@ -2406,6 +2471,7 @@ class FormReconciler:
                         popup_snap,
                         matching[0],
                         val,
+                        session=session,
                         control_kind=inferred,
                         codec=FieldCodecSpec(),
                         run_id=session.run_id,
@@ -3216,31 +3282,56 @@ class FormReconciler:
                 ),
             )
 
-        receipt = issue_form_tx_receipt(
-            run_id=session.run_id,
-            pack=pack,
-            dossier=session.dossier,
-            signing_key=session.signing_key,
-            outcome=FormTxOutcome.VERIFIED_DONE,
-            # The receipt names each auto-filled control once, as the signer
-            # counts them from the write ledger; a control filled again (after
-            # a sign-in or a re-render) is still one field.
-            fields_filled_auto=len(
-                read_subjects(
-                    [w for w in session.writes if w.source == "auto_fill"], ()
-                )
-            ),
-            human_resolutions=session.human_resolutions,
-            commit_mutations_observed=delta_mutations,
-            summary_verdict=verdict,
-            outputs=extracted_outputs,
-            not_covered=(
-                *sorted(session._not_covered),
-                *(f"optional-blank:{k}" for k in sorted(session._optional_blank)),
-                *(f"intake:{k}" for k in self._unconsumed_intake_keys(session)),
-            ),
-            writes=session.writes,
-        )
+        def _not_signed(reason: str) -> FormTxResult:
+            # Submitted and read back, but the run cannot be signed as
+            # verified. A person checks it; it is never retried blindly.
+            return self._build_result(
+                session,
+                outcome=FormTxOutcome.READBACK_INCOMPLETE,
+                safe_to_retry=False,
+                outputs=extracted_outputs,
+                summary_verdict=verdict,
+                receipt=None,
+                what_happened=(
+                    "Submitted, but the run could not be signed as verified: " + reason
+                ),
+            )
+
+        unrecorded = _unrecorded_actuations(session)
+        if unrecorded:
+            return _not_signed(
+                "controls were changed that the write ledger does not record: "
+                f"{unrecorded}"
+            )
+        try:
+            receipt = issue_form_tx_receipt(
+                run_id=session.run_id,
+                pack=pack,
+                dossier=session.dossier,
+                signing_key=session.signing_key,
+                outcome=FormTxOutcome.VERIFIED_DONE,
+                # Each auto-filled control once, as the signer counts them from
+                # the ledger: a control filled again (after a sign-in or a
+                # re-render) is still one field.
+                fields_filled_auto=len(
+                    read_subjects(
+                        [w for w in session.writes if w.source == "auto_fill"], ()
+                    )
+                ),
+                human_resolutions=session.human_resolutions,
+                commit_mutations_observed=delta_mutations,
+                summary_verdict=verdict,
+                outputs=extracted_outputs,
+                not_covered=(
+                    *sorted(session._not_covered),
+                    *(f"optional-blank:{k}" for k in sorted(session._optional_blank)),
+                    *(f"intake:{k}" for k in self._unconsumed_intake_keys(session)),
+                ),
+                writes=session.writes,
+            )
+        except ValueError as exc:
+            # The signer refused: report it as a stop, never raise past here.
+            return _not_signed(str(exc))
         return self._build_result(
             session,
             outcome=FormTxOutcome.VERIFIED_DONE,
@@ -4221,6 +4312,7 @@ class FormReconciler:
                         snap,
                         live_ctrl,
                         val,
+                        session=session,
                         control_kind=ctrl_kind,
                         codec=codec,
                         placeholder_values=placeholders,
