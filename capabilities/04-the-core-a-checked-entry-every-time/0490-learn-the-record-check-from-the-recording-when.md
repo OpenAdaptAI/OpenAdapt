@@ -1,0 +1,1 @@
+| Learn the record check from the recording, when the person looks the record up after saving | Released ([#1290](https://github.com/OpenAdaptAI/OpenAdapt/pull/1290)) | Synthetic | `record --verify` |

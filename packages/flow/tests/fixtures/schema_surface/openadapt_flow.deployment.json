@@ -2436,6 +2436,25 @@
         "default": 0.2,
         "title": "Poll Interval S",
         "type": "number"
+       },
+       "artifact_producer": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Artifact Producer"
+       },
+       "acting_roots": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Acting Roots",
+        "type": "array"
        }
       },
       "title": "EffectsConfig",
@@ -6009,6 +6028,25 @@
         "default": 0.2,
         "title": "Poll Interval S",
         "type": "number"
+       },
+       "artifact_producer": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Artifact Producer"
+       },
+       "acting_roots": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Acting Roots",
+        "type": "array"
        }
       },
       "title": "EffectsConfig",

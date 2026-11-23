@@ -1,0 +1,1 @@
+| Receipts carry the run's handoffs as counterparty confirmation lines (`predicate.confirmations[]` in `record/run/v1`), written by the after-run receipt hook | In a pull request | Unit tests, and a real replayer run whose receipt carries its claim's `sent` line and verifies | `openadapt_flow/handoffs/line.py`, `receipt_record.py` |

@@ -1,0 +1,1 @@
+| Capture a recording's network traffic and compile a clean save into an API step, with the same record check | Released ([#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269)) | Synthetic patients on a local OpenEMR test copy | network capture, `ApiBinding` |
