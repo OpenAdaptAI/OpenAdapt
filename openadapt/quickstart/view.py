@@ -386,6 +386,15 @@ def next_step(steps: NextSteps) -> tuple[str, str, str]:
     )
 
 
+def bridge_lines(steps: NextSteps) -> list[tuple[str, str]]:
+    """Bridge from the synthetic demo to the user's own app and agent scripts."""
+
+    lines = [("Your own app", steps.record)]
+    if steps.verify_snippet:
+        lines.append(("Playwright/CUA drop-in", steps.verify_snippet))
+    return lines
+
+
 def failure_step(outcome: Outcome) -> tuple[str, str]:
     """When something didn't check out: the report to read first."""
 
@@ -434,6 +443,11 @@ def more_lines(steps: NextSteps, root: Path, seal_page: Optional[Path]) -> list[
         f"{title} (any MCP client): {steps.agent}",
         f"Try it on your own app: {steps.record}",
     ]
+    if steps.verify_snippet:
+        lines.append(
+            f"Verify Playwright/CUA writes (pip install openadapt-verify): "
+            f"{steps.verify_snippet}"
+        )
     if steps.verify:
         lines.append(f"Check every receipt again: {steps.verify}")
     if seal_page is not None:
@@ -691,6 +705,8 @@ class PlainView(_Base):
             self._say(f"Next: {title}")
             self._say(f"  {command}")
             self._say(f"  {other}")
+            for label, value in bridge_lines(steps):
+                self._say(f"  {label}: {value}")
         else:
             title, path = failure_step(outcome)
             self._say(f"Next: {title}")
@@ -1335,6 +1351,8 @@ class RichView(_Base):
                     soft_wrap=True,
                 )
             self.console.print(f"[dim]{_escape(other)}[/]")
+            for label, value in bridge_lines(steps):
+                self.console.print(f"[dim]{_escape(label)}:[/] {_escape(value)}")
         else:
             title, path = failure_step(outcome)
             self.console.print(f"[bold red]Next[/]  [bold]{_escape(title)}[/]")
