@@ -46,6 +46,9 @@ def _write_config(
         'org_id = "org_stub"',
         "poll_wait_s = 1",
     ]
+    profile = config_dir / "deployment.yaml"
+    profile.write_text("runtime: {profile: standard}\n", encoding="utf-8")
+    lines.append(f"profile = {json.dumps(str(profile))}")
     lines.append(f"storage_root = {json.dumps(str(config_dir / 'storage'))}")
     lines += [f"{k} = {json.dumps(v)}" for k, v in extra.items()]
     (config_dir / "connector.toml").write_text("\n".join(lines) + "\n", "utf-8")
@@ -287,7 +290,8 @@ def test_serve_refuses_the_stub_job_then_stops_on_the_event(tmp_path: Path) -> N
     ack = next(r for r in records if r["path"] == "/api/connector/ack")
     assert ack["body"]["job_id"] == stub.JOB_ID
     assert ack["body"]["status"] == "failed"
-    assert "safety" in (ack["body"]["error"] or "")
+    assert ack["body"]["error_code"] == "governance_refused"
+    assert "error" not in ack["body"]
     assert TOKEN not in log.read_text("utf-8")
     text = ws.log_path(config_dir).read_text("utf-8")
     assert TOKEN not in text and "service stopped" in text
@@ -411,14 +415,17 @@ def test_auth_rejection_is_retried_without_execution_or_token_in_logs(
     assert "ConnectorClientError" in text
 
 
-def test_stop_during_an_existing_job_reports_and_acks_before_exit(tmp_path):
+def test_stop_during_an_existing_job_reports_and_acks_before_exit(
+    tmp_path, monkeypatch
+):
     import hashlib
     import zipfile
 
     from openadapt_flow.connector.executor import RunOutcome
 
     config = tmp_path / "connector"
-    _write_config(config, "https://cp.example")
+    # One worker: the service must not lease a second job while the first runs.
+    _write_config(config, "https://cp.example", max_workers=1)
     bundle = config / "storage/bundles/wf_stub/bundle.zip"
     bundle.parent.mkdir(parents=True)
     with zipfile.ZipFile(bundle, "w") as archive:
@@ -448,6 +455,18 @@ def test_stop_during_an_existing_job_reports_and_acks_before_exit(tmp_path):
             0, {"execution_target_kind": "web", "success": True, "model_calls": 0}
         )
 
+    from openadapt_flow.connector import daemon
+    from openadapt_flow.connector.executor import ExecutionResult
+
+    def execute_job(job, settings, storage, *, runner, **_kwargs):
+        # Managed authority is covered by the connector contract tests. Only
+        # execution is stood in here: the production handle_job still builds
+        # the callback and ack, so the stop control runs through real
+        # report/ack code while a job is in flight.
+        runner()
+        return ExecutionResult("success", {}, None, job.report_ref())
+
+    monkeypatch.setattr(daemon, "execute_job", execute_job)
     logger, redactor = ws.build_logger(config, name="test.ws.finish")
     assert (
         ws.serve(

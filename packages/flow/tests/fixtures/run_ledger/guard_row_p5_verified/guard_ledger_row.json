@@ -1,0 +1,17 @@
+{
+  "approval_decided_at": null,
+  "approval_opened_at": null,
+  "approver_kind": "none",
+  "diff_path": "guard_diff.private.json",
+  "fields_checked": [
+    "note"
+  ],
+  "fields_differing": [],
+  "guard_verdict": "VERIFIED",
+  "hold_ms": 69.3,
+  "readback_tier": "independent_readback",
+  "schema": "openadapt.guard-ledger-row/v1",
+  "task_id": "task-ledger-0001",
+  "verdict": "VERIFIED",
+  "verdict_reason": "readback_verified"
+}

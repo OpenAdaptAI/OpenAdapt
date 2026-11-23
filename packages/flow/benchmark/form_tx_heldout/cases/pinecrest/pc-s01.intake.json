@@ -1,0 +1,21 @@
+{
+  "case_id": "pc-s01",
+  "facts": {
+    "coverage.deductible": 2500,
+    "coverage.effective_date": "2026-12-20",
+    "history.prior_claims_5yr": 0,
+    "property.address_line1": "9 Brackish Cove Ln",
+    "property.burglar_alarm": false,
+    "property.city": "Saltmarsh",
+    "property.construction_type": "brick / masonry",
+    "property.finish_level": "semi-custom",
+    "property.heating_type": "heat pump",
+    "property.roof_material": "slate",
+    "property.roof_year": 2016,
+    "property.square_feet": 2300,
+    "property.state": "MA",
+    "property.stories": "1",
+    "property.year_built": 1985,
+    "property.zip": "02536"
+  }
+}

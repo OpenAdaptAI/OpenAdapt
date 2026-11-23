@@ -50,9 +50,10 @@ import subprocess
 import sys
 import tempfile
 import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 FLOW = Path(__file__).resolve().parents[2]
 if str(FLOW) not in sys.path:
@@ -188,6 +189,7 @@ def _rows(db: Path) -> list[tuple[str, str]]:
 
 def _record(binary: Path, root: Path, kind: str, db: Path) -> tuple[Path, dict]:
     """Record the healthy workflow on the old version and compile it."""
+    from openadapt_flow import sealed_set as _sealed
     from openadapt_flow.compiler import compile_recording
     from openadapt_flow.ir import Workflow
     from openadapt_flow.policy import evaluate_policy, load_policy
@@ -215,7 +217,9 @@ def _record(binary: Path, root: Path, kind: str, db: Path) -> tuple[Path, dict]:
         app.close()
     # The banner is every click's identity band (``--identifier`` in a browser).
     events_path = recording / "events.jsonl"
-    events = [json.loads(line) for line in events_path.read_text().splitlines()]
+    # Encrypted at rest by default (#2423): the recording is a sealed set, so
+    # read and rewrite its events through the sealed-set API (in memory).
+    events = [json.loads(line) for line in _sealed.read_text(events_path).splitlines()]
     pad = 6
     for event in events:
         if event.get("kind") == "click":
@@ -225,7 +229,7 @@ def _record(binary: Path, root: Path, kind: str, db: Path) -> tuple[Path, dict]:
                 banner[2] + 2 * pad,
                 banner[3] + 2 * pad,
             ]
-    events_path.write_text("".join(json.dumps(e) + "\n" for e in events))
+    _sealed.write_text(events_path, "".join(json.dumps(e) + "\n" for e in events))
     bundle = root / "bundle"
     workflow = compile_recording(recording, bundle, name=f"chart-note-{kind}")
     save = workflow.steps[-1]
@@ -245,7 +249,7 @@ def _record(binary: Path, root: Path, kind: str, db: Path) -> tuple[Path, dict]:
     # ``openadapt-flow qualify set-risk`` records for a person).
     for step in workflow.steps[:-1]:
         step.risk = "reversible"
-    (bundle / "manifest.json").unlink(missing_ok=True)
+    _sealed.unlink(bundle / "manifest.json", missing_ok=True)
     workflow.save(bundle, encrypt=bool(workflow.encrypted))
     workflow = Workflow.load(bundle)
     report = evaluate_policy(workflow, load_policy("clinical-write"))
@@ -337,6 +341,40 @@ def _target(binary: Path, db: Path, kind: str, *, verifier: bool, profile: str) 
         params={"note": RUN_NOTE},
         execution_target_kind="macos" if kind == "ax" else "rdp",
     )
+
+
+#: How the self-repair legs run, recorded in the results and printed. Under
+#: the encryption-at-rest default an attended approval (a person's decision,
+#: which self-repair's probe and resume need) is refused in a sealed run
+#: (#2423), so these legs alone run on a plaintext copy of the bundle under
+#: the product's documented opt-out. Record, compile and the governed runs
+#: stay under the default.
+SELF_REPAIR_MODE = (
+    "plaintext (known limitation: attended approvals are refused in sealed runs, #2423)"
+)
+
+
+@contextmanager
+def _self_repair_legs(bundle: Path, dest: Path) -> Iterator[Path]:
+    """A plaintext copy of ``bundle`` at ``dest``, with encryption at rest
+    off (``at_rest.opted_out``, named on stderr and in the ledger) until the
+    block ends. The copy is decrypted in memory and saved under the same
+    content digest, so it is the same program."""
+    from openadapt_flow import at_rest
+    from openadapt_flow.ir import Workflow
+
+    print(f"self-repair legs: {SELF_REPAIR_MODE}", flush=True)
+    with at_rest.opted_out("qualification: self-repair legs (#2423 limitation)"):
+        source = Workflow.load(bundle)
+        source.save(dest)
+        copy = Workflow.load(dest)
+        if (
+            copy.manifest is None
+            or source.manifest is None
+            or (copy.manifest.content_digest != source.manifest.content_digest)
+        ):
+            raise RuntimeError("the plaintext copy is not the same program")
+        yield dest
 
 
 def _repair(
@@ -431,9 +469,10 @@ def qualify(kind: str, root: Path) -> dict[str, Any]:
     binary = _build(root)
     demo_db = root / "sor-demo.db"
     bundle, compiled = _record(binary, root / "record", kind, demo_db)
-    checked = _repair(binary, root, bundle, kind, "with-record-check")
-    no_verifier = _repair(binary, root, bundle, kind, "no-verifier", verifier=False)
-    demo = _repair(binary, root, bundle, kind, "demo-profile", profile="demo")
+    with _self_repair_legs(bundle, root / "repair-bundle") as plain:
+        checked = _repair(binary, root, plain, kind, "with-record-check")
+        no_verifier = _repair(binary, root, plain, kind, "no-verifier", verifier=False)
+        demo = _repair(binary, root, plain, kind, "demo-profile", profile="demo")
     expected_basis = "element_and_record_check" if kind == "ax" else "record_check"
     checks = {
         "demonstration_saved_one_row": _rows(demo_db) == [(PATIENT[0], DEMO_NOTE)],
@@ -485,6 +524,7 @@ def qualify(kind: str, root: Path) -> dict[str, Any]:
             if "repair_every_backend/results/" not in line
         ],
         "compiled": compiled,
+        "self_repair_mode": SELF_REPAIR_MODE,
         "repair_with_record_check": checked,
         "repair_without_verifier": no_verifier,
         "repair_under_demo_profile": demo,
@@ -540,6 +580,7 @@ def main() -> int:
         out = RESULTS / f"macos-{mode}-{datetime.now(timezone.utc):%Y%m%d}.json"
         out.write_text(json.dumps(report, indent=2) + "\n")
         print(f"{kind}: {'PASSED' if report['passed'] else 'FAILED'} -> {out}")
+        print(f"  self-repair legs ran {report['self_repair_mode']}")
         for name, ok in report["checks"].items():
             print(f"  {'ok ' if ok else 'BAD'} {name}")
         failed |= not report["passed"]

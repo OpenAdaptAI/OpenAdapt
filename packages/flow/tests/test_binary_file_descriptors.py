@@ -100,6 +100,7 @@ def test_raw_descriptor_entry_points_cannot_fall_back_to_text_open():
     covered = raw_descriptor_owners(source)
     assert "approval_mode/item_approval.py" in covered
     assert "write_ledger.py" in covered
+    assert "exceptions/registry.py" in covered
 
 
 def test_binary_open_refuses_an_explicit_text_mode(

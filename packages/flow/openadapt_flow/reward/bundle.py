@@ -5,7 +5,7 @@ loads: the contract, its required and forbidden effects, the oracle recipe,
 and (when certified) a self-signed certificate with the calibration counts
 beside it. :func:`write_bundle` writes one from the effects and oracle a
 caller passes; tests, the benchmark harnesses and the ``serve-reward`` demo
-seed (:mod:`openadapt_flow.reward.seed`) all build their bundles with it.
+seed (the demo reward seed) all build their bundles with it.
 
 Nothing here is a production recipe. A production-scope certificate is
 calibrated on a held-out corpus by the OpenAdapt control service.
@@ -148,7 +148,13 @@ def write_bundle(
             "components": [{"name": "terminal_effect", "weight": 1.0}],
             # The synthetic banner lie yields 0, not the default -1 penalty:
             # this fixture demonstrates "no reward", not a tuned penalty.
-            "scoring": {"wrong_effect_reward": 0.0},
+            # Asking a person after the right record landed earns half the
+            # verified reward. The contract declares it: an undeclared
+            # escalation earns nothing (openadapt-types 0.24.1).
+            "scoring": {
+                "wrong_effect_reward": 0.0,
+                "escalated_after_effect_reward": 0.5,
+            },
             "certificate_policy": {
                 "epsilon": 0.05,
                 "delta": 0.05,

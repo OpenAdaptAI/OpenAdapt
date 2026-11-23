@@ -12,7 +12,7 @@ import hashlib
 import hmac
 import json
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Any, Callable, Literal, Mapping, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
@@ -120,6 +120,9 @@ class FormTxOutcome(str, Enum):
     AUTH_REQUIRED = "auth_required"
     VALIDATION_BLOCKED = "validation_blocked"
     READBACK_REFUTED = "readback_refuted"
+    # Submitted, and nothing read back contradicted it, but at least one field
+    # that was typed, selected or kept could not be read back. Never verified.
+    READBACK_INCOMPLETE = "readback_incomplete"
     DELIVERY_UNCERTAIN = "delivery_uncertain"
     ABORTED_BY_HUMAN = "aborted_by_human"
 
@@ -381,7 +384,7 @@ class OutputExtractionSpec(BaseModel):
 
 
 class SummaryCheckSpec(BaseModel):
-    """Independent summary/search read-back verification contract."""
+    """Summary/search read-back verification contract (read by the acting session)."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -409,6 +412,7 @@ class FormPack(BaseModel):
     modal_rules: tuple[ModalRuleSpec, ...] = ()
     screens: tuple[WizardScreenSpec, ...] = ()
     summary_check: Optional[SummaryCheckSpec] = None
+    commit_url_patterns: tuple[str, ...] = ()
     max_commit_mutations: int = Field(default=1, ge=0, le=10)
     # Overrides of the engine's default word lists (``form_tx/presets/words``).
     # None keeps the default. An entity table also expects a dossier entity of
@@ -571,6 +575,50 @@ class HumanResolutionRecord(BaseModel):
     idempotency_key: str
 
 
+class FieldWriteRecord(BaseModel):
+    """One field the layer typed, selected or kept during a run.
+
+    The read-back judge covers every record: each one gets a passed, failed or
+    not_checked verdict. ``field_key`` is the dossier key when the field is
+    bound, otherwise ``control:<label or selector>``.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    field_key: str = Field(min_length=1)
+    dossier_key: Optional[str] = None
+    label: Optional[str] = None
+    selector: Optional[str] = None
+    # The wizard screen the control was on, when known.
+    screen_id: Optional[str] = None
+    source: Literal[
+        "auto_fill",
+        "operator_value",
+        "operator_fixed_on_screen",
+        "operator_kept_prefill",
+        "popup_return",
+        # Already held the intended value; the run left it as it was.
+        "kept_matching",
+    ]
+    in_popup_subroutine: Optional[str] = None
+    # Set when a popup input was re-read from its control and matched just
+    # before the popup's apply button. This guards the apply; it is not a
+    # read-back of the application's record, so the field stays not_checked
+    # unless the summary shows it.
+    checked_before_apply: bool = False
+
+
+class ReadbackStatus(str, Enum):
+    """Result of reading back one field after submit."""
+
+    PASSED = "passed"
+    FAILED = "failed"
+    # The field was written, selected or kept, but the layer could not read it
+    # back (no read-back declared, control absent, anchor ambiguous, lookup
+    # failed). It is never counted as passed.
+    NOT_CHECKED = "not_checked"
+
+
 class ReadbackFieldVerdict(BaseModel):
     """Field-by-field comparison between intended state and post-run read-back."""
 
@@ -581,6 +629,24 @@ class ReadbackFieldVerdict(BaseModel):
     passed: bool
     provenance: ProvenanceKind
     reason: str = ""
+    status: Optional[ReadbackStatus] = None
+
+    @model_validator(mode="after")
+    def _status_agrees_with_passed(self) -> "ReadbackFieldVerdict":
+        if self.status is None:
+            object.__setattr__(
+                self,
+                "status",
+                ReadbackStatus.PASSED if self.passed else ReadbackStatus.FAILED,
+            )
+        elif self.passed != (self.status == ReadbackStatus.PASSED):
+            raise ValueError("passed must be True exactly when status is 'passed'")
+        return self
+
+
+ReadbackEvidence = Literal[
+    "acting_session_reread", "separate_session_read", "operator_attested"
+]
 
 
 class SummaryVerdict(BaseModel):
@@ -591,9 +657,157 @@ class SummaryVerdict(BaseModel):
     passed: bool
     checked_count: int
     failed_keys: tuple[str, ...] = ()
+    not_checked_keys: tuple[str, ...] = ()
     field_verdicts: tuple[ReadbackFieldVerdict, ...] = ()
     extracted_outputs: dict[str, Any] = Field(default_factory=dict)
     missing_required_outputs: tuple[str, ...] = ()
+    # Who produced the read-back. The judge reads through the session that
+    # did the work, so it is "acting_session_reread"; only a read by a fresh,
+    # separate session may be called independent.
+    readback_evidence: ReadbackEvidence = "acting_session_reread"
+    # Distinct summary control observations per dossier key, populated by
+    # SummaryJudge.evaluate so downstream signers can verify subject coverage
+    # without counting repeated verdicts for the same control as distinct reads.
+    observations_per_key: Optional[dict[str, int]] = None
+    # Digest of the complete run subject set evaluated by SummaryJudge, so the
+    # public signer rejects partial or altered write ledgers.
+    ledger_digest: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _passed_needs_every_field_checked(self) -> "SummaryVerdict":
+        if self.passed and (
+            self.failed_keys
+            or self.not_checked_keys
+            or any(v.status != ReadbackStatus.PASSED for v in self.field_verdicts)
+        ):
+            raise ValueError("A read-back cannot pass with a failed or unchecked field")
+        return self
+
+
+class Subject(BaseModel):
+    """One control the run wrote, kept or accepted, and the key it holds.
+
+    ``subject_id`` names where it is (popup, selector or entity row), so two
+    controls that hold the same dossier key are two subjects.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    subject_id: str
+    key: str
+    label: str = ""
+    source: str = ""
+
+
+def read_subjects(
+    writes: Sequence[FieldWriteRecord],
+    resolutions: Sequence[HumanResolutionRecord],
+) -> list[Subject]:
+    """Every written, kept or operator-accepted control, by subject."""
+    subjects: dict[str, Subject] = {}
+    for w in writes:
+        key = w.dossier_key or w.field_key
+        sid = (
+            f"{w.in_popup_subroutine or 'main'}|{w.screen_id or ''}|"
+            f"{w.selector or ''}|{w.field_key}"
+        )
+        existing = subjects.get(sid)
+        if existing is None:
+            subjects[sid] = Subject(
+                subject_id=sid, key=key, label=w.label or "", source=w.source
+            )
+        elif w.source == "auto_fill" and existing.source != "auto_fill":
+            subjects[sid] = existing.model_copy(update={"source": "auto_fill"})
+    for rec in resolutions:
+        if (
+            rec.halt_kind == FormHaltKind.PREFILL_ENTITY_CONFLICT
+            and rec.action == HumanDecisionAction.ACCEPT_PORTAL_PREFILL
+        ):
+            # One subject per accepted row, not per table.
+            row = canonical_sha256(rec.resolved_value)[:16]
+            sid = f"entity|{rec.field_signature}|{row}"
+            subjects.setdefault(
+                sid,
+                Subject(
+                    subject_id=sid,
+                    key=f"entity:{rec.field_signature}|{row}",
+                    source="operator_kept_prefill",
+                ),
+            )
+    return list(subjects.values())
+
+
+def subjects_digest(subjects: Sequence[Subject]) -> str:
+    """Canonical SHA-256 digest of a run's complete subject set."""
+    return canonical_sha256(
+        [
+            s.model_dump(mode="json")
+            for s in sorted(subjects, key=lambda s: s.subject_id)
+        ]
+    )
+
+
+def uncovered_subject_verdicts(
+    subjects: Sequence[Subject],
+    verdicts: Sequence[ReadbackFieldVerdict],
+    codec_for: Callable[[str], FormCodecKind],
+    observations_per_key: Optional[Mapping[str, int]] = None,
+) -> list[ReadbackFieldVerdict]:
+    """absent-evidence-as-success: a subject with no verdict is not_checked.
+
+    One verdict for a key accounts for one subject holding that key. When more
+    subjects hold the key than there are distinct observations for it, the
+    summary cannot say which control it shows, so the rest are not_checked.
+    Never passed.
+    """
+    # A passed or failed verdict is an observation of the summary; two
+    # read-backs that resolve to the same shown value are one observation,
+    # so they account for one subject only. When distinct observation counts
+    # are not provided, at most one observation per key is credited so repeated
+    # verdicts cannot cover multiple subjects without distinct-read evidence.
+    observed: dict[str, int] = {}
+    other: dict[str, int] = {}
+    for v in verdicts:
+        bucket = (
+            observed
+            if v.status in (ReadbackStatus.PASSED, ReadbackStatus.FAILED)
+            else other
+        )
+        bucket[v.dossier_key] = bucket.get(v.dossier_key, 0) + 1
+    verdicts_per_key: dict[str, int] = dict(other)
+    for key, n in observed.items():
+        distinct = (
+            observations_per_key.get(key, 0)
+            if observations_per_key is not None
+            else min(n, 1)
+        )
+        verdicts_per_key[key] = verdicts_per_key.get(key, 0) + min(n, distinct)
+    by_key: dict[str, list[Subject]] = {}
+    for subject in subjects:
+        by_key.setdefault(subject.key, []).append(subject)
+    out: list[ReadbackFieldVerdict] = []
+    for key, group in sorted(by_key.items()):
+        have = verdicts_per_key.get(key, 0)
+        for subject in sorted(group, key=lambda s: s.subject_id)[have:]:
+            out.append(
+                ReadbackFieldVerdict(
+                    dossier_key=key,
+                    codec_kind=codec_for(key),
+                    passed=False,
+                    status=ReadbackStatus.NOT_CHECKED,
+                    provenance=ProvenanceKind.INTAKE_DOCUMENT,
+                    reason=(
+                        f"No read-back covers {subject.label or subject.subject_id!r}"
+                        + (
+                            f": {len(group)} controls hold {key!r} and only "
+                            f"{have} read-back verdict(s) exist"
+                            if have
+                            else ""
+                        )
+                    ),
+                )
+            )
+    return out
 
 
 class PackPatchCandidate(BaseModel):
@@ -633,7 +847,19 @@ class FormTxReceiptPayload(BaseModel):
     commit_mutations_observed: int = Field(ge=0)
     readback_checked_count: int = Field(ge=0)
     readback_passed: bool
+    readback_not_checked_count: int = Field(default=0, ge=0)
     salted_output_digests: dict[str, str] = Field(default_factory=dict)
+    readback_evidence: ReadbackEvidence = "acting_session_reread"
+
+    @model_validator(mode="after")
+    def _verified_means_fully_checked(self) -> "FormTxReceiptPayload":
+        if self.outcome == FormTxOutcome.VERIFIED_DONE and (
+            not self.readback_passed or self.readback_not_checked_count
+        ):
+            raise ValueError(
+                "A verified receipt needs a passing read-back with no unchecked field"
+            )
+        return self
 
 
 class SignedFormTxReceipt(BaseModel):

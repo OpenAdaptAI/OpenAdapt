@@ -1,0 +1,43 @@
+{
+  "agent": null,
+  "agent_error": "GateRefused: the hold did not approve 'Submit to chart'",
+  "attempt": "/tmp/acp-demo-out/4-fallback/kept/cache/fallback/wrap.fallback-2e89a8e2928331ef-42b4692268c2/fallback-084420b471744764a6e39508abc32eff/run/wrap.fallback-2e89a8e2928331ef-42b4692268c2/attempts/20261122T023638-b67aa0",
+  "gates": [
+    {
+      "at": 1795315002.1357582,
+      "control": "Submit to chart",
+      "decision": "refused_by_hold",
+      "identity": [
+        "Jane Sample",
+        "MRN P1"
+      ],
+      "missing": [],
+      "screenshot": "/tmp/acp-demo-out/4-fallback/kept/cache/fallback/wrap.fallback-2e89a8e2928331ef-42b4692268c2/fallback-084420b471744764a6e39508abc32eff/run/wrap.fallback-2e89a8e2928331ef-42b4692268c2/attempts/20261122T023638-b67aa0/gates/gate-01.png",
+      "url": "http://127.0.0.1:54032/?fault=ok&idempotency=demo#encounter"
+    }
+  ],
+  "harness": {
+    "actions": 5,
+    "gate_checks": 1,
+    "gate_evidence_screenshots": 1,
+    "gate_refusals": 1,
+    "observations": 5,
+    "readbacks": 0,
+    "screenshots_at_gate": 0,
+    "screenshots_every_turn": 0,
+    "screenshots_requested": 0
+  },
+  "jit_status": "capture_failed",
+  "network_metadata": {
+    "api_binding": "UNAVAILABLE",
+    "capture_closed": true,
+    "causal_attribution": "UNAVAILABLE",
+    "events": [],
+    "losses": [],
+    "mode": "metadata_only",
+    "records_complete": null,
+    "schema": "openadapt.network-metadata/v1"
+  },
+  "readbacks": [],
+  "seconds": 6.02
+}

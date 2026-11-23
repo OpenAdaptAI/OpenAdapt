@@ -530,13 +530,16 @@ def execute_variant_set(
             child=spec.name,
             child_run=child_run,
         )
+    from openadapt_flow import sealed_set
+
+    # The child's run directory is encrypted by default: read in memory.
     report_path = Path(result.report_path) if result.report_path else None
-    if report_path is None and (child_dir / "report.json").is_file():
+    if report_path is None and sealed_set.is_file(child_dir / "report.json"):
         report_path = child_dir / "report.json"
     report_sha256: Optional[str] = None
     names_variant = False
-    if report_path is not None and report_path.is_file():
-        raw = report_path.read_bytes()
+    if report_path is not None and sealed_set.is_file(report_path):
+        raw = sealed_set.read_bytes(report_path)
         report_sha256 = hashlib.sha256(raw).hexdigest()
         try:
             names_variant = RunReport.model_validate_json(raw).variant_route == stamp

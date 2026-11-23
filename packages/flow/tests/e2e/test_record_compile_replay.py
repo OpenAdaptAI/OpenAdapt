@@ -476,7 +476,7 @@ class TestCliSmoke:
             str(healed),
         )
         assert proc.returncode == 0, f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
-        assert "bundled MockMed" in proc.stdout
+        assert "bundled demo app" in proc.stdout
         assert (selfserve_run / "report.json").is_file()
         assert (healed / "workflow.json").is_file()
         report = json.loads((selfserve_run / "report.json").read_text())

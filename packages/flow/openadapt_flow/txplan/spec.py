@@ -49,6 +49,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from openadapt_flow.txplan.audit import AuditSource, ScopedCollection
+
 TX_SCHEMA = "openadapt.tx/v1"
 _NAME = r"^[a-z][a-z0-9_-]{0,47}$"
 _TEMPLATE = re.compile(r"\{([a-z_][a-z0-9_]*)\}")
@@ -69,12 +71,69 @@ class Auth(_Closed):
     value_env: str
 
 
+class Enforcement(_Closed):
+    """A recorded probe: a write sent with a version that did not match was
+    refused with ``status``. Without this (or a probe the adapter runs), a
+    declared precondition is not trusted: a server that ignores ``If-Match``
+    would apply the write over a newer edit."""
+
+    status: int = Field(ge=100, le=599)
+    #: When the probe ran (ISO date), and against what (a server version).
+    observed: str = Field(min_length=4, max_length=40)
+    server: str = Field(default="", max_length=80)
+
+
+class Precondition(_Closed):
+    """A server-enforced condition on a write: the record must still be the
+    version OpenAdapt read (``If-Match``). Without one, a whole-record write
+    or a delete can erase another caller's edit made after the read.
+
+    It counts only with enforcement evidence: ``enforcement`` (a recorded
+    probe whose status is a refusal status), or ``probe: true``, which lets
+    the adapter send the first write on the route once with a version that
+    can't match. A refusal proves enforcement; an accepted probe was the
+    write itself, sent without a check, and is never VERIFIED."""
+
+    header: str = Field(default="If-Match", pattern=r"^[A-Za-z0-9-]{1,64}$")
+    #: Where the version comes from: the read's ``ETag`` response header, or
+    #: a field of the record as read (a dotted path: ``meta.versionId``).
+    source: Literal["etag", "field"] = "etag"
+    field: Optional[str] = None
+    #: How the header value is written; ``{value}`` is the version
+    #: (``W/"{value}"`` for a weak FHIR tag).
+    format: str = "{value}"
+    #: Statuses by which the server says the record changed, so nothing was written.
+    refused_status: list[int] = Field(default_factory=lambda: [412])
+    enforcement: Optional[Enforcement] = None
+    probe: bool = False
+
+    def recorded(self) -> bool:
+        """A recorded probe that got a refusal status."""
+        return (
+            self.enforcement is not None
+            and self.enforcement.status in self.refused_status
+        )
+
+    @model_validator(mode="after")
+    def _check(self) -> "Precondition":
+        if (self.source == "field") != bool(self.field):
+            raise ValueError("precondition: field goes with source: field")
+        if "{value}" not in self.format:
+            raise ValueError("precondition: format must hold {value}")
+        return self
+
+
 class Route(_Closed):
     method: str = "GET"
     path: str
     #: update only: the server replaces the whole record, so OpenAdapt sends
     #: the baseline merged with the planned fields (and the full baseline on undo).
     replace: bool = False
+    #: update and delete: send the version that was read, so the server
+    #: refuses the write if the record changed since. A replace update or a
+    #: delete without an enforced one is never VERIFIED: a lost update can't
+    #: be excluded.
+    precondition: Optional[Precondition] = None
     #: list only: pagination.
     page_param: Optional[str] = None
     per_page_param: Optional[str] = "per_page"
@@ -112,6 +171,10 @@ class Collection(_Closed):
     #: A delete that the API can't reverse exactly (the record gets a new id
     #: when recreated) is irreversible: it waits in the holdback queue.
     delete_reversible: bool = False
+    #: Resource-scoped verification for a system with no frame to diff (an
+    #: API or SaaS system): read the record back and check the system's own
+    #: log. See :mod:`openadapt_flow.txplan.audit`.
+    scoped: Optional[ScopedCollection] = None
 
 
 class RestSystem(_Closed):
@@ -125,6 +188,8 @@ class RestSystem(_Closed):
     idempotency_header: Optional[str] = None
     timeout_s: float = Field(default=20.0, gt=0, le=300)
     collections: list[Collection] = Field(min_length=1)
+    #: The system's own event or audit log, for resource-scoped verification.
+    audit: Optional[AuditSource] = None
 
     @model_validator(mode="after")
     def _check(self) -> "RestSystem":
