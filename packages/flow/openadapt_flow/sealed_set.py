@@ -1659,7 +1659,9 @@ def restore(root: Path | str) -> str:
             stanza = kh.device_stanza(bucket)  # type: ignore[arg-type]
         except kh.KeyHierarchyError as exc:
             raise SealedSetError(f"Not restoring {base}: {exc}") from exc
-        record = dict(header["bucket_record"])  # type: ignore[arg-type]
+        raw_record = header["bucket_record"]
+        assert isinstance(raw_record, dict)
+        record = dict(raw_record)
         stanzas = [
             s for s in record.get("stanzas", []) if s.get("fpr") != stanza["fpr"]
         ]
