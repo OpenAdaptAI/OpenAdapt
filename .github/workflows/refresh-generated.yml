@@ -1,0 +1,156 @@
+name: Refresh generated pages
+
+# CAPABILITIES.md and llms-full.txt are generated from sources (row files
+# under capabilities/, packages/flow/docs/commands/, README.md, the Flow docs
+# and changelog). Pull requests change only the sources: when every pull
+# request also regenerated the pages, each merge to main made every other
+# open pull request conflict. This workflow regenerates both pages from main
+# and opens a draft pull request with the result. It never pushes to main.
+#
+# The pull request is opened with the workflow's own token, and GitHub starts
+# no workflows for that, so it opens as a draft: marking it ready for review
+# (a person's action) runs CI as usual. A newer refresh closes the older one.
+# On a pull request, ci.yml only checks that neither page was edited by hand
+# (scripts/build_capabilities.py --check-pr).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "capabilities/**"
+      - "packages/flow/docs/commands/**"
+      - "README.md"
+      - "packages/flow/docs/SURFACES.md"
+      - "packages/flow/docs/LIMITS.md"
+      - "packages/flow/CHANGELOG.md"
+      - "packages/flow/pyproject.toml"
+      - "scripts/build_capabilities.py"
+      - "scripts/build_command_map.py"
+      - "scripts/build_llms_full.py"
+      # A merged refresh runs once more, finds nothing to do, and closes any
+      # refresh pull request it made obsolete.
+      - "CAPABILITIES.md"
+      - "llms-full.txt"
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh-generated
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    name: refresh CAPABILITIES.md and llms-full.txt
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          # The step below pushes the refresh branch (never main).
+          persist-credentials: true
+      - name: Regenerate, and open or replace the refresh pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Stop, rather than drop a row, when the page changed outside the
+          # generator (a pull request whose CI passed before --check-pr).
+          python3 scripts/build_capabilities.py --guard
+          python3 scripts/build_capabilities.py
+          python3 scripts/build_llms_full.py
+          python3 scripts/build_capabilities.py --check
+          python3 scripts/build_llms_full.py --check
+
+          prefix="bot/refresh-generated-"
+          open_prs="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open \
+            --author "app/github-actions" --limit 100 \
+            --json number,headRefName,body \
+            --jq "map(select(.headRefName | startswith(\"$prefix\")))")"
+
+          if git diff --quiet -- CAPABILITIES.md capabilities/CAPABILITIES.md.sha256 llms-full.txt; then
+            echo "CAPABILITIES.md and llms-full.txt are current."
+            for number in $(jq -r '.[].number' <<<"$open_prs"); do
+              gh pr close "$number" --repo "$GITHUB_REPOSITORY" --delete-branch \
+                --comment "main already has these pages; nothing to refresh."
+            done
+            exit 0
+          fi
+
+          digest="$(cat CAPABILITIES.md llms-full.txt | sha256sum | cut -c1-16)"
+          if jq -e --arg d "content: $digest" 'any(.[]; .body | contains($d))' <<<"$open_prs" >/dev/null; then
+            echo "An open refresh pull request already has this content ($digest)."
+            exit 0
+          fi
+
+          # Lines the refresh drops from CAPABILITIES.md, for the reviewer: a
+          # row edited or removed through its row file shows here, and so
+          # would a hand edit of the page that never reached a row file.
+          removed="$(git diff -U0 -- CAPABILITIES.md | grep -E '^-[^-]' | cut -c2-200 | head -20 || true)"
+          sha="$(git rev-parse --short=12 HEAD)"
+          # The run id keeps a rerun on the same commit off an old branch.
+          branch="${prefix}${sha}-${GITHUB_RUN_ID}"
+          git switch -c "$branch"
+          git add CAPABILITIES.md capabilities/CAPABILITIES.md.sha256 llms-full.txt
+          git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "docs: refresh CAPABILITIES.md and llms-full.txt"
+          git push -q origin "HEAD:refs/heads/$branch"
+
+          body="$(printf '%s\n' \
+            "Regenerated from main at ${sha} by \`.github/workflows/refresh-generated.yml\`:" \
+            "\`python scripts/build_capabilities.py\` and \`python scripts/build_llms_full.py\`." \
+            "" \
+            "This is a draft because GitHub runs no workflows for a pull request the workflow token opens. Mark it ready for review to run CI, then merge it like any other." \
+            "" \
+            "Lines this refresh removes from CAPABILITIES.md (an edited or removed row shows here; anything else is a hand edit to move into capabilities/ first):" \
+            "" \
+            '```' \
+            "${removed:-(none)}" \
+            '```' \
+            "" \
+            "content: ${digest}")"
+          url="$(gh pr create --repo "$GITHUB_REPOSITORY" --draft --base main \
+            --head "$branch" \
+            --title "docs: refresh CAPABILITIES.md and llms-full.txt" \
+            --body "$body")"
+          echo "opened $url"
+          for number in $(jq -r '.[].number' <<<"$open_prs"); do
+            gh pr close "$number" --repo "$GITHUB_REPOSITORY" --delete-branch \
+              --comment "Superseded by $url."
+          done
+
+  blocked:
+    name: refresh blocked issue
+    needs: refresh
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open, or comment on, the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="CAPABILITIES.md refresh blocked"
+          body="The refresh of CAPABILITIES.md and llms-full.txt stopped: ${RUN_URL}
+
+          Usually the page on main was edited by hand, so regenerating it would drop that edit. The run log lists the lines no file under capabilities/ produces. Add a row file for each (or edit section.md) and run python scripts/build_capabilities.py in the same pull request."
+          number="$(gh issue list -R "$GITHUB_REPOSITORY" --state open \
+            --search "\"$title\" in:title" --json number,title \
+            -q "map(select(.title == \"$title\")) | .[0].number // empty")"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" -R "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi
