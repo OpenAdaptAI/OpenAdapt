@@ -779,3 +779,121 @@ def test_cli_serve_and_config_subprocess(tmp_path: Path) -> None:
     )
     assert pub_run.returncode == 0, pub_run.stderr
     assert pub_run.stdout.strip() == noop_server.public_key_b64
+
+
+def test_stale_row_in_same_table_does_not_verify_mismatched_insert(
+    tmp_path: Path,
+) -> None:
+    """Probe E: an insert into the read-back table with wrong status must not
+    verify against a pre-existing stale row in the same table."""
+    db_path = tmp_path / "claims.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE claims (id TEXT, status TEXT)")
+        conn.execute("INSERT INTO claims (id, status) VALUES ('C1', 'open')")
+
+    pack_path = tmp_path / "probe_e.json"
+    pack_path.write_text(
+        json.dumps(
+            {
+                "name": "open_claim",
+                "description": "Open a claim record.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"id": {"type": "string"}},
+                    "required": ["id"],
+                },
+                "steps": [
+                    {
+                        "op": "sqlite_insert",
+                        "database": str(db_path),
+                        "table": "claims",
+                        "values": {"id": "{id}", "status": "closed"},
+                    }
+                ],
+                "readback_contract": {
+                    "kind": "sqlite",
+                    "database": str(db_path),
+                    "table": "claims",
+                    "match": {"id": "{id}", "status": "open"},
+                    "expected_count": 1,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    server = McpifyServer(load_workflow_spec(pack_path))
+    res = _run_stdio_session(
+        server,
+        [
+            *_handshake_messages(),
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 20,
+                    "method": "tools/call",
+                    "params": {"name": "open_claim", "arguments": {"id": "C1"}},
+                }
+            ),
+        ],
+    )[1]["result"]
+    assert res["isError"] is True
+    assert res["structuredContent"]["status"] == "HALT"
+    assert res["structuredContent"]["verdict"] == "MISMATCH"
+    assert res["structuredContent"]["receipt"] is None
+
+
+def test_custom_runner_without_applied_targets_fails_closed(tmp_path: Path) -> None:
+    """Probe F: a custom runner returning writes_applied=1 without applied_targets
+    must fail closed (ABSTAIN), never matching pre-existing rows."""
+    db_path = tmp_path / "claims.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE claims (id TEXT, status TEXT)")
+        conn.execute("INSERT INTO claims (id, status) VALUES ('C1', 'open')")
+
+    pack_path = tmp_path / "probe_f.json"
+    pack_path.write_text(
+        json.dumps(
+            {
+                "name": "open_claim",
+                "description": "Open a claim record.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"id": {"type": "string"}},
+                    "required": ["id"],
+                },
+                "steps": [{"op": "click", "target": "#save"}],
+                "readback_contract": {
+                    "kind": "sqlite",
+                    "database": str(db_path),
+                    "table": "claims",
+                    "match": {"id": "{id}", "status": "open"},
+                    "expected_count": 1,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    server = McpifyServer(
+        load_workflow_spec(pack_path),
+        runner=lambda _s, _a: {"writes_applied": 1, "llm_calls": 0},
+    )
+    res = _run_stdio_session(
+        server,
+        [
+            *_handshake_messages(),
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 21,
+                    "method": "tools/call",
+                    "params": {"name": "open_claim", "arguments": {"id": "C1"}},
+                }
+            ),
+        ],
+    )[1]["result"]
+    assert res["isError"] is True
+    assert res["structuredContent"]["status"] == "HALT"
+    assert res["structuredContent"]["verdict"] in ("MISMATCH", "ABSTAIN")
+    assert res["structuredContent"]["receipt"] is None

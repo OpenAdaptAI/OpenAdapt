@@ -578,16 +578,19 @@ def default_deterministic_runner(
             placeholders = ", ".join("?" for _ in cols)
             col_list = ", ".join(cols)
             with sqlite3.connect(db_raw) as conn:
-                conn.execute(
+                cursor = conn.execute(
                     f"INSERT INTO {table} ({col_list}) VALUES ({placeholders})",
                     [values[c] for c in cols],
                 )
+                inserted_rowid = cursor.lastrowid
             writes_applied += 1
             applied_targets.append(
                 {
                     "kind": "sqlite",
                     "database": str(Path(db_raw).resolve()),
                     "table": table,
+                    "rowid": inserted_rowid,
+                    "values": dict(values),
                 }
             )
         elif isinstance(op, str):
@@ -601,6 +604,50 @@ def default_deterministic_runner(
         "unexecuted_ops": unexecuted_ops,
         "llm_calls": 0,
     }
+
+
+def _snapshot_sqlite_before_count(
+    spec: WorkflowToolSpec,
+    arguments: Mapping[str, Any],
+) -> Optional[int]:
+    """Count rows matching a SQLite read-back contract BEFORE the runner runs."""
+    contract = spec.readback_contract
+    if contract.get("kind") != "sqlite":
+        return None
+    db_path_raw = contract.get("database")
+    table = contract.get("table")
+    match_spec = contract.get("match")
+    if (
+        not isinstance(db_path_raw, str)
+        or not isinstance(table, str)
+        or not _SAFE_SQL_IDENTIFIER_RE.match(table)
+        or not isinstance(match_spec, Mapping)
+        or not match_spec
+    ):
+        return None
+    db_path = Path(db_path_raw)
+    if not db_path.is_file():
+        return 0
+    columns: list[str] = []
+    params: list[Any] = []
+    for col, tmpl in match_spec.items():
+        if not isinstance(col, str) or not _SAFE_SQL_IDENTIFIER_RE.match(col):
+            return None
+        columns.append(col)
+        params.append(_render_value(tmpl, arguments))
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        try:
+            where_clause = " AND ".join(f"{col} = ?" for col in columns)
+            row = conn.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE {where_clause}",
+                params,
+            ).fetchone()
+            return int(row[0]) if row is not None else 0
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return None
 
 
 def default_readback_oracle(
@@ -641,6 +688,10 @@ def default_readback_oracle(
         )
 
     applied_targets = execution_output.get("applied_targets")
+    before_count = execution_output.get("_readback_before_count")
+    has_before_count = isinstance(before_count, int) and not isinstance(
+        before_count, bool
+    )
     contract = spec.readback_contract
     kind = contract.get("kind")
 
@@ -665,15 +716,18 @@ def default_readback_oracle(
                 verdict="ABSTAIN",
                 reason=f"Read-back SQLite database does not exist: {db_path}",
             )
+        resolved_db = str(db_path.resolve())
+        written_rowids: list[int] = []
         if isinstance(applied_targets, (list, tuple)):
-            resolved_db = str(db_path.resolve())
-            if not any(
-                isinstance(t, Mapping)
+            matching_targets = [
+                t
+                for t in applied_targets
+                if isinstance(t, Mapping)
                 and t.get("kind") == "sqlite"
                 and t.get("database") == resolved_db
                 and t.get("table") == table
-                for t in applied_targets
-            ):
+            ]
+            if not matching_targets:
                 return ReadbackResult(
                     verdict="ABSTAIN",
                     reason=(
@@ -682,6 +736,21 @@ def default_readback_oracle(
                     ),
                     observed={"applied_targets": list(applied_targets)},
                 )
+            written_rowids = [
+                t["rowid"]
+                for t in matching_targets
+                if isinstance(t.get("rowid"), int)
+                and not isinstance(t.get("rowid"), bool)
+            ]
+        elif not has_before_count:
+            return ReadbackResult(
+                verdict="ABSTAIN",
+                reason=(
+                    "Runner did not report applied_targets and no before-call "
+                    "snapshot is available; refusing to match pre-existing rows"
+                ),
+                observed={"applied_targets": applied_targets},
+            )
         expected: dict[str, Any] = {}
         columns: list[str] = []
         for col, tmpl in match_spec.items():
@@ -697,7 +766,11 @@ def default_readback_oracle(
             conn.row_factory = sqlite3.Row
             try:
                 where_clause = " AND ".join(f"{col} = ?" for col in columns)
-                params = [expected[col] for col in columns]
+                params: list[Any] = [expected[col] for col in columns]
+                if written_rowids:
+                    rowid_placeholders = ", ".join("?" for _ in written_rowids)
+                    where_clause = f"rowid IN ({rowid_placeholders}) AND {where_clause}"
+                    params = [*written_rowids, *params]
                 rows = conn.execute(
                     f"SELECT * FROM {table} WHERE {where_clause}",
                     params,
@@ -712,7 +785,12 @@ def default_readback_oracle(
             )
 
         expected_count = int(contract.get("expected_count", 1))
-        if len(rows) == expected_count:
+        effective_count = (
+            len(rows)
+            if written_rowids
+            else (len(rows) - int(before_count) if has_before_count else len(rows))
+        )
+        if effective_count == expected_count:
             observed = dict(rows[-1]) if rows else {}
             return ReadbackResult(
                 verdict="VERIFIED",
@@ -723,13 +801,13 @@ def default_readback_oracle(
         return ReadbackResult(
             verdict="MISMATCH",
             reason=(
-                f"Expected {expected_count} matching row(s) in {table}, "
-                f"observed {len(rows)}"
+                f"Expected {expected_count} new matching row(s) in {table}, "
+                f"observed {effective_count}"
             ),
             expected=expected,
-            observed={"matched_rows": len(rows)},
+            observed={"matched_rows": len(rows), "new_matched_rows": effective_count},
             discrepancies=(
-                f"row_count: expected={expected_count}, observed={len(rows)}",
+                f"row_count: expected={expected_count}, observed={effective_count}",
             ),
         )
 
@@ -747,22 +825,21 @@ def default_readback_oracle(
                 verdict="ABSTAIN",
                 reason=f"Read-back JSON file not found: {file_path}",
             )
-        if isinstance(applied_targets, (list, tuple)):
-            resolved_file = str(file_path.resolve())
-            if not any(
-                isinstance(t, Mapping)
-                and t.get("kind") == "json_file"
-                and t.get("path") == resolved_file
-                for t in applied_targets
-            ):
-                return ReadbackResult(
-                    verdict="ABSTAIN",
-                    reason=(
-                        f"Applied write(s) did not target read-back JSON file "
-                        f"{file_path}"
-                    ),
-                    observed={"applied_targets": list(applied_targets)},
-                )
+        resolved_file = str(file_path.resolve())
+        if not isinstance(applied_targets, (list, tuple)) or not any(
+            isinstance(t, Mapping)
+            and t.get("kind") == "json_file"
+            and t.get("path") == resolved_file
+            for t in applied_targets
+        ):
+            return ReadbackResult(
+                verdict="ABSTAIN",
+                reason=(
+                    f"Applied write(s) did not target read-back JSON file "
+                    f"{file_path}"
+                ),
+                observed={"applied_targets": list(applied_targets)},
+            )
         try:
             observed_data = json.loads(file_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
@@ -1002,6 +1079,7 @@ class McpifyServer:
                 data={"validation_errors": validation_errors},
             )
 
+        before_count = _snapshot_sqlite_before_count(spec, arguments)
         try:
             execution_output = dict(self._runner(spec, arguments))
         except Exception as exc:
@@ -1016,6 +1094,8 @@ class McpifyServer:
                     discrepancies=(f"runner_exception: {type(exc).__name__}",),
                 ),
             )
+        if before_count is not None:
+            execution_output["_readback_before_count"] = before_count
 
         llm_calls = int(execution_output.get("llm_calls", 0))
         if llm_calls != 0:
