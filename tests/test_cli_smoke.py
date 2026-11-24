@@ -318,13 +318,13 @@ def test_distribution_metadata_does_not_publish_a_static_lifecycle():
 def test_distribution_metadata_installs_the_launcher_on_newer_python():
     """An upper Requires-Python bound made pip on 3.13+ backtrack to 1.3.0.
 
-    The launcher installs on any Python >=3.10; the engine dependencies carry
+    The launcher installs on any Python >=3.11; the engine dependencies carry
     the version marker instead (tests/test_python_support.py).
     """
     from importlib.metadata import metadata
 
     actual = metadata("openadapt")["Requires-Python"]
-    assert {term.strip() for term in actual.split(",")} == {">=3.10"}
+    assert {term.strip() for term in actual.split(",")} == {">=3.11"}
 
 
 def test_doctor_lists_quickstart_dependencies_as_core_not_extras(monkeypatch):

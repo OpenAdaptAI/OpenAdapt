@@ -203,7 +203,7 @@ def test_unsupported_python_preflight_prints_remedy_before_delegation(
         result = runner.invoke(cli_main, ["quickstart"])
 
     assert result.exit_code != 0
-    assert "OpenAdapt needs Python 3.10\u20133.12" in result.output
+    assert "OpenAdapt needs Python 3.11\u20133.12" in result.output
     assert f"This is Python {version_info[0]}.{version_info[1]}" in result.output
     assert "uv tool install --python 3.12 openadapt" in result.output
     assert (
@@ -227,7 +227,7 @@ def test_pep668_error_prints_the_same_remedy(monkeypatch, story_calls):
         result = runner.invoke(cli_main, ["quickstart", "--out", "pep-run"])
 
     assert result.exit_code != 0
-    assert "OpenAdapt needs Python 3.10\u20133.12" in result.output
+    assert "OpenAdapt needs Python 3.11\u20133.12" in result.output
     assert "managed by your operating system" in result.output
     assert "uv tool install --python 3.12 openadapt" in result.output
 

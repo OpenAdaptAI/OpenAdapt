@@ -8,7 +8,7 @@ Two install bugs motivate this file.
    1.3.0 (the newest release with no upper bound and no engine dependency),
    and installed an unrelated pre-compiler CLI with no error. `openadapt
    quickstart` then failed with "No such command". The launcher now installs
-   on any Python >=3.10, every engine requirement carries a marker, and every
+   on any Python >=3.11, every engine requirement carries a marker, and every
    engine command on an unsupported interpreter prints how to install with
    Python 3.12.
 2. The Flow tutorial prints `openadapt-flow record ...` as its next step. The
@@ -184,7 +184,7 @@ def no_engine_import(monkeypatch):
 
 
 def _assert_remedy(output: str) -> None:
-    assert "OpenAdapt needs Python 3.10–3.12" in output
+    assert "OpenAdapt needs Python 3.11–3.12" in output
     assert "This is Python 3.14" in output
     assert "uv tool install --python 3.12 openadapt" in output
 

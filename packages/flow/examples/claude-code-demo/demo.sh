@@ -35,11 +35,11 @@ setup_venv() {
     uv pip install --quiet --python "$PY" "$FLOW_SPEC" "$AGENT_SPEC"
   else
     local base=""
-    for candidate in python3.12 python3.11 python3.10; do
+    for candidate in python3.12 python3.11; do
       if command -v "$candidate" >/dev/null 2>&1; then base="$candidate"; break; fi
     done
     if [ -z "$base" ]; then
-      echo "Need Python 3.10, 3.11, or 3.12 (or uv). Install one and rerun." >&2
+      echo "Need Python 3.11 or 3.12 (or uv). Install one and rerun." >&2
       exit 1
     fi
     "$base" -m venv "$VENV"
