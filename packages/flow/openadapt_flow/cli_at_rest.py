@@ -22,6 +22,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from openadapt_flow.cli_hints import command
+
 RECOVERY_WARNING = (
     "Anyone with this code can open every recording and run on this computer, "
     "including ones that show patient or customer data. Store it offline. "
@@ -59,7 +61,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
     if status["mode"] == "org":
         print(f"Key records not yet archived: {status['unarchived']}")
     elif not status["recovery_key"]:
-        print("No recovery key. Create one: openadapt-flow at-rest recovery create")
+        print(f"No recovery key. Create one: {command('at-rest recovery create')}")
     if status["configured_key"]:
         print("A configured key (OPENADAPT_BUNDLE_KEY) is set: deprecated.")
     return 0
@@ -128,7 +130,7 @@ def _cmd_shred(args: argparse.Namespace) -> int:
             f"at-rest shred: NOT COMPLETE for {root}: destroyed {copies}, but the "
             "copy of its key in the organization archive it was written to could "
             "not be deleted (offline, unmounted or read-only?). Run this again on "
-            "this computer, or `openadapt-flow at-rest archive`, once that "
+            f"this computer, or `{command('at-rest archive')}`, once that "
             "archive is reachable.",
             file=sys.stderr,
         )
