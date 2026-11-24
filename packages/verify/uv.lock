@@ -18,7 +18,7 @@ required-markers = [
 [manifest]
 overrides = [
     { name = "numpy", marker = "python_full_version < '3'" },
-    { name = "openadapt-flow", extras = ["receipts", "agent", "openai-agents", "claude-agent-sdk"], specifier = ">=2.6.0,<4" },
+    { name = "openadapt-flow", extras = ["receipts", "agent", "openai-agents", "claude-agent-sdk"], specifier = ">=2.6.0,<5" },
     { name = "opencv-python", marker = "python_full_version < '3'" },
     { name = "pillow", marker = "python_full_version < '3'" },
     { name = "rapidocr-onnxruntime", marker = "python_full_version < '3'" },
@@ -853,7 +853,7 @@ wheels = [
 
 [[package]]
 name = "openadapt-verify"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
@@ -885,10 +885,10 @@ requires-dist = [
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.2" },
     { name = "cryptography", specifier = ">=50.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
-    { name = "openadapt-flow", extras = ["agent"], marker = "extra == 'mcp'", specifier = ">=3.0.0,<4" },
-    { name = "openadapt-flow", extras = ["claude-agent-sdk"], marker = "extra == 'claude'", specifier = ">=3.0.0,<4" },
-    { name = "openadapt-flow", extras = ["openai-agents"], marker = "extra == 'openai'", specifier = ">=3.0.0,<4" },
-    { name = "openadapt-flow", extras = ["receipts"], specifier = ">=3.0.0,<4" },
+    { name = "openadapt-flow", extras = ["agent"], marker = "extra == 'mcp'", specifier = ">=3.0.0,<5" },
+    { name = "openadapt-flow", extras = ["claude-agent-sdk"], marker = "extra == 'claude'", specifier = ">=3.0.0,<5" },
+    { name = "openadapt-flow", extras = ["openai-agents"], marker = "extra == 'openai'", specifier = ">=3.0.0,<5" },
+    { name = "openadapt-flow", extras = ["receipts"], specifier = ">=3.0.0,<5" },
     { name = "pymysql", marker = "extra == 'mysql'", specifier = ">=1.1,<2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },

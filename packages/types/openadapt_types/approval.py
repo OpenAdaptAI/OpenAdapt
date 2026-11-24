@@ -281,11 +281,13 @@ class StepClass(str, Enum):
     REVERSIBLE = "reversible"
     CONSEQUENTIAL = "consequential"
     IRREVERSIBLE = "irreversible"
-    #: An irreversible, high-risk write to a system of record.
-    #: Wire value remains ``clinical_write`` in v1 for signed-grant and receipt compatibility.
-    HIGH_RISK_WRITE = "clinical_write"
-    #: Legacy alias for ``HIGH_RISK_WRITE``.
+    #: An irreversible, high-risk write to a system of record. Declared
+    #: first so the member keeps its 0.24.0 name (``.name``, ``str()``,
+    #: ``repr()``); the wire value stays ``clinical_write`` in v1 for
+    #: signed-grant and receipt compatibility.
     CLINICAL_WRITE = "clinical_write"
+    #: Domain-neutral alias for ``CLINICAL_WRITE``.
+    HIGH_RISK_WRITE = "clinical_write"
 
     @classmethod
     def _missing_(cls, value: object) -> Optional["StepClass"]:
@@ -305,10 +307,11 @@ class ApproverPolicyRefusal(str, Enum):
     """Closed reasons a policy refuses an approver."""
 
     KIND_NOT_ALLOWED = "approver_kind_not_allowed"
-    #: Wire value remains ``clinical_write_needs_opt_in`` in v1 for Flow compatibility.
-    HIGH_RISK_WRITE_NEEDS_OPT_IN = "clinical_write_needs_opt_in"
-    #: Legacy alias for ``HIGH_RISK_WRITE_NEEDS_OPT_IN``.
+    #: Declared first so the member keeps its 0.24.0 name; the wire value
+    #: stays ``clinical_write_needs_opt_in`` in v1 for Flow compatibility.
     CLINICAL_WRITE_NEEDS_OPT_IN = "clinical_write_needs_opt_in"
+    #: Domain-neutral alias for ``CLINICAL_WRITE_NEEDS_OPT_IN``.
+    HIGH_RISK_WRITE_NEEDS_OPT_IN = "clinical_write_needs_opt_in"
 
     @classmethod
     def _missing_(cls, value: object) -> Optional["ApproverPolicyRefusal"]:

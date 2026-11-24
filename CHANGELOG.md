@@ -4,6 +4,11 @@
 
 ## Unreleased
 
+### Requirements
+
+- Accepts openadapt-flow 4: the launcher's Flow requirement and `openadapt
+  doctor`'s supported range are now `>=3.3.0,<5.0.0` (was `<4.0.0`).
+
 ### Features
 
 - **Agent-to-agent handoffs.**

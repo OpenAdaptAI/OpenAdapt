@@ -111,7 +111,7 @@ this order.
 | Signal `completed`, every required effect CONFIRMED | `verified` | the declared positive reward |
 | Signal `completed`, a required effect REFUTED (absent, duplicated, wrong value) | `wrong_effect` | 0 or the declared penalty |
 | Signal `halted_before_effect`, `refused`, or `rejected_policy`, store shows no required effect | that outcome | 0 or the declared penalty |
-| Same signals, and every required effect is present exactly as declared | `escalated_after_effect` | `escalated_after_effect_reward` (default 0.5) |
+| Same signals, and every required effect is present exactly as declared | `escalated_after_effect` | `escalated_after_effect_reward` (0 unless the contract declares it; the synthetic bundle declares 0.5) |
 | Same signals, and a required effect is present but not as declared | `reconciliation_required`, uncertainty `effect_uncertain` | unscored |
 
 Unscored is never 0.0. The receipt carries `scalar_reward: null` and the
