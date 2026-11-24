@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml)
 [![PyPI version](https://img.shields.io/pypi/v/openadapt-capture.svg)](https://pypi.org/project/openadapt-capture/)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/capture/LICENSE)
 
 Record what a person does on a Windows or macOS desktop, then read it back in
@@ -28,7 +28,7 @@ compiles. Everything stays in a local folder.
 
 ## Quick start
 
-You need Python 3.10 or later, and before the first recording:
+You need Python 3.11 or later, and before the first recording:
 
 - **FFmpeg.** Capture writes video with the `ffmpeg` executable on your
   `PATH`. If you don't have one, install FFmpeg with your package manager. On
@@ -133,8 +133,8 @@ See [docs/AUTHENTICATION_HANDOFF.md](https://github.com/OpenAdaptAI/OpenAdapt/bl
 ## Use it with OpenAdapt
 
 To compile a recording into a program that replays the task, install
-OpenAdapt with this package as an extra. OpenAdapt needs Python 3.10, 3.11,
-or 3.12.
+OpenAdapt with this package as an extra. OpenAdapt needs Python 3.11 or
+3.12.
 
 ```bash
 pip install "openadapt[capture]"

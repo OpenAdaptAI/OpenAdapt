@@ -25,7 +25,7 @@ import threading
 import webbrowser
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -80,10 +80,10 @@ def _parse_utc_expiry(value: object) -> str:
     if not isinstance(value, str) or not value:
         raise InvalidCredentialPayload("expires_at must be a non-empty string")
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value)
     except ValueError as e:
         raise InvalidCredentialPayload("expires_at must be ISO-8601") from e
-    if parsed.tzinfo is None or parsed.utcoffset() != timezone.utc.utcoffset(parsed):
+    if parsed.tzinfo is None or parsed.utcoffset() != UTC.utcoffset(parsed):
         raise InvalidCredentialPayload("expires_at must use UTC")
     return value
 
@@ -535,7 +535,7 @@ class HostedPoller:
         if days is None or credential.expires_at is None:
             return False
         deadline = datetime.fromisoformat(
-            credential.expires_at.replace("Z", "+00:00")
+            credential.expires_at
         ).strftime("%Y-%m-%d")
         day_text = "day" if days == 1 else "days"
         try:

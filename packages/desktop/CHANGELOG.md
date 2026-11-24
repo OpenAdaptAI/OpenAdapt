@@ -15,6 +15,15 @@
 
 
 
+## v0.32.3 (2026-11-23)
+
+### Bug Fixes
+
+- **desktop**: keep permission guidance within the size budget
+- **macos**: guide 27.3 app-control permissions conservatively
+
+
+
 ## Unreleased
 
 

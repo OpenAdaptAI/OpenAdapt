@@ -1467,11 +1467,13 @@ class MacOSBackend(RemoteDisplayBackend):
 
     def _ensure_input_trusted(self) -> None:
         if self._require_input_trust and not self._mac_client.input_trusted():
+            from openadapt_flow.macos_permissions import control_permission_guidance
+
+            guidance = control_permission_guidance()
             raise MacOSBackendError(
-                "Accessibility is not granted, so macOS would silently drop "
-                "synthetic input. In System Settings > Privacy & Security > "
-                "Accessibility, enable the app that launches openadapt-flow, "
-                "then restart it. Refusing to emit input."
+                "macOS process input trust is not confirmed. "
+                + guidance["instructions"]
+                + " Refusing to emit input."
             )
 
     def _ensure_input_ready(
