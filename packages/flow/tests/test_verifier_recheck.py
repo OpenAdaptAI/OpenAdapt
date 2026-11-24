@@ -1595,3 +1595,50 @@ def test_positive_recheck_after_confirmed_still_records_rechecked() -> None:
     assert after is not None
     assert after.rechecked is not None and after.recheck_owed is None
     assert after.resolved["outcome"] == "CONFIRMED"  # type: ignore[index]
+
+
+def test_a_write_begun_without_a_ledger_rechecks_without_one(
+    tmp_path: Path, due_now: None
+) -> None:
+    # begin_write(ledger=None): the default recheck call must not look the
+    # attempt up in the default ledger (where it never was) and hold a
+    # correct write UNCERTAIN; it reads again and judges.
+    db = _db(tmp_path)
+    contract = Contract.from_dict(_doc(db))
+    before = begin_write(contract, _params(2), actor=BOT, ledger=None)
+    _sql(db, *_save_sql(2))
+    result = verify_write(before)
+    assert result.verified, result.reasons
+    late = _recheck(contract, result)
+    assert late.outcome == "CONFIRMED", late.reasons
+    # Late collateral still stops the write without a ledger (held, never
+    # confirmed).
+    before = begin_write(contract, _params(3), actor=BOT, ledger=None)
+    _sql(db, *_save_sql(3))
+    result = verify_write(before)
+    assert result.verified, result.reasons
+    _sql(db, "UPDATE patient_data SET email = 'x@example.test' WHERE pid = 1")
+    late = _recheck(contract, result)
+    assert late.outcome != "CONFIRMED" and not late.verified
+
+
+def test_a_sleep_that_wakes_early_still_reads_when_due(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The sleep timer and the wall clock can disagree by milliseconds; a
+    # wake just before the due second must not make a correct recheck read
+    # "not yet due" (UNCERTAIN).
+    import openadapt_flow.verifier as v
+
+    contract, _, result = _first(tmp_path, recheck_after_s=1)
+    real = v.time.sleep
+    calls: list[float] = []
+
+    def early(seconds: float) -> None:
+        calls.append(seconds)
+        real(max(0.0, seconds - 0.3) if len(calls) == 1 else seconds)
+
+    monkeypatch.setattr(v.time, "sleep", early)
+    late = _recheck(contract, result, wait=True)
+    assert late.outcome == "CONFIRMED", late.reasons
+    assert late.read_at >= late.due_at
