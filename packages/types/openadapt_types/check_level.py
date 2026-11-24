@@ -70,10 +70,12 @@ __all__ = [
     "BASES",
     "Basis",
     "CheckLevel",
+    "CONFIRMED_WORD",
     "OUTCOME_WORDS",
     "OutcomeWord",
     "ReadbackLabel",
     "VERIFIED_LEVELS",
+    "VERIFIED_WORD",
     "from_effect_strength",
     "from_oracle_tier",
     "from_verification_tier",
@@ -262,6 +264,8 @@ _BASIS_LEVEL: dict[str, CheckLevel] = {
 
 #: The receipt outcome words.
 OutcomeWord = Literal["VERIFIED", "SHOWN", "CONFIRMED", "ATTESTED", "RECORDED"]
+VERIFIED_WORD: OutcomeWord = "VERIFIED"
+CONFIRMED_WORD: OutcomeWord = "CONFIRMED"
 OUTCOME_WORDS: tuple[OutcomeWord, ...] = (
     "VERIFIED",
     "SHOWN",

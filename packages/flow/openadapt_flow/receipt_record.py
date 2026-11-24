@@ -420,10 +420,12 @@ def build_statement(
     # confirmed keeps the run from VERIFIED.
     if outcome == "VERIFIED" and settled.total and not settled.passes:
         outcome, reason = "UNKNOWN", "unverified_write"
+    from openadapt_types.check_level import VERIFIED_WORD
+
     scope = _evidence_scope(report, outcome)
     if (
         scope is None
-        and outcome == "VERIFIED"
+        and outcome == VERIFIED_WORD
         and isinstance(report.get("readback"), Mapping)
     ):
         # Receipts say VERIFIED only on a level 3 or 4 read (check_level).
@@ -513,13 +515,14 @@ def _evidence_scope(
     report with no ``readback`` block (made no save, or written before the
     block existed), which keeps its earlier receipt shape.
     """
+    from openadapt_types.check_level import VERIFIED_WORD
     from openadapt_types.evidence_scope import predicate_evidence_scope_problem
 
     from openadapt_flow.evidence_basis import evidence_scope_for_run
 
     readback = report.get("readback")
     readback = readback if isinstance(readback, Mapping) else None
-    if readback is None and outcome == "VERIFIED":
+    if readback is None and outcome == VERIFIED_WORD:
         return None
     try:
         scope = evidence_scope_for_run(readback, outcome)

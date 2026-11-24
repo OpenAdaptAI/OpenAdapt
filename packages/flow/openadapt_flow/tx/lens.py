@@ -1694,9 +1694,11 @@ class TransactionalCommitEngine:
         atomic_enforced: bool = False,
         basis: Optional[Basis] = None,
     ) -> TxCommitResult:
+        from openadapt_types.check_level import CONFIRMED_WORD
+
         scope = tx_evidence_scope(
             outcome=outcome,
-            basis=basis if outcome == "CONFIRMED" else None,
+            basis=basis if outcome == CONFIRMED_WORD else None,
             read_back=r1 is not None,
             wire_observed=wire_summary is not None,
         )

@@ -127,6 +127,8 @@ def tx_evidence_scope(
     with a basis is ``VERIFIED``.
     """
 
+    from openadapt_types.check_level import CONFIRMED_WORD
+
     level = (
         CheckLevel.SYSTEM_OF_RECORD
         if basis is not None or read_back
@@ -135,7 +137,7 @@ def tx_evidence_scope(
     return build_evidence_scope(
         level,
         basis=basis,
-        confirmed=outcome == "CONFIRMED" and basis is not None,
+        confirmed=outcome == CONFIRMED_WORD and basis is not None,
         wire_channel="http_proxy" if wire_observed else "none",
         protocols_parsed=("http",) if wire_observed else (),
         read_back_at=(

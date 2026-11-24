@@ -92,6 +92,7 @@ def evidence_scope_for_run(
     re-read is ``SHOWN`` whatever the run's outcome.
     """
 
+    from openadapt_types.check_level import VERIFIED_WORD
     from openadapt_types.evidence_scope import build_evidence_scope
 
     level = CheckLevel.UNCHECKED
@@ -104,7 +105,7 @@ def evidence_scope_for_run(
             )
         except ValueError:
             level = CheckLevel.UNCHECKED
-    verified = str(outcome).upper() == "VERIFIED"
+    verified = str(outcome).upper() == VERIFIED_WORD
     basis = basis_for_tier(to_verification_tier(level)) if verified else None
     return build_evidence_scope(
         level,

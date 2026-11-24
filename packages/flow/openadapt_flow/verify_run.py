@@ -65,7 +65,9 @@ from openadapt_types.approval import (
     checked_how_for_flow_tier,
 )
 from openadapt_types.check_level import (
+    CONFIRMED_WORD,
     VERIFIED_LEVELS,
+    VERIFIED_WORD,
     CheckLevel,
     from_effect_strength,
     from_verification_tier,
@@ -3793,7 +3795,7 @@ def verify_run(
         level,
         # Only a verified receipt names a basis, so only it reads VERIFIED.
         basis=basis if verified else None,
-        confirmed=delta_verdict == "CONFIRMED",
+        confirmed=delta_verdict == CONFIRMED_WORD,
         minimum=minimum_level,
         read_back_at=read_at if not unread else None,
         recheck_window_s=recheck_after_s if recheck_due_at is not None else None,
@@ -4413,7 +4415,7 @@ def _verified_read(receipt: Mapping[str, Any]) -> bool:
         and receipt.get("checked_how") == CheckLevel.SEPARATE_SESSION.label
         and isinstance(scope, Mapping)
         and scope.get("basis") == "separate_session"
-        and scope.get("word") == "VERIFIED"
+        and scope.get("word") == VERIFIED_WORD
     )
 
 
@@ -4426,7 +4428,7 @@ def _evidence_scope_receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]
     if evidence_scope_problem(scope) is not None:
         return "evidence_scope"
     verified = receipt.get("outcome") in ("verified", "rolled_back_verified")
-    if (scope["word"] == "VERIFIED") is not verified:
+    if (scope["word"] == VERIFIED_WORD) is not verified:
         return "evidence_scope"
     if "checked_how" in receipt and scope["check_level"] != receipt["checked_how"]:
         return "evidence_scope"

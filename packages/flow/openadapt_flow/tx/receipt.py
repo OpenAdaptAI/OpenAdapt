@@ -134,12 +134,13 @@ class TxReceiptPayload(BaseModel):
         ):
             raise ValueError("wire_commitment_and_counts_must_be_present_together")
         if self.evidence_scope is not None:
+            from openadapt_types.check_level import CONFIRMED_WORD, VERIFIED_WORD
             from openadapt_types.evidence_scope import evidence_scope_problem
 
             if evidence_scope_problem(self.evidence_scope) is not None:
                 raise ValueError("evidence_scope_invalid")
             word = self.evidence_scope["word"]
-            if (word == "VERIFIED") is not (self.outcome == "CONFIRMED"):
+            if (word == VERIFIED_WORD) is not (self.outcome == CONFIRMED_WORD):
                 # A CONFIRMED commit without a basis is UNCERTAIN, never here.
                 raise ValueError("evidence_scope_word_disagrees_with_outcome")
         return self
