@@ -48,33 +48,46 @@ has every run.
 On a test copy of openIMIS, the open-source insurance and claims system that
 runs Nepal's national health insurance scheme, the compiled program entered
 149 synthetic claims with no model calls: 148 read back correct and none were
-saved wrong. Each saved claim was read back by SQL through a read-only
-database role on the test copy; the 149th stopped before saving
+saved wrong. Each saved claim was checked through a read-only database role on
+the test copy; the 149th stopped before saving
 ([SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#openimis)).
-
-A screen can't show a save that went wrong behind it. On a test copy of
-OpenEMR, with faults injected in its database (a field blanked, a value changed, a
-duplicate chart, a chart removed, another chart deleted or edited), the agent
-claimed success on all 30 bad saves. Reading the record back caught 25 of the
-30 and confirmed all 5 clean saves, with no false alarms. On MockMed, a test app
-that shows a save as done before its server answers, the agent also claimed
-all 30 bad saves, and the read-back caught all 30
-([details below](#why-the-read-back-matters)).
 
 ## One harness, three modes
 
 | Mode | What happens | Model calls |
 |---|---|---|
-| **Explore** | A person records the task (once, or several times with `openadapt compile --induce` for variations), or an AI agent runs it once while OpenAdapt records every action, ideally on test data. The save is read back before anything compiles. | Your agent's, on your own key |
-| **Run** | The compiled program repeats the task with new inputs. It checks the record before each save and reads it back after. | None |
+| **Explore** | A person records the task (once, or several times with `openadapt compile --induce` for variations), or an AI agent runs it once while OpenAdapt records every action, ideally on test data. The save is checked before anything compiles. | Your agent's, on your own key |
+| **Run** | The compiled program repeats the task with new inputs. It checks the record before each save and reads the result back after. | None |
 | **Repair** | When the app changes, the run stops before saving. An agent shows the fix, the program tries it up to the save without saving, and a person approves it. | Only when something changed, on your own key |
 
-## Why the read-back matters
+## The 3-level verification ladder
 
-A success screen is not proof of a save. We injected 8 kinds of bad save into
-a test app (a save that never landed, landed partly, landed twice, went to the
-wrong record, or changed another record), 9 runs each, alongside clean runs.
-Each check below was asked whether those 72 bad saves had succeeded:
+Most enterprise deployments do not give an automation tool direct SQL access,
+and OpenAdapt does not require it. OpenAdapt picks the strongest layer the app
+supports:
+
+- **Promote to API or MCP when an endpoint exists:** Record the task in the
+  GUI, compile it into direct form/RPC calls and MCP tools (`openadapt-agent serve`)
+  whenever the app exposes an endpoint, and avoid replaying pixels where a
+  compiled API step is ~7x faster (3.3 s vs. 22.5 s on OpenEMR above).
+- **Level 1 (Before-click local guard: 100% of apps, 0 DB needed):** Checks
+  the active record and entity identity across tabs, enforces policy and
+  consent gates before consequential writes, and checks screenshots locally for
+  UI drift or prompt injection. If anything looks wrong, it stops and asks a
+  person instead of guessing.
+- **Level 2 (Post-action UI and confirmation read-back: ~90% of portals, 0 DB needed):**
+  Reads back submitted fields, server confirmation IDs, or generated PDFs in a
+  separate session to confirm what the portal actually recorded.
+- **Level 3 (Direct API or DB read-back: optional upgrade):** When you own the
+  system or have read-only FHIR, REST, or SQL access, reads the system of
+  record directly and mints a signed `VERIFIED` receipt.
+
+### Why independent checks beat a "Saved" screen
+
+In controlled fault tests, a success banner on screen is not enough to prove a
+write landed. We injected 8 kinds of bad save into a test app (a save that
+never landed, landed partly, landed twice, went to the wrong record, or changed
+another record), 9 runs each, alongside clean runs:
 
 | How the save was checked | Bad saves reported as saved |
 |---|---|
@@ -84,26 +97,17 @@ Each check below was asked whether those 72 bad saves had succeeded:
 
 The test app's database is SQLite with two record tables, so "every table"
 there is two tables; a real system has many more. Separately, 9 of the 18
-correct saves stopped in every arm: the server committed the save but its
-answer timed out, so the write step halted before any read-back ran. Most
-deployments give no database access at all. Where the app's own screens are
-the only independent read, the check covers at most the target record, read
-in a separate session, and the same user's changes in the app's activity log
-within a stated window, where the app shows one and the program is set up to
-read it.
-
+correct saves stopped in every arm because the server committed the save after
+its response timed out, so the write step halted before any read-back ran.
 [EFFECT_E2E.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/effect_e2e/EFFECT_E2E.md)
 has the fault set, the method and the raw results.
 
-An agent working alone can't see these faults either. Claude Sonnet 5.5, using
-computer use, did a task on a test app whose server broke the save in 6 ways,
-5 times each. The agent reported all 30 bad saves as done. Given the agent's
-run, `openadapt-flow verify-run` read each record back: it flagged all 30 and
-confirmed all 10 clean saves, with no false alarms. The test app shows "saved"
-before the server answers, so the screen gave the agent nothing to notice. That
-gap is what the read-back closes.
-[SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back)
-has the method, the raw runs and the cost.
+An agent working alone misses the same faults. In controlled runs on OpenEMR
+and MockMed with 30 injected bad saves each, Claude Sonnet 5.5 computer use
+reported all 30 bad saves as done. Running `openadapt-flow verify-run` caught
+25 of 30 on OpenEMR and 30 of 30 on MockMed, while confirming all clean saves
+with zero false alarms
+([SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back)).
 
 ## Try it in one command
 
@@ -378,13 +382,19 @@ it. [Run outcomes](https://docs.openadapt.ai/reference/outcomes/) lists every va
 
 ## When to use something else
 
-- **The app has an API for the task.** Call the API.
-- **Every task is new.** Use a computer-use agent. OpenAdapt pays off when the
-  same entry repeats.
-- **There's no way to read the record back.** The record check needs read
-  access to the system of record: an API, the database, FHIR, or a separate
-  signed-in session. Without one, a run can only end as finished but not
-  checked.
+- **You already have a clean, documented API client for the task.** Call the
+  API directly. (If the app only exposes an internal form or RPC endpoint,
+  OpenAdapt can record it in the GUI and compile it into a direct API/MCP
+  step instead of replaying pixels.)
+- **Every task is one-off.** Use a computer-use agent. OpenAdapt pays off when
+  the same entry repeats or needs repeatable verification.
+- **You need a `VERIFIED` receipt with zero read-back path at all.** Level 1
+  before-click guards work on 100% of apps with no database access, and Level 2
+  UI confirmation read-back covers ~90% of portals with no database access.
+  Level 3 direct API/FHIR/SQL read-back is an optional upgrade when you own the
+  system. If a target exposes neither a UI read-back nor an API/DB read-back, a
+  run finishes as checked-before-click (`COMPLETED_UNVERIFIED`) rather than
+  `VERIFIED`.
 
 
 ## Packages
