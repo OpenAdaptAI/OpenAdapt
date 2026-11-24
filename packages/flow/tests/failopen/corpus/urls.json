@@ -1,0 +1,31 @@
+{
+  "_about": "Redirect targets a browser reads as leaving the origin, or that a URL parser and a browser read differently. Used by M11 on every site that relays or follows a URL.",
+  "hostile": [
+    "//evil.example/x",
+    "///evil.example/x",
+    "////evil.example/x",
+    "/\\evil.example/x",
+    "\\\\evil.example/x",
+    "\t//evil.example/x",
+    "/\t/evil.example/x",
+    "http://app.test@evil.example/x",
+    "http://app.test:443@evil.example/x",
+    "https://evil.example/x",
+    "http:////evil.example/x",
+    "http:\\\\evil.example/x",
+    "/x\r\nSet-Cookie: a=b",
+    "javascript:alert(1)",
+    " //evil.example/x"
+  ],
+  "safe": [
+    "/a/b",
+    "/a/b?q=1#f",
+    "b/c",
+    "?q=1"
+  ],
+  "chain": [
+    "/step1",
+    "/step2",
+    "//evil.example/step3"
+  ]
+}

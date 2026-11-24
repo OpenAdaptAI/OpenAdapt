@@ -10,7 +10,7 @@ writer's own response is never evidence that the write persisted.
 pip install openadapt-verify
 ```
 
-Requires Python 3.10, 3.11 or 3.12. The install is 21 distributions and about
+Requires Python 3.11 or 3.12. The install is 21 distributions and about
 41 MB of site-packages, with no vision, OCR, browser, GUI, NumPy or ML stack. It uses the verifier, write ledger, protected journal, SQL guards and
 receipt signing from `openadapt-flow`: the same code, not a copy. Flow's
 vision stack is its `vision` extra, which this package never installs.
