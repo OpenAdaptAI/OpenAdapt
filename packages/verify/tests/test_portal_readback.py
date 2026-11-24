@@ -878,3 +878,64 @@ def test_fresh_reload_stored_dom_must_match_proof_digest(tmp_path: Path) -> None
     assert res.verdict == "HALT"
     assert res.receipt_verdict == "REFUTED"
     assert res.reason == "summary_dom_digest_mismatch"
+
+
+def test_fresh_reload_value_split_by_inline_tags_is_read_whole(
+    tmp_path: Path,
+) -> None:
+    for dom in (
+        b"<dl><dt>Premium</dt><dd>$500<span>,000</span></dd></dl>",
+        b"<dl><dt>Premium</dt><dd>$500<sup>.99</sup></dd></dl>",
+        b"<div>Premium: <del>$500</del> $900</div>",
+    ):
+        res = _stored_reload(tmp_path, dom, {"premium": "$500"})
+        assert res.verdict == "HALT", dom
+        assert _check_status(res, "premium") == "REFUTED", dom
+
+    res_ok = _stored_reload(
+        tmp_path, b"<div><b>Premium</b>: <span>$500</span></div>", {"premium": "$500"}
+    )
+    assert res_ok.verdict == "VERIFIED", res_ok
+
+
+def test_fresh_reload_header_row_label_does_not_bind_next_row(
+    tmp_path: Path,
+) -> None:
+    dom = (
+        b"<table><tr><th>Premium</th><th>Deductible</th></tr>"
+        b"<tr><td>$600</td><td>$500</td></tr></table>"
+    )
+    res = _stored_reload(tmp_path, dom, {"deductible": "$600"})
+    assert res.verdict == "HALT"
+    assert _check_status(res, "deductible") == "ABSTAIN"
+
+    res_row = _stored_reload(
+        tmp_path,
+        b"<table><tr><th>Deductible</th><td>$600</td></tr></table>",
+        {"deductible": "$600"},
+    )
+    assert res_row.verdict == "VERIFIED", res_row
+
+
+def test_fresh_reload_field_locators_and_labels(tmp_path: Path) -> None:
+    dom = (
+        b'<div><input id="prem" name="premium_amt" value="$500">'
+        b'<div hidden><input id="ghost" value="$500"></div>'
+        b"<p>Total due: $500</p></div>"
+    )
+    for locator in ("#prem", "id=prem", "name=premium_amt", '[name="premium_amt"]'):
+        res = _stored_reload(
+            tmp_path, dom, {"premium": "$500"}, field_locators={"premium": locator}
+        )
+        assert res.verdict == "VERIFIED", (locator, res)
+    for locator in ("#ghost", "div > input.premium", "#missing"):
+        res = _stored_reload(
+            tmp_path, dom, {"premium": "$500"}, field_locators={"premium": locator}
+        )
+        assert res.verdict == "HALT", locator
+        assert _check_status(res, "premium") == "ABSTAIN", locator
+
+    res_label = _stored_reload(
+        tmp_path, dom, {"premium": "$500"}, field_labels={"premium": ["Total due"]}
+    )
+    assert res_label.verdict == "VERIFIED", res_label

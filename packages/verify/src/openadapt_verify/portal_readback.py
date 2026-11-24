@@ -413,6 +413,45 @@ _VALUE_INPUT_TYPES = frozenset(
 )
 
 
+# Inline elements: text inside them joins the surrounding text into one node, so
+# ``$500<span>,000</span>`` reads as ``$500,000``, never as ``$500``.
+_INLINE_TAGS = frozenset(
+    {
+        "a",
+        "abbr",
+        "b",
+        "bdi",
+        "bdo",
+        "cite",
+        "code",
+        "data",
+        "del",
+        "dfn",
+        "em",
+        "font",
+        "i",
+        "ins",
+        "kbd",
+        "mark",
+        "nobr",
+        "q",
+        "s",
+        "samp",
+        "small",
+        "span",
+        "strike",
+        "strong",
+        "sub",
+        "sup",
+        "time",
+        "tt",
+        "u",
+        "var",
+        "wbr",
+    }
+)
+
+
 def _attrs_hide_element(tag: str, attrs: Mapping[str, str | None]) -> bool:
     """Whether inline markup alone hides this element and its subtree."""
     if "hidden" in attrs:
@@ -428,37 +467,71 @@ def _attrs_hide_element(tag: str, attrs: Mapping[str, str | None]) -> bool:
     return False
 
 
+@dataclass(frozen=True)
+class _TextNode:
+    """One run of visible text, and the element its block sits in.
+
+    ``scope`` is the parent of the nearest non-inline element around the text.
+    A label in one node binds the next node only when both share a scope: two
+    cells of one table row, a ``dt``/``dd`` pair in one ``dl``, or two blocks in
+    one container. A header row never binds the next row's cells.
+    """
+
+    text: str
+    scope: int
+
+
 class _VisibleDomExtractor(HTMLParser):
     """Collect what a reloaded page shows, using inline markup only.
 
-    - ``nodes``: visible text nodes in document order. Comments, attributes,
-      ``script``/``style``/``template``/``head``, form-control text, and subtrees
-      hidden by ``hidden``, ``aria-hidden="true"`` or an inline ``display:none`` /
-      ``visibility:hidden`` style are left out.
+    - ``nodes``: visible text runs in document order. Text split only by inline
+      elements (``span``, ``b``, ``sup``, ``del`` ...) is one run. Comments,
+      attributes, ``script``/``style``/``template``/``head``, form-control text,
+      and subtrees hidden by ``hidden``, ``aria-hidden="true"`` or an inline
+      ``display:none`` / ``visibility:hidden`` style are left out.
     - ``controls_by_id`` / ``controls_by_name``: values of visible, text-like
       ``input`` and ``textarea`` controls. They are read only when a check binds
       a field to that control by ``<label for>`` or by an explicit locator.
     - ``label_for``: ``(label text, control id)`` for each ``<label for=...>``.
 
-    Hiding by stylesheet rules, classes or script cannot be evaluated by a
-    standard-library parser. The bytes are therefore expected to be the
-    rendered page; a value hidden only by a stylesheet still reads as shown.
-    Elements are closed only by an explicit end tag, so a missing end tag can
-    hide more of the page than a browser would (fail closed), never less.
+    Limits: hiding by stylesheet rules, classes or script cannot be evaluated
+    by a standard-library parser, so the bytes are expected to be the rendered
+    page; a value hidden only by a stylesheet still reads as shown. Elements
+    are closed only by an explicit end tag, as written; mis-nested markup can
+    be read differently from a browser.
     """
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
-        self._stack: list[tuple[str, bool]] = []
-        self.nodes: list[str] = []
+        self._stack: list[tuple[str, bool, int]] = []
+        self._next_eid = 0
+        self.nodes: list[_TextNode] = []
         self.controls_by_id: dict[str, list[str]] = {}
         self.controls_by_name: dict[str, list[str]] = {}
         self.label_for: list[tuple[str, str]] = []
         self._label: tuple[str, list[str]] | None = None
         self._textarea: tuple[str, str, list[str]] | None = None
+        self._buf: list[str] = []
+        self._buf_scope = -1
 
     def _hidden(self) -> bool:
         return bool(self._stack) and self._stack[-1][1]
+
+    def _scope(self) -> int:
+        for idx in range(len(self._stack) - 1, -1, -1):
+            if self._stack[idx][0] not in _INLINE_TAGS:
+                return self._stack[idx - 1][2] if idx > 0 else -1
+        return -1
+
+    def _flush(self) -> None:
+        text = " ".join("".join(self._buf).split())
+        self._buf = []
+        if not text:
+            return
+        if self._label is not None:
+            self._label[1].append(text)
+        else:
+            self.nodes.append(_TextNode(text, self._buf_scope))
 
     def _add_control(self, ctrl_id: str, name: str, value: str) -> None:
         compact = " ".join(value.split())
@@ -469,6 +542,8 @@ class _VisibleDomExtractor(HTMLParser):
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag = tag.lower()
+        if tag not in _INLINE_TAGS:
+            self._flush()
         amap = {k.lower(): v for k, v in attrs}
         hidden = (
             self._hidden()
@@ -487,10 +562,15 @@ class _VisibleDomExtractor(HTMLParser):
             self._label = ((amap.get("for") or "").strip(), [])
         if tag == "textarea" and not hidden:
             self._textarea = (ctrl_id, name, [])
-        self._stack.append((tag, hidden or tag in _FORM_CONTROL_TEXT_TAGS))
+        self._next_eid += 1
+        self._stack.append(
+            (tag, hidden or tag in _FORM_CONTROL_TEXT_TAGS, self._next_eid)
+        )
 
     def handle_endtag(self, tag: str) -> None:
         tag = tag.lower()
+        if tag not in _INLINE_TAGS:
+            self._flush()
         if tag == "label" and self._label is not None:
             for_id, parts = self._label
             self.label_for.append((" ".join(" ".join(parts).split()), for_id))
@@ -511,13 +591,13 @@ class _VisibleDomExtractor(HTMLParser):
             return
         if self._hidden():
             return
-        compact = " ".join(data.split())
-        if not compact:
-            return
-        if self._label is not None:
-            self._label[1].append(compact)
-            return
-        self.nodes.append(compact)
+        if not self._buf:
+            self._buf_scope = self._scope()
+        self._buf.append(data)
+
+    def close(self) -> None:
+        super().close()
+        self._flush()
 
 
 def _normalize_dom_label(text: str) -> str:
@@ -525,12 +605,13 @@ def _normalize_dom_label(text: str) -> str:
     return cleaned
 
 
-def _node_values_for_label(nodes: Sequence[str], target_label: str) -> list[str]:
+def _node_values_for_label(nodes: Sequence[_TextNode], target_label: str) -> list[str]:
     """Visible text values bound to ``target_label`` (already normalized).
 
-    A value is bound when the label is its own text node and the value is the
-    next one (``<dt>Label</dt><dd>value</dd>``), or when one text node reads
-    ``Label: value`` or ``Label value``. The whole rest of the node is the value.
+    A value is bound when the label is its own text run and the value is the
+    next run in the same scope (``<dt>Label</dt><dd>value</dd>``, two cells of
+    one row), or when one run reads ``Label: value`` or ``Label value``. The
+    whole rest of the run is the value.
     """
     label_words = target_label.split()
     prefix_re = re.compile(
@@ -539,16 +620,17 @@ def _node_values_for_label(nodes: Sequence[str], target_label: str) -> list[str]
     )
     bound_values: list[str] = []
     for idx, node in enumerate(nodes):
-        if _normalize_dom_label(node.rstrip(":")) == target_label:
-            if idx + 1 < len(nodes):
-                bound_values.append(nodes[idx + 1].strip())
+        text = node.text
+        if _normalize_dom_label(text.rstrip(":")) == target_label:
+            if idx + 1 < len(nodes) and nodes[idx + 1].scope == node.scope:
+                bound_values.append(nodes[idx + 1].text.strip())
             continue
-        if ":" in node:
-            left, right = node.split(":", 1)
+        if ":" in text:
+            left, right = text.split(":", 1)
             if _normalize_dom_label(left) == target_label:
                 bound_values.append(right.strip())
         else:
-            m = prefix_re.match(node)
+            m = prefix_re.match(text)
             if m:
                 bound_values.append(m.group(1).strip())
     return bound_values
