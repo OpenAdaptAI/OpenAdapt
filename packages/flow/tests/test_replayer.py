@@ -4759,3 +4759,17 @@ def test_native_selection_missing_capability_refuses_before_input(bundle, run_di
     )
     assert not report.success
     assert backend.actions == []
+
+
+def test_recheck_deferred_readback_type_hints_resolve():
+    import typing
+
+    hints = typing.get_type_hints(Replayer.recheck_deferred_readback)
+    assert set(hints) >= {
+        "workflow",
+        "deferred",
+        "params",
+        "run_id",
+        "read_only",
+        "return",
+    }

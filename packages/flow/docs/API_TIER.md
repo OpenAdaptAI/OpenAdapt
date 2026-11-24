@@ -35,16 +35,22 @@ against 15.95 s and two approvals with API steps off (20 runs each,
 ## How to use it
 
 ```bash
-openadapt-flow record --backend web --url https://app.example/ --capture-network --out rec/
+# Raw bodies need an encrypted recording: a recording key, or strict mode.
+OPENADAPT_FLOW_AT_REST=strict openadapt-flow record --backend web \
+  --url https://app.example/ --capture-network \
+  --capture-network-bodies raw --out rec/
 openadapt-flow compile rec/ --out bundle/ --name referral
 openadapt-flow api show bundle/
 openadapt-flow api admit bundle/ --identity subject_name=lname   # a person, at a terminal
 openadapt-flow run bundle/ ...
 ```
 
-1. **Record with `--capture-network`.** Flow keeps the page's requests next
-   to the recorded events in `network.jsonl`. Start the recording before you
-   open the form, so the page that serves the form is captured.
+1. **Record with `--capture-network --capture-network-bodies raw`.** Flow
+   keeps the page's requests next to the recorded events in `network.jsonl`.
+   The proposal needs the raw (redacted) bodies; the default keeps only
+   declared fields ([NETWORK_CAPTURE.md](NETWORK_CAPTURE.md)), and raw needs
+   an encrypted recording. Start the recording before you open the form, so
+   the page that serves the form is captured.
 2. **Compile.** If the save can be repeated as one request, `compile`
    proposes an API step on the save step. `api_proposal.json` in the bundle
    says either which step got the proposal, or why there is none.

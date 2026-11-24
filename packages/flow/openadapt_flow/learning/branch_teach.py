@@ -54,6 +54,7 @@ from typing import Any, Callable, Optional, Sequence
 
 from pydantic import BaseModel, Field
 
+from openadapt_flow import artifacts
 from openadapt_flow.ir import (
     Guard,
     GuardSource,
@@ -360,9 +361,9 @@ def _run_texts(run_dir: Path, report: RunReport) -> list[str]:
         if result.before_png is None:
             continue
         frame = run_dir / result.before_png
-        if not frame.is_file():
+        if not artifacts.is_file(frame):
             continue
-        for line in ocr(frame.read_bytes()):
+        for line in ocr(artifacts.open_read(frame)):
             text = (scrub_text(line.text) or "").strip()
             if text:
                 texts.append(text)
@@ -375,9 +376,9 @@ def _load_negative(
     screen_texts: Callable[[Path, RunReport], list[str]],
 ) -> tuple[RunReport, list[str]]:
     path = Path(run_dir) / "report.json"
-    if not path.is_file():
+    if not artifacts.is_file(path):
         raise TeachError(f"no run report at {path} for a normal run")
-    report = RunReport.model_validate_json(path.read_text(encoding="utf-8"))
+    report = RunReport.model_validate_json(artifacts.read_text(path))
     if report.workflow_name != base.name:
         raise TeachError(
             f"the normal run at {run_dir} came from {report.workflow_name!r}, "
@@ -782,8 +783,7 @@ def teach_branch(
             "narration_sha256": _digest(spoken[2]) if spoken_ok and spoken else None,
         },
         "example_run_reports_sha256": [
-            _digest((ex.run_dir / "report.json").read_text(encoding="utf-8"))
-            for ex in loaded
+            _digest(artifacts.read_text(ex.run_dir / "report.json")) for ex in loaded
         ],
         "runtime_model_calls": 0,
     }

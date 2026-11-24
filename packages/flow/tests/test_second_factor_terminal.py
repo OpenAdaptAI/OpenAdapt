@@ -33,12 +33,21 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(key, raising=False)
 
 
+_PERSON_THREADS: list[threading.Thread] = []
+
+
 @pytest.fixture
 def terminal() -> Iterator[tuple[int, int]]:
     leader, follower = pty.openpty()
-    yield leader, follower
-    os.close(leader)
-    os.close(follower)
+    try:
+        yield leader, follower
+    finally:
+        threads = list(_PERSON_THREADS)
+        _PERSON_THREADS.clear()
+        for thread in threads:
+            thread.join(timeout=WAIT_S)
+        os.close(leader)
+        os.close(follower)
 
 
 class _Screen(io.StringIO):
@@ -80,6 +89,7 @@ def _person(
         os.write(leader, text.encode())
 
     thread = threading.Thread(target=answer, daemon=True)
+    _PERSON_THREADS.append(thread)
     thread.start()
     return thread
 
@@ -120,7 +130,7 @@ def test_a_timeout_restores_echo_and_the_next_prompt_gets_its_answer(
     assert time.monotonic() - started < WAIT_S
     # No reader is left behind holding the terminal with echo off.
     assert _echo_on(follower)
-    assert threading.active_count() == threads
+    assert threading.active_count() <= threads
     screen.prompts.acquire(timeout=0)  # the prompt that timed out
     _person(leader, screen, f"{CODE}\n")
     assert _ask(source) == CODE

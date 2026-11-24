@@ -1,0 +1,1 @@
+Encryption at rest: the device keys, policy and recipients by fingerprint, a solo recovery key, `restore` for a backup only the recovery code opens, and `shred`, which destroys an encrypted run's bucket key so nobody can open it.

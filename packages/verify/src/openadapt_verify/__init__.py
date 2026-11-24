@@ -34,19 +34,31 @@ from openadapt_verify.commit_firewall import (
     verify_commit,
 )
 from openadapt_verify.guard import checked_write, verified
+from openadapt_verify.portal_readback import (
+    ConfirmationPdfOracle,
+    FieldCheck,
+    FreshReloadSummaryOracle,
+    PortalReadbackResult,
+    ReloadProof,
+)
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 __all__ = [
     "Actor",
     "AlreadyWritten",
     "CommitBlockedError",
     "CommitResult",
+    "ConfirmationPdfOracle",
     "Contract",
+    "FieldCheck",
+    "FreshReloadSummaryOracle",
     "LocalSealVerification",
     "Outcome",
+    "PortalReadbackResult",
     "PortableReceiptVerification",
     "ReceiptError",
+    "ReloadProof",
     "Scope",
     "UiCommitCheck",
     "WriteBlocked",
