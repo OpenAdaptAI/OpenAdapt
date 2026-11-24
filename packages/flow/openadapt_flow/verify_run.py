@@ -3798,20 +3798,21 @@ def verify_run(
         receipt["correlation_id"] = correlation_id
     if recheck_due_at is not None:
         receipt[RECHECK_RECEIPT_FIELD] = recheck_due_at
-    receipt[EVIDENCE_SCOPE_FIELD] = build_evidence_scope(
-        level,
-        # Only a verified receipt names a basis, so only it reads VERIFIED.
-        basis=basis if verified else None,
-        confirmed=delta_verdict == CONFIRMED_WORD,
-        minimum=minimum_level,
-        read_back_at=read_at if not unread else None,
-        recheck_window_s=(
-            int(recheck_after_s)
-            if recheck_due_at is not None and recheck_after_s is not None
-            else None
-        ),
-        not_covered=("changes_after_read_back",),
-    )
+    if build_evidence_scope is not None:
+        receipt[EVIDENCE_SCOPE_FIELD] = build_evidence_scope(
+            level,
+            # Only a verified receipt names a basis, so only it reads VERIFIED.
+            basis=basis if verified else None,
+            confirmed=delta_verdict == CONFIRMED_WORD,
+            minimum=minimum_level,
+            read_back_at=read_at if not unread else None,
+            recheck_window_s=(
+                int(recheck_after_s)
+                if recheck_due_at is not None and recheck_after_s is not None
+                else None
+            ),
+            not_covered=("changes_after_read_back",),
+        )
     if request_context is not None:
         receipt["request_context"] = request_context.to_dict()
     problem = receipt_problem(receipt) or evidence_problem(evidence, receipt)
@@ -4436,7 +4437,7 @@ def _evidence_scope_receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]
     if EVIDENCE_SCOPE_FIELD not in receipt:
         return None  # Receipts issued before the block existed.
     scope = receipt[EVIDENCE_SCOPE_FIELD]
-    if evidence_scope_problem(scope) is not None:
+    if evidence_scope_problem is None or evidence_scope_problem(scope) is not None:
         return "evidence_scope"
     verified = receipt.get("outcome") in ("verified", "rolled_back_verified")
     if (scope["word"] == VERIFIED_WORD) is not verified:

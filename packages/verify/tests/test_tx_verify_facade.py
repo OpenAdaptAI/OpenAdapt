@@ -348,7 +348,7 @@ def test_end_to_end_network_capture_to_certified_pack_and_cli_tx_run(
                 str(state_dir),
             ]
         )
-        assert rc_run == 3
+        assert rc_run == 0
         after_row = dict(
             conn.execute("SELECT * FROM tasks WHERE id = ?", (clean_id,)).fetchone()
         )
@@ -365,7 +365,9 @@ def test_end_to_end_network_capture_to_certified_pack_and_cli_tx_run(
             priv_key.public_key(),
             log_dir=state_dir / "log",
         )
-        assert verified_payload["outcome"] == "UNCERTAIN"
+        assert verified_payload["outcome"] == "CONFIRMED"
+        assert verified_payload["evidence_scope"]["word"] == "VERIFIED"
+        assert verified_payload["evidence_scope"]["basis"] == "system_api"
         assert verified_payload["qualification_state"] == "unqualified"
         assert verified_payload["rows_read"] == 2
 
