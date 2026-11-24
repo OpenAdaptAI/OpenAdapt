@@ -93,20 +93,26 @@ jobs:
           echo "run=$run" | tee -a "$GITHUB_OUTPUT"
 
       - name: Set up Python
-        if: steps.scope.outputs.run == 'true'
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
 
       - name: Install uv
-        if: steps.scope.outputs.run == 'true'
         uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: .github/ci-tools/uv.lock
 
-      # Cheapest decisive check first: structure, signature honesty, and
-      # repo agreement need no network and cannot be flaky.
+      # Run the offline source-boundary check BEFORE networked manifest checks
+      # so remote manifest drift can never mask a source-boundary violation.
+      # The guard reads its rules from source-policy.public.json (rendered from
+      # the canonical private manifest) and fails closed when that file is
+      # missing or incomplete. Stdlib only: no dependency install.
+      - name: Check open-core source boundary
+        run: python scripts/check_source_boundary.py
+
+      # Cheapest decisive manifest check first: structure, signature honesty,
+      # and repo agreement need no network and cannot be flaky.
       - name: Validate platform manifest structure (offline)
         if: steps.scope.outputs.run == 'true'
         run: python scripts/validate_platform_manifest.py --offline
@@ -118,16 +124,20 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/validate_platform_manifest.py
 
-      - name: Prove the drift guard fails when it should
+      - name: Prove the manifest drift and source boundary guards fail when they should
         # The daily/dispatched production check is intentionally stdlib-only.
-        # This characterization suite belongs on source changes, not every
-        # remote drift probe, so scheduled checks stay fast and network-light.
-        if: steps.scope.outputs.run == 'true' && (github.event_name == 'pull_request' || github.event_name == 'push')
+        # Characterization suites belong on PR/push source changes so scheduled
+        # checks stay fast and network-light, sharing one VM and one install.
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        env:
+          RUN_MANIFEST_TESTS: ${{ steps.scope.outputs.run }}
         run: |
           python scripts/ci/locked_install.py --lock .github/ci-tools:test
-          python -m pytest \
-            tests/test_platform_manifest_drift.py \
-            tests/test_platform_version_display.py -q
+          test_files=(tests/test_source_boundary.py)
+          if [ "$RUN_MANIFEST_TESTS" = "true" ]; then
+            test_files+=(tests/test_platform_manifest_drift.py tests/test_platform_version_display.py)
+          fi
+          python -m pytest "${test_files[@]}" -q
 
   report-manifest-drift:
     # A red scheduled run in a repository nobody has open is not a signal.
@@ -161,35 +171,3 @@ jobs:
           else
             gh issue create --repo "${{ github.repository }}" --title "$TITLE" --body "$BODY"
           fi
-
-  check-source-boundary:
-    if: github.event.pull_request.draft != true
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up Python
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: '3.12'
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
-        with:
-          enable-cache: true
-          cache-dependency-glob: .github/ci-tools/uv.lock
-
-      # The guard reads its rules from source-policy.public.json (rendered from
-      # the canonical private manifest) and fails closed when that file is
-      # missing or incomplete. Stdlib only: no dependency install.
-      - name: Check open-core source boundary
-        run: python scripts/check_source_boundary.py
-
-      # Prove the guard still blocks what it blocked before the rules moved out
-      # of the script, and that it fails closed without them.
-      - name: Prove the boundary guard fails when it should
-        if: github.event_name == 'pull_request' || github.event_name == 'push'
-        run: |
-          python scripts/ci/locked_install.py --lock .github/ci-tools:test
-          python -m pytest tests/test_source_boundary.py -q

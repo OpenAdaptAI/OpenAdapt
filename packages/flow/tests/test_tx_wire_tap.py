@@ -1278,9 +1278,14 @@ def test_wire_tap_generality_and_import_boundaries(tmp_path: Path) -> None:
         exact_redaction = node.module == "openadapt_flow.secret_redaction" and {
             name.name for name in node.names
         } <= {"MASK", "credential_header", "mask_header"}
+        # The verdict-site marker is stdlib only and does nothing at run time.
+        exact_site = node.module == "openadapt_flow.verdict_sites" and [
+            name.name for name in node.names
+        ] == ["verdict_site"]
         return (
             exact_crypto
             or exact_redaction
+            or exact_site
             or node.module.split(".")[0] in stdlib_names
             or node.module in allowed_non_stdlib
         )

@@ -35,6 +35,7 @@ from openadapt_flow.tx.types import (
     WireTapProtocol,
     canonical_sha256,
 )
+from openadapt_flow.verdict_sites import verdict_site
 from openadapt_flow.wire_check import READ_METHODS, carries_secret, mask_secrets
 
 __all__ = [
@@ -140,6 +141,7 @@ def _normalize_origin(url_or_origin: str) -> str:
     return f"{scheme}://{host}:{port}"
 
 
+@verdict_site("wire_tap.relay_redirect_location", classes="C6")
 def relay_redirect_location(
     location: str,
     *,
