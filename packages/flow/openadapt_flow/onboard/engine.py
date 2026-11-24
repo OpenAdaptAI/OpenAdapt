@@ -585,19 +585,24 @@ def _issue_signed_run_receipt(
 
     from datetime import datetime, timezone
 
+    from openadapt_types.receipt import OUTCOME_FROM_RUN
+
     from openadapt_flow.offline_seal import seal_home, signer_for
     from openadapt_flow.receipt_record import write_receipt_record
 
     run_dir.mkdir(parents=True, exist_ok=True)
     now = datetime.now(timezone.utc).isoformat()
     verified = write_result.outcome is Outcome.CONFIRMED
+    verified_outcome = next(iter(OUTCOME_FROM_RUN))
+    run_outcome = verified_outcome if verified else "STOPPED"
+    line_verdict = write_result.outcome.value.lower() if verified else "refuted"
     contract_hashes = [eff.contract_hash() for eff in (contract.config.effects or ())]
     evidence = [
         {
             "effect_contract_hash": ch,
             "substrate": "sql",
-            "initial_verdict": "confirmed" if verified else "refuted",
-            "final_verdict": "confirmed" if verified else "refuted",
+            "initial_verdict": line_verdict,
+            "final_verdict": line_verdict,
             "observed_effect": "present" if verified else "absent",
             "verification_tier": 1,
         }
@@ -609,8 +614,8 @@ def _issue_signed_run_receipt(
         "run_id": write_result.write_id or case_name,
         "started_at": now,
         "finished_at": now,
-        "execution_outcome": "VERIFIED" if verified else "STOPPED",
-        "outcome": "VERIFIED" if verified else "STOPPED",
+        "execution_outcome": run_outcome,
+        "outcome": run_outcome,
         "model_calls": 0,
         "verifier_outcome": write_result.outcome.value,
         "effect_receipt_sha256": write_result.receipt_sha256,
@@ -794,6 +799,9 @@ def qualify_pack(
                     + "; ".join(res.reasons[:2])
                 )
         except Exception as exc:  # noqa: BLE001 - fail closed on any runtime error
+            from openadapt_flow.verdict import Errored
+
+            not_checked = Errored(type(exc).__name__, str(exc))
             clean_outcomes.append(
                 CleanWriteOutcome(
                     kind=case.kind,
@@ -803,10 +811,12 @@ def qualify_pack(
                     outcome="ERROR",
                     confirmed=False,
                     receipt_path=None,
-                    reasons=(str(exc),),
+                    reasons=(not_checked.reason,),
                 )
             )
-            refusal_reasons.append(f"clean write {case_name!r} raised: {exc}")
+            refusal_reasons.append(
+                f"clean write {case_name!r} raised: {not_checked.reason}"
+            )
 
     clean_total = len(clean_outcomes)
     clean_verified = sum(1 for c in clean_outcomes if c.confirmed)
