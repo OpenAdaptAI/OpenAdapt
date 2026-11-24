@@ -17,14 +17,16 @@
 
 Only an admitted contract is written as ``contract.yaml``. Its
 ``provenance`` section names the model, the prompt digest, the inputs'
-digests and the admission's check digest; an edit to the check after
-admission no longer matches (:func:`admission_problem`). Running the
+digests and the admission's check digest, and is signed with this
+computer's key. An edit to the check or the record after admission, or a
+record no pinned key signed, no longer matches (:func:`admission_problem`). Running the
 contract makes no model calls.
 """
 
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime as _dt
 import hashlib
 import json
@@ -35,7 +37,15 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 import yaml
+from openadapt_types.seal import canonical_json
 
+from openadapt_flow.offline_seal import (
+    LocalSealError,
+    load_registry,
+    public_key_entry,
+    sign_subject,
+    verify_local_seal,
+)
 from openadapt_flow.verify_draft import admit as A
 from openadapt_flow.verify_draft import inputs as I
 from openadapt_flow.verify_draft import model as M
@@ -258,6 +268,15 @@ def run(
         contract["provenance"] = provenance(
             draft, adm, used, describe, desc, trace_path, task_path, qualifier
         )
+        try:
+            contract = sign_admission(contract)
+        except LocalSealError as exc:
+            # An unsigned record can't be told from a forged one: refuse.
+            outcome.admitted = False
+            outcome.reason = (
+                f"admitted, but the admission record could not be signed: {exc}"
+            )
+            return _finish(out, started, outcome, admissions)
         path = out / "contract.yaml"
         path.write_text(
             "# Drafted by a model and admitted by OpenAdapt qualification "
@@ -366,16 +385,80 @@ def provenance(
     }
 
 
-def admission_problem(path: str | Path) -> Optional[str]:
+#: ``run_id`` of the signed statement over an admission record.
+SIGNATURE_RUN_ID = "verify-draft-admission"
+
+
+def admission_sha256(contract: Mapping[str, Any]) -> str:
+    """Digest of the whole admitted contract (check, provenance and admission
+    record) without the admission's own signature."""
+
+    data = copy.deepcopy(dict(contract))
+    admission = (data.get("provenance") or {}).get("admission")
+    if isinstance(admission, dict):
+        admission.pop("signature", None)
+    return hashlib.sha256(canonical_json(data).encode("utf-8")).hexdigest()
+
+
+def sign_admission(
+    contract: Mapping[str, Any], *, home: Optional[Path] = None
+) -> dict[str, Any]:
+    """``contract`` with ``provenance.admission.signature``: a statement over
+    :func:`admission_sha256`, signed with this computer's key (the key that
+    signs run receipts). Raises :class:`LocalSealError` when the key can't be
+    used; never signs with another key."""
+
+    signed = copy.deepcopy(dict(contract))
+    statement = sign_subject(
+        "record", admission_sha256(signed), SIGNATURE_RUN_ID, home=home
+    )
+    signed["provenance"]["admission"]["signature"] = statement.wire()
+    return signed
+
+
+def _registry(keys: Optional[str | Path], home: Optional[Path]) -> list[Any]:
+    from openadapt_types.seal import parse_key_registry
+
+    if keys:
+        return list(load_registry(Path(keys)))
+    return parse_key_registry([public_key_entry(home)])
+
+
+def admission_problem(
+    path: str | Path,
+    *,
+    keys: Optional[str | Path] = None,
+    home: Optional[Path] = None,
+) -> Optional[str]:
     """None when the contract at ``path`` is still the check that was
-    admitted; else why not."""
+    admitted and its admission record carries a valid signature by a pinned
+    key; else why not.
+
+    The pinned keys are ``keys`` (a key-registry file) or, by default, this
+    computer's own key. A record anyone could write (a self-computed check
+    digest, no signature, or one by a key that isn't pinned) is refused.
+    This stops a forged or foreign record, not someone who holds the key.
+    """
 
     data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    if not isinstance(data, dict):
+        return "no admission record"
     prov = (data.get("provenance") or {}).get("admission") or {}
-    if prov.get("suite") != SUITE:
+    if not isinstance(prov, dict) or prov.get("suite") != SUITE:
         return "no admission record"
     if A.check_sha256(data) != prov.get("check_sha256"):
         return "the check changed after admission"
+    if not prov.get("signature"):
+        return "the admission record is not signed"
+    try:
+        registry = _registry(keys, home)
+    except (LocalSealError, OSError, ValueError) as exc:
+        return f"no pinned key to check the admission record with: {exc}"
+    got = verify_local_seal(prov["signature"], admission_sha256(data), registry)
+    if not got.ok:
+        if got.reason == "subject_mismatch":
+            return "the admission record changed after it was signed"
+        return f"the admission record's signature is not valid ({got.reason})"
     return None
 
 
@@ -420,17 +503,18 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="OpenAPI, GraphQL or FHIR CapabilityStatement file; 'db' for the sandbox's database schema; or 'none'",
     )
     ap.add_argument(
-        "--trace", required=True, help="HAR file of one correct demonstration"
+        "--trace",
+        help="HAR file of one correct demonstration (required unless --check)",
     )
     ap.add_argument(
         "--task",
-        required=True,
-        help="task.yaml: instruction and the demonstration's params",
+        help="task.yaml: instruction and the demonstration's params (required unless --check)",
     )
     ap.add_argument(
-        "--sandbox", required=True, help="sandbox.yaml (openadapt.verify-sandbox/v1)"
+        "--sandbox",
+        help="sandbox.yaml (openadapt.verify-sandbox/v1) (required unless --check)",
     )
-    ap.add_argument("--out", required=True, help="output folder")
+    ap.add_argument("--out", help="output folder (required unless --check)")
     ap.add_argument(
         "--rounds", type=int, default=MAX_ROUNDS, choices=range(1, MAX_ROUNDS + 1)
     )
@@ -447,13 +531,27 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument(
         "--check",
         metavar="CONTRACT",
-        help="only check that CONTRACT is still the admitted check",
+        help="only check that CONTRACT is still the admitted check, signed by a pinned key",
+    )
+    ap.add_argument(
+        "--keys",
+        metavar="REGISTRY",
+        help="with --check: key registry (JSON) of the keys to trust; default: this computer's key",
     )
     args = ap.parse_args(argv)
+    if args.keys and not args.check:
+        ap.error("--keys needs --check")
     if args.check:
-        problem = admission_problem(args.check)
+        problem = admission_problem(args.check, keys=args.keys)
         print(problem or "admitted check, unchanged")
         return 1 if problem else 0
+    missing = [
+        f"--{name}"
+        for name in ("trace", "task", "sandbox", "out")
+        if not getattr(args, name)
+    ]
+    if missing:
+        ap.error("the following arguments are required: " + ", ".join(missing))
     ledger = M.SpendLedger(Path(args.spend_ledger), args.spend_cap_usd)
     drafter = M.ClaudeDrafter(ledger, label=Path(args.out).name)
     outcome = run(

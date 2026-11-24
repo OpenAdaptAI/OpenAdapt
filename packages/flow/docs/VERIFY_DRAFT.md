@@ -42,8 +42,13 @@ to the model.
 **One trace** (`--trace`). A HAR file of one correct demonstration of the
 write. The command replays its write requests in the sandbox. Before anything
 is sent to the model, it removes sign-in headers (`Authorization`, `Cookie`,
-API-key headers) and masks fields whose names look secret (password, token,
-key, session).
+API-key headers) and masks fields, query parameters and headers whose names
+look secret. Names are matched as whole tokens against the shared list in
+`openadapt_flow/secret_field_vocabulary.json` (password, token, pin, otp,
+totp, mfa, cookie, signature, session id, api key, ...), so `otpCode`,
+`userPin` and `X-Amz-Signature` are masked while `author` and
+`session_count` are not. A name that is exactly `code`, `sig`, `sid` or
+`refresh` is masked too.
 
 **The task** (`--task`):
 
@@ -98,8 +103,9 @@ no reset hook.
    time) are starting state and never land inside a write's window. The
    sandbox then replays the trace's writes once, between two reads of the
    store, to see which rows they move. The model gets the rows and columns
-   that moved, with their values, except a secret-named column (password,
-   token, secret, key, hash), whose value is masked. The sandbox holds
+   that moved, with their values, except a column with a secret name from
+   the same list (password, token, secret, api key, hash, ...), whose value
+   is masked. The sandbox holds
    synthetic data only.
 2. **Draft.** The pinned model writes a contract, as JSON text, that diffs
    the whole database (`frame.database`). It also writes other valid values
@@ -121,7 +127,7 @@ no reset hook.
    | `sibling_edit` | another business record edited beside the write | refuted |
    | `late_revert` | the write undone after the check confirmed it | refuted at the recheck |
    | `lost_update` | updates only: the other user saves the record first, then the agent's save overwrites it, both through the app | refuted, or prevented by the app |
-   | 5 clean writes | the write with other values, and a recheck of each | confirmed |
+   | 5 clean writes | the write with other values, and a recheck of each | confirmed (a recheck that crashes is an error, never a pass) |
    | attribution probe | the write by two users with two sets of values (2 x 2), and the first of them again | confirmed |
 
    A case the sandbox can't build is **untestable**, never a pass. Examples
@@ -182,9 +188,24 @@ window.
 - `report.json`: admitted or not, rounds, person decisions, seconds and
   model cost.
 
+The admission record is signed with this computer's key (the key that signs
+run receipts, under `~/.openadapt/seal` unless `OPENADAPT_SEAL_KEY` names
+another). The signature covers the whole contract: the check, the inputs'
+digests and the admission record. If the key can't be used, no contract is
+written.
+
 `openadapt verify draft --check contract.yaml` tells you whether the file is
-still the check that was admitted. Any edit to its effects, its reads or its
-frame after admission makes the check fail.
+still the check that was admitted. The check fails when:
+
+- the effects, reads or frame changed after admission;
+- the admission record is not signed, or changed after it was signed;
+- no pinned key signed it. By default the only pinned key is this computer's.
+  To check a contract admitted on another machine, pass that machine's key
+  with `--keys registry.json`, a JSON file of the form
+  `{"keys": [{"key_id": ..., "public_key": ..., "status": "active"}]}`.
+
+This stops a forged or copied record. It does not stop someone who holds the
+signing key.
 
 ## The model and its cost
 

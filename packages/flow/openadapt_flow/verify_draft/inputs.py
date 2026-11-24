@@ -21,18 +21,24 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
+from openadapt_flow.secret_field_names import names_secret_field
 from openadapt_flow.verify_draft.sandbox import Request
 
 #: Longest description text sent to the model.
 MAX_DESCRIPTION_CHARS = 40_000
-#: Shared secret-looking field/header/column name pattern (also imported by admit.py).
-SECRET_NAME_RE = re.compile(
-    r"pass(word)?|secret|token|api[-_]?key|hash|salt|session|csrf|auth"
-    r"|credential|bearer|refresh|private[-_]?key|access[-_]?key"
-    r"|(^|[^a-z0-9])(cred|pin|otp|tfa|jwt)([^a-z0-9]|$)",
-    re.I,
-)
-_SECRET = SECRET_NAME_RE
+
+
+def is_secret_name(name: object) -> bool:
+    """True when a field, header, query key or column name looks secret.
+
+    One shared token matcher (:mod:`openadapt_flow.secret_field_names`), so
+    ``otpCode``, ``userPin``, ``X-Amz-Signature`` and a ``cookie`` key are
+    masked while ``author``, ``author_id`` and ``session_count`` stay clear.
+    """
+
+    return names_secret_field(name)
+
+
 _SECRET_HEADERS = frozenset(
     {
         "authorization",
@@ -251,7 +257,7 @@ def _mask_json(value: Any, *, mask_scalars: bool = False) -> Any:
         return {
             k: _mask_json(
                 v,
-                mask_scalars=mask_scalars or bool(SECRET_NAME_RE.search(str(k))),
+                mask_scalars=mask_scalars or is_secret_name(k),
             )
             for k, v in value.items()
         }
@@ -277,7 +283,7 @@ def _mask_multipart(body: str, mime: str) -> str:
         if filename is not None:
             fields.append({"name": name, "filename": str(filename), "value": "***"})
             continue
-        if not name or SECRET_NAME_RE.search(name):
+        if not name or is_secret_name(name):
             fields.append({"name": name, "value": "***"})
             continue
         payload = part.get_content()
@@ -302,7 +308,7 @@ def _mask_body(body: Optional[str], mime: str) -> Optional[str]:
 
         return urlencode(
             [
-                (k, "***" if SECRET_NAME_RE.search(k) else v)
+                (k, "***" if is_secret_name(k) else v)
                 for k, v in parse_qsl(body, keep_blank_values=True)
             ]
         )[:2000]
@@ -332,7 +338,7 @@ def masked(req: Request, *, response_chars: int = 1500) -> dict[str, Any]:
     parts = urlsplit(req.url)
     query = urlencode(
         [
-            (k, "***" if SECRET_NAME_RE.search(k) else v)
+            (k, "***" if is_secret_name(k) else v)
             for k, v in parse_qsl(parts.query, keep_blank_values=True)
         ]
     )
@@ -343,7 +349,7 @@ def masked(req: Request, *, response_chars: int = 1500) -> dict[str, Any]:
         "headers": {
             k: v
             for k, v in req.headers.items()
-            if k.lower() not in _SECRET_HEADERS and not SECRET_NAME_RE.search(k)
+            if k.lower() not in _SECRET_HEADERS and not is_secret_name(k)
         },
         "body": _mask_body(req.body, req.mime),
         "status": req.status,

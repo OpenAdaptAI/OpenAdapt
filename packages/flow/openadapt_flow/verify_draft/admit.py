@@ -66,7 +66,7 @@ from openadapt_flow.verdict import (
 )
 from openadapt_flow.verdict_sites import verdict_site
 from openadapt_flow.verifier import Outcome
-from openadapt_flow.verify_draft.inputs import SECRET_NAME_RE
+from openadapt_flow.verify_draft.inputs import is_secret_name
 from openadapt_flow.verify_draft.sandbox import (
     App,
     Move,
@@ -160,7 +160,16 @@ _ATTRIBUTION_KEYS = frozenset(
         "server_set",
     }
 )
-_SECRET_COLUMN = SECRET_NAME_RE
+
+
+def _secret_column(column: str) -> bool:
+    """A column whose values the model never sees. A column named just
+    ``code`` is an ordinary identifier here (see ``_IDENTIFIER``), unlike a
+    query or form key named ``code``."""
+
+    return is_secret_name(column) and column.strip().lower() != "code"
+
+
 _IDENTIFIER = re.compile(r"(^|_)(id|key|no|number|code|slug|mrn|ref|uuid)$", re.I)
 
 
@@ -341,7 +350,7 @@ class Demo:
             vals = {
                 c: (
                     "***"  # a secret-named column: its name, never its value
-                    if _SECRET_COLUMN.search(c)
+                    if _secret_column(c)
                     else f"{text((m.before or {}).get(c))!r} -> {text((m.after or {}).get(c))!r}"
                     if m.change == "changed"
                     else text((row or {}).get(c))
@@ -767,6 +776,11 @@ class Qualifier:
             obs = observe(_execute)
             if isinstance(obs, Errored):
                 case.outcome = case.outcome or "ERROR"
+                if rechecks and case.outcome == Outcome.CONFIRMED.value:
+                    # The write was confirmed but its recheck (or the revert
+                    # before it) crashed: a recheck nobody saw through is
+                    # not a pass, whatever it set before it crashed.
+                    case.recheck = "ERROR"
                 case.reasons.append(f"{obs.exc_type}: {obs.reason}")
                 return None
             if isinstance(obs, Observed):

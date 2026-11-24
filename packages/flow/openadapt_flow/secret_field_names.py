@@ -5,6 +5,9 @@ JSON key) is split into lowercase tokens, then matched as whole consecutive
 tokens against ``secret_field_vocabulary.json``. So ``patientSsn``,
 ``PatientSSN``, ``card_cvv``, ``card-cvv``, ``card.cvv`` and "Card CVV" all
 match, while ``pinnedItems``, ``spinnerState`` and ``opinionText`` do not.
+An identifier whose whole token list is one of ``exact_names`` (``code``,
+``sig``, ``sid``, ``refresh``) is secret too, so ``code`` and ``Sig`` match
+but ``productCode`` and ``refresh_interval`` do not.
 
 ``chrome_extension/content.js`` and ``chrome_extension/network_redact.js``
 implement the same ``fieldTokens`` split and embed the same phrase list; keep
@@ -20,11 +23,15 @@ from typing import Final
 
 _VOCABULARY_PATH: Final = Path(__file__).with_name("secret_field_vocabulary.json")
 
-SECRET_FIELD_PHRASES: Final[tuple[str, ...]] = tuple(
-    json.loads(_VOCABULARY_PATH.read_text(encoding="utf-8"))["phrases"]
-)
+_VOCABULARY: Final = json.loads(_VOCABULARY_PATH.read_text(encoding="utf-8"))
+SECRET_FIELD_PHRASES: Final[tuple[str, ...]] = tuple(_VOCABULARY["phrases"])
 _PHRASE_TOKENS: Final[tuple[tuple[str, ...], ...]] = tuple(
     tuple(phrase.split()) for phrase in SECRET_FIELD_PHRASES
+)
+#: Identifiers that are secret only when they are the whole name.
+SECRET_EXACT_NAMES: Final[tuple[str, ...]] = tuple(_VOCABULARY.get("exact_names", ()))
+_EXACT_TOKENS: Final[frozenset[tuple[str, ...]]] = frozenset(
+    tuple(name.split()) for name in SECRET_EXACT_NAMES
 )
 
 _LOWER_UPPER = re.compile(r"([a-z0-9])([A-Z])")
@@ -41,9 +48,12 @@ def field_tokens(value: object) -> list[str]:
 
 
 def names_secret_field(value: object) -> bool:
-    """True when the identifier contains a secret phrase as whole tokens."""
+    """True when the identifier contains a secret phrase as whole tokens,
+    or is exactly one of the exact names."""
 
     tokens = field_tokens(value)
+    if tuple(tokens) in _EXACT_TOKENS:
+        return True
     for phrase in _PHRASE_TOKENS:
         width = len(phrase)
         for start in range(len(tokens) - width + 1):
