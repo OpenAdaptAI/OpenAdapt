@@ -372,6 +372,9 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 continue
             ev_tab_id = _evidence_tab_id(evidence)
+            # Re-read the atomic auth-pause state file so separate native host
+            # processes (evidence port vs co-pilot port) share live pause/resume.
+            paused_tabs = _load_paused_tabs(recording)
             if ev_tab_id is not None and ev_tab_id in paused_tabs:
                 write_message(
                     _with_request_id(

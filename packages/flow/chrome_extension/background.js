@@ -307,6 +307,8 @@ function handleWindowFocusChanged(windowId) {
   if (changed) persistSession(SESSION_POPUPS_KEY, serializePopups());
 }
 
+const authPauseAckPromises = new WeakMap();
+
 async function recordAuthInterstitial(msg, sender) {
   const tabId = sender && sender.tab && Number.isInteger(sender.tab.id) ? sender.tab.id : null;
   if (!Number.isInteger(tabId)) {
@@ -354,29 +356,34 @@ async function recordAuthInterstitial(msg, sender) {
   }
 
   // Notify local native host of the structural auth pause.
-  let hostAcked = false;
-  try {
-    const reply = await sendCopilotNative({
-      type: 'COPILOT_AUTH_PAUSED',
-      tab_id: tabId,
-      kind,
-      signals,
-      origin,
-    });
-    hostAcked = Boolean(
-      reply && reply.ok === true && reply.type === 'COPILOT_AUTH_PAUSED_ACK'
-    );
-  } catch (e) {
-    hostAcked = false;
-  }
+  const hostAckPromise = (async () => {
+    let hostAcked = false;
+    try {
+      const reply = await sendCopilotNative({
+        type: 'COPILOT_AUTH_PAUSED',
+        tab_id: tabId,
+        kind,
+        signals,
+        origin,
+      });
+      hostAcked = Boolean(
+        reply && reply.ok === true && reply.type === 'COPILOT_AUTH_PAUSED_ACK'
+      );
+    } catch (e) {
+      hostAcked = false;
+    }
 
-  // Only update if this pause entry is still the active one for tabId.
-  if (authPauseByTab.get(tabId) === entry) {
-    entry.hostAcked = hostAcked;
-    entry.mode = hostAcked ? 'capture_paused_host_acked' : 'capture_paused_local';
-    persistSession(SESSION_AUTH_KEY, serializeAuthPauses());
-    setBadge(recording);
-  }
+    // Update entry even if resumeAfterAuth is awaiting this promise.
+    if (authPauseByTab.get(tabId) === entry) {
+      entry.hostAcked = hostAcked;
+      entry.mode = hostAcked ? 'capture_paused_host_acked' : 'capture_paused_local';
+      persistSession(SESSION_AUTH_KEY, serializeAuthPauses());
+      setBadge(recording);
+    }
+    return hostAcked;
+  })();
+  authPauseAckPromises.set(entry, hostAckPromise);
+  await hostAckPromise;
   return entry;
 }
 
@@ -384,6 +391,14 @@ async function resumeAfterAuth(tabId) {
   const entry = getActiveAuthPause(tabId);
   if (!entry) {
     return { ok: true, resumed: false };
+  }
+  // Wait for any in-flight COPILOT_AUTH_PAUSED round-trip so resume never
+  // races ahead of a cold-starting native host and leaves it stuck paused.
+  const pendingAck = authPauseAckPromises.get(entry);
+  if (pendingAck) {
+    try {
+      await pendingAck;
+    } catch (e) {}
   }
   // If the native host acknowledged the pause, require an explicit matched
   // COPILOT_AUTH_RESUMED_ACK (ok:true) before clearing the pause state.
