@@ -417,3 +417,79 @@ def test_ui_commit_check_pre_commit_gate_body_exception_and_async(
     )
     assert res_err.status == "UNCONFIRMED_WRITE"
     assert res_err.verdict == "ABSTAIN"
+
+
+def test_same_page_as_independent_page_stays_same_screen_sync_and_async(
+    tmp_path: Path,
+) -> None:
+    """Passing the same page object as both page and independent_page must never verify."""
+    signing_key = Ed25519PrivateKey.generate()
+    sync_page = _SyncPlaywrightPage({"Status": "Approved"})
+
+    sync_res = verify_commit(
+        sync_page,
+        intent="Approve Invoice",
+        expected={"Status": "Approved"},
+        record_id="rec-same-sync",
+        independent_page=sync_page,
+        receipt_dir=tmp_path / "sync_receipts",
+        signing_key=signing_key,
+    )
+    assert sync_res.status == "SAME_SCREEN"
+    assert sync_res.verdict == "SAME_SCREEN"
+    assert sync_res.verified is False
+    assert sync_res.receipt is None
+    assert sync_res.receipt_id is None
+
+    async_page = _AsyncPlaywrightPage({"Status": "Approved"})
+    async_res = asyncio.run(
+        async_verify_commit(
+            async_page,
+            intent="Approve Invoice",
+            expected={"Status": "Approved"},
+            record_id="rec-same-async",
+            independent_page=async_page,
+            receipt_dir=tmp_path / "async_receipts",
+            signing_key=signing_key,
+        )
+    )
+    assert async_res.status == "SAME_SCREEN"
+    assert async_res.verdict == "SAME_SCREEN"
+    assert async_res.verified is False
+    assert async_res.receipt is None
+    assert async_res.receipt_id is None
+
+
+def test_none_evidence_skips_visual_verifier_and_returns_unconfirmed_write(
+    tmp_path: Path,
+) -> None:
+    """When neither DOM nor screenshot bytes are available, never invoke visual verifier."""
+    sync_veto = _DuckPrePostVisualVeto(_FakeVetoVerdict.PASS)
+    sync_res = verify_commit(
+        None,
+        intent="Approve Invoice",
+        expected={"Status": "Approved"},
+        verifier=sync_veto,
+        inbox=tmp_path / "none_sync_inbox.jsonl",
+    )
+    assert sync_veto.calls == []
+    assert sync_res.status == "UNCONFIRMED_WRITE"
+    assert sync_res.verdict == "ABSTAIN"
+    assert sync_res.verified is False
+    assert sync_res.receipt is None
+
+    async_veto = _DuckPrePostVisualVeto(_FakeVetoVerdict.PASS)
+    async_res = asyncio.run(
+        async_verify_commit(
+            None,
+            intent="Approve Invoice",
+            expected={"Status": "Approved"},
+            verifier=async_veto,
+            inbox=tmp_path / "none_async_inbox.jsonl",
+        )
+    )
+    assert async_veto.calls == []
+    assert async_res.status == "UNCONFIRMED_WRITE"
+    assert async_res.verdict == "ABSTAIN"
+    assert async_res.verified is False
+    assert async_res.receipt is None

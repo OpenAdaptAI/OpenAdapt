@@ -24,12 +24,13 @@ def main() -> None:
     out = Path("/tmp/openadapt-ui-commit-check-demo")
     signing_key = Ed25519PrivateKey.generate()
 
-    # 1. Clean commit -> verified + signed Ed25519 record/run/v1 receipt.
+    # 1. Clean commit -> verified via distinct independent read-back + signed Ed25519 receipt.
     with ui_commit_check(
         DemoPage(expected),
         intent="Bind Policy",
         expected=expected,
         record_id="quote-2026-0001",
+        independent_page=DemoPage(expected),
         receipt_dir=out,
         signing_key=signing_key,
     ) as check:
@@ -50,7 +51,9 @@ def main() -> None:
         ):
             pass
     except CommitBlockedError as err:
-        print(f"STOPPED  | verdict={err.result.verdict} | reason={err.reason}")
+        print(
+            f"{err.result.status} | verdict={err.result.verdict} | reason={err.reason}"
+        )
 
 
 if __name__ == "__main__":

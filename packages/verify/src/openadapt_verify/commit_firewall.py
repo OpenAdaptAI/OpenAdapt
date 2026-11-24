@@ -704,7 +704,9 @@ def verify_commit(
     )
     if expected and _is_page_like(read_target):
         dom_checked = True
-        dom_independent = independent_page is not None
+        dom_independent = (
+            independent_page is not None and independent_page is not page_or_screenshot
+        )
         dom_passed, mismatches = _check_dom_sync(read_target, expected)
         shot_fn = getattr(read_target, "screenshot", None)
         if callable(shot_fn):
@@ -718,7 +720,7 @@ def verify_commit(
 
     visual_verdict: Optional[CommitVerdict] = None
     visual_reason = ""
-    if expected and verifier is not None:
+    if expected and verifier is not None and (dom_checked or after_png is not None):
         visual_verdict, visual_reason = _run_visual_verifier_sync(
             verifier,
             before_png=before_png,
@@ -775,7 +777,9 @@ async def async_verify_commit(
     )
     if expected and _is_page_like(read_target):
         dom_checked = True
-        dom_independent = independent_page is not None
+        dom_independent = (
+            independent_page is not None and independent_page is not page_or_screenshot
+        )
         dom_passed, mismatches = await _check_dom_async(read_target, expected)
         shot_fn = getattr(read_target, "screenshot", None)
         if callable(shot_fn):
@@ -791,7 +795,7 @@ async def async_verify_commit(
 
     visual_verdict: Optional[CommitVerdict] = None
     visual_reason = ""
-    if expected and verifier is not None:
+    if expected and verifier is not None and (dom_checked or after_png is not None):
         visual_verdict, visual_reason = await _run_visual_verifier_async(
             verifier,
             before_png=before_png,
