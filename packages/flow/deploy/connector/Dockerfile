@@ -6,14 +6,15 @@
 #   mkdir -p wheels && cp openadapt_flow-<version>-py3-none-any.whl wheels/
 #   docker build -t openadapt-connector:<version> .
 #
-# Run it with three mounts (see docker-compose.yml): /etc/openadapt holds
-# connector.toml (0600, the connector token) and the local secret store;
-# /srv/openadapt is the encrypted customer storage volume (programs in, reports
-# out); nothing else is written outside the container's tmpfs.
+# Mount operator configuration at /etc/openadapt, encrypted customer storage
+# at /srv/openadapt and a separate private ledger directory from the encrypted
+# volume at /var/lib/openadapt/ledger. See docs/BYOC_CONNECTOR.md.
 ARG BASE_IMAGE=python:3.12-slim-bookworm
 FROM ${BASE_IMAGE}
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONUNBUFFERED=1 \
+    OPENADAPT_FLOW_PLAINTEXT_LEDGER_DIR=/var/lib/openadapt/ledger \
     PYTHONDONTWRITEBYTECODE=1 \
     OPENADAPT_HOME=/etc/openadapt \
     PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
@@ -31,7 +32,7 @@ RUN set -eu; \
     rm -rf /tmp/wheels /var/lib/apt/lists/*
 
 RUN useradd --system --create-home --uid 10001 openadapt \
- && mkdir -p /etc/openadapt /srv/openadapt \
+ && mkdir -p /etc/openadapt /srv/openadapt /var/lib/openadapt/ledger \
  && chown openadapt:openadapt /srv/openadapt
 COPY entrypoint.sh /usr/local/bin/openadapt-connector-entrypoint
 RUN chmod 0755 /usr/local/bin/openadapt-connector-entrypoint

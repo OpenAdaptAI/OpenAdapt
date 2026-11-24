@@ -112,6 +112,28 @@
 
 ### Fixes
 
+- The form transaction layer (`form_tx`, an unreleased prototype until this
+  release) reads back every field it typed, selected or kept. Each one gets
+  a `passed`, `failed` or `not_checked` verdict; a field it cannot read back
+  (no read-back declared, the summary control missing or ambiguous, a failed
+  lookup, a value entered only in a popup) is `not_checked` and never
+  passed. A submit with any `not_checked` field ends `readback_incomplete`,
+  never `verified_done`, and gets no receipt. Before, fields typed in a popup
+  estimator had no verdict at all and such a run could end verified.
+  Popup inputs are also re-read just before the popup's apply button, and a
+  mismatch stops the run before apply. The side panel shows refuted and
+  incomplete runs as needing action. Measured on four held-out synthetic
+  quote portals: `benchmark/form_tx_heldout_run/RESULTS.md`.
+- A wrapped sign-in no longer compiles a pixel check that freezes a withheld
+  credential field. The recorder blacks out a withheld field in every frame
+  that still shows it, so a `REGION_STABLE` crop that overlapped one held a
+  black rectangle that never matched the unredacted screenshot at replay
+  time, failing a step whose region overlapped a credential box during the
+  run, for example the click into the password field. Such a check is now
+  clipped to the part of its region clear of the box and re-cropped from the
+  same frame. When no usable part is left, it is dropped and recorded in
+  `param_hygiene.json`. This applies to mined checks and to the
+  focused-field pass.
 - A FHIR searchset Bundle's `OperationOutcome` entry (`search.mode:
   outcome`) is no longer read as a marker match. Packs can declare
   `search_match` on the entry parent (Medplum uses `path: search.mode`,
