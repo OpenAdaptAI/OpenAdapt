@@ -1,0 +1,21 @@
+{
+  "case_id": "pc-s05",
+  "facts": {
+    "coverage.deductible": 2500,
+    "coverage.effective_date": "2027-01-01",
+    "history.prior_claims_5yr": 0,
+    "property.address_line1": "802 Millrace St",
+    "property.burglar_alarm": false,
+    "property.city": "Springfield",
+    "property.construction_type": "wood frame",
+    "property.finish_level": "builder grade",
+    "property.heating_type": "electric baseboard",
+    "property.roof_material": "asphalt shingle",
+    "property.roof_year": 2015,
+    "property.square_feet": 1750,
+    "property.state": "OR",
+    "property.stories": "1",
+    "property.year_built": 1964,
+    "property.zip": "97477"
+  }
+}

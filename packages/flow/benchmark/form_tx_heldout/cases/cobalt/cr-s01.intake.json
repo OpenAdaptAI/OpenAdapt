@@ -1,0 +1,26 @@
+{
+  "case_id": "cr-s01",
+  "facts": {
+    "applicant.date_of_birth": "1995-01-17",
+    "applicant.email": "ines.calloway@example.test",
+    "applicant.first_name": "Ines",
+    "applicant.last_name": "Calloway",
+    "applicant.license_state": "WA",
+    "applicant.marital_status": "Single",
+    "coverage.bi_limits": "50/100",
+    "coverage.collision_deductible": 1000,
+    "coverage.comprehensive_deductible": 500,
+    "garaging.city": "Lakemont",
+    "garaging.state": "WA",
+    "garaging.zip": "98052",
+    "household.driver_count": 1,
+    "vehicle.annual_miles": 12000,
+    "vehicle.commute_miles_one_way": 14,
+    "vehicle.lienholder": "Northgate Credit Union",
+    "vehicle.make": "Norvik",
+    "vehicle.model": "Aster",
+    "vehicle.ownership": "finance",
+    "vehicle.primary_use": "commute",
+    "vehicle.year": 2019
+  }
+}

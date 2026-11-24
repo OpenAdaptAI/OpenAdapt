@@ -29,6 +29,16 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Sequence
 
+from openadapt_flow.verdict import (
+    Obligations,
+    Result,
+    Settlement,
+    Status,
+    Subject,
+    settle,
+)
+from openadapt_flow.verdict_sites import verdict_site
+
 if TYPE_CHECKING:
     from openadapt_types.receipt import ReceiptVerification, RoleKey
 
@@ -54,13 +64,27 @@ def mode_enabled(env: Optional[Mapping[str, str]] = None) -> bool:
     return env.get(ENV_MODE, "on").strip().lower() not in ("0", "off", "false", "no")
 
 
+def _occurrences(hashes: Sequence[Any]) -> list[Subject]:
+    """One subject per contract hash, numbered per hash, so two effects with
+    the same contract are two obligations."""
+
+    seen: Counter[Any] = Counter()
+    out = []
+    for h in hashes:
+        seen[h] += 1
+        out.append(Subject(surface="effect", key=f"{h}#{seen[h]}"))
+    return out
+
+
+@verdict_site("receipt_record.line", classes="C1 C3")
 def _line(
     index: int, result: Mapping[str, Any], ledger: Mapping[str, Any] | None
 ) -> dict[str, Any]:
     from openadapt_flow.check_level import CheckLevel, from_verification_tier
 
     evidence = result.get("effect_evidence") or []
-    declared = Counter(result.get("effect_contract_hashes") or [])
+    planned = list(result.get("effect_contract_hashes") or [])
+    declared = Counter(planned)
     ledger_effects = ledger["effects"] if ledger is not None else []
     # A declared effect can lack a bound hash when the run stopped before the
     # reader ran. Keep the attempted write and withhold its verification.
@@ -74,29 +98,49 @@ def _line(
     # A negative aggregate flag covers both a contradiction and an unavailable
     # reader. Only complete, contract-bound read evidence distinguishes them.
     if declared and ledger_matches and declared == observed:
-        verdicts = {item["final_verdict"] for item in evidence}
         levels = [
             from_verification_tier(item["verification_tier"])
             if type(item.get("verification_tier")) is int
             else CheckLevel.UNCHECKED
             for item in evidence
         ]
-        if verdicts <= {"confirmed", "refuted"} and min(levels) > CheckLevel.UNCHECKED:
-            if "refuted" in verdicts:
-                check = "refuted"
-            elif (
-                verdicts == {"confirmed"}
-                and result.get("effect_verified") is True
-                and all(item.get("observed_effect") == "present" for item in evidence)
-                and (ledger is None or ledger.get("status") == "confirmed")
-            ):
-                check = "confirmed"
-            if check != "not_checked":
-                strength = (
-                    "read_back"
-                    if min(levels) >= CheckLevel.SYSTEM_OF_RECORD
-                    else "same_screen"
-                )
+        # The declared effects are the obligations; each read settles the
+        # one its contract hash names. A read below UNCHECKED, or a verdict
+        # nobody listed, is not checked.
+        subjects = _occurrences([item["effect_contract_hash"] for item in evidence])
+        results = [
+            Result.from_code(
+                subject,
+                item["final_verdict"],
+                held=frozenset({"confirmed"}),
+                refuted=frozenset({"refuted"}),
+            )
+            if level > CheckLevel.UNCHECKED
+            else Result.not_checked(subject, "unchecked read")
+            for subject, item, level in zip(subjects, evidence, levels)
+        ]
+        settled = settle(
+            Obligations.fix(_occurrences(planned), source="effect_contract_hashes"),
+            results,
+        )
+        # Anything unread outranks a refutation: a line is refuted only when
+        # every declared effect was read.
+        label = settled.label(precedence=(Status.NOT_CHECKED, Status.REFUTED))
+        if label is Status.REFUTED:
+            check = "refuted"
+        elif (
+            label is Status.HELD
+            and result.get("effect_verified") is True
+            and all(item.get("observed_effect") == "present" for item in evidence)
+            and (ledger is None or ledger.get("status") == "confirmed")
+        ):
+            check = "confirmed"
+        if check != "not_checked":
+            strength = (
+                "read_back"
+                if min(levels) >= CheckLevel.SYSTEM_OF_RECORD
+                else "same_screen"
+            )
     not_checked: list[str] = []
     if result.get("effect_approved_unverified") is True:
         not_checked.append("approved_unverified")
@@ -207,6 +251,36 @@ def _write_lines(report: Mapping[str, Any], results: list[Any]) -> list[dict[str
             "too_many_writes", "the complete write list exceeds the receipt limit"
         )
     return lines
+
+
+@verdict_site("receipt_record.lines", classes="C2 C3")
+def _tally_lines(
+    lines: Sequence[Mapping[str, Any]],
+) -> tuple[dict[str, int], Settlement]:
+    """The receipt's line counts and their settlement: every line is one
+    obligation. A check nobody listed counts as not checked, so the three
+    counts always add up to the number of lines."""
+
+    subjects = [Subject(surface="line", key=str(n)) for n in range(len(lines))]
+    settled = settle(
+        Obligations.fix(subjects, source="lines"),
+        [
+            Result.from_code(
+                subject,
+                line.get("check"),
+                held=frozenset({"confirmed"}),
+                refuted=frozenset({"refuted"}),
+            )
+            for subject, line in zip(subjects, lines)
+        ],
+    )
+    confirmed, refuted = len(settled.held), len(settled.refuted)
+    tally = {
+        "confirmed": confirmed,
+        "refuted": refuted,
+        "not_checked": settled.total - confirmed - refuted,
+    }
+    return tally, settled
 
 
 #: Signed per-write receipts a run folder may hold, each one line.
@@ -338,14 +412,13 @@ def build_statement(
         raise ReceiptRecordError(
             "too_many_writes", "the complete write list exceeds the receipt limit"
         )
-    tally = {
-        k: sum(1 for line in lines if line["check"] == k)
-        for k in ("confirmed", "refuted", "not_checked")
-    }
+    tally, settled = _tally_lines(lines)
     outcome, reason = r.receipt_outcome(report.get("execution_outcome"))
     if outcome == "VERIFIED" and results and "change_ledger" not in report:
         outcome, reason = "UNKNOWN", "incomplete_write_coverage"
-    if outcome == "VERIFIED" and (tally["refuted"] or tally["not_checked"]):
+    # A run that wrote nothing has no line to check; any line that isn't
+    # confirmed keeps the run from VERIFIED.
+    if outcome == "VERIFIED" and settled.total and not settled.passes:
         outcome, reason = "UNKNOWN", "unverified_write"
     bundle = report.get("bundle_content_digest")
     bundle = bundle if isinstance(bundle, str) and _SHA256.fullmatch(bundle) else None
@@ -422,6 +495,13 @@ def build_statement(
 
 def _write(path: Path, payload: Mapping[str, Any], *, private: bool = False) -> None:
     data = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    from openadapt_flow import sealed_set
+
+    if sealed_set.is_sealed_path(path):
+        # An encrypted run (the default): the receipt is a structural file of
+        # its set, the private openings and the card are sealed with it.
+        sealed_set.write_bytes(path, data)
+        return
     fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
         with os.fdopen(fd, "wb") as handle:
@@ -453,9 +533,17 @@ def write_receipt_record(
     Idempotent: an existing receipt over the same report bytes is kept. A
     receipt over different bytes is never silently replaced.
     """
+    from openadapt_flow import sealed_set
     from openadapt_flow.sealed_maintenance import mutation_lock
 
-    with mutation_lock(run_dir):
+    # An encrypted run's writes go through its sealed writer, which takes the
+    # set's own lock per write; serialize receipts on a lock of their own.
+    lock = (
+        sealed_set.side_lock(run_dir, "receipt")
+        if sealed_set.is_sealed(run_dir)
+        else mutation_lock(run_dir)
+    )
+    with lock:
         return _write_locked(
             Path(run_dir),
             signer,
@@ -483,12 +571,7 @@ def _write_locked(
     from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
     from openadapt_flow.seal_keys import KeyUnavailable
 
-    # Private openings need encrypted-set support before they can be persisted
-    # beside an encrypted report. A direct caller has the same boundary as CLI.
-    if sealed_set.is_sealed(run_dir):
-        raise ReceiptRecordError(
-            "encrypted_run", "private openings require encrypted storage"
-        )
+    # In an encrypted run the private openings are sealed in its set.
     try:
         pending = CheckpointStore(run_dir).read_pending()
     except Exception as exc:
@@ -554,12 +637,14 @@ def _write_locked(
     out = run_dir / RECEIPT_FILE
     private = run_dir / PRIVATE_FILE
     legacy = None
-    if out.exists():
+    if sealed_set.is_file(out):
         try:
-            existing = r.loads_strict(out.read_bytes())
+            existing = r.loads_strict(sealed_set.read_bytes(out))
             if r.is_receipt_envelope(existing):
                 checked = r.verify_receipt(
-                    existing, registry, openings=r.loads_strict(private.read_bytes())
+                    existing,
+                    registry,
+                    openings=r.loads_strict(sealed_set.read_bytes(private)),
                 )
                 if (
                     not checked.ok
@@ -590,7 +675,9 @@ def _write_locked(
                         "already_signed", "receipt facts differ from the settled report"
                     )
                 write_public_card(
-                    run_dir, existing, r.loads_strict(private.read_bytes())["openings"]
+                    run_dir,
+                    existing,
+                    r.loads_strict(sealed_set.read_bytes(private))["openings"],
                 )
                 return existing
         except (OSError, ValueError) as exc:
@@ -601,7 +688,9 @@ def _write_locked(
         ):
             raise ReceiptRecordError("existing_unreadable", "unrecognized receipt file")
         legacy = run_dir / "run-summary.json"
-        if legacy.exists() and legacy.read_bytes() != out.read_bytes():
+        if sealed_set.is_file(legacy) and sealed_set.read_bytes(
+            legacy
+        ) != sealed_set.read_bytes(out):
             raise ReceiptRecordError(
                 "legacy_summary_conflict", "both summary files exist and differ"
             )
@@ -611,10 +700,13 @@ def _write_locked(
         raise ReceiptRecordError(exc.code, str(exc)) from exc
     if sealed_set.read_bytes(path) != raw:
         raise ReceiptRecordError("report_changed", "report changed while signing")
-    if legacy is not None and not legacy.exists():
+    if legacy is not None and not sealed_set.is_file(legacy):
         # Preserve the original bytes; an error before envelope installation
         # leaves the legacy file and any earlier summary readable.
-        os.link(out, legacy)
+        if sealed_set.is_sealed_path(out):
+            sealed_set.write_bytes(legacy, sealed_set.read_bytes(out))
+        else:
+            os.link(out, legacy)
     _write(private, r.private_openings(envelope, openings), private=True)
     _write(out, envelope)
     write_public_card(run_dir, envelope, openings)
@@ -740,9 +832,7 @@ def receipt_after_run(
         return None
     from openadapt_flow import sealed_set
 
-    if sealed_set.is_sealed(Path(run_dir)):
-        return "receipt not written: the run directory is encrypted at rest"
-    if not (Path(run_dir) / "report.json").is_file():
+    if not sealed_set.is_file(Path(run_dir) / "report.json"):
         return None
     try:
         from openadapt_flow.handoffs.registry import ledgers_for
@@ -861,16 +951,18 @@ def verify_run_receipt(
 
     run_dir = Path(run_dir)
     try:
-        envelope = loads_strict((run_dir / RECEIPT_FILE).read_text(encoding="utf-8"))
+        if not sealed_set.is_file(run_dir / RECEIPT_FILE):
+            raise FileNotFoundError(RECEIPT_FILE)
+        envelope = loads_strict(sealed_set.read_text(run_dir / RECEIPT_FILE))
     except FileNotFoundError:
         return r._refuse("unsigned", "no receipt.json")
     except (OSError, ValueError):
         return r._refuse("malformed", "receipt.json is not JSON")
     openings = None
     private = run_dir / PRIVATE_FILE
-    if private.is_file():
+    if sealed_set.is_file(private):
         try:
-            openings = loads_strict(private.read_text(encoding="utf-8"))
+            openings = loads_strict(sealed_set.read_text(private))
         except (OSError, ValueError):
             return r._refuse("malformed", "receipt.private.json is not JSON")
     result = r.verify_receipt(envelope, registry, openings=openings)

@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v0.2.1 (2026-11-23)
+
+Published after [#2589](https://github.com/OpenAdaptAI/OpenAdapt/pull/2589),
+[#2600](https://github.com/OpenAdaptAI/OpenAdapt/pull/2600) and
+[#2616](https://github.com/OpenAdaptAI/OpenAdapt/pull/2616): its first main
+push runs failed on unrelated Flow jobs.
+
+- Accept openadapt-flow 4: the openadapt-flow requirement and the `openai`,
+  `claude` and `mcp` extras now allow `<5` (was `<4`), so openadapt-verify
+  installs beside the next Flow major instead of holding Flow at 3.x
+  (#2535).
+
 ## v0.2.0 (2026-11-14)
 
 ### Install without the vision stack
