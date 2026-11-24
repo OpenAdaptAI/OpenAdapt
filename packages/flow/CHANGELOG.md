@@ -27,6 +27,11 @@
   an editable control is a form, never a confirmation. Each section is opened,
   filled and saved, and its completion is read from its card on the hub after
   the save, with the demonstrated number of writes.
+- Repeating structures (`openadapt_flow.gui.repeating`). An "add another"
+  group is learned from a demonstration. A run adds instances until the count
+  matches the intake, fills them in order and reads each one back by the
+  container it was written into. It never deletes an instance and stops on a
+  prefilled one.
 
 ## v4.0.0 (2026-11-24)
 

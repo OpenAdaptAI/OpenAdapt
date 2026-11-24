@@ -300,6 +300,9 @@ Done:
 - [x] `verify_draft.judge_case` (C3 C5): admission cases settle on the verdict
   kernel via allow-listed outcome maps; untestable, error, or unknown codes
   never hold.
+- [x] `gui.repeating.judge_instances` (C1 C2 C5): new. Item-by-slot
+  obligations from the intake, checked in the instance each item was written
+  into; an instance nobody planned is refuted.
 
 Next, most bug-prone first:
 
