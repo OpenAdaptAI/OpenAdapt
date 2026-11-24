@@ -1,12 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "OpenAdapt Extension Evidence (optional)",
-  "version": "0.1.0",
-  "description": "Optional everyday-Chrome evidence for OpenAdapt recordings: open shadow DOM targets and iframe context (including cross-origin frames) while a recording is active. Not required; accessibility recording still works without it.",
+  "name": "OpenAdapt Co-Pilot",
+  "version": "0.2.0",
+  "minimum_chrome_version": "116",
+  "description": "Local browser co-pilot for OpenAdapt: side-panel control, popup return, sign-in capture pause, and verified receipts. Local-only.",
   "permissions": [
-    "activeTab",
-    "tabs",
-    "scripting",
     "storage",
     "nativeMessaging",
     "webRequest",
@@ -40,6 +38,6 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     },
-    "default_title": "OpenAdapt extension evidence (idle)"
+    "default_title": "OpenAdapt Co-Pilot"
   }
 }

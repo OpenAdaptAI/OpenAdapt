@@ -1265,6 +1265,7 @@ def test_wire_tap_generality_and_import_boundaries(tmp_path: Path) -> None:
         "openadapt_flow.tx.types",
         "openadapt_flow.tx.receipt",  # encrypted private-state writer, already import-light checked
         "openadapt_flow.wire_check",
+        "openadapt_flow.capture_privacy",  # body minimizer, stdlib only (below)
     }
     stdlib_names = sys.stdlib_module_names
 
@@ -1298,6 +1299,13 @@ def test_wire_tap_generality_and_import_boundaries(tmp_path: Path) -> None:
         "from openadapt_flow.secret_redaction import *",
     ):
         assert not permitted_from_import(ast.parse(unknown).body[0])
+
+    minimizer_source = WIRE_TAP_PATH.parent.parent / "capture_privacy.py"
+    for node in ast.walk(ast.parse(minimizer_source.read_text())):
+        if isinstance(node, ast.Import):
+            assert all(alias.name.split(".")[0] in stdlib_names for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            assert node.module.split(".")[0] in stdlib_names
 
     redaction_source = WIRE_TAP_PATH.parent.parent / "secret_redaction.py"
     for node in ast.walk(ast.parse(redaction_source.read_text())):

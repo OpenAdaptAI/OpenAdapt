@@ -120,12 +120,14 @@ def cmd_record(a: argparse.Namespace, app: AppBase) -> None:
     from playwright.sync_api import sync_playwright
 
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
-    from openadapt_flow.network_capture import NetworkCapture
+    from openadapt_flow.network_capture import NetworkCapture, require_raw_ready
     from openadapt_flow.recorder import Recorder
 
     out = Path(a.out)
     if out.exists():
         raise SystemExit(f"exists: {out}")
+    # Raw bodies (synthetic data) need OPENADAPT_FLOW_PLAINTEXT_AT_REST here.
+    require_raw_ready(out)
     start_proxy(app)
     values = app.recording_values()
     if a.tag:
@@ -143,7 +145,7 @@ def cmd_record(a: argparse.Namespace, app: AppBase) -> None:
         page.goto(app.base + "/")
         if app.login_required:
             app.login(page)
-        capture = NetworkCapture(ctx).start()
+        capture = NetworkCapture(ctx, bodies="raw").start()
         app.open_form(page)
         rec = Recorder(
             PlaywrightBackend(page),

@@ -88,10 +88,15 @@ def drive(
     """Run the task's selector solution. With ``recording``, write the
     recording the recorder would: events, params and the network capture."""
 
-    from openadapt_flow.network_capture import NetworkCapture
+    from openadapt_flow.network_capture import NetworkCapture, require_raw_ready
 
+    if recording is not None:
+        # Raw bodies (synthetic data) need OPENADAPT_FLOW_PLAINTEXT_AT_REST.
+        require_raw_ready(recording)
     context = browser.new_context(viewport={"width": 1280, "height": 900})
-    capture = NetworkCapture(context).start() if recording is not None else None
+    capture = (
+        NetworkCapture(context, bodies="raw").start() if recording is not None else None
+    )
     t0 = time.monotonic()
     events: list[dict[str, Any]] = []
     page = context.new_page()

@@ -15,7 +15,16 @@
 
 <!-- version list -->
 
-## Unreleased
+## v4.0.0 (2026-11-24)
+
+### Breaking Changes
+
+- **Encryption at rest is now enabled by default** (`#2423`): recordings,
+  compiled bundles, and run directories are written as sealed-set v3
+  encrypted containers unless `OPENADAPT_ENCRYPT_AT_REST=0` or `--no-encrypt`
+  is set. Released `openadapt` launcher `1.23.0` (`openadapt-flow<4`) reads
+  run files via plain paths, so this major bump keeps `1.23.0` on Flow 3.4.0
+  while pairing Flow 4.0.0 with `openadapt 1.24.0` (`>=4.0.0,<5.0.0`).
 
 ### Encryption at rest by default
 
@@ -140,6 +149,22 @@
   application vocabulary: month names, yes and no words, currency signs and
   tables come from the pack. See docs/EFFECT_LOCATION.md.
 
+### Changes
+
+- Network captures no longer write raw bodies by default. `record
+  --capture-network` keeps only the `--param` and `--identifier` values of
+  each request and response body, plus a per-capture keyed hash of every
+  other value and of each HTML, text or binary body; undeclared URL query
+  values are hashed too. `dump_har` and `save_har` do the same with the wire
+  policy's id and version fields. `--capture-network-bodies raw` (and
+  `raw_bodies=True`) keeps the redacted bodies, which API step and undo
+  proposals need, and is refused unless the recording is encrypted or
+  `OPENADAPT_FLOW_PLAINTEXT_AT_REST` explicitly allows plaintext. Binary
+  bodies, files and non-text responses are sized and hashed from their
+  bytes as sent; the recording's `app_url` query is minimized too; an
+  explicit `application/octet-stream` body is never parsed as JSON (a
+  missing content type still is); and `load_har` refuses a HAR marked
+  minimized that carries a raw body.
 ### Fixes
 
 - `verify-run` with `minimum_effect_strength: independent_session` now
