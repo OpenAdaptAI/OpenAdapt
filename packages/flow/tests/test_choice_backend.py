@@ -1044,15 +1044,41 @@ def test_post_delivery_drift_is_uncertain_across_native_and_listed_choices(
 def test_recovered_readback_must_restart_its_stability_window(
     server: Server, browser: Any, kind: str
 ) -> None:
+    from openadapt_flow.backends import choice
+
+    # The committed value drifts to WRONG, then recovers to CARD. WRONG holds
+    # until a read of the field has seen it: a fixed WRONG window can fall
+    # between two readback polls on a loaded machine, and then the backend
+    # never sees the drift at all and the test proves nothing. The page
+    # stamps when CARD came back, so the wait below is measured from the
+    # recovery on one clock, against the backend's own stable interval.
     def prepare(page: Any) -> None:
         page.evaluate(
             """kind => {
           const field = document.querySelector('[name=department]');
+          const own = Object.getOwnPropertyDescriptor(
+            Object.getPrototypeOf(field), 'value');
+          let drifted = null;
+          window.sawWrong = false;
+          window.recoveredAt = null;
+          Object.defineProperty(field, 'value', {
+            configurable: true,
+            get() {
+              const value = own.get.call(this);
+              if (value === 'WRONG' && !window.sawWrong) {
+                window.sawWrong = true;
+                setTimeout(() => {
+                  drifted.value = 'CARD';
+                  window.recoveredAt = performance.now();
+                }, 60);
+              }
+              return value;
+            },
+            set(value) { own.set.call(this, value); },
+          });
           const drift = () => {
-            window.commitAt = performance.now();
-            const target = kind === 'native' ? field.selectedOptions[0] : field;
-            setTimeout(() => target.value = 'WRONG', 60);
-            setTimeout(() => target.value = 'CARD', 180);
+            drifted = kind === 'native' ? field.selectedOptions[0] : field;
+            setTimeout(() => drifted.value = 'WRONG', 60);
           };
           if (kind === 'native') field.addEventListener('change', drift);
           else document.addEventListener('mousedown', event => {
@@ -1062,21 +1088,28 @@ def test_recovered_readback_must_restart_its_stability_window(
             kind,
         )
 
-    elapsed: list[float] = []
+    seen: list[Any] = []
     outcome, value, confirmed = _choose(
         server,
         browser,
         kind,
         "Cardiology",
         prepare=prepare,
-        check=lambda page: elapsed.append(page.evaluate("performance.now()-commitAt")),
+        check=lambda page: seen.append(
+            page.evaluate(
+                "({sawWrong: window.sawWrong, since: window.recoveredAt === null"
+                " ? null : performance.now() - window.recoveredAt})"
+            )
+        ),
     )
     assert isinstance(outcome, dict), outcome
     assert value == "CARD"
     assert confirmed
-    # _choose includes its existing300ms final confirm delay; the choice
-    # itself must wait beyond the recovered state's full stable interval.
-    assert elapsed[0] >= 800
+    assert seen[0]["sawWrong"], "the backend never read the drifted value"
+    # The choice returns no sooner than the stable interval after the first
+    # read of the recovered state, and _choose then waits 300 ms to confirm.
+    assert seen[0]["since"] is not None
+    assert seen[0]["since"] >= choice._STABLE_S * 1000 + 300
 
 
 @pytest.mark.parametrize("prior", [None, False, True])
