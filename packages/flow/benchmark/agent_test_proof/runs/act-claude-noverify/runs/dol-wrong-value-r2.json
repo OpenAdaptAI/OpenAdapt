@@ -1,0 +1,71 @@
+{
+ "scenario": "dol-wrong-value",
+ "rep": 2,
+ "fault": "wrong_value",
+ "note": "The phone's last two digits are swapped on the way in.",
+ "task": {
+  "lastname": "Mbeki",
+  "firstname": "Thabo",
+  "poste": "Fleet coordinator",
+  "phone": "555-0204",
+  "email": "t.mbeki@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/list.php?leftmenu=contacts",
+ "agent_s": 74.6,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE Contact \"Thabo Mbeki\" exists in Third-parties > Contacts/Addresses list (id not visible)",
+  "claim_line": true,
+  "final_text": "I added the contact Thabo Mbeki, not linked to any third party. His job position is Fleet coordinator and his email is t.mbeki@example.invalid. The contact list now shows 4 contacts, with Thabo Mbeki listed once.\n\nHis professional phone is stored as 5550204, because Dolibarr drops the dash from 555-0204. The first save had the digits wrong (555-0240), so I edited the contact and corrected it. I left every other field as it was.\n\nI couldn't see the page's URL, so I don't have the record's id. The contact is listed under Third-parties > Contacts/Addresses > List.\n\nRESULT: DONE Contact \"Thabo Mbeki\" exists in Third-parties > Contacts/Addresses list (id not visible)"
+ },
+ "model_calls": 18,
+ "store": {
+  "correct": true,
+  "reasons": [],
+  "new": [
+   "82"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795248518.82,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 62
+  },
+  {
+   "t": 1795248546.024,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "wrong_value",
+   "rewritten": [
+    "phone_pro"
+   ],
+   "status": 302,
+   "accepted": true,
+   "ms": 55
+  },
+  {
+   "t": 1795248584.142,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": false,
+   "status": 302,
+   "ms": 70
+  }
+ ],
+ "outcome": "completed_correctly",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

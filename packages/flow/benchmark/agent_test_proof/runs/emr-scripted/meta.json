@@ -1,0 +1,38 @@
+{
+ "run_id": "20261121T082003Z-64ba2c",
+ "app": "openemr",
+ "app_pack": {
+  "source": "openemr.yaml",
+  "digest": "sha256:c5ee71eff045aff40b1dd6ff214b7929b4b3df9d4e48640c2ad633b925e5ccfa"
+ },
+ "scenarios": {
+  "source": "openemr.yaml",
+  "digest": "sha256:a2dd8251288c760f553672b19a0daf73d93715524bcf4d01dbba3f926c63f38e",
+  "version": "1.0.0",
+  "count": 8
+ },
+ "images": [
+  "docker.io/library/mariadb@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4",
+  "docker.io/openemr/openemr@sha256:0aa4d3d52b22fa69986c087e7c99e9854d8dfd70440634eb7c8af0e08f19f3ab"
+ ],
+ "agent": {
+  "id": "scripted",
+  "kind": "scripted",
+  "model": ""
+ },
+ "instructions_digest": null,
+ "repetitions": 1,
+ "caps": {
+  "run_usd": 5.0,
+  "scenario_usd": 1.5,
+  "steps": 60,
+  "wall_s": 900.0
+ },
+ "openadapt_flow": "2.6.0",
+ "machine": {
+  "system": "Darwin",
+  "machine": "arm64",
+  "python": "3.12.7"
+ },
+ "started": "2026-11-21T08:20:03+00:00"
+}

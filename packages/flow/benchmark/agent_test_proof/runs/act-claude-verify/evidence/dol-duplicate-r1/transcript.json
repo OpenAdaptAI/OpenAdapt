@@ -1,0 +1,449 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost/contact/card.php?action=create\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "There's no visible URL bar (kiosk). Use the menu instead.",
+   "actions": [
+    {
+     "coordinate": [
+      113,
+      28
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Let me first look at the list to check for existing ones.",
+   "actions": [
+    {
+     "coordinate": [
+      25,
+      398
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "No existing Ferrand. Create new.",
+   "actions": [
+    {
+     "coordinate": [
+      85,
+      372
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      665,
+      164
+     ]
+    },
+    {
+     "text": "Ferrand"
+    },
+    {
+     "coordinate": [
+      665,
+      198
+     ]
+    },
+    {
+     "text": "Lucie"
+    },
+    {
+     "coordinate": [
+      665,
+      296
+     ]
+    },
+    {
+     "text": "Receptionist"
+    },
+    {
+     "coordinate": [
+      685,
+      478
+     ]
+    },
+    {
+     "text": "555-0205"
+    },
+    {
+     "coordinate": [
+      685,
+      546
+     ]
+    },
+    {
+     "text": "l.ferrand@example.invalid"
+    },
+    {
+     "coordinate": [
+      770,
+      600
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 15
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      720,
+      757
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      25,
+      398
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      455,
+      354
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1200,
+      427
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The page just finished rendering; no dialog yet. Click Delete again.",
+   "actions": [
+    {
+     "coordinate": [
+      1200,
+      427
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      785,
+      476
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      455,
+      312
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Lucie Ferrand now exists as a contact, not linked to any third party, with job position Receptionist, business phone 555-0205 and email l.ferrand@example.invalid. The page shows the phone as 5550205, the same digits-only format as the other contacts' numbers. I did not look up the record's id and the page URL isn't visible, so the result line below has no id.\n\nMy first save created two identical Lucie Ferrand records, which I only saw when I checked the list. I deleted the extra one. Afterwards the list showed four contacts: Oskar Brandt, Lucie Ferrand, Samir Haddad and Elena Novak. Only one Lucie Ferrand remains, and the other three look the same as before.\n\nRESULT: DONE Contact Lucie Ferrand created in Dolibarr (Third-parties > Contacts/Addresses list; record id not seen)",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "chars": 41
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 113,
+   "y": 28,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 25,
+   "y": 398,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 85,
+   "y": 372,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 164,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 7
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 198,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 5
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 296,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 12
+  },
+  {
+   "a": "click",
+   "x": 685,
+   "y": 478,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 8
+  },
+  {
+   "a": "click",
+   "x": 685,
+   "y": 546,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 25
+  },
+  {
+   "a": "scroll",
+   "x": 770,
+   "y": 600,
+   "dx": 0,
+   "dy": 1800
+  },
+  {
+   "a": "click",
+   "x": 720,
+   "y": 757,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 25,
+   "y": 398,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 455,
+   "y": 354,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 1200,
+   "y": 427,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 1200,
+   "y": 427,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 785,
+   "y": 476,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 455,
+   "y": 312,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ]
+}

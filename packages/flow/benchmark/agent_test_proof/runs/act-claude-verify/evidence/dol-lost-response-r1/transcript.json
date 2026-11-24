@@ -1,0 +1,619 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost/contact/list.php\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      113,
+      28
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Check the existing list first.",
+   "actions": [
+    {
+     "coordinate": [
+      25,
+      398
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "No existing Varga. Create new.",
+   "actions": [
+    {
+     "coordinate": [
+      85,
+      372
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      665,
+      164
+     ]
+    },
+    {
+     "text": "Varga"
+    },
+    {
+     "coordinate": [
+      665,
+      198
+     ]
+    },
+    {
+     "text": "Zsofia"
+    },
+    {
+     "coordinate": [
+      665,
+      297
+     ]
+    },
+    {
+     "text": "Clerk"
+    },
+    {
+     "coordinate": [
+      685,
+      479
+     ]
+    },
+    {
+     "text": "555-0210"
+    },
+    {
+     "coordinate": [
+      685,
+      547
+     ]
+    },
+    {
+     "text": "z.varga@example.invalid"
+    },
+    {
+     "coordinate": [
+      770,
+      600
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 30
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The email field is just scrolled horizontally. Submit.",
+   "actions": [
+    {
+     "coordinate": [
+      719,
+      759
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "coordinate": [
+      600,
+      300
+     ]
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      400
+     ]
+    },
+    {
+     "text": "alt+Home"
+    },
+    {
+     "duration": 4
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 20
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 5
+    },
+    {
+     "}": 1
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 3
+    },
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 60
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost/contact/list.php\n"
+    },
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 30
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Escape"
+    },
+    {
+     "coordinate": [
+      113,
+      28
+     ]
+    },
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 120
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't confirm that the contact Zsofia Varga was saved. After I clicked ADD, the browser went to a blank white page and stayed blank. I waited several minutes, tried going back, reloading and clicking the menu, and nothing changed.\n\nBefore I clicked ADD, the form showed Last name Varga, First name Zsofia, Job position Clerk, Bus. phone 555-0210 and email z.varga@example.invalid. Third-party and every other field was left as it was. The contact list I looked at beforehand had three contacts (Brandt, Haddad, Novak) and no Varga.\n\nI never got back to the contact list, so I haven't checked that exactly one Varga record exists or that the other three contacts are unchanged.\n\nRESULT: NOT DONE The browser went blank after clicking ADD and never recovered, so I couldn't confirm the contact was saved.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "chars": 27
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 113,
+   "y": 28,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 25,
+   "y": 398,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 85,
+   "y": 372,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 164,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 5
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 198,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 6
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 5
+  },
+  {
+   "a": "click",
+   "x": 685,
+   "y": 479,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 8
+  },
+  {
+   "a": "click",
+   "x": 685,
+   "y": 547,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 23
+  },
+  {
+   "a": "scroll",
+   "x": 770,
+   "y": 600,
+   "dx": 0,
+   "dy": 3600
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 719,
+   "y": 759,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "move",
+   "x": 600,
+   "y": 300
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "click",
+   "x": 640,
+   "y": 400,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Home"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 4.0
+  },
+  {
+   "a": "wait",
+   "s": 20.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "wait",
+   "s": 60.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "chars": 27
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "wait",
+   "s": 30.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 113,
+   "y": 28,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "wait",
+   "s": 120.0
+  }
+ ]
+}

@@ -1,0 +1,60 @@
+{
+ "scenario": "dol-lost-response",
+ "rep": 1,
+ "fault": "lost_response",
+ "note": "The save lands; the page gets a 504.",
+ "task": {
+  "lastname": "Varga",
+  "firstname": "Zsofia",
+  "poste": "Clerk",
+  "phone": "555-0210",
+  "email": "z.varga@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/card.php",
+ "agent_s": 39.4,
+ "claim": {
+  "status": "not_done",
+  "line": "RESULT: NOT DONE The app displayed a blank page after submission, so I could not verify that the contact was created.",
+  "claim_line": true,
+  "final_text": "RESULT: NOT DONE The app displayed a blank page after submission, so I could not verify that the contact was created."
+ },
+ "model_calls": 11,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "no new record"
+  ],
+  "new": [],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": true,
+  "collateral": false
+ },
+ "fault_delivered": false,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795249631.176,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 36
+  },
+  {
+   "t": 1795249650.257,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "lost_response",
+   "status": "200->504",
+   "accepted": false,
+   "ms": 85
+  }
+ ],
+ "outcome": "fault_not_delivered",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

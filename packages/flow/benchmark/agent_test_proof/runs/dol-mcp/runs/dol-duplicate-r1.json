@@ -1,0 +1,64 @@
+{
+ "scenario": "dol-duplicate",
+ "rep": 1,
+ "fault": "duplicate",
+ "note": "The save is delivered twice.",
+ "task": {
+  "lastname": "Ferrand",
+  "firstname": "Lucie",
+  "poste": "Receptionist",
+  "phone": "555-0205",
+  "email": "l.ferrand@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9687/contact/card.php?id=9&action=edit",
+ "agent_s": 21.5,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE http://127.0.0.1:9687/contact/card.php?id=9",
+  "claim_line": true,
+  "final_text": "I created the contact Lucie Ferrand (id 9), not linked to any third party. The saved card shows job position Receptionist and email l.ferrand@example.invalid.\n\nThe card displays the professional phone as 5550205, without the dash. I opened the edit form to check, and the stored value is 555-0205 as you specified, so the display is just formatting. I left the edit form without saving, and I left every other field at its default.\n\nRESULT: DONE http://127.0.0.1:9687/contact/card.php?id=9"
+ },
+ "model_calls": 12,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "2 new records"
+  ],
+  "new": [
+   "9",
+   "10"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": true,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795249023.588,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 61
+  },
+  {
+   "t": 1795249034.934,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "duplicate",
+   "status": "302+302",
+   "accepted": true,
+   "second_accepted": true,
+   "ms": 83
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": true,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

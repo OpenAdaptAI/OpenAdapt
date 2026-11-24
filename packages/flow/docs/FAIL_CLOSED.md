@@ -291,6 +291,10 @@ Done:
 - [x] `receipt_record._tally_lines` (C2 C3): fix: a line check nobody listed
   keeps the run from VERIFIED and counts as not checked.
 - [x] `tx/wire_tap.relay_redirect_location` (C6): registered after #2470.
+- [x] `gui.steps.judge_step` (C3 C5): new. A commit holds only on exactly
+  the demonstrated writes; an unlisted step role is not checked.
+- [x] `gui.attestations.judge_attestations` (C1 C2 C5): new. The plan's boxes
+  are the obligations; a box the plan never saw is unexpected.
 
 Next, most bug-prone first:
 

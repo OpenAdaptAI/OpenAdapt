@@ -368,6 +368,7 @@ dependencies = [
 requires-dist = [
     { name = "a2a-sdk", extras = ["http-server"], marker = "extra == 'a2a'", specifier = ">=1.3.1,<2" },
     { name = "aardwolf", marker = "extra == 'rdp'", specifier = "==0.2.14" },
+    { name = "anthropic", marker = "extra == 'agent-test'", specifier = ">=0.40" },
     { name = "anthropic", marker = "extra == 'dev'", specifier = ">=0.40" },
     { name = "anthropic", marker = "extra == 'grounder'", specifier = ">=0.40" },
     { name = "anyio", marker = "extra == 'agent'", specifier = ">=4.0" },
@@ -419,12 +420,14 @@ requires-dist = [
     { name = "openadapt-grounding", marker = "extra == 'grounding'", specifier = ">=0.1.0" },
     { name = "openadapt-privacy", extras = ["presidio"], marker = "extra == 'privacy'", specifier = ">=1.1.4" },
     { name = "openadapt-types", specifier = ">=0.24.0,<0.25.0" },
+    { name = "openai", marker = "extra == 'agent-test'", specifier = ">=1.60" },
     { name = "openai-agents", marker = "extra == 'openai-agents'", specifier = ">=0.24,<0.25" },
     { name = "opencv-python", marker = "extra == 'dev'", specifier = ">=4.9,<5.1" },
     { name = "opencv-python", marker = "extra == 'vision'", specifier = ">=4.9,<5.1" },
     { name = "openenv", marker = "extra == 'openenv'", specifier = ">=0.11,<0.12" },
     { name = "pillow", marker = "extra == 'dev'", specifier = ">=10.0" },
     { name = "pillow", marker = "extra == 'vision'", specifier = ">=10.0" },
+    { name = "playwright", marker = "extra == 'agent-test'", specifier = ">=1.44" },
     { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.44" },
     { name = "playwright", marker = "extra == 'dev'", specifier = ">=1.44" },
     { name = "playwright", marker = "extra == 'openenv'", specifier = ">=1.44" },
@@ -471,7 +474,7 @@ requires-dist = [
     { name = "winrt-windows-media-ocr", marker = "sys_platform == 'win32' and extra == 'native-ocr'", specifier = ">=2.0" },
     { name = "winrt-windows-storage-streams", marker = "sys_platform == 'win32' and extra == 'native-ocr'", specifier = ">=2.0" },
 ]
-provides-extras = ["vision", "native-ocr", "browser", "dev", "grounder", "grounding", "local-grounding", "console", "countersign", "receipts", "keychain", "pkcs11", "execute", "windows", "connector-windows", "reward", "openenv", "macos", "linux", "rdp", "registry", "privacy", "hosted", "service", "service-mlx", "capture", "interop", "agent", "a2a", "claude-agent-sdk", "openai-agents", "langgraph"]
+provides-extras = ["vision", "native-ocr", "browser", "agent-test", "dev", "grounder", "grounding", "local-grounding", "console", "countersign", "receipts", "keychain", "pkcs11", "execute", "windows", "connector-windows", "reward", "openenv", "macos", "linux", "rdp", "registry", "privacy", "hosted", "service", "service-mlx", "capture", "interop", "agent", "a2a", "claude-agent-sdk", "openai-agents", "langgraph"]
 
 [[package]]
 name = "openadapt-types"
