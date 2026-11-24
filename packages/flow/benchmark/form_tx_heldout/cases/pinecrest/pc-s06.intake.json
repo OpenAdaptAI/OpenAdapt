@@ -1,0 +1,21 @@
+{
+  "case_id": "pc-s06",
+  "facts": {
+    "coverage.deductible": 1000,
+    "coverage.effective_date": "2027-01-01",
+    "history.prior_claims_5yr": 0,
+    "property.address_line1": "5 Woodsmoke Ln",
+    "property.burglar_alarm": false,
+    "property.city": "Hazel Bluff",
+    "property.construction_type": "log",
+    "property.finish_level": "custom",
+    "property.heating_type": "wood stove",
+    "property.roof_material": "metal",
+    "property.roof_year": 2010,
+    "property.square_feet": 1400,
+    "property.state": "OR",
+    "property.stories": "1",
+    "property.year_built": 1992,
+    "property.zip": "97814"
+  }
+}
