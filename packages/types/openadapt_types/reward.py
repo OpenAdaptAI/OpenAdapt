@@ -47,7 +47,9 @@ from pydantic import (
     StrictFloat,
     StrictInt,
     StrictStr,
+    SerializerFunctionWrapHandler,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
@@ -122,7 +124,7 @@ class RewardOutcomeV1(str, Enum):
     and no forbidden effect is, but the policy halted, refused, or was
     rejected instead of declaring the task done.  Partial credit: the
     contract's ``escalated_after_effect_reward``, at least zero and below the
-    verified reward."""
+    verified reward, and zero when the contract declares none."""
 
     RECONCILIATION_REQUIRED = "reconciliation_required"
     """Delivery or effect is uncertain.  UNSCORED.  Never 0.0."""
@@ -253,6 +255,18 @@ class RewardOracleV1(_StrictContract):
         return tier_of(self.channel)
 
 
+#: The credit for asking after the work is done, when a contract declares none.
+#: Zero: an outcome added in 0.24.1 never pays under a contract that was
+#: written, or certified, without declaring it.
+ESCALATED_AFTER_EFFECT_DEFAULT = 0.0
+#: Scoring fields added in 0.24.1, with the default a contract certified
+#: under 0.24.0 implicitly has. They are not serialized at that default, so
+#: every 0.24.0 digest stays the same and 0.24.0 can read what 0.24.1 writes.
+_DIGEST_STABLE_SCORING_DEFAULTS: Mapping[str, float] = {
+    "escalated_after_effect_reward": ESCALATED_AFTER_EFFECT_DEFAULT,
+}
+
+
 class RewardScoringPolicyV1(_StrictContract):
     """How each scoring class becomes a scalar.
 
@@ -264,10 +278,13 @@ class RewardScoringPolicyV1(_StrictContract):
     the confidence a policy needs before it declares done rather than asks:
     with verified reward ``v``, wrong-effect reward ``w`` and this value
     ``x``, declaring done pays more in expectation only when the policy is
-    more than ``(x - w) / (v - w)`` sure the effect is right.  With the
-    defaults (1, -1, 0.5) that is 75%.  Zero gives no credit for asking; a
-    value at or above the verified reward is refused, because asking would
-    then pay as much as finishing.
+    more than ``(x - w) / (v - w)`` sure the effect is right.  With
+    ``v = 1``, ``w = -1`` and ``x = 0.5`` that is 75%.  The default is zero:
+    a contract that doesn't declare it gives no credit for asking, so a
+    contract certified before this outcome existed never starts paying for
+    it.  The value is at least 0 and below 1; a value at or above the
+    verified reward is refused too, because asking would then pay as much as
+    finishing.
     """
 
     verified_reward: StrictFloat = Field(
@@ -301,7 +318,7 @@ class RewardScoringPolicyV1(_StrictContract):
         allow_inf_nan=False,
     )
     escalated_after_effect_reward: StrictFloat = Field(
-        default=0.5,
+        default=ESCALATED_AFTER_EFFECT_DEFAULT,
         ge=0.0,
         lt=1.0,
         allow_inf_nan=False,
@@ -317,6 +334,29 @@ class RewardScoringPolicyV1(_StrictContract):
             )
         return self
 
+    @model_serializer(mode="wrap")
+    def _omit_new_defaults(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        # A field added in 0.24.1 is written out only when it differs from
+        # its default, so a file this version writes stays readable by
+        # 0.24.0 (whose models forbid unknown fields) and hashes the same.
+        data = handler(self)
+        for name, default in _DIGEST_STABLE_SCORING_DEFAULTS.items():
+            if data.get(name) == default:
+                del data[name]
+        return data
+
+    @property
+    def escalated_after_effect_credit(self) -> float:
+        """The scalar an ``escalated_after_effect`` episode earns.
+
+        The declared value, zero when the contract declares none. The
+        validator keeps it below the verified reward.
+        """
+
+        return self.escalated_after_effect_reward
+
     def scalar_for(self, outcome: RewardOutcomeV1) -> float | None:
         """Return the declared scalar, or ``None`` for an unscored outcome."""
 
@@ -327,7 +367,7 @@ class RewardScoringPolicyV1(_StrictContract):
             RewardOutcomeV1.REJECTED_POLICY: self.rejected_policy_reward,
             RewardOutcomeV1.WRONG_EFFECT: self.wrong_effect_reward,
             RewardOutcomeV1.ESCALATED_AFTER_EFFECT: (
-                self.escalated_after_effect_reward
+                self.escalated_after_effect_credit
             ),
         }
         return declared.get(RewardOutcomeV1(outcome))
@@ -390,6 +430,14 @@ class RewardContractV1(_StrictContract):
 
     @property
     def digest(self) -> str:
+        """The canonical digest certificates and receipts bind.
+
+        A scoring field added after a contract version shipped is serialized,
+        and so hashed, only when it differs from its default
+        (``RewardScoringPolicyV1._omit_new_defaults``). A contract written
+        before the field existed keeps the digest it was certified under.
+        """
+
         return _digest_payload(self.model_dump(mode="json"))
 
 

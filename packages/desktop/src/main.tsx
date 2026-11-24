@@ -5,6 +5,7 @@ import { ControlOverlay } from "./overlay/ControlOverlay";
 import { ProgramWorkbenchPreview } from "./ui/ProgramWorkbenchPreview";
 import "@openadapt/program-graph/styles.css";
 import "./styles/app.css";
+import "./styles/semantic-theme.css";
 
 const surface = new URLSearchParams(window.location.search).get("surface");
 const root = surface === "control-overlay"

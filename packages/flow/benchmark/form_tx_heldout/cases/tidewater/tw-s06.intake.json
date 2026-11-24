@@ -1,0 +1,22 @@
+{
+  "case_id": "tw-s06",
+  "facts": {
+    "applicant.date_of_birth": "1969-01-28",
+    "applicant.email": "agathe.r@example.test",
+    "applicant.first_name": "Agathe",
+    "applicant.last_name": "Rimmington",
+    "history.prior_claims_3yr": 0,
+    "household.driver_count": 3,
+    "property.address_line1": "6 Heron Rock Way",
+    "property.city": "Astoria",
+    "property.occupancy": "Owner occupied",
+    "property.roof_year": 2021,
+    "property.square_feet": 2010,
+    "property.state": "OR",
+    "property.year_built": 1955,
+    "property.zip": "97103",
+    "vehicle.make": "Halden",
+    "vehicle.model": "Fjord",
+    "vehicle.year": 2018
+  }
+}
