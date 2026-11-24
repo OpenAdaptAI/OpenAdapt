@@ -2605,7 +2605,7 @@ requires-dist = [
     { name = "openadapt-flow", extras = ["vision"], marker = "extra == 'windows'" },
     { name = "openadapt-grounding", marker = "extra == 'grounding'", specifier = ">=0.1.0" },
     { name = "openadapt-privacy", extras = ["presidio"], marker = "extra == 'privacy'", specifier = ">=1.1.4" },
-    { name = "openadapt-types", specifier = ">=0.24.0,<0.25.0" },
+    { name = "openadapt-types", specifier = ">=0.24.2,<0.25.0" },
     { name = "openai", marker = "extra == 'agent-test'", specifier = ">=1.60" },
     { name = "openai-agents", marker = "extra == 'openai-agents'", specifier = ">=0.24,<0.25" },
     { name = "opencv-python", marker = "extra == 'dev'", specifier = ">=4.9,<5.1" },

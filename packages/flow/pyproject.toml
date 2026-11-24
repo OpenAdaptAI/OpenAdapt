@@ -102,7 +102,7 @@ dependencies = [
     # re-exports them. 0.24.0 is the first release that carries the models
     # again (0.23.0 is a shim over this package). openadapt-types is 0-based
     # semver with major_on_zero=false, so a breaking change bumps the minor.
-    "openadapt-types>=0.24.0,<0.25.0",
+    "openadapt-types>=0.24.2,<0.25.0",
 ]
 
 [project.optional-dependencies]

@@ -43,6 +43,10 @@
   is set. Released `openadapt` launcher `1.23.0` (`openadapt-flow<4`) reads
   run files via plain paths, so this major bump keeps `1.23.0` on Flow 3.4.0
   while pairing Flow 4.0.0 with `openadapt 1.24.0` (`>=4.0.0,<5.0.0`).
+- **Requires `openadapt-types>=0.24.2,<0.25.0`.** Flow 4.0.0 imports
+  `openadapt_types.check_level` and `openadapt_types.evidence_scope`, which
+  first ship in types 0.24.2. The old `>=0.24.0` floor let an install resolve
+  types 0.24.0 and fail on import.
 
 ### Encryption at rest by default
 
