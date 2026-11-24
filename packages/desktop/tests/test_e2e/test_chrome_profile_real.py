@@ -139,34 +139,39 @@ def test_sign_in_persists_and_desktop_closes_only_its_window(tmp_path: Path, por
     n = notice()
     profile_id = service.create("Synthetic portal", n["sha256"], True)["profile_id"]
 
-    # The person's own Chrome, which Desktop didn't open and must leave alone.
-    own_dir = Path(tempfile.mkdtemp(prefix="own-chrome-"))
-    own = subprocess.Popen(
-        [
-            str(find_chrome()),
-            f"--user-data-dir={own_dir}",
-            "--no-first-run",
-            "--no-default-browser-check",
-            "about:blank",
-        ]
-    )
+    own: subprocess.Popen[bytes] | None = None
     try:
         opened = service.open(profile_id, f"{portal}/login")
         endpoint = opened["browser_cdp_endpoint"]
         assert endpoint.startswith("http://127.0.0.1:")
-        assert _wait_for(lambda: ("/home", True) in _Portal.seen)
+        assert _wait_for(lambda: ("/home", True) in _Portal.seen), (
+            f"expected ('/home', True) in {_Portal.seen!r}"
+        )
         assert _page_text(endpoint, portal) == "Signed in as tester"
+
+        user_data = service.root / profile_id / "user-data"
+        # Wait for Chrome's NetworkService to create the on-disk cookie store
+        # before starting a second Chrome or closing, so two fresh Chrome
+        # processes never race to initialize macOS "Chrome Safe Storage".
+        _wait_for(lambda: _cookies_db_exists(user_data), 10.0)
+
+        # The person's own Chrome, which Desktop didn't open and must leave alone.
+        own_dir = Path(tempfile.mkdtemp(prefix="own-chrome-"))
+        own = subprocess.Popen(
+            [
+                str(find_chrome()),
+                f"--user-data-dir={own_dir}",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "about:blank",
+            ]
+        )
 
         # Another Desktop that didn't open this profile refuses it (in use).
         other = ChromeProfileService(tmp_path / "data")
         with pytest.raises(ChromeProfileError) as err:
             other.open(profile_id, f"{portal}/home")
         assert err.value.code == "profile_in_use"
-
-        user_data = service.root / profile_id / "user-data"
-        # Wait for Chrome's NetworkService to create the on-disk cookie store
-        # before closing, so the newly-set session cookie is flushed on exit.
-        _wait_for(lambda: _cookies_db_exists(user_data), 10.0)
 
         assert service.close(profile_id)["closed"] is True
         lock = "lockfile" if sys.platform == "win32" else "SingletonLock"
@@ -191,8 +196,9 @@ def test_sign_in_persists_and_desktop_closes_only_its_window(tmp_path: Path, por
         assert own.poll() is None
     finally:
         service.close_all()
-        own.terminate()
-        try:
-            own.wait(10)
-        except subprocess.TimeoutExpired:
-            own.kill()
+        if own is not None:
+            own.terminate()
+            try:
+                own.wait(10)
+            except subprocess.TimeoutExpired:
+                own.kill()
