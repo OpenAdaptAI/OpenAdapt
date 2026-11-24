@@ -22,12 +22,10 @@ _SAMPLE_DOM_BYTES = (
     b"<dt>Deductible</dt><dd>$1,000.00</dd>"
     b"<dt>Coverage Limit</dt><dd>2000</dd>"
     b"<dt>Prior Losses</dt><dd>0</dd>"
-    b"<dt>Prior Losses</dt><dd>2</dd>"
     b"<dt>Bundled Auto</dt><dd>Yes</dd>"
     b"<dt>Quote ID</dt><dd>MRN-88041</dd>"
     b"<dt>Policy Ref</dt><dd>MRN-88O41</dd>"
     b"<dt>Premium</dt><dd>\xe2\x82\xac500</dd>"
-    b"<dt>Premium</dt><dd>500.00</dd>"
     b"</dl></body></html>"
 )
 _SAMPLE_DOM_SHA = hashlib.sha256(_SAMPLE_DOM_BYTES).hexdigest()
@@ -215,21 +213,36 @@ class TestFreshReloadSummaryOracle:
         assert res_cur.refuted_count == 1
 
         # One-sided currency: expected €500 vs bare 500.00 -> ABSTAIN (HALT / UNCERTAIN), never VERIFIED
+        dom_bare = b"<html><body><dl><dt>Premium</dt><dd>500.00</dd></dl></body></html>"
+        proof_bare = _valid_reload_proof(
+            navigation_type="new_session",
+            summary_dom_sha256=hashlib.sha256(dom_bare).hexdigest(),
+        )
         res_one_sided = oracle.verify(
             {"premium": "€500"},
             {"premium": "500.00"},
-            proof,
-            summary_dom_bytes=_SAMPLE_DOM_BYTES,
+            proof_bare,
+            summary_dom_bytes=dom_bare,
         )
         assert res_one_sided.verdict == "HALT"
         assert res_one_sided.receipt_verdict == "UNCERTAIN"
         assert res_one_sided.abstained_count == 1
 
+        dom_losses = (
+            b"<html><body><dl>"
+            b"<dt>Prior Losses</dt><dd>2</dd>"
+            b"<dt>Deductible</dt><dd>$1,000.00</dd>"
+            b"</dl></body></html>"
+        )
+        proof_losses = _valid_reload_proof(
+            navigation_type="new_session",
+            summary_dom_sha256=hashlib.sha256(dom_losses).hexdigest(),
+        )
         res = oracle.verify(
             {"prior_losses": 0, "deductible": 1000},
             {"prior_losses": 2, "deductible": "$1,000.00"},
-            proof,
-            summary_dom_bytes=_SAMPLE_DOM_BYTES,
+            proof_losses,
+            summary_dom_bytes=dom_losses,
         )
         assert res.verdict == "HALT"
         assert res.receipt_verdict == "REFUTED"
@@ -597,6 +610,39 @@ def test_pdf_font_name_slash_q_does_not_reset_invisible_render_mode(
         + b"\nendstream\nendobj\n%%EOF\n"
     )
     pdf_path = store / "hidden_font_q.pdf"
+    pdf_path.write_bytes(pdf_bytes)
+    res = ConfirmationPdfOracle().verify(
+        pdf_path, {"premium": "$500"}, producer="separate_session"
+    )
+    assert res.verdict == "HALT"
+    assert res.receipt_verdict != "CONFIRMED"
+
+
+def test_fresh_reload_rejects_conflicting_duplicate_label_values() -> None:
+    """Duplicate labels with conflicting values (e.g. $500 vs $250) must refuse."""
+    dom = b"<html><body><div>Premium: $500</div><div>Premium: $250</div></body></html>"
+    proof = _valid_reload_proof(summary_dom_sha256=hashlib.sha256(dom).hexdigest())
+    res = FreshReloadSummaryOracle().verify(
+        {"premium": "$500"}, {"premium": "$500"}, proof, summary_dom_bytes=dom
+    )
+    assert res.verdict == "HALT"
+    assert res.receipt_verdict == "UNCERTAIN"
+    assert "conflicting_duplicate_label" in res.reason
+
+
+def test_pdf_float_render_mode_3_0_tr_stays_invisible(tmp_path: Path) -> None:
+    """Float render mode `3.0 Tr` must set mode 3 (invisible), never matching `0 Tr`."""
+    store = tmp_path / "store"
+    store.mkdir()
+    stream = b"BT 3.0 Tr (Premium: $500) Tj ET"
+    pdf_bytes = (
+        b"%PDF-1.4\n1 0 obj << /Length "
+        + str(len(stream)).encode()
+        + b" >>\nstream\n"
+        + stream
+        + b"\nendstream\nendobj\n%%EOF\n"
+    )
+    pdf_path = store / "hidden_float_tr.pdf"
     pdf_path.write_bytes(pdf_bytes)
     res = ConfirmationPdfOracle().verify(
         pdf_path, {"premium": "$500"}, producer="separate_session"

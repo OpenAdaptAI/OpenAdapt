@@ -399,43 +399,68 @@ def _normalize_dom_label(text: str) -> str:
     return cleaned
 
 
+def _dom_bound_values_for_label(nodes: Sequence[str], field_name: str) -> list[str]:
+    """Collect every visible DOM text value bound to ``field_name``."""
+    target_label = _normalize_dom_label(field_name)
+    if not target_label:
+        return []
+    label_words = target_label.split()
+    prefix_re = re.compile(
+        r"^\s*" + r"[\s_-]+".join(re.escape(w) for w in label_words) + r"\s+(.+)$",
+        re.IGNORECASE,
+    )
+    bound_values: list[str] = []
+    for idx, node in enumerate(nodes):
+        # Case 1: Node is the exact label (with optional trailing colon), value is the next node.
+        if _normalize_dom_label(node.rstrip(":")) == target_label:
+            if idx + 1 < len(nodes):
+                bound_values.append(nodes[idx + 1].strip())
+            continue
+        # Case 2: Same text node "Label: value" or "Label value".
+        if ":" in node:
+            left, right = node.split(":", 1)
+            if _normalize_dom_label(left) == target_label:
+                bound_values.append(right.strip())
+        else:
+            m = prefix_re.match(node)
+            if m:
+                bound_values.append(m.group(1).strip())
+    return bound_values
+
+
+def _dom_label_binding_status(
+    nodes: Sequence[str], field_name: str, expected_val: str
+) -> str:
+    """Classify visible DOM bindings for ``field_name`` against ``expected_val``.
+
+    Returns:
+      - ``"matched"`` iff at least one visible binding matches ``expected_val`` on
+        token boundaries and no duplicate binding for the same label conflicts.
+      - ``"conflict"`` iff the same label appears multiple times with conflicting values.
+      - ``"missing"`` otherwise.
+    """
+    if not expected_val:
+        return "missing"
+    bound_values = _dom_bound_values_for_label(nodes, field_name)
+    if not bound_values:
+        return "missing"
+    val_re = re.compile(
+        r"(?<![A-Za-z0-9_.])" + re.escape(expected_val) + r"(?![A-Za-z0-9_.])"
+    )
+    matches = [bool(val_re.search(val)) for val in bound_values]
+    if any(matches):
+        if all(matches):
+            return "matched"
+        return "conflict"
+    return "missing"
+
+
 def _dom_value_matches_bound_label(
     nodes: Sequence[str], field_name: str, expected_val: str
 ) -> bool:
     """Return True iff ``expected_val`` appears in visible DOM text bound to ``field_name``
-    on token boundaries (never in HTML attributes, scripts, substrings of larger numbers,
-    or under a different field's label)."""
-    target_label = _normalize_dom_label(field_name)
-    if not target_label or not expected_val:
-        return False
-    val_re = re.compile(
-        r"(?<![A-Za-z0-9_.])" + re.escape(expected_val) + r"(?![A-Za-z0-9_.])"
-    )
-    for idx, node in enumerate(nodes):
-        # Case 1: Node is the exact label (with optional trailing colon), value is the next node.
-        if _normalize_dom_label(node.rstrip(":")) == target_label:
-            if idx + 1 < len(nodes) and val_re.search(nodes[idx + 1]):
-                return True
-        # Case 2: Same text node "Label: value" or "Label value".
-        if ":" in node:
-            left, right = node.split(":", 1)
-            if _normalize_dom_label(left) == target_label and val_re.search(
-                right.strip()
-            ):
-                return True
-        else:
-            # Check prefix "<label> <value>" where label words match the start of the node.
-            label_words = target_label.split()
-            prefix_re = re.compile(
-                r"^\s*"
-                + r"[\s_-]+".join(re.escape(w) for w in label_words)
-                + r"\s+(.+)$",
-                re.IGNORECASE,
-            )
-            m = prefix_re.match(node)
-            if m and val_re.search(m.group(1).strip()):
-                return True
-    return False
+    on token boundaries with no conflicting duplicate label values."""
+    return _dom_label_binding_status(nodes, field_name, expected_val) == "matched"
 
 
 class FreshReloadSummaryOracle:
@@ -517,8 +542,13 @@ class FreshReloadSummaryOracle:
             if val is None or (isinstance(val, str) and not val.strip()):
                 continue
             compact_val = " ".join(str(val).strip().split())
-            if _dom_value_matches_bound_label(dom_nodes, fname, compact_val):
+            binding_status = _dom_label_binding_status(dom_nodes, fname, compact_val)
+            if binding_status == "matched":
                 verified_observed[fname] = val
+            elif binding_status == "conflict":
+                missing_in_dom[fname] = (
+                    "conflicting_duplicate_label_values_in_summary_dom_bytes"
+                )
             else:
                 missing_in_dom[fname] = (
                     "observed_value_not_bound_to_label_in_summary_dom_bytes"
@@ -554,11 +584,15 @@ class FreshReloadSummaryOracle:
                 provenance_evidence=prov_evidence,
             )
         if abstained > 0:
-            reason = (
-                "observed_value_not_in_dom_bytes"
-                if missing_in_dom
-                else "missing_required_fields"
-            )
+            if any(
+                v == "conflicting_duplicate_label_values_in_summary_dom_bytes"
+                for v in missing_in_dom.values()
+            ):
+                reason = "conflicting_duplicate_label_values_in_dom_bytes"
+            elif missing_in_dom:
+                reason = "observed_value_not_in_dom_bytes"
+            else:
+                reason = "missing_required_fields"
             return PortalReadbackResult(
                 verdict="HALT",
                 receipt_verdict="UNCERTAIN",
@@ -645,7 +679,7 @@ def _extract_text_from_content_stream(stream_bytes: bytes) -> list[str]:
     # Alternatives inside the TJ array are strictly disjoint (no backtracking).
     token_re = re.compile(
         r"(?<![A-Za-z0-9_/])([qQ])(?![A-Za-z0-9_])"
-        r"|\b([0-7])\s+Tr\b"
+        r"|(?<![.\d])\b([0-7](?:\.0+)?)\s+Tr\b"
         r"|\(((?:\\.|[^\\()])*)\)\s*Tj"
         r"|\[((?:[^\[\]()]|\((?:\\.|[^\\()])*\))*)\]\s*TJ",
         re.DOTALL,
@@ -660,7 +694,7 @@ def _extract_text_from_content_stream(stream_bytes: bytes) -> list[str]:
                 render_mode = state_stack.pop() if state_stack else 0
             continue
         if m.group(2) is not None:
-            render_mode = int(m.group(2))
+            render_mode = int(float(m.group(2)))
             continue
         if render_mode in (3, 7):
             # PDF render mode 3 (invisible) and 7 (clip-only) draw no visible glyphs.
