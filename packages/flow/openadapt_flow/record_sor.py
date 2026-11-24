@@ -103,7 +103,8 @@ _NOT_SYSTEM_OF_RECORD = frozenset(
 def _not_tier_one(kind: str) -> RecordSorError:
     return RecordSorError(
         f"verifier kind {kind!r} does not read the system of record outside "
-        "the UI; use rest, sql, fhir, graphql or file"
+        "the UI; use rest, sql, fhir or graphql, or a file kind whose "
+        "artifact_producer is system_of_record"
     )
 
 

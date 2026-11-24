@@ -460,6 +460,43 @@ def prepare_derived_assets(
     workflow._pending_derived_assets = dict(candidate._pending_derived_assets)
 
 
+def copy_bundle_files(
+    source: Path | str, destination: Path | str, *, ignore: Iterable[str] = ()
+) -> None:
+    """Copy a bundle's files to a new ``destination``, leaving out any path
+    with a component matching a pattern in ``ignore`` (as
+    ``shutil.ignore_patterns`` does).
+
+    A plaintext source is copied as files. A sealed source becomes a new
+    sealed set written through its own writer: each file is decrypted in
+    memory and sealed again, so nothing lands in plaintext. A file-by-file copy
+    of a sealed set that leaves files out would not match the copied index,
+    and every reader refuses that.
+    """
+    import fnmatch
+    import shutil
+
+    from openadapt_flow import sealed_set as _sealed
+
+    patterns = tuple(ignore)
+    source, destination = Path(source), Path(destination)
+    if not _sealed.is_sealed(source):
+        shutil.copytree(source, destination, ignore=shutil.ignore_patterns(*patterns))
+        return
+    reader = _sealed.open_set(source)
+    passphrase = _sealed.output_bundle_key()
+    if not passphrase:
+        raise _sealed.SealedSetKeyError(
+            _sealed.missing_key_message(destination, "bundle")
+        )
+    with _sealed.writing(destination, "bundle", passphrase):
+        for rel in reader.files():
+            parts = rel.split("/")
+            if any(fnmatch.fnmatch(part, pat) for part in parts for pat in patterns):
+                continue
+            _sealed.write_bytes(destination / rel, reader.read_bytes(rel))
+
+
 def copy_genesis_template_inputs(
     workflow: Workflow, source: Path | str, destination: Path | str
 ) -> None:

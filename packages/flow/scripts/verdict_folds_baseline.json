@@ -1,55 +1,9 @@
 {
-  "openadapt/cli.py": {
-    "cmp_literal": 1,
-    "slice_count": 1,
-    "swallow": 10,
-    "swallow_wide": 7
-  },
-  "openadapt/quickstart/engine.py": {
-    "cmp_literal": 7,
-    "swallow": 3
-  },
-  "openadapt/quickstart/notices.py": {
-    "swallow": 1
-  },
-  "openadapt/quickstart/openemr.py": {
-    "cmp_literal": 2,
-    "swallow": 2,
-    "swallow_wide": 1
-  },
-  "openadapt/quickstart/scene.py": {
-    "cmp_literal": 1,
-    "slice_count": 1
-  },
-  "openadapt/quickstart/story.py": {
-    "swallow_wide": 3
-  },
-  "openadapt/quickstart/view.py": {
-    "cmp_literal": 2,
-    "swallow": 1
-  },
-  "openadapt/quickstart/workers.py": {
-    "cmp_literal": 1,
-    "swallow": 2,
-    "swallow_wide": 1
-  },
-  "openadapt/receipt_verify.py": {
-    "swallow": 2
-  },
-  "openadapt/seal_claim.py": {
-    "swallow": 5
-  },
-  "openadapt/seal_publish.py": {
-    "swallow": 1
-  },
-  "openadapt/seal_view/__init__.py": {
-    "swallow": 2
-  },
   "packages/flow/openadapt_flow/__main__.py": {
     "cmp_literal": 14,
-    "says_unchanged": 2,
     "swallow": 8,
-    "swallow_wide": 9
+    "swallow_wide": 9,
+    "says_unchanged": 2
   },
   "packages/flow/openadapt_flow/_browser_readiness.py": {
     "swallow": 1,
@@ -62,8 +16,8 @@
     "swallow": 2
   },
   "packages/flow/openadapt_flow/action_evidence.py": {
-    "bool_fold": 3,
-    "cmp_literal": 2
+    "cmp_literal": 2,
+    "bool_fold": 3
   },
   "packages/flow/openadapt_flow/adapters/capture.py": {
     "swallow": 2
@@ -76,9 +30,12 @@
     "swallow": 2
   },
   "packages/flow/openadapt_flow/after_stop.py": {
-    "bool_fold": 2,
     "cmp_literal": 6,
+    "bool_fold": 2,
     "swallow": 2
+  },
+  "packages/flow/openadapt_flow/agent/a2a_server.py": {
+    "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/agent/authoring.py": {
     "cmp_literal": 3,
@@ -89,8 +46,8 @@
     "cmp_literal": 2
   },
   "packages/flow/openadapt_flow/agent/browser_teach.py": {
-    "bool_fold": 1,
     "cmp_literal": 1,
+    "bool_fold": 1,
     "swallow": 7,
     "swallow_wide": 5
   },
@@ -101,9 +58,12 @@
     "swallow": 3
   },
   "packages/flow/openadapt_flow/agent/contract.py": {
-    "cmp_literal": 10,
     "says_success": 3,
+    "cmp_literal": 10,
     "says_unchanged": 4
+  },
+  "packages/flow/openadapt_flow/agent/contract_call.py": {
+    "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/agent/example_app.py": {
     "slice_count": 1
@@ -118,26 +78,26 @@
   },
   "packages/flow/openadapt_flow/agent/mcp.py": {
     "swallow": 1,
-    "swallow_wide": 2
+    "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/agent/repair.py": {
     "swallow": 4,
     "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/agent/runner.py": {
-    "cmp_literal": 12,
     "says_success": 1,
-    "says_unchanged": 1,
+    "cmp_literal": 12,
     "swallow": 3,
-    "swallow_wide": 1
+    "swallow_wide": 1,
+    "says_unchanged": 1
   },
   "packages/flow/openadapt_flow/agent/runs.py": {
     "swallow": 2,
     "swallow_wide": 2
   },
   "packages/flow/openadapt_flow/agent/sandbox.py": {
-    "cmp_literal": 2,
     "says_success": 2,
+    "cmp_literal": 2,
     "swallow": 5,
     "swallow_wide": 2
   },
@@ -164,20 +124,39 @@
   "packages/flow/openadapt_flow/agent/verify_tools.py": {
     "swallow_wide": 1
   },
+  "packages/flow/openadapt_flow/agent_guard/approval_fields.py": {
+    "bool_fold": 1,
+    "swallow": 3,
+    "swallow_wide": 1
+  },
   "packages/flow/openadapt_flow/agent_guard/capture.py": {
     "cmp_literal": 1
   },
   "packages/flow/openadapt_flow/agent_guard/cdp.py": {
-    "swallow": 9
+    "swallow": 11
   },
   "packages/flow/openadapt_flow/agent_guard/commit_guard.py": {
     "cmp_literal": 2,
     "swallow_wide": 2
   },
+  "packages/flow/openadapt_flow/agent_guard/ledger_row.py": {
+    "says_success": 2,
+    "cmp_literal": 1,
+    "swallow_wide": 1
+  },
+  "packages/flow/openadapt_flow/agent_guard/readback.py": {
+    "says_success": 1,
+    "cmp_literal": 1,
+    "swallow": 2
+  },
   "packages/flow/openadapt_flow/agent_guard/session.py": {
     "cmp_literal": 1,
     "swallow": 4,
     "swallow_wide": 1
+  },
+  "packages/flow/openadapt_flow/agent_guard/shadow_hold.py": {
+    "says_success": 3,
+    "cmp_literal": 3
   },
   "packages/flow/openadapt_flow/api_footprint.py": {
     "empty_change_set": 1
@@ -189,8 +168,8 @@
     "bool_fold": 3
   },
   "packages/flow/openadapt_flow/approval_mode/dry_run.py": {
-    "bool_fold": 2,
-    "cmp_literal": 1
+    "cmp_literal": 1,
+    "bool_fold": 2
   },
   "packages/flow/openadapt_flow/approval_mode/durable_carry.py": {
     "swallow": 1
@@ -199,8 +178,8 @@
     "swallow": 5
   },
   "packages/flow/openadapt_flow/approval_mode/gate.py": {
-    "bool_fold": 3,
     "cmp_literal": 4,
+    "bool_fold": 3,
     "swallow": 5,
     "swallow_wide": 6
   },
@@ -208,25 +187,28 @@
     "bool_fold": 1
   },
   "packages/flow/openadapt_flow/approval_mode/model.py": {
-    "bool_fold": 3,
-    "cmp_literal": 1
+    "cmp_literal": 1,
+    "bool_fold": 3
   },
   "packages/flow/openadapt_flow/approval_mode/named_person_binding.py": {
     "swallow": 1
   },
   "packages/flow/openadapt_flow/approval_mode/post.py": {
-    "bool_fold": 3,
-    "cmp_literal": 9
+    "cmp_literal": 9,
+    "bool_fold": 3
   },
   "packages/flow/openadapt_flow/approval_mode/requirements.py": {
-    "bool_fold": 2,
-    "cmp_literal": 2
+    "cmp_literal": 2,
+    "bool_fold": 2
   },
   "packages/flow/openadapt_flow/approval_mode/switch.py": {
     "swallow": 1
   },
   "packages/flow/openadapt_flow/assurance.py": {
     "says_success": 1
+  },
+  "packages/flow/openadapt_flow/at_rest.py": {
+    "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/attest_bridge.py": {
     "swallow": 2,
@@ -261,6 +243,9 @@
   "packages/flow/openadapt_flow/backends/macos_backend.py": {
     "swallow": 16,
     "swallow_wide": 1
+  },
+  "packages/flow/openadapt_flow/backends/one_time_field.py": {
+    "swallow": 6
   },
   "packages/flow/openadapt_flow/backends/parallels_vm.py": {
     "swallow": 2
@@ -325,12 +310,19 @@
     "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/cli_compose.py": {
-    "cmp_literal": 1,
-    "says_success": 1
+    "says_success": 1,
+    "cmp_literal": 1
   },
   "packages/flow/openadapt_flow/cli_deferred.py": {
-    "cmp_literal": 4,
-    "says_success": 1
+    "says_success": 1,
+    "cmp_literal": 4
+  },
+  "packages/flow/openadapt_flow/cli_handoff.py": {
+    "swallow": 1,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/cli_handoff_list.py": {
+    "swallow": 1
   },
   "packages/flow/openadapt_flow/cli_hints.py": {
     "slice_count": 1
@@ -340,8 +332,8 @@
     "swallow": 3
   },
   "packages/flow/openadapt_flow/cli_process.py": {
-    "cmp_literal": 2,
     "says_success": 1,
+    "cmp_literal": 2,
     "swallow": 1
   },
   "packages/flow/openadapt_flow/cli_receipt.py": {
@@ -378,10 +370,10 @@
     "swallow": 1
   },
   "packages/flow/openadapt_flow/compile_agent/code_action.py": {
-    "empty_change_set": 1,
-    "slice_count": 1,
     "swallow": 9,
-    "swallow_wide": 4
+    "swallow_wide": 4,
+    "slice_count": 1,
+    "empty_change_set": 1
   },
   "packages/flow/openadapt_flow/compile_agent/driven.py": {
     "swallow_wide": 1
@@ -397,8 +389,9 @@
     "swallow": 6
   },
   "packages/flow/openadapt_flow/compile_agent/pipeline.py": {
-    "cmp_literal": 6,
-    "swallow": 2
+    "cmp_literal": 7,
+    "swallow": 2,
+    "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/compile_agent/repair_bridge.py": {
     "cmp_literal": 4,
@@ -428,10 +421,10 @@
   },
   "packages/flow/openadapt_flow/compiler/compile.py": {
     "bool_fold": 1,
-    "empty_change_set": 1,
-    "slice_count": 1,
     "swallow": 2,
-    "swallow_wide": 1
+    "swallow_wide": 1,
+    "slice_count": 1,
+    "empty_change_set": 1
   },
   "packages/flow/openadapt_flow/compiler/compose_authoring.py": {
     "swallow": 1,
@@ -460,8 +453,8 @@
   },
   "packages/flow/openadapt_flow/compiler/narration_rules.py": {
     "bool_fold": 1,
-    "slice_count": 1,
-    "swallow_wide": 1
+    "swallow_wide": 1,
+    "slice_count": 1
   },
   "packages/flow/openadapt_flow/compiler/probing.py": {
     "cmp_literal": 4,
@@ -476,18 +469,24 @@
     "says_unchanged": 1
   },
   "packages/flow/openadapt_flow/connector/daemon.py": {
-    "cmp_literal": 3,
-    "swallow": 1,
-    "swallow_wide": 2
+    "cmp_literal": 4,
+    "swallow": 2,
+    "swallow_wide": 6
+  },
+  "packages/flow/openadapt_flow/connector/egress.py": {
+    "cmp_literal": 1
   },
   "packages/flow/openadapt_flow/connector/executor.py": {
-    "cmp_literal": 12,
-    "swallow": 2,
-    "swallow_wide": 1
+    "cmp_literal": 18,
+    "swallow": 6,
+    "swallow_wide": 2
   },
   "packages/flow/openadapt_flow/connector/windows_service.py": {
-    "swallow": 5,
+    "swallow": 6,
     "swallow_wide": 1
+  },
+  "packages/flow/openadapt_flow/connector/windows_tokens.py": {
+    "swallow": 1
   },
   "packages/flow/openadapt_flow/console/app.py": {
     "swallow": 2
@@ -497,9 +496,9 @@
   },
   "packages/flow/openadapt_flow/console/data.py": {
     "cmp_literal": 5,
-    "empty_change_set": 2,
-    "swallow": 4,
-    "swallow_wide": 1
+    "swallow": 5,
+    "swallow_wide": 1,
+    "empty_change_set": 2
   },
   "packages/flow/openadapt_flow/console/decision_relay.py": {
     "cmp_literal": 1
@@ -524,8 +523,8 @@
     "swallow": 1
   },
   "packages/flow/openadapt_flow/countersign/render.py": {
-    "cmp_literal": 4,
-    "says_success": 2
+    "says_success": 2,
+    "cmp_literal": 4
   },
   "packages/flow/openadapt_flow/countersign/tsa.py": {
     "swallow": 3
@@ -537,8 +536,8 @@
     "cmp_literal": 1
   },
   "packages/flow/openadapt_flow/decision/features.py": {
-    "bool_fold": 2,
-    "cmp_literal": 4
+    "cmp_literal": 4,
+    "bool_fold": 2
   },
   "packages/flow/openadapt_flow/decision/labels.py": {
     "cmp_literal": 1
@@ -547,8 +546,8 @@
     "cmp_literal": 1
   },
   "packages/flow/openadapt_flow/decision/synthetic.py": {
-    "cmp_literal": 2,
-    "says_success": 1
+    "says_success": 1,
+    "cmp_literal": 2
   },
   "packages/flow/openadapt_flow/demo_proof.py": {
     "cmp_literal": 4,
@@ -567,6 +566,19 @@
   "packages/flow/openadapt_flow/emit/mcp_tool.py": {
     "swallow": 1
   },
+  "packages/flow/openadapt_flow/exceptions/cli.py": {
+    "swallow_wide": 1
+  },
+  "packages/flow/openadapt_flow/exceptions/mcp_server.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/exceptions/registry.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/exceptions/watch.py": {
+    "swallow": 8,
+    "swallow_wide": 4
+  },
   "packages/flow/openadapt_flow/execute/dispatch.py": {
     "cmp_literal": 2
   },
@@ -575,22 +587,22 @@
     "swallow_wide": 3
   },
   "packages/flow/openadapt_flow/execution_profiles.py": {
-    "bool_fold": 17,
-    "cmp_literal": 17,
     "says_success": 1,
+    "cmp_literal": 17,
+    "bool_fold": 17,
     "says_unchanged": 1
   },
   "packages/flow/openadapt_flow/extension_network.py": {
     "swallow": 1
   },
   "packages/flow/openadapt_flow/failure_signals.py": {
-    "cmp_literal": 6,
     "says_success": 1,
+    "cmp_literal": 6,
     "says_unchanged": 1
   },
   "packages/flow/openadapt_flow/fault_gate.py": {
-    "bool_fold": 1,
-    "cmp_literal": 2
+    "cmp_literal": 2,
+    "bool_fold": 1
   },
   "packages/flow/openadapt_flow/fhir_setup.py": {
     "swallow_wide": 1
@@ -608,20 +620,54 @@
   "packages/flow/openadapt_flow/fleet/status.py": {
     "swallow_wide": 2
   },
+  "packages/flow/openadapt_flow/flight/cli.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/flight/computer.py": {
+    "says_success": 1,
+    "swallow": 4,
+    "swallow_wide": 8
+  },
+  "packages/flow/openadapt_flow/flight/gate.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/flight/proxy.py": {
+    "says_success": 1,
+    "swallow": 1,
+    "swallow_wide": 1
+  },
+  "packages/flow/openadapt_flow/flight/scrub.py": {
+    "bool_fold": 1,
+    "slice_count": 4
+  },
+  "packages/flow/openadapt_flow/flight/timeline.py": {
+    "says_success": 1,
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/form_tx/judge.py": {
+    "bool_fold": 1
+  },
   "packages/flow/openadapt_flow/form_tx/playwright_surface.py": {
-    "swallow": 14
+    "swallow": 16
+  },
+  "packages/flow/openadapt_flow/form_tx/receipt.py": {
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/form_tx/reconciler.py": {
+    "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/form_tx/session_lease.py": {
     "cmp_literal": 1,
     "swallow": 1
   },
   "packages/flow/openadapt_flow/form_tx/types.py": {
+    "bool_fold": 1,
     "says_success": 1
   },
   "packages/flow/openadapt_flow/generate/compositional.py": {
     "cmp_literal": 3,
-    "says_unchanged": 2,
-    "swallow": 1
+    "swallow": 1,
+    "says_unchanged": 2
   },
   "packages/flow/openadapt_flow/generate/demo_analysis.py": {
     "slice_count": 2
@@ -630,18 +676,18 @@
     "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/generate/verify_contract.py": {
-    "empty_change_set": 1,
-    "swallow_wide": 1
+    "swallow_wide": 1,
+    "empty_change_set": 1
   },
   "packages/flow/openadapt_flow/generate/zero_touch.py": {
     "cmp_literal": 4,
-    "slice_count": 1,
     "swallow": 2,
-    "swallow_wide": 3
+    "swallow_wide": 3,
+    "slice_count": 1
   },
   "packages/flow/openadapt_flow/guard.py": {
-    "cmp_literal": 3,
     "says_success": 1,
+    "cmp_literal": 3,
     "swallow_wide": 2
   },
   "packages/flow/openadapt_flow/halt_cleanup.py": {
@@ -649,9 +695,25 @@
     "swallow": 5,
     "swallow_wide": 1
   },
+  "packages/flow/openadapt_flow/handoff.py": {
+    "swallow_wide": 1
+  },
+  "packages/flow/openadapt_flow/handoffs/followup.py": {
+    "slice_count": 1,
+    "empty_change_set": 1
+  },
+  "packages/flow/openadapt_flow/handoffs/line.py": {
+    "empty_change_set": 1
+  },
+  "packages/flow/openadapt_flow/handoffs/payer.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/handoffs/readers.py": {
+    "swallow": 1
+  },
   "packages/flow/openadapt_flow/hard_invariants.py": {
-    "cmp_literal": 1,
     "says_success": 2,
+    "cmp_literal": 1,
     "says_unchanged": 1
   },
   "packages/flow/openadapt_flow/hooks/agents.py": {
@@ -662,15 +724,15 @@
     "swallow": 1
   },
   "packages/flow/openadapt_flow/hooks/engine.py": {
-    "cmp_literal": 6,
     "says_success": 12,
+    "cmp_literal": 6,
     "swallow": 1,
     "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/hosted.py": {
     "cmp_literal": 5,
-    "empty_change_set": 1,
-    "swallow": 8
+    "swallow": 8,
+    "empty_change_set": 1
   },
   "packages/flow/openadapt_flow/intake/param_gate.py": {
     "swallow": 1,
@@ -698,8 +760,8 @@
     "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/ir.py": {
-    "bool_fold": 1,
     "cmp_literal": 10,
+    "bool_fold": 1,
     "slice_count": 1
   },
   "packages/flow/openadapt_flow/jit/adapters.py": {
@@ -721,18 +783,22 @@
     "empty_change_set": 2
   },
   "packages/flow/openadapt_flow/jit/lifecycle.py": {
-    "bool_fold": 2,
-    "cmp_literal": 2
+    "cmp_literal": 2,
+    "bool_fold": 2
   },
   "packages/flow/openadapt_flow/learn.py": {
-    "cmp_literal": 3
+    "cmp_literal": 4
+  },
+  "packages/flow/openadapt_flow/learn_probe.py": {
+    "cmp_literal": 1,
+    "bool_fold": 1
   },
   "packages/flow/openadapt_flow/learning/branch_teach.py": {
     "bool_fold": 3
   },
   "packages/flow/openadapt_flow/learning/gate.py": {
-    "bool_fold": 1,
     "cmp_literal": 6,
+    "bool_fold": 1,
     "empty_change_set": 2
   },
   "packages/flow/openadapt_flow/learning/interpreter.py": {
@@ -760,6 +826,9 @@
   "packages/flow/openadapt_flow/mockmed/fault_server.py": {
     "cmp_literal": 1
   },
+  "packages/flow/openadapt_flow/models/runtime.py": {
+    "swallow_wide": 1
+  },
   "packages/flow/openadapt_flow/multi_surface_record.py": {
     "swallow": 3
   },
@@ -784,8 +853,8 @@
     "cmp_literal": 2
   },
   "packages/flow/openadapt_flow/policy.py": {
-    "bool_fold": 6,
     "cmp_literal": 1,
+    "bool_fold": 6,
     "slice_count": 1
   },
   "packages/flow/openadapt_flow/privacy.py": {
@@ -795,18 +864,18 @@
     "empty_change_set": 1
   },
   "packages/flow/openadapt_flow/provenance.py": {
-    "bool_fold": 3,
-    "says_success": 1
+    "says_success": 1,
+    "bool_fold": 3
   },
   "packages/flow/openadapt_flow/public_seal.py": {
     "cmp_literal": 1,
     "swallow": 1
   },
   "packages/flow/openadapt_flow/qualification/__init__.py": {
-    "bool_fold": 9,
     "cmp_literal": 7,
-    "empty_change_set": 1,
-    "swallow": 2
+    "bool_fold": 9,
+    "swallow": 2,
+    "empty_change_set": 1
   },
   "packages/flow/openadapt_flow/qualification/models.py": {
     "says_unchanged": 1
@@ -815,65 +884,87 @@
     "swallow": 6
   },
   "packages/flow/openadapt_flow/qualification_faults.py": {
-    "bool_fold": 1,
-    "cmp_literal": 4
+    "cmp_literal": 4,
+    "bool_fold": 1
   },
   "packages/flow/openadapt_flow/qualification_identity_evidence.py": {
-    "bool_fold": 3,
-    "cmp_literal": 3
+    "cmp_literal": 3,
+    "bool_fold": 3
   },
   "packages/flow/openadapt_flow/qualification_oracle_gate.py": {
-    "bool_fold": 2,
     "cmp_literal": 1,
+    "bool_fold": 2,
     "empty_change_set": 1
   },
   "packages/flow/openadapt_flow/qualification_proposal.py": {
     "cmp_literal": 1
   },
   "packages/flow/openadapt_flow/qualify/campaign.py": {
-    "bool_fold": 4,
-    "cmp_literal": 4,
-    "empty_change_set": 3,
     "says_success": 3,
+    "cmp_literal": 4,
+    "bool_fold": 4,
+    "swallow_wide": 1,
     "slice_count": 1,
-    "swallow_wide": 1
+    "empty_change_set": 3
   },
   "packages/flow/openadapt_flow/qualify/faults.py": {
     "swallow": 5
   },
   "packages/flow/openadapt_flow/qualify/result.py": {
-    "cmp_literal": 15,
     "says_success": 3,
+    "cmp_literal": 15,
     "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/readback_ladder.py": {
     "cmp_literal": 1
   },
-  "packages/flow/openadapt_flow/receipt.py": {
-    "bool_fold": 8,
-    "cmp_literal": 9,
-    "empty_change_set": 1,
+  "packages/flow/openadapt_flow/readiness/cdp_wire.py": {
+    "cmp_literal": 1,
+    "swallow_wide": 2
+  },
+  "packages/flow/openadapt_flow/readiness/compare.py": {
+    "says_success": 2,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/readiness/devtools_relay.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/readiness/export.py": {
     "says_success": 1
   },
-  "packages/flow/openadapt_flow/receipt_record.py": {
-    "bool_fold": 1,
+  "packages/flow/openadapt_flow/readiness/runner.py": {
+    "says_success": 6,
     "cmp_literal": 3,
-    "swallow": 3
+    "swallow": 2,
+    "swallow_wide": 2
+  },
+  "packages/flow/openadapt_flow/receipt.py": {
+    "says_success": 1,
+    "cmp_literal": 9,
+    "bool_fold": 8,
+    "empty_change_set": 1
+  },
+  "packages/flow/openadapt_flow/receipt_record.py": {
+    "says_success": 1,
+    "cmp_literal": 5,
+    "bool_fold": 3,
+    "swallow": 3,
+    "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/reconcile/__init__.py": {
-    "bool_fold": 1,
-    "cmp_literal": 1,
-    "else_success": 2,
     "says_success": 5,
-    "swallow": 1
+    "cmp_literal": 1,
+    "bool_fold": 1,
+    "swallow": 1,
+    "else_success": 2
   },
   "packages/flow/openadapt_flow/record_check_binding.py": {
     "bool_fold": 1
   },
   "packages/flow/openadapt_flow/record_check_synthesis.py": {
     "cmp_literal": 1,
-    "empty_change_set": 1,
-    "swallow": 1
+    "swallow": 1,
+    "empty_change_set": 1
   },
   "packages/flow/openadapt_flow/record_sor.py": {
     "swallow": 1,
@@ -890,14 +981,14 @@
     "swallow": 1
   },
   "packages/flow/openadapt_flow/repair/auto_repair.py": {
-    "bool_fold": 1,
-    "cmp_literal": 5,
     "says_success": 1,
+    "cmp_literal": 5,
+    "bool_fold": 1,
     "swallow": 1
   },
   "packages/flow/openadapt_flow/repair/campaign.py": {
-    "bool_fold": 1,
     "cmp_literal": 2,
+    "bool_fold": 1,
     "swallow": 1,
     "swallow_wide": 1
   },
@@ -930,35 +1021,35 @@
     "swallow": 1
   },
   "packages/flow/openadapt_flow/repair/self_repair.py": {
-    "bool_fold": 7,
     "cmp_literal": 8,
-    "slice_count": 1,
+    "bool_fold": 7,
     "swallow": 15,
-    "swallow_wide": 11
+    "swallow_wide": 11,
+    "slice_count": 1
   },
   "packages/flow/openadapt_flow/repair/standard_change.py": {
-    "bool_fold": 1,
     "cmp_literal": 4,
+    "bool_fold": 1,
     "swallow": 1
   },
   "packages/flow/openadapt_flow/report.py": {
-    "bool_fold": 1,
-    "cmp_literal": 5
+    "cmp_literal": 5,
+    "bool_fold": 1
   },
   "packages/flow/openadapt_flow/request_binding.py": {
     "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/rest_setup.py": {
-    "empty_change_set": 2,
     "swallow": 1,
-    "swallow_wide": 2
+    "swallow_wide": 2,
+    "empty_change_set": 2
   },
   "packages/flow/openadapt_flow/retention.py": {
     "cmp_literal": 1
   },
   "packages/flow/openadapt_flow/retention_apply.py": {
-    "bool_fold": 2,
-    "cmp_literal": 1
+    "cmp_literal": 1,
+    "bool_fold": 2
   },
   "packages/flow/openadapt_flow/reward/models.py": {
     "bool_fold": 1
@@ -967,8 +1058,8 @@
     "swallow": 1
   },
   "packages/flow/openadapt_flow/reward/worker.py": {
-    "bool_fold": 2,
-    "cmp_literal": 1
+    "cmp_literal": 1,
+    "bool_fold": 2
   },
   "packages/flow/openadapt_flow/rl_env/desktop.py": {
     "swallow": 4,
@@ -983,12 +1074,12 @@
     "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/rl_env/record_grader.py": {
-    "bool_fold": 1,
-    "cmp_literal": 2
+    "cmp_literal": 2,
+    "bool_fold": 1
   },
   "packages/flow/openadapt_flow/rl_env/reward.py": {
-    "cmp_literal": 5,
     "says_success": 2,
+    "cmp_literal": 5,
     "swallow": 2,
     "swallow_wide": 2
   },
@@ -996,25 +1087,25 @@
     "swallow": 1
   },
   "packages/flow/openadapt_flow/rl_env/validate.py": {
-    "bool_fold": 1,
-    "says_success": 1
+    "says_success": 1,
+    "bool_fold": 1
   },
   "packages/flow/openadapt_flow/rl_env/validate_desktop.py": {
-    "bool_fold": 1,
     "says_success": 1,
+    "bool_fold": 1,
     "swallow": 1
   },
   "packages/flow/openadapt_flow/rl_env/windows_guest.py": {
-    "slice_count": 1,
-    "swallow": 1
+    "swallow": 1,
+    "slice_count": 1
   },
   "packages/flow/openadapt_flow/rollback.py": {
-    "bool_fold": 2,
     "cmp_literal": 3,
-    "empty_change_set": 1,
-    "says_unchanged": 2,
+    "bool_fold": 2,
     "swallow": 5,
-    "swallow_wide": 3
+    "swallow_wide": 3,
+    "says_unchanged": 2,
+    "empty_change_set": 1
   },
   "packages/flow/openadapt_flow/rollback_qualify.py": {
     "swallow": 2,
@@ -1027,6 +1118,29 @@
     "bool_fold": 1,
     "swallow": 1
   },
+  "packages/flow/openadapt_flow/run_ledger/cli.py": {
+    "says_success": 1,
+    "bool_fold": 1,
+    "swallow_wide": 1
+  },
+  "packages/flow/openadapt_flow/run_ledger/collect.py": {
+    "says_success": 5,
+    "cmp_literal": 5
+  },
+  "packages/flow/openadapt_flow/run_ledger/outcome.py": {
+    "says_success": 6,
+    "cmp_literal": 2,
+    "says_unchanged": 5
+  },
+  "packages/flow/openadapt_flow/run_ledger/readers.py": {
+    "says_success": 4,
+    "cmp_literal": 5,
+    "bool_fold": 1,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/run_ledger/store.py": {
+    "cmp_literal": 1
+  },
   "packages/flow/openadapt_flow/runner/business_decision_service.py": {
     "empty_change_set": 1
   },
@@ -1035,9 +1149,9 @@
     "slice_count": 1
   },
   "packages/flow/openadapt_flow/runner/hosted_adapter.py": {
-    "bool_fold": 1,
-    "cmp_literal": 7,
     "says_success": 1,
+    "cmp_literal": 7,
+    "bool_fold": 1,
     "swallow": 4,
     "swallow_wide": 2
   },
@@ -1060,11 +1174,11 @@
     "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/runtime/admitted_composition.py": {
-    "bool_fold": 2,
-    "cmp_literal": 10,
     "says_success": 3,
-    "says_unchanged": 1,
-    "swallow": 3
+    "cmp_literal": 10,
+    "bool_fold": 2,
+    "swallow": 3,
+    "says_unchanged": 1
   },
   "packages/flow/openadapt_flow/runtime/authorization.py": {
     "bool_fold": 1,
@@ -1077,9 +1191,9 @@
     "swallow": 1
   },
   "packages/flow/openadapt_flow/runtime/composition.py": {
-    "bool_fold": 2,
-    "cmp_literal": 5,
     "says_success": 2,
+    "cmp_literal": 5,
+    "bool_fold": 2,
     "swallow": 1
   },
   "packages/flow/openadapt_flow/runtime/control_overlay.py": {
@@ -1087,8 +1201,8 @@
     "says_unchanged": 1
   },
   "packages/flow/openadapt_flow/runtime/durable/attended.py": {
-    "bool_fold": 1,
     "cmp_literal": 11,
+    "bool_fold": 1,
     "swallow": 3,
     "swallow_wide": 1
   },
@@ -1104,8 +1218,8 @@
   },
   "packages/flow/openadapt_flow/runtime/durable/checkpoint.py": {
     "bool_fold": 1,
-    "slice_count": 2,
-    "swallow": 1
+    "swallow": 1,
+    "slice_count": 2
   },
   "packages/flow/openadapt_flow/runtime/durable/continuation.py": {
     "cmp_literal": 2
@@ -1117,8 +1231,8 @@
     "slice_count": 1
   },
   "packages/flow/openadapt_flow/runtime/durable/resume.py": {
-    "bool_fold": 1,
     "cmp_literal": 1,
+    "bool_fold": 1,
     "slice_count": 1
   },
   "packages/flow/openadapt_flow/runtime/effect_watch.py": {
@@ -1127,30 +1241,37 @@
   },
   "packages/flow/openadapt_flow/runtime/effects/_common.py": {
     "bool_fold": 1,
-    "empty_change_set": 2,
-    "slice_count": 1
+    "slice_count": 1,
+    "empty_change_set": 2
   },
   "packages/flow/openadapt_flow/runtime/effects/adapter.py": {
     "swallow": 2
+  },
+  "packages/flow/openadapt_flow/runtime/effects/api_recheck.py": {
+    "says_success": 4,
+    "cmp_literal": 5,
+    "swallow": 1,
+    "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/runtime/effects/compensation.py": {
     "swallow": 1
   },
   "packages/flow/openadapt_flow/runtime/effects/deferred_report.py": {
+    "says_success": 1,
     "cmp_literal": 3,
-    "says_success": 1
+    "swallow": 2
   },
   "packages/flow/openadapt_flow/runtime/effects/desktop_readback.py": {
     "cmp_literal": 1,
     "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/runtime/effects/desktop_readback_sessions.py": {
-    "slice_count": 1,
-    "swallow": 1
+    "swallow": 1,
+    "slice_count": 1
   },
   "packages/flow/openadapt_flow/runtime/effects/effect.py": {
-    "empty_change_set": 1,
-    "swallow": 1
+    "swallow": 1,
+    "empty_change_set": 1
   },
   "packages/flow/openadapt_flow/runtime/effects/effect_model.py": {
     "bool_fold": 2,
@@ -1167,8 +1288,8 @@
     "swallow": 2
   },
   "packages/flow/openadapt_flow/runtime/effects/frame.py": {
-    "cmp_literal": 2,
     "says_success": 1,
+    "cmp_literal": 2,
     "slice_count": 1
   },
   "packages/flow/openadapt_flow/runtime/effects/fresh_session.py": {
@@ -1182,19 +1303,24 @@
     "says_success": 1
   },
   "packages/flow/openadapt_flow/runtime/effects/late_write.py": {
-    "cmp_literal": 2,
-    "says_success": 1
+    "says_success": 1,
+    "cmp_literal": 2
   },
   "packages/flow/openadapt_flow/runtime/effects/onscreen.py": {
-    "empty_change_set": 1,
     "swallow": 5,
-    "swallow_wide": 1
+    "swallow_wide": 1,
+    "empty_change_set": 1
   },
   "packages/flow/openadapt_flow/runtime/effects/pipeline_safety.py": {
     "swallow": 1
   },
   "packages/flow/openadapt_flow/runtime/effects/rest.py": {
     "swallow": 3
+  },
+  "packages/flow/openadapt_flow/runtime/effects/row_versions.py": {
+    "says_success": 2,
+    "cmp_literal": 2,
+    "swallow": 6
   },
   "packages/flow/openadapt_flow/runtime/effects/smart_auth.py": {
     "swallow": 1,
@@ -1218,8 +1344,8 @@
     "cmp_literal": 1
   },
   "packages/flow/openadapt_flow/runtime/healing/perturbation.py": {
-    "bool_fold": 1,
-    "cmp_literal": 1
+    "cmp_literal": 1,
+    "bool_fold": 1
   },
   "packages/flow/openadapt_flow/runtime/healing/pipeline.py": {
     "says_unchanged": 1
@@ -1228,8 +1354,8 @@
     "swallow": 1
   },
   "packages/flow/openadapt_flow/runtime/identity.py": {
-    "slice_count": 1,
-    "swallow_wide": 1
+    "swallow_wide": 1,
+    "slice_count": 1
   },
   "packages/flow/openadapt_flow/runtime/identity_census.py": {
     "swallow": 1,
@@ -1237,6 +1363,9 @@
   },
   "packages/flow/openadapt_flow/runtime/identity_looks.py": {
     "swallow": 5
+  },
+  "packages/flow/openadapt_flow/runtime/identity_vlm.py": {
+    "swallow": 2
   },
   "packages/flow/openadapt_flow/runtime/layout_drift.py": {
     "swallow_wide": 1
@@ -1249,43 +1378,55 @@
     "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/runtime/process_v1.py": {
-    "cmp_literal": 10,
     "says_success": 1,
+    "cmp_literal": 10,
     "says_unchanged": 1
   },
   "packages/flow/openadapt_flow/runtime/readback_pipeline.py": {
     "swallow_wide": 2
   },
   "packages/flow/openadapt_flow/runtime/remote_vlm.py": {
-    "swallow": 1
+    "swallow": 4
+  },
+  "packages/flow/openadapt_flow/runtime/replay/effects.py": {
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/runtime/replay/settling.py": {
+    "swallow": 5,
+    "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/runtime/replayer.py": {
-    "bool_fold": 12,
     "cmp_literal": 26,
-    "empty_change_set": 3,
+    "bool_fold": 12,
+    "swallow": 57,
+    "swallow_wide": 46,
     "slice_count": 1,
-    "swallow": 62,
-    "swallow_wide": 47
+    "empty_change_set": 3
   },
   "packages/flow/openadapt_flow/runtime/resolver.py": {
     "cmp_literal": 1,
     "swallow": 3,
     "swallow_wide": 1
   },
+  "packages/flow/openadapt_flow/runtime/second_factor_step.py": {
+    "says_success": 1,
+    "swallow": 1,
+    "swallow_wide": 3
+  },
   "packages/flow/openadapt_flow/runtime/surfaces.py": {
     "swallow": 9,
     "swallow_wide": 9
   },
   "packages/flow/openadapt_flow/runtime/variant_router.py": {
-    "bool_fold": 1,
     "cmp_literal": 1,
+    "bool_fold": 1,
     "swallow": 3
   },
   "packages/flow/openadapt_flow/runtime/worklist_pool.py": {
     "cmp_literal": 3,
-    "says_unchanged": 1,
     "swallow": 3,
-    "swallow_wide": 8
+    "swallow_wide": 8,
+    "says_unchanged": 1
   },
   "packages/flow/openadapt_flow/runtime_validation.py": {
     "cmp_literal": 1
@@ -1303,6 +1444,16 @@
   "packages/flow/openadapt_flow/seal_timestamp.py": {
     "slice_count": 1
   },
+  "packages/flow/openadapt_flow/sealed_set.py": {
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/second_factor.py": {
+    "swallow": 2,
+    "swallow_wide": 1
+  },
+  "packages/flow/openadapt_flow/second_factor_terminal.py": {
+    "swallow": 1
+  },
   "packages/flow/openadapt_flow/secret_inputs.py": {
     "swallow_wide": 1
   },
@@ -1313,33 +1464,33 @@
     "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/shadow.py": {
-    "bool_fold": 1,
-    "empty_change_set": 1,
     "says_success": 1,
+    "bool_fold": 1,
     "swallow": 4,
-    "swallow_wide": 7
+    "swallow_wide": 7,
+    "empty_change_set": 1
   },
   "packages/flow/openadapt_flow/shadow_db.py": {
-    "bool_fold": 1,
     "cmp_literal": 1,
+    "bool_fold": 1,
     "swallow": 2,
     "swallow_wide": 3
   },
   "packages/flow/openadapt_flow/shadow_report.py": {
-    "cmp_literal": 3,
-    "says_success": 1
+    "says_success": 1,
+    "cmp_literal": 3
   },
   "packages/flow/openadapt_flow/skills.py": {
     "swallow": 2
   },
   "packages/flow/openadapt_flow/subroutines.py": {
-    "bool_fold": 2,
-    "cmp_literal": 2
+    "cmp_literal": 2,
+    "bool_fold": 2
   },
   "packages/flow/openadapt_flow/taskgen/validate.py": {
-    "bool_fold": 3,
-    "cmp_literal": 2,
     "says_success": 1,
+    "cmp_literal": 2,
+    "bool_fold": 3,
     "swallow": 2,
     "swallow_wide": 4
   },
@@ -1347,69 +1498,100 @@
     "swallow": 2
   },
   "packages/flow/openadapt_flow/teach_scope.py": {
-    "bool_fold": 1,
     "cmp_literal": 1,
+    "bool_fold": 1,
     "swallow": 8,
     "swallow_wide": 2
   },
   "packages/flow/openadapt_flow/terminal_verification_v2.py": {
-    "bool_fold": 7,
+    "says_success": 1,
     "cmp_literal": 30,
-    "says_success": 1
+    "bool_fold": 7
   },
   "packages/flow/openadapt_flow/transaction.py": {
-    "bool_fold": 7,
-    "cmp_literal": 13,
     "says_success": 1,
-    "says_unchanged": 1,
+    "cmp_literal": 13,
+    "bool_fold": 7,
+    "swallow": 1,
     "slice_count": 1,
-    "swallow": 1
+    "says_unchanged": 1
   },
   "packages/flow/openadapt_flow/transforms.py": {
     "says_unchanged": 1
   },
   "packages/flow/openadapt_flow/tutorial.py": {
-    "bool_fold": 2,
-    "cmp_literal": 5
+    "cmp_literal": 5,
+    "bool_fold": 2
   },
   "packages/flow/openadapt_flow/tx/induce.py": {
-    "empty_change_set": 1,
+    "swallow": 1,
     "slice_count": 3,
-    "swallow": 1
+    "empty_change_set": 1,
+    "bool_fold": 1
   },
   "packages/flow/openadapt_flow/tx/lens.py": {
-    "else_success": 1,
     "says_success": 1,
-    "swallow_wide": 1
+    "swallow_wide": 1,
+    "else_success": 1
   },
   "packages/flow/openadapt_flow/tx/wire_tap.py": {
     "bool_fold": 2,
     "swallow": 3,
     "swallow_wide": 2
   },
-  "packages/flow/openadapt_flow/undo_proposal.py": {
+  "packages/flow/openadapt_flow/txplan/adapters.py": {
     "bool_fold": 1,
+    "swallow": 2,
+    "swallow_wide": 1
+  },
+  "packages/flow/openadapt_flow/txplan/audit.py": {
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/txplan/cli.py": {
+    "says_success": 1,
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/txplan/engine.py": {
+    "says_success": 9,
+    "cmp_literal": 6,
+    "bool_fold": 2,
+    "swallow_wide": 1,
+    "says_unchanged": 1,
+    "empty_change_set": 4
+  },
+  "packages/flow/openadapt_flow/txplan/proxy.py": {
+    "cmp_literal": 1,
+    "swallow": 1,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/txplan/scoped.py": {
+    "says_success": 1,
+    "cmp_literal": 3,
+    "else_success": 1
+  },
+  "packages/flow/openadapt_flow/undo_proposal.py": {
     "cmp_literal": 5,
-    "slice_count": 1,
+    "bool_fold": 1,
     "swallow": 4,
-    "swallow_wide": 3
+    "swallow_wide": 3,
+    "slice_count": 1
   },
   "packages/flow/openadapt_flow/validation/behavioral_generalization.py": {
-    "bool_fold": 2,
-    "cmp_literal": 3,
     "says_success": 1,
+    "cmp_literal": 3,
+    "bool_fold": 2,
     "swallow_wide": 4
   },
   "packages/flow/openadapt_flow/validation/dense_surface.py": {
-    "bool_fold": 1,
-    "cmp_literal": 7
+    "cmp_literal": 7,
+    "bool_fold": 1
   },
   "packages/flow/openadapt_flow/validation/hardening/fixtures.py": {
     "swallow": 2
   },
   "packages/flow/openadapt_flow/validation/identity_ladder.py": {
-    "bool_fold": 1,
-    "cmp_literal": 2
+    "cmp_literal": 2,
+    "bool_fold": 1
   },
   "packages/flow/openadapt_flow/validation/identity_looks_dense.py": {
     "cmp_literal": 7,
@@ -1431,8 +1613,8 @@
     "says_unchanged": 1
   },
   "packages/flow/openadapt_flow/verifier.py": {
-    "cmp_literal": 39,
     "says_success": 4,
+    "cmp_literal": 39,
     "swallow": 9
   },
   "packages/flow/openadapt_flow/verifier_audit/runner.py": {
@@ -1446,12 +1628,12 @@
     "swallow_wide": 2
   },
   "packages/flow/openadapt_flow/verify_run.py": {
-    "bool_fold": 2,
-    "cmp_literal": 36,
-    "empty_change_set": 1,
     "says_success": 4,
-    "swallow": 5,
-    "swallow_wide": 4
+    "cmp_literal": 37,
+    "bool_fold": 2,
+    "swallow": 6,
+    "swallow_wide": 4,
+    "empty_change_set": 1
   },
   "packages/flow/openadapt_flow/vision/imgops.py": {
     "swallow": 2
@@ -1460,8 +1642,8 @@
     "swallow_wide": 5
   },
   "packages/flow/openadapt_flow/visualize/builder.py": {
-    "bool_fold": 2,
-    "cmp_literal": 3
+    "cmp_literal": 3,
+    "bool_fold": 2
   },
   "packages/flow/openadapt_flow/visualize/projection.py": {
     "cmp_literal": 1
@@ -1476,12 +1658,26 @@
   "packages/flow/openadapt_flow/wrap/__init__.py": {
     "swallow_wide": 2
   },
+  "packages/flow/openadapt_flow/wrap/approval_gate.py": {
+    "swallow": 1
+  },
   "packages/flow/openadapt_flow/wrap/candidate.py": {
     "swallow": 1
   },
   "packages/flow/openadapt_flow/wrap/cli.py": {
     "says_success": 1,
-    "swallow": 1
+    "swallow": 2,
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/wrap/dispatch_cli.py": {
+    "says_success": 3
+  },
+  "packages/flow/openadapt_flow/wrap/fallback.py": {
+    "says_success": 2,
+    "cmp_literal": 5,
+    "swallow": 2,
+    "swallow_wide": 2,
+    "empty_change_set": 1
   },
   "packages/flow/openadapt_flow/wrap/mcp.py": {
     "swallow": 1
@@ -1491,23 +1687,69 @@
     "swallow": 2
   },
   "packages/flow/openadapt_flow/write_ledger.py": {
-    "cmp_literal": 7,
-    "says_success": 1
+    "says_success": 1,
+    "cmp_literal": 7
   },
   "packages/flow/openadapt_flow/write_receipt.py": {
-    "bool_fold": 3,
-    "cmp_literal": 9
+    "cmp_literal": 9,
+    "bool_fold": 3
+  },
+  "openadapt/cli.py": {
+    "cmp_literal": 1,
+    "swallow": 10,
+    "swallow_wide": 7,
+    "slice_count": 2
+  },
+  "openadapt/quickstart/engine.py": {
+    "cmp_literal": 7,
+    "swallow": 3
+  },
+  "openadapt/quickstart/notices.py": {
+    "swallow": 1
+  },
+  "openadapt/quickstart/openemr.py": {
+    "cmp_literal": 2,
+    "swallow": 2,
+    "swallow_wide": 1
+  },
+  "openadapt/quickstart/scene.py": {
+    "cmp_literal": 1,
+    "slice_count": 1
+  },
+  "openadapt/quickstart/story.py": {
+    "swallow_wide": 3
+  },
+  "openadapt/quickstart/view.py": {
+    "cmp_literal": 2,
+    "swallow": 1
+  },
+  "openadapt/quickstart/workers.py": {
+    "cmp_literal": 1,
+    "swallow": 2,
+    "swallow_wide": 1
+  },
+  "openadapt/receipt_verify.py": {
+    "swallow": 2
+  },
+  "openadapt/seal_claim.py": {
+    "swallow": 5
+  },
+  "openadapt/seal_publish.py": {
+    "swallow": 1
+  },
+  "openadapt/seal_view/__init__.py": {
+    "swallow": 2
   },
   "scripts/ci/attestation.py": {
     "bool_fold": 2
   },
   "scripts/ci/check_windows_governed_safety.py": {
-    "cmp_literal": 4,
-    "says_success": 2
+    "says_success": 2,
+    "cmp_literal": 1
   },
   "scripts/ci/flow_shard_measurement.py": {
-    "bool_fold": 1,
     "cmp_literal": 1,
+    "bool_fold": 1,
     "swallow_wide": 1
   },
   "scripts/ci/newest_green.py": {
@@ -1518,9 +1760,9 @@
   },
   "scripts/ci/protected_safety_review.py": {
     "cmp_literal": 2,
-    "empty_change_set": 1,
     "swallow": 1,
-    "swallow_wide": 1
+    "swallow_wide": 1,
+    "empty_change_set": 1
   },
   "scripts/ci/tests/test_flow_shard_measurement.py": {
     "cmp_literal": 2

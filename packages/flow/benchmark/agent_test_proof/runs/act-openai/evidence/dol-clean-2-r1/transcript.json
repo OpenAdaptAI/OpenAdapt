@@ -1,0 +1,371 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f989d9e11e294af016b0153bc4d0c87d1be01fcf28215eb39",
+     "call_id": "call_1BhvBuawPLkxIq69ufEV4YNg",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f989d9e11e294af016b0153c054ac87d1b8a6e228b2a47449",
+     "call_id": "call_Icx2BDzSbPzcJYQyEFoaV8RP",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 113,
+       "y": 28
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f989d9e11e294af016b0153c2cff087d1b6c218d4a673e345",
+     "call_id": "call_dLiHNILIKPhL6qzP50NkzsUe",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 88,
+       "y": 372
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f989d9e11e294af016b0153c5545c87d1b826ec6289043d2b",
+     "call_id": "call_4PK6wsg9Vvm8izHv2EucknXp",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Lindgren",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 653,
+       "y": 197
+      },
+      {
+       "text": "Tove",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 644,
+       "y": 295
+      },
+      {
+       "text": "Purchasing lead",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 675,
+       "y": 480
+      },
+      {
+       "text": "555-0202",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 673,
+       "y": 547
+      },
+      {
+       "text": "t.lindgren@example.invalid",
+       "type": "type"
+      },
+      {
+       "scroll_x": 0,
+       "scroll_y": 478,
+       "type": "scroll",
+       "x": 1174,
+       "y": 633
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f989d9e11e294af016b0153c990cc87d1a2cfb6e584fe7710",
+     "call_id": "call_MujeevfqmdQqRMTCahbD2Ooz",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 720,
+       "y": 758
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f989d9e11e294af016b0153cc9d8487d199cd2f1da3a2ffc7",
+     "call_id": "call_amxHSSLF91vEO4Xi8Gi0Gm18",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "l"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f989d9e11e294af016b0153cf952487d1b32134768a1a3c04",
+     "call_id": "call_wvqebmKIaAzRlZs1rXyrsatA",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 501,
+       "y": 157
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f989d9e11e294af016b0153d30e2087d1b08b6952734ada1c",
+     "call_id": "call_Ed0SLSZJZuTfATHoBmO9bIkt",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1125,
+       "y": 156
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f989d9e11e294af016b0153d5d78087d196175ea155a520b8",
+     "call_id": "call_q0EhGZFJQP6PfUBsxBHOMHU2",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 459,
+       "y": 354
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f989d9e11e294af016b0153d9f51887d19b40d571d6d51137",
+     "call_id": "call_S8tbHDZUOXBJ5aQJuPII9stH",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 451,
+       "y": 352
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE 4",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 113,
+   "y": 28,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 88,
+   "y": 372,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 8
+  },
+  {
+   "a": "click",
+   "x": 653,
+   "y": 197,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 4
+  },
+  {
+   "a": "click",
+   "x": 644,
+   "y": 295,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 15
+  },
+  {
+   "a": "click",
+   "x": 675,
+   "y": 480,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 8
+  },
+  {
+   "a": "click",
+   "x": 673,
+   "y": 547,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 26
+  },
+  {
+   "a": "scroll",
+   "x": 1174,
+   "y": 633,
+   "dx": 0,
+   "dy": 478
+  },
+  {
+   "a": "click",
+   "x": 720,
+   "y": 758,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "l"
+   ]
+  },
+  {
+   "a": "move",
+   "x": 501,
+   "y": 157
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 1125,
+   "y": 156,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 459,
+   "y": 354
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 451,
+   "y": 352,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  }
+ ]
+}

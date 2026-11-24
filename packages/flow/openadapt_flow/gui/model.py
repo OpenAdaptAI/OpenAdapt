@@ -48,6 +48,7 @@ __all__ = [
     "norm",
     "screen_signature",
     "spec_for",
+    "write_outcomes_of",
 ]
 
 #: The roles a backend maps its controls to. Anything else is ``other``.
@@ -308,7 +309,8 @@ class DemoStep:
     ``target`` is the control as seen in ``before``. ``writes`` is how many
     writes the backend counted between ``before`` and ``after`` (requests that
     change state, a file save, a cell committed), or None when it could not
-    count them."""
+    count them. ``write_outcomes`` is what each of those writes returned
+    (``"2xx"``, ``"redirect /done"``), or None when the backend does not say."""
 
     action: ActionKind
     target: Control
@@ -316,6 +318,7 @@ class DemoStep:
     after: Screen
     writes: Optional[int]
     value: str = ""
+    write_outcomes: Optional[tuple[str, ...]] = None
 
 
 @runtime_checkable
@@ -335,6 +338,14 @@ class Actuator(Protocol):
         """Writes counted since the backend started, or None if it cannot
         count them. A backend that cannot count can never show a commit."""
         ...
+
+
+def write_outcomes_of(actuator: object) -> Optional[tuple[str, ...]]:
+    """What each write so far returned, from a backend's optional
+    ``write_outcomes()``, or None when it does not report them."""
+    fn = getattr(actuator, "write_outcomes", None)
+    got = fn() if callable(fn) else None
+    return tuple(got) if isinstance(got, (tuple, list)) else None
 
 
 @dataclass
@@ -357,12 +368,19 @@ class Recorder:
         target = before.control(handle)
         if target is None:
             raise MissingControl(handle)
+        o0 = write_outcomes_of(self.actuator)
         w0 = self.actuator.write_count()
         run()
-        w1 = self.actuator.write_count()
         after = self.actuator.observe()
+        # Read after the screen settles, as a run does, so a late write is
+        # counted in the demo too.
+        w1 = self.actuator.write_count()
         writes = None if w0 is None or w1 is None else w1 - w0
-        self.steps.append(DemoStep(action, target, before, after, writes, value))
+        o1 = write_outcomes_of(self.actuator)
+        outcomes = None if o0 is None or o1 is None else o1[len(o0) :]
+        self.steps.append(
+            DemoStep(action, target, before, after, writes, value, outcomes)
+        )
 
     def click(self, handle: str) -> None:
         self._do("click", handle, lambda: self.actuator.click(handle))

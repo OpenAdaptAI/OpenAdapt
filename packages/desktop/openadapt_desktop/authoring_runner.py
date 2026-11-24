@@ -139,7 +139,47 @@ def _require_empty_cookies(browser: Any) -> None:
         raise AuthoringError("Playwright Chromium did not start with empty cookies.")
 
 
-def launch_empty_playwright_chromium(url: str) -> Any:
+# Chromium flags for a browser Desktop launches itself: use a mock keychain and
+# the basic password store so the launch never prompts for the login keychain.
+OWNED_CHROMIUM_ARGS = ("--use-mock-keychain", "--password-store=basic")
+
+
+class OwnedChromium:
+    """A Chromium that Desktop launched, with the context, browser and driver it owns.
+
+    ``close`` tears all of them down, newest first. It is idempotent and never
+    raises, so it can run on setup failure and on every terminal stop.
+    """
+
+    def __init__(self, playwright: Any, browser: Any, context: Any, page: Any = None) -> None:
+        self.playwright = playwright
+        self.browser = browser
+        self.context = context
+        self.page = page
+        self.closed = False
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        self.closed = True
+        for name, owner in (
+            ("context", self.context),
+            ("browser", self.browser),
+        ):
+            if owner is None:
+                continue
+            try:
+                owner.close()
+            except Exception as exc:  # noqa: BLE001 - teardown keeps going
+                logger.warning("authoring Chromium {} close failed: {}", name, type(exc).__name__)
+        if self.playwright is not None:
+            try:
+                self.playwright.stop()
+            except Exception as exc:  # noqa: BLE001 - teardown keeps going
+                logger.warning("authoring Playwright stop failed: {}", type(exc).__name__)
+
+
+def launch_empty_playwright_chromium(url: str, *, headless: bool = False) -> OwnedChromium:
     """Launch a fresh Chromium with empty cookies. Never attach to logged-in Chrome."""
 
     if not isinstance(url, str) or not url.startswith("https://"):
@@ -148,17 +188,20 @@ def launch_empty_playwright_chromium(url: str) -> Any:
         from playwright.sync_api import sync_playwright
     except ImportError as exc:
         raise AuthoringError("Playwright Chromium is unavailable.") from exc
-    playwright = sync_playwright().start()
-    browser = playwright.chromium.launch(headless=False)
-    context = browser.new_context()
-    cookies = context.cookies()
-    if cookies:
-        browser.close()
-        playwright.stop()
-        raise AuthoringError("Playwright Chromium did not start with empty cookies.")
-    page = context.new_page()
-    page.goto(url)
-    return page
+    owned = OwnedChromium(sync_playwright().start(), None, None)
+    try:
+        owned.browser = owned.playwright.chromium.launch(
+            headless=headless, args=list(OWNED_CHROMIUM_ARGS)
+        )
+        owned.context = owned.browser.new_context()
+        if owned.context.cookies():
+            raise AuthoringError("Playwright Chromium did not start with empty cookies.")
+        owned.page = owned.context.new_page()
+        owned.page.goto(url)
+    except BaseException:
+        owned.close()
+        raise
+    return owned
 
 
 def _pack_dir(data_dir: Path, pack_id: str) -> Path:
@@ -607,6 +650,7 @@ class AuthoringRunner:
         self._coach_hint: str | None = None
         self._out_dir: Path | None = None
         self._playwright: Any | None = None
+        self._start_generation = 0
 
     def is_bound(self) -> bool:
         return self._pack is not None and self._lease_secret is not None
@@ -1048,22 +1092,53 @@ class AuthoringRunner:
         backend = str(self._pin.get("backend") or "macos")
         if backend == "windows":
             raise AuthoringCoachOnly("COACH_ONLY")
+
+        with self._lock:
+            self._start_generation += 1
+            start_gen = self._start_generation
+
+        browser = None
         if backend == "web":
             url = self._pin.get("url")
             if not isinstance(url, str) or not url.startswith("https://"):
                 raise AuthoringError("A Playwright job needs a URL typed into Desktop.")
             launcher = self._playwright_launcher or launch_empty_playwright_chromium
-            self._playwright = launcher(url)
-            _require_empty_cookies(self._playwright)
-        factory = self._recorder_factory
-        if factory is None:
-            raise AuthoringError("Authoring recorder is unavailable.")
-        out_dir = self._out_dir or _pack_dir(self.config.data_dir, self._pack or "p.invalidpackid")
-        out_dir.mkdir(parents=True, exist_ok=True)
-        self._recorder = factory(out_dir)
-        self._recording = True
-        self._secret_pause = False
-        self._secret_type_recorded = False
+            self._close_owned_browser()
+            browser = launcher(url)
+
+        with self._lock:
+            if self._start_generation != start_gen:
+                if browser is not None:
+                    self._close_owned_browser(browser)
+                return {"recording": False}
+            self._playwright = browser
+
+        try:
+            if backend == "web":
+                _require_empty_cookies(self._playwright)
+            factory = self._recorder_factory
+            if factory is None:
+                raise AuthoringError("Authoring recorder is unavailable.")
+            out_dir = self._out_dir or _pack_dir(
+                self.config.data_dir, self._pack or "p.invalidpackid"
+            )
+            out_dir.mkdir(parents=True, exist_ok=True)
+            recorder = factory(out_dir)
+        except BaseException:
+            self._close_owned_browser()
+            raise
+
+        with self._lock:
+            if self._start_generation != start_gen:
+                if hasattr(recorder, "finish") and callable(recorder.finish):
+                    recorder.finish()
+                self._close_owned_browser()
+                return {"recording": False}
+            self._recorder = recorder
+            self._recording = True
+            self._secret_pause = False
+            self._secret_type_recorded = False
+
         self.emit("status_update", self.status_dict() or {})
         return {"recording": True}
 
@@ -1122,15 +1197,34 @@ class AuthoringRunner:
         self.emit("status_update", self.status_dict() or {})
         return {"paused": True, "param": param}
 
+    def _close_owned_browser(self, target: Any = None) -> None:
+        """Close a Chromium Desktop launched. An attached browser is left open."""
+
+        if target is None:
+            browser, self._playwright = self._playwright, None
+        else:
+            browser = target
+            if self._playwright is target:
+                self._playwright = None
+        if isinstance(browser, OwnedChromium):
+            browser.close()
+
     def _stop_record(self) -> dict[str, Any]:
-        recorder = self._recorder
+        with self._lock:
+            self._start_generation += 1
+            recorder = self._recorder
         if recorder is None:
+            self._close_owned_browser()
             return {"recording": False}
         finish = getattr(recorder, "finish", None)
-        if callable(finish):
-            finish()
-        self._recording = False
-        self._paused = False
+        try:
+            if callable(finish):
+                finish()
+        finally:
+            self._close_owned_browser()
+        with self._lock:
+            self._recording = False
+            self._paused = False
         self.emit("status_update", self.status_dict() or {})
         return {"recording": False}
 
@@ -1156,6 +1250,7 @@ class AuthoringRunner:
 
     def _halt(self, *, unsigned: bool, command_id: str | None) -> None:
         with self._lock:
+            self._start_generation += 1
             if self._actuation_started:
                 self._uncertain = True
                 uncertain = True
@@ -1176,6 +1271,7 @@ class AuthoringRunner:
                 }
             )
             return
+        self._close_owned_browser()
         if self._node_table is not None:
             self._node_table.clear()
         if unsigned and self._pack and self._lease_secret and self._transport:

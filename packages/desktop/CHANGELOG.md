@@ -1,6 +1,105 @@
 # CHANGELOG
 
 
+## v0.32.3 (2026-11-23)
+
+### Bug Fixes
+
+- **desktop**: keep permission guidance within the size budget
+- **macos**: guide 27.3 app-control permissions conservatively
+
+
+
+## Unreleased
+
+
+
+## v0.32.2 (2026-11-24)
+
+### Bug Fixes
+
+- **desktop**: launch authoring Chromium keychain-safe and close what it owns
+
+
+
+## v0.32.1 (2026-11-23)
+
+### Bug Fixes
+
+- **desktop**: sync control overlay contract pin to openadapt-types 0.24.2
+
+
+
+## v0.32.0 (2026-11-22)
+
+### Features
+
+- **design**: share Desktop overlay and phone theme roles
+
+### Bug Fixes
+
+- **desktop**: preserve pinned theme bytes on checkout
+
+
+## v0.31.3 (2026-11-22)
+
+### Bug Fixes
+
+- **desktop**: use native handlers for browser and external URLs
+
+
+
+## v0.31.2 (2026-11-22)
+
+### Bug Fixes
+
+- **desktop**: omit initial UI policy argument and forward inspected policy on certification
+- **desktop**: distinguish omitted policy from explicit selection in dispatcher and qualification
+- **types,desktop**: align certification policy readback, strict bool catalog slots, and canonical v1 outcome bytes
+- **types,desktop**: preserve v1 wire compat, tighten managed catalog schema, and support bundled Flow policy fallback
+
+
+
+## v0.31.1 (2026-11-22)
+
+### Bug Fixes
+
+- Exception cards are checked on Windows as on macOS and Linux: a link or junction is
+  refused, and a card must be private to this user by its access control list (only this
+  user, SYSTEM and Administrators). Answers are written only where they come out private,
+  and card and answer files are read and written as raw bytes.
+- Update the `url` crate to 2.5.9 (RUSTSEC-2026-0592).
+
+## v0.31.0 (2026-11-21)
+
+### Features
+
+- **guard**: approval card values beside the source, ReadbackProvider seam, per-save ledger row
+- **desktop**: The stop queue now lists exception cards from any run on this
+  computer that asked a person (a one-time code prompt, an unexpected dialog,
+  a sign-in partway through, a stall, a possible duplicate, an ambiguous
+  record, a task it can't finish), not only Desktop's own runs. Each card is
+  answered on its own, here or on a paired phone, and the answer is signed
+  with the same approver key as other stop answers. Requires Flow with the
+  exception registry (#2494). The Flow 2.4.1 that Desktop runs has no
+  registry yet, so the queue shows exception cards only from runs of a newer
+  Flow on this computer.
+
+### Bug Fixes
+
+- **guard**: The phone's approval card for an agent's save no longer says
+  "exactly what will be saved" when OpenAdapt could not read the values the
+  save sends. It shows the task's value beside each sent value, flags a
+  difference, and says plainly when the sent values were not read or checked.
+  With no write adapter it shows the value on screen when the agent asked,
+  beside the task's, with a difference flagged. The on-screen values and the
+  source and task columns need a Flow release that includes #2492. Desktop
+  still runs Flow 2.4.1: until then an agent's save says its values were not
+  checked and never "exactly", and a compiled program's save keeps its
+  wording.
+
+
+
 ## v0.30.6 (2026-11-19)
 
 ### Bug Fixes

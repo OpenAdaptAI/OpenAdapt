@@ -31,7 +31,7 @@ jobs:
     env:
       CONNECTOR_DIR: C:\ProgramData\OpenAdapt\connector
       EVIDENCE_DIR: ${{ github.workspace }}\connector-evidence
-      # A fixed test value; the stub accepts any bearer token.
+      # Synthetic bootstrap token; the rotation probe requires a new bearer.
       CI_CONNECTOR_TOKEN: ci-connector-service-test-token-7f3a9c
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -51,9 +51,9 @@ jobs:
           --lock 'packages/flow[connector-windows]'
           --editable packages/types --editable packages/flow
 
-      - name: Unit tests (service wrapper)
+      - name: Unit tests (service wrapper and child output)
         working-directory: packages/flow
-        run: python -m pytest tests/test_connector_windows_service.py -q -p no:cacheprovider
+        run: python -m pytest tests/test_connector_windows_service.py tests/test_connector_diagnostic_process.py -q -p no:cacheprovider
 
       - name: Start the stub control plane on 127.0.0.1
         run: |
@@ -84,16 +84,21 @@ jobs:
           New-Item -ItemType Directory -Force -Path $env:CONNECTOR_DIR | Out-Null
           $storage = Join-Path $env:RUNNER_TEMP 'byoc-storage'
           New-Item -ItemType Directory -Force -Path $storage | Out-Null
+          $profilePath = Join-Path $env:CONNECTOR_DIR 'deployment.yaml'
+          [IO.File]::WriteAllText($profilePath, "runtime: {profile: standard}`n")
           $toml = @(
             '[connector]',
             "control_plane_url = `"http://127.0.0.1:$env:STUB_PORT`"",
             "token = `"$env:CI_CONNECTOR_TOKEN`"",
             'org_id = "org_stub"',
             'poll_wait_s = 2',
+            "profile = '$profilePath'",
             'storage_backend = "local"',
             "storage_root = '$storage'"
           ) -join "`n"
-          [IO.File]::WriteAllText((Join-Path $env:CONNECTOR_DIR 'connector.toml'), "$toml`n")
+          $configPath = Join-Path $env:CONNECTOR_DIR 'connector.toml'
+          [IO.File]::WriteAllText($configPath, "$toml`n")
+          "BOOTSTRAP_CONFIG_HASH=$((Get-FileHash $configPath).Hash)" >> $env:GITHUB_ENV
           # Plant explicit broad grants. Installation must replace them,
           # not merely remove inheritance or update its own named entries.
           icacls $env:CONNECTOR_DIR /grant '*S-1-1-0:(OI)(CI)R' '*S-1-5-32-545:(OI)(CI)R'
@@ -122,9 +127,17 @@ jobs:
           $failure
           if ($failure -notmatch 'RESTART') { throw 'no restart recovery action' }
           $allowed = @('NT AUTHORITY\SYSTEM', 'BUILTIN\Administrators', 'NT SERVICE\OpenAdaptConnector')
+          $serviceWriteRights = [Security.AccessControl.FileSystemRights]'Write,Delete,DeleteSubdirectoriesAndFiles,ChangePermissions,TakeOwnership'
           foreach ($path in @($env:CONNECTOR_DIR, (Join-Path $env:CONNECTOR_DIR 'connector.toml'))) {
             icacls $path
-            $ids = (Get-Acl $path).Access | ForEach-Object { $_.IdentityReference.Value }
+            $acl = Get-Acl $path
+            if ($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne 'S-1-5-32-544') { throw "Administrators do not own $path" }
+            $serviceWrites = $acl.Access | Where-Object {
+              $_.IdentityReference.Value -eq 'NT SERVICE\OpenAdaptConnector' -and
+              $_.AccessControlType -eq 'Allow' -and ($_.FileSystemRights -band $serviceWriteRights)
+            }
+            if ($serviceWrites) { throw "service has write access on $path" }
+            $ids = $acl.Access | ForEach-Object { $_.IdentityReference.Value }
             $extra = $ids | Where-Object { $allowed -notcontains $_ }
             if ($extra) { throw "unexpected ACL entries on ${path}: $($extra -join ', ')" }
             if ($ids -notcontains 'NT SERVICE\OpenAdaptConnector') { throw "service account missing on $path" }
@@ -147,31 +160,39 @@ jobs:
           --log "$env:EVIDENCE_DIR\stub-requests.json" --timeout 120
           --token-env CI_CONNECTOR_TOKEN
 
-      - name: Recover after process death during an empty poll
+      - name: Rotate the service token and recover it after process death during an empty poll
         run: |
           $ErrorActionPreference = 'Stop'
-          $stateUrl = "http://127.0.0.1:$env:STUB_PORT/test/state"
+          $testUrl = "http://127.0.0.1:$env:STUB_PORT/test"
+          $stateUrl = "$testUrl/state"
+          $configPath = Join-Path $env:CONNECTOR_DIR 'connector.toml'
+          $configAcl = (Get-Acl $configPath).Sddl
+          Invoke-RestMethod "$testUrl/request-rotation" | Out-Null
           $active = $false
           for ($i = 0; $i -lt 100; $i++) {
             $before = Invoke-RestMethod $stateUrl
-            if ($before.active_empty_polls -gt 0) { $active = $true; break }
+            if ($before.rotated_polls -gt 0 -and $before.active_empty_polls -gt 0) { $active = $true; break }
             Start-Sleep -Milliseconds 100
           }
-          if (-not $active) { throw 'no active empty poll before the crash probe' }
+          if (-not $active) { throw 'service never polled with the rotated token before the crash probe' }
           $oldPid = [int](Get-CimInstance Win32_Service -Filter "Name='OpenAdaptConnector'").ProcessId
           if ($oldPid -le 0) { throw 'service was not running before the crash probe' }
           Stop-Process -Id $oldPid -Force
+          $afterStop = Invoke-RestMethod $stateUrl
           $recovered = $false
           for ($i = 0; $i -lt 120; $i++) {
             $svc = Get-CimInstance Win32_Service -Filter "Name='OpenAdaptConnector'"
             $after = Invoke-RestMethod $stateUrl
-            if ($svc.State -eq 'Running' -and [int]$svc.ProcessId -gt 0 -and [int]$svc.ProcessId -ne $oldPid -and $after.polls -gt $before.polls) {
+            if ($svc.State -eq 'Running' -and [int]$svc.ProcessId -gt 0 -and [int]$svc.ProcessId -ne $oldPid -and $after.rotated_polls -gt $afterStop.rotated_polls) {
               $recovered = $true; break
             }
             Start-Sleep -Milliseconds 500
           }
-          if (-not $recovered) { throw 'SCM did not restart the service and resume polling' }
-          @{ old_pid = $oldPid; restarted_pid = [int]$svc.ProcessId; polls_before = $before.polls; polls_after = $after.polls; restarted_during_empty_poll = $true } |
+          if (-not $recovered) { throw 'SCM did not restart the service and resume polling with the rotated bearer' }
+          if ((Get-FileHash $configPath).Hash -ne $env:BOOTSTRAP_CONFIG_HASH -or (Get-Acl $configPath).Sddl -ne $configAcl) {
+            throw 'rotation changed the admin-owned connector config or ACL'
+          }
+          @{ old_pid = $oldPid; restarted_pid = [int]$svc.ProcessId; polls_before = $before.polls; polls_after = $after.polls; restarted_during_empty_poll = $true; rotated_polls_after_restart = $after.rotated_polls - $afterStop.rotated_polls } |
             ConvertTo-Json | Set-Content (Join-Path $env:EVIDENCE_DIR 'service-lifecycle.json')
 
       - name: Refuse a revoked token without logging it or reporting a job
@@ -258,9 +279,10 @@ jobs:
           if (Test-Path $logs) { Copy-Item "$logs\*" $env:EVIDENCE_DIR -ErrorAction SilentlyContinue }
           if ($env:STUB_PID) { taskkill /T /F /PID $env:STUB_PID 2>&1 | Out-Null }
           Get-ChildItem $env:EVIDENCE_DIR | Format-Table Name, Length
+          $tokenPatterns = @([regex]::Escape($env:CI_CONNECTOR_TOKEN), 'oaconn_[0-9a-f]{64}')
+          $hits = Get-ChildItem $env:EVIDENCE_DIR -File | Select-String -Pattern $tokenPatterns
+          if ($hits) { $hits | ForEach-Object { $_.Path }; throw 'a connector token appears in the evidence' }
           Get-Content (Join-Path $env:EVIDENCE_DIR 'connector.log') -ErrorAction SilentlyContinue
-          $hits = Get-ChildItem $env:EVIDENCE_DIR -File | Select-String -SimpleMatch $env:CI_CONNECTOR_TOKEN
-          if ($hits) { $hits | ForEach-Object { $_.Path }; throw 'the connector token appears in the evidence' }
           exit 0
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

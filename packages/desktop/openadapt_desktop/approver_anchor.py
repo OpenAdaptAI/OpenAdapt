@@ -470,7 +470,13 @@ def _read_windows(path: Path) -> bytes:  # pragma: no cover - Windows only
     return data
 
 
-def _windows_security(target: Path) -> tuple[str | None, list[Ace] | None]:  # pragma: no cover
+def _windows_security(  # pragma: no cover - Windows only
+    target: Path, *, handle: int | None = None
+) -> tuple[str | None, list[Ace] | None]:
+    """The owner SID and DACL entries of ``target``, or of the open file
+    ``handle`` (a Win32 handle) when one is given, so the answer is about the
+    file already opened and not whatever the name points to now."""
+
     import ctypes
     from ctypes import wintypes
 
@@ -480,16 +486,28 @@ def _windows_security(target: Path) -> tuple[str | None, list[Ace] | None]:  # p
     dacl = ctypes.c_void_p()
     descriptor = ctypes.c_void_p()
     owner_info, dacl_info = 0x1, 0x4
-    status = advapi.GetNamedSecurityInfoW(
-        wintypes.LPCWSTR(str(target)),
-        1,  # SE_FILE_OBJECT
-        owner_info | dacl_info,
-        ctypes.byref(owner),
-        None,
-        ctypes.byref(dacl),
-        None,
-        ctypes.byref(descriptor),
-    )
+    if handle is None:
+        status = advapi.GetNamedSecurityInfoW(
+            wintypes.LPCWSTR(str(target)),
+            1,  # SE_FILE_OBJECT
+            owner_info | dacl_info,
+            ctypes.byref(owner),
+            None,
+            ctypes.byref(dacl),
+            None,
+            ctypes.byref(descriptor),
+        )
+    else:
+        status = advapi.GetSecurityInfo(
+            wintypes.HANDLE(handle),
+            1,  # SE_FILE_OBJECT
+            owner_info | dacl_info,
+            ctypes.byref(owner),
+            None,
+            ctypes.byref(dacl),
+            None,
+            ctypes.byref(descriptor),
+        )
     if status != 0:
         raise AnchorError(
             "approver_anchor_unreadable", f"Can't read the security of {target} ({status})."

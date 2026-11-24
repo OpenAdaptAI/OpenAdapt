@@ -1,0 +1,112 @@
+# Dolibarr (ERP and accounting, GPL-3.0): add a contact.
+#
+# The app runs from the project's own published image (by tag; the database
+# image by digest), pulled when the stack starts. Nothing from Dolibarr is copied into this package; the
+# SQL below is ours and only reads and writes the contact table.
+schema: openadapt.agent-test.app/v1
+name: dolibarr
+title: Dolibarr ERP
+licence: GPL-3.0 (image pulled by reference, not redistributed)
+description: Dolibarr, the company's ERP and accounting system
+record_noun: contact
+
+stack:
+  # {project}, {app_port}, {proxy_port} and {bind} are filled in by `openadapt test up`.
+  services:
+    db:
+      image: docker.io/library/mariadb@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4
+      container_name: "{project}-db"
+      healthcheck:
+        test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+        interval: 5s
+        retries: 60
+      environment:
+        MARIADB_ROOT_PASSWORD: synthetic-db-pass
+        MARIADB_DATABASE: dolibarr
+    app:
+      image: docker.io/dolibarr/dolibarr:20.0.2
+      container_name: "{project}-app"
+      depends_on:
+        db: {condition: service_healthy}
+      ports: ["{bind}:{app_port}:80"]
+      environment:
+        DOLI_DB_HOST: db
+        DOLI_DB_NAME: dolibarr
+        DOLI_DB_USER: root
+        DOLI_DB_PASSWORD: synthetic-db-pass
+        DOLI_ADMIN_LOGIN: admin
+        DOLI_ADMIN_PASSWORD: synthetic-admin-pass
+        DOLI_INSTALL_AUTO: "1"
+        DOLI_INIT_DEMO: "0"
+        # Dolibarr builds absolute links from this, so it is the front door's URL.
+        DOLI_URL_ROOT: "http://127.0.0.1:{proxy_port}"
+        DOLI_COMPANY_NAME: Synthetic Supplies
+        DOLI_ENABLE_MODULES: Societe
+  ready_path: /index.php
+  ready_timeout_s: 900
+
+login:
+  # Run by the harness in every scenario's fresh browser context. The agent
+  # starts signed in and never sees these synthetic values.
+  - {goto: /index.php}
+  - {fill: "#username", value: admin}
+  - {fill: "#password", value: synthetic-admin-pass}
+  - {click: "input[type=submit]"}
+  - {wait: load}
+  - {absent: "#username", error: the harness could not sign in to Dolibarr}
+signed_out_selector: "#username"
+start_path: /index.php
+
+save:
+  method: POST
+  path_regex: '^/contact/card\.php$'
+  body_require: '(^|&)action=add(&|$)'
+  ok_status: [302]
+
+store:
+  kind: mariadb
+  service: db
+  database: dolibarr
+  user: root
+  password: synthetic-db-pass
+  table: llx_socpeople
+  key: rowid
+  # Task field -> column, judging rule, and the save request's form field.
+  fields:
+    lastname: {column: lastname, kind: text, form: lastname}
+    firstname: {column: firstname, kind: text, form: firstname}
+    poste: {column: poste, kind: text, form: poste}
+    email: {column: email, kind: email, form: email}
+    phone: {column: phone, kind: phone, form: phone_pro}
+  identity: [lastname, firstname]
+  insert_sql: >-
+    INSERT INTO llx_socpeople (entity, datec, lastname, firstname, poste, email, phone, statut, priv, fk_user_creat)
+    VALUES (1, NOW(), {lastname}, {firstname}, {poste}, {email}, {phone}, 1, 0, 1)
+
+task: >-
+  Add a new contact (not linked to any third party): {firstname} {lastname},
+  job position {poste}, professional phone {phone}, email {email}. Fill in
+  exactly these values (first name, last name, job position, professional
+  phone, email) and leave every other field as it is.
+
+# The model-free reference agents. `scripted` fills the form and believes the
+# page; `scripted-readback` then reads the contact list back before answering.
+scripted:
+  - {goto: "/contact/card.php?action=create"}
+  - {fill: "#lastname", value: "{lastname}"}
+  - {fill: "#firstname", value: "{firstname}"}
+  - {fill: "#title", value: "{poste}"}
+  - {fill: "#phone_pro", value: "{phone}"}
+  - {fill: "#email", value: "{email}"}
+  - {click: "input[name=add]"}
+  - {wait: load}
+readback:
+  steps:
+    - {goto: "/contact/list.php?search_lastname={lastname}&search_firstname={firstname}"}
+    - {wait: load}
+    # Exactly one contact with this name.
+    - {expect_regex: 'List\((\d+)\)', equals: 1}
+    - {click: 'table.liste a[href*="contact/card.php?id="]'}
+    - {wait: load}
+    - {expect_text: ["{email}", "{poste}"]}
+    - {expect_digits: ["{phone}"]}

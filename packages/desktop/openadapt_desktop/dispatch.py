@@ -45,6 +45,7 @@ from urllib.parse import urlsplit
 from loguru import logger
 
 from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.macos_permissions import control_permission_guidance
 from openadapt_desktop.private_fs import ensure_private_dir
 
 EmitFn = Callable[[str, dict], None]
@@ -81,7 +82,7 @@ _APPROVER_KEY_SETUP_CODES = frozenset(
 #: Stop cards a paired phone may answer through Desktop. A waiting save is
 #: answered through the portal's own save approval; turning "only ask about
 #: problems" back on is answered on the computer.
-PHONE_ANSWERABLE_KINDS = frozenset({"same_record", "confirm_save", "halted"})
+PHONE_ANSWERABLE_KINDS = frozenset({"same_record", "confirm_save", "halted", "exception"})
 _TEACH_CORRECTION_SCHEMA = "openadapt.desktop-teach-correction/v1"
 _TEACH_CORRECTION_META_KEY = "teach_correction"
 
@@ -2749,13 +2750,13 @@ class EngineDispatcher:
         """Inspect Flow's canonical graph, coverage, and certification contract."""
 
         from openadapt_desktop.qualification import (
-            DEFAULT_QUALIFICATION_POLICY,
             first_replay_review_is_draft,
             inspect_bundle,
         )
 
         workflow_id = str(params.get("workflow_id") or "")
-        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        raw_policy = params.get("policy")
+        policy = str(raw_policy).strip() or None if raw_policy is not None else None
         try:
             bundle = self._qualification_bundle_dir(workflow_id)
             result = inspect_bundle(
@@ -3694,13 +3695,13 @@ class EngineDispatcher:
         """Persist a pass/fail policy attempt into the resealed local bundle."""
 
         from openadapt_desktop.qualification import (
-            DEFAULT_QUALIFICATION_POLICY,
             certify_bundle,
             first_replay_review_is_draft,
         )
 
         workflow_id = str(params.get("workflow_id") or "")
-        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        raw_policy = params.get("policy")
+        policy = str(raw_policy).strip() or None if raw_policy is not None else None
         try:
             bundle = self._qualification_bundle_dir(workflow_id)
             bundle_key = self._qualification_bundle_key(workflow_id)
@@ -4490,7 +4491,7 @@ class EngineDispatcher:
     def _stop_cards(self) -> list[dict]:
         """Every card the queue shows now, rebuilt from the stores."""
 
-        from openadapt_desktop import stop_queue
+        from openadapt_desktop import exception_queue, stop_queue
         from openadapt_desktop.work_items import OPEN, TEACHING, public_item
 
         names = {
@@ -4519,7 +4520,7 @@ class EngineDispatcher:
             card = stop_queue.card_for_rearm(switch)
             if card is not None:
                 cards.append(card)
-        return stop_queue.sort_cards(cards)
+        return stop_queue.sort_cards(cards + exception_queue.stop_cards())
 
     def _rearm_offer(self, workflow_id: str) -> dict | None:
         """Flow's re-arm offer for a task's switch, with the clean items named."""
@@ -4819,7 +4820,7 @@ class EngineDispatcher:
     ) -> dict:
         from datetime import datetime, timezone
 
-        from openadapt_desktop import stop_queue
+        from openadapt_desktop import exception_queue, stop_queue
         from openadapt_desktop.approver_keychain import ApproverKeychainError
 
         params = {"shown_ms": shown_ms}
@@ -4841,6 +4842,8 @@ class EngineDispatcher:
             }
         if choice_id == "leave":
             return {"ok": True, "results": [], "changed": 0}
+        if any(card["kind"] == stop_queue.EXCEPTION_KIND for card in cards):
+            return exception_queue.answer_stop_cards(self, cards, choice_id, sign, device)
         if any(card["kind"] == "rearm_problems_only" for card in cards):
             if len(cards) != 1 or device is not None:
                 return {
@@ -6227,7 +6230,7 @@ class EngineDispatcher:
     def check_permissions(self, **params: Any) -> dict:
         """Return the prompt-free :class:`PermissionStatus`.
 
-        macOS capture needs Screen Recording, Accessibility, and Input
+        macOS capture needs Screen Recording, app-control trust, and Input
         Monitoring. This check never requests access. Input Monitoring fails
         closed if its preflight API is unavailable; non-mac platforms do not
         use these macOS permissions and report all three as granted.
@@ -6238,13 +6241,11 @@ class EngineDispatcher:
                 "accessibility": True,
                 "input_monitoring": True,
             }
-        screen = _mac_preflight_screen()
-        access = _mac_preflight_accessibility()
-        input_monitoring = _mac_preflight_input_monitoring()
         return {
-            "screen_recording": screen,
-            "accessibility": access,
-            "input_monitoring": input_monitoring,
+            "screen_recording": _mac_preflight_screen(),
+            "accessibility": _mac_preflight_accessibility(),
+            "input_monitoring": _mac_preflight_input_monitoring(),
+            "control_permission": control_permission_guidance(),
         }
 
     def request_input_monitoring(self, **params: Any) -> dict:
@@ -6482,22 +6483,22 @@ def _toml_value(value: Any) -> str:
     return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def _mac_preflight_screen() -> bool:  # pragma: no cover - platform-specific
+def _mac_preflight_screen() -> bool | None:  # pragma: no cover - platform-specific
     try:
         from Quartz import CGPreflightScreenCaptureAccess
 
         return bool(CGPreflightScreenCaptureAccess())
     except Exception:
-        return True
+        return None
 
 
-def _mac_preflight_accessibility() -> bool:  # pragma: no cover - platform-specific
+def _mac_preflight_accessibility() -> bool | None:  # pragma: no cover - platform-specific
     try:
         from ApplicationServices import AXIsProcessTrusted
 
         return bool(AXIsProcessTrusted())
     except Exception:
-        return True
+        return None
 
 
 def _mac_preflight_input_monitoring() -> bool:  # pragma: no cover - platform-specific

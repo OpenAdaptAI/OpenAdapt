@@ -274,6 +274,12 @@ and no browser handle. A broker for databases, HTTP APIs and MCP servers
 doesn't exist yet. Until it does, `--strict` refuses instead of installing
 advisory hooks under a strict name.
 
+For SQL databases, that broker is `openadapt proxy --postgres URL -- claude`
+(or `--sqlite`). It holds the credentials, takes them out of the agent's
+environment and gives the agent only preview, apply and undo tools
+([TRANSACTIONS.md](TRANSACTIONS.md)). Wiring `--strict` to it is the next
+step. Until then, `--strict` stays refused.
+
 ## Limits
 
 - Hooks are advisory (see the top of this page).

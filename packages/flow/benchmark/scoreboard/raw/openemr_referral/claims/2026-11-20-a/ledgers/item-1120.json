@@ -1,0 +1,668 @@
+{
+  "model": "claude-sonnet-5-5",
+  "effort": "medium",
+  "tool": "computer_toolset_20260801",
+  "price_per_mtok_usd": {
+    "input": 2.0,
+    "output": 10.0,
+    "cache_read": 0.2,
+    "cache_write": 2.5
+  },
+  "started_at": 1795221699.673721,
+  "finished_at": 1795221780.551042,
+  "model_calls": 14,
+  "actions": 64,
+  "cost_usd": 0.123412,
+  "final_text": "I created and saved the patient Edwina ScoreboardC1120. OpenEMR found no matching patients first, so no duplicate was created. I didn't re-open the saved record to check the email, because the field only showed part of the address while I was typing it.\n\nI also set Birth Sex to Female, since the form marks it as required.",
+  "refused_actions": [
+    {
+      "turn": 10,
+      "name": "triple_click",
+      "reason": "anthropic action 'triple_click' is not supported: a triple-click has no step in the recording format"
+    }
+  ],
+  "calls": [
+    {
+      "turn": 1,
+      "started_s": 1795221699.673728,
+      "ended_s": 1795221701.717559,
+      "input_tokens": 4,
+      "output_tokens": 79,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 5222,
+      "cost_usd": 0.013853,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              434,
+              283
+            ]
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011ChF9K6g7GHbQbgeXS2VL7",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 2,
+      "started_s": 1795221702.458472,
+      "ended_s": 1795221705.2334669,
+      "input_tokens": 2,
+      "output_tokens": 355,
+      "cache_read_input_tokens": 5222,
+      "cache_creation_input_tokens": 1470,
+      "cost_usd": 0.0082734,
+      "actions": [
+        {
+          "name": "type",
+          "input": {
+            "text": "Ms."
+          }
+        },
+        {
+          "name": "key",
+          "input": {
+            "text": "Return"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              444,
+              318
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "Edwina"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              670,
+              318
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "ScoreboardC1120"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              426,
+              431
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "1990-05-14"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              972,
+              431
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "Female"
+          }
+        },
+        {
+          "name": "key",
+          "input": {
+            "text": "Return"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              1038,
+              466
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "Female"
+          }
+        },
+        {
+          "name": "key",
+          "input": {
+            "text": "Return"
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011ChF9KJEdz7rGRKVqDydqy",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 3,
+      "started_s": 1795221710.824901,
+      "ended_s": 1795221712.9298801,
+      "input_tokens": 2,
+      "output_tokens": 145,
+      "cache_read_input_tokens": 6692,
+      "cache_creation_input_tokens": 1892,
+      "cost_usd": 0.007522399999999999,
+      "actions": [
+        {
+          "name": "scroll",
+          "input": {
+            "coordinate": [
+              640,
+              540
+            ],
+            "scroll_direction": "down",
+            "scroll_amount": 10
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011ChF9KvHoWdtBAnNPNSJWC",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 4,
+      "started_s": 1795221713.670284,
+      "ended_s": 1795221715.644083,
+      "input_tokens": 2,
+      "output_tokens": 82,
+      "cache_read_input_tokens": 8584,
+      "cache_creation_input_tokens": 1531,
+      "cost_usd": 0.0063683,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              132,
+              506
+            ]
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011ChF9L8EePFUmv7XCZEbcA",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 5,
+      "started_s": 1795221716.374836,
+      "ended_s": 1795221720.3124669,
+      "input_tokens": 2,
+      "output_tokens": 407,
+      "cache_read_input_tokens": 10115,
+      "cache_creation_input_tokens": 1468,
+      "cost_usd": 0.009767,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              479,
+              562
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "1130 SYNTHETIC WAY"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              444,
+              597
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "EXAMPLETON"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              419,
+              636
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "02139"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              1016,
+              597
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "Massachusetts"
+          }
+        },
+        {
+          "name": "key",
+          "input": {
+            "text": "Return"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              1016,
+              636
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "USA"
+          }
+        },
+        {
+          "name": "key",
+          "input": {
+            "text": "Return"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              461,
+              748
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "555-0120"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              1035,
+              783
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "edwina.scoreboard.1120@example.invalid"
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011ChF9LKuNV9Gst8jHtqpk5",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 6,
+      "started_s": 1795221727.0916202,
+      "ended_s": 1795221729.286408,
+      "input_tokens": 2,
+      "output_tokens": 135,
+      "cache_read_input_tokens": 11583,
+      "cache_creation_input_tokens": 1970,
+      "cost_usd": 0.0085956,
+      "actions": [
+        {
+          "name": "scroll",
+          "input": {
+            "coordinate": [
+              1035,
+              783
+            ],
+            "scroll_direction": "down",
+            "scroll_amount": 30
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011ChF9M82XX7eAogLaYSdfX",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 7,
+      "started_s": 1795221730.077247,
+      "ended_s": 1795221732.418854,
+      "input_tokens": 2,
+      "output_tokens": 165,
+      "cache_read_input_tokens": 13553,
+      "cache_creation_input_tokens": 1513,
+      "cost_usd": 0.008147100000000001,
+      "actions": [
+        {
+          "name": "scroll",
+          "input": {
+            "coordinate": [
+              700,
+              650
+            ],
+            "scroll_direction": "down",
+            "scroll_amount": 30
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011ChF9MLVd9HgK5Gb2TNrmu",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 8,
+      "started_s": 1795221733.170062,
+      "ended_s": 1795221735.732316,
+      "input_tokens": 2,
+      "output_tokens": 161,
+      "cache_read_input_tokens": 15066,
+      "cache_creation_input_tokens": 1551,
+      "cost_usd": 0.0085047,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              1035,
+              383
+            ]
+          }
+        },
+        {
+          "name": "key",
+          "input": {
+            "text": "Home"
+          }
+        },
+        {
+          "name": "zoom",
+          "input": {
+            "region": [
+              640,
+              360,
+              1180,
+              410
+            ]
+          }
+        }
+      ],
+      "request_id": "req_011ChF9MZeeB6pg7uQbEx7gE",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 9,
+      "started_s": 1795221736.8209898,
+      "ended_s": 1795221739.553717,
+      "input_tokens": 2,
+      "output_tokens": 127,
+      "cache_read_input_tokens": 16617,
+      "cache_creation_input_tokens": 1549,
+      "cost_usd": 0.008469899999999999,
+      "actions": [
+        {
+          "name": "scroll",
+          "input": {
+            "coordinate": [
+              700,
+              650
+            ],
+            "scroll_direction": "down",
+            "scroll_amount": 30
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011ChF9MqGF32nM41y792r5H",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 10,
+      "started_s": 1795221740.308032,
+      "ended_s": 1795221742.758622,
+      "input_tokens": 2,
+      "output_tokens": 194,
+      "cache_read_input_tokens": 18166,
+      "cache_creation_input_tokens": 1513,
+      "cost_usd": 0.0093597,
+      "actions": [
+        {
+          "name": "triple_click",
+          "input": {
+            "coordinate": [
+              1035,
+              383
+            ]
+          }
+        },
+        {
+          "name": "key",
+          "input": {
+            "text": "ctrl+a"
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "edwina.scoreboard.1120@example.invalid"
+          }
+        },
+        {
+          "name": "key",
+          "input": {
+            "text": "Home"
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011ChF9N6BgizP8ytpk2GC5a",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 11,
+      "started_s": 1795221742.759393,
+      "ended_s": 1795221745.4780622,
+      "input_tokens": 2,
+      "output_tokens": 151,
+      "cache_read_input_tokens": 19679,
+      "cache_creation_input_tokens": 252,
+      "cost_usd": 0.0060798,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              1035,
+              383
+            ]
+          }
+        },
+        {
+          "name": "key",
+          "input": {
+            "text": "ctrl+a"
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "edwina.scoreboard.1120@example.invalid"
+          }
+        },
+        {
+          "name": "key",
+          "input": {
+            "text": "Home"
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011ChF9NGkBBHf932Kxve5Qk",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 12,
+      "started_s": 1795221747.37148,
+      "ended_s": 1795221750.120748,
+      "input_tokens": 2,
+      "output_tokens": 188,
+      "cache_read_input_tokens": 19931,
+      "cache_creation_input_tokens": 1570,
+      "cost_usd": 0.0097952,
+      "actions": [
+        {
+          "name": "scroll",
+          "input": {
+            "coordinate": [
+              700,
+              650
+            ],
+            "scroll_direction": "down",
+            "scroll_amount": 30
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              284,
+              772
+            ]
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 2
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011ChF9NcVaareh2SDZaaa1U",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 13,
+      "started_s": 1795221762.65914,
+      "ended_s": 1795221764.886982,
+      "input_tokens": 2,
+      "output_tokens": 98,
+      "cache_read_input_tokens": 21501,
+      "cache_creation_input_tokens": 1599,
+      "cost_usd": 0.0092817,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              599,
+              280
+            ]
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 3
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011ChF9PkU4wdVcuaD7T2uF3",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 14,
+      "started_s": 1795221778.0420852,
+      "ended_s": 1795221780.550027,
+      "input_tokens": 2,
+      "output_tokens": 103,
+      "cache_read_input_tokens": 23100,
+      "cache_creation_input_tokens": 1496,
+      "cost_usd": 0.009394,
+      "actions": [],
+      "request_id": "req_011ChF9QsnPgqrGy92JrUPGk",
+      "stop_reason": "end_turn"
+    }
+  ]
+}

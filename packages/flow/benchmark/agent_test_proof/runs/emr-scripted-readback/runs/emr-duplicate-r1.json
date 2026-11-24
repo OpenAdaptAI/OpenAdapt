@@ -1,0 +1,126 @@
+{
+ "scenario": "emr-duplicate",
+ "rep": 1,
+ "fault": "duplicate",
+ "note": "The save is delivered twice.",
+ "task": {
+  "fname": "Aiko",
+  "lname": "Tanaka",
+  "DOB": "1965-12-01",
+  "sex": "Female",
+  "street": "40 Spruce Court",
+  "city": "Springfield",
+  "state": "MA",
+  "state_name": "Massachusetts",
+  "postal_code": "01109",
+  "phone_home": "413-555-0304",
+  "email": "a.tanaka@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php",
+ "agent_s": 15.2,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE read back http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php",
+  "claim_line": true,
+  "final_text": "RESULT: DONE read back http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php"
+ },
+ "model_calls": 0,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "2 new records"
+  ],
+  "new": [
+   "4",
+   "5"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": true,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795249028.794,
+   "method": "POST",
+   "path": "/interface/main/main_screen.php",
+   "save": false,
+   "status": 302,
+   "ms": 427
+  },
+  {
+   "t": 1795249030.122,
+   "method": "POST",
+   "path": "/library/ajax/dated_reminders_counter.php",
+   "save": false,
+   "status": 200,
+   "ms": 110
+  },
+  {
+   "t": 1795249030.89,
+   "method": "POST",
+   "path": "/interface/main/dated_reminders/dated_reminders.php",
+   "save": false,
+   "status": 200,
+   "ms": 94
+  },
+  {
+   "t": 1795249034.015,
+   "method": "POST",
+   "path": "/interface/new/new_comprehensive_save.php",
+   "save": true,
+   "fault": "duplicate",
+   "status": "200+200",
+   "accepted": true,
+   "second_accepted": true,
+   "ms": 697
+  },
+  {
+   "t": 1795249036.517,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/labdata_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 113
+  },
+  {
+   "t": 1795249036.548,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/vitals_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 111
+  },
+  {
+   "t": 1795249036.516,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/disc_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 144
+  },
+  {
+   "t": 1795249036.514,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/pnotes_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 200
+  },
+  {
+   "t": 1795249036.511,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/stats.php",
+   "save": false,
+   "status": 200,
+   "ms": 288
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": true,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

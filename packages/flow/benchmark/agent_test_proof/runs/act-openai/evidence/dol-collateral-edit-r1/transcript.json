@@ -1,0 +1,446 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0588a9ea5d8f9fda016b01554fb48487d18e3352131bc17159",
+     "call_id": "call_7u9GbIA507TwCTnCQvjtkwCO",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0588a9ea5d8f9fda016b015552809c87d18abfb77d504bb967",
+     "call_id": "call_s4WnRFB7VOCMKOQtowJgz4bw",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 111,
+       "y": 29
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0588a9ea5d8f9fda016b015554ed2887d1b7356f3c3a26e812",
+     "call_id": "call_S61xuopYqsp88eKDSpKFLE5J",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 98,
+       "y": 373
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0588a9ea5d8f9fda016b015559a2c487d1af3b8e15a1f37957",
+     "call_id": "call_iOPOHwpnytA70MH4msqF56rL",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Park",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 650,
+       "y": 198
+      },
+      {
+       "text": "Minseo",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 653,
+       "y": 295
+      },
+      {
+       "text": "Logistics planner",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 668,
+       "y": 478
+      },
+      {
+       "text": "555-0208",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 665,
+       "y": 545
+      },
+      {
+       "text": "m.park@example.invalid",
+       "type": "type"
+      },
+      {
+       "scroll_x": 0,
+       "scroll_y": 481,
+       "type": "scroll",
+       "x": 1177,
+       "y": 671
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0588a9ea5d8f9fda016b01555f84cc87d183a44a0adca8b003",
+     "call_id": "call_9fvjCPzax4QJFjsydnD9fQLs",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 719,
+       "y": 759
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0588a9ea5d8f9fda016b015568c80c87d18656555d9cb25dd4",
+     "call_id": "call_KdQ2jZKRZB21ZgBW93qZyegg",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0588a9ea5d8f9fda016b01556b5af887d1a6609400744dad20",
+     "call_id": "call_ZmnP2Xdt7EG9xmmgUQ3EzYBJ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 409,
+       "y": 100
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0588a9ea5d8f9fda016b01556f21a887d185e9c56a4aa67de8",
+     "call_id": "call_6GPP9iwV1wwFDwz1vHMePkOi",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "F11"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0588a9ea5d8f9fda016b015573c53087d1b917bb0c8ef694d4",
+     "call_id": "call_jeTlerYo0THU91PAQoeJh6nz",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 485,
+       "y": 159
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0588a9ea5d8f9fda016b015578c58087d1a74cec7b4c56a02c",
+     "call_id": "call_5bhkfrmKLQVmNXFcXEPkH2uB",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0588a9ea5d8f9fda016b01557d02c087d1951ff73656d63fdc",
+     "call_id": "call_E78I4KWSJRZ0OaHEZtH5GEMw",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1123,
+       "y": 155
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0588a9ea5d8f9fda016b0155828a8487d1a911ee5031b2b2a7",
+     "call_id": "call_u6jDFnUrgipgKb8lhG7NoaZM",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 455,
+       "y": 394
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0588a9ea5d8f9fda016b01558802f087d1bc5a974677cee6d7",
+     "call_id": "call_RehYgao5UyOg9mECAQuRgP27",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 450,
+       "y": 393
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE Minseo Park",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 111,
+   "y": 29,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 98,
+   "y": 373,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 4
+  },
+  {
+   "a": "click",
+   "x": 650,
+   "y": 198,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 6
+  },
+  {
+   "a": "click",
+   "x": 653,
+   "y": 295,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 17
+  },
+  {
+   "a": "click",
+   "x": 668,
+   "y": 478,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 8
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 545,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 22
+  },
+  {
+   "a": "scroll",
+   "x": 1177,
+   "y": 671,
+   "dx": 0,
+   "dy": 481
+  },
+  {
+   "a": "click",
+   "x": 719,
+   "y": 759,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "L"
+   ]
+  },
+  {
+   "a": "move",
+   "x": 409,
+   "y": 100
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F11"
+   ]
+  },
+  {
+   "a": "move",
+   "x": 485,
+   "y": 159
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "L"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 1123,
+   "y": 155,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 455,
+   "y": 394
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 450,
+   "y": 393,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  }
+ ]
+}

@@ -1,7 +1,7 @@
 {
   "manifest_kind": "openadapt-platform-release-manifest",
   "schema_version": "2.0.0",
-  "generated_at": "2026-11-19T21:28:04+00:00",
+  "generated_at": "2026-11-22T12:49:07+00:00",
   "generation": {
     "files": [
       {
@@ -1159,7 +1159,7 @@
     }
   },
   "compatibility": {
-    "python": ">=3.10",
+    "python": ">=3.11",
     "launcher_requires": {
       "openadapt-agent": [
         ">=2.1.0,<3"
@@ -1171,7 +1171,7 @@
         ">=0.1.0"
       ],
       "openadapt-flow": [
-        ">=3.3.0,<4.0.0"
+        ">=3.3.0,<5.0.0"
       ],
       "openadapt-grounding": [
         ">=0.1.0"

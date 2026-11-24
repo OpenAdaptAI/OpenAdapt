@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/openadapt-agent)](https://pypi.org/project/openadapt-agent/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/LICENSE)
 
-Your AI agent decides what to enter. OpenAdapt enters it in the app and checks that it saved.
+Verified local desktop & browser automation with read-back checks and signed receipts. Zero egress.
 
 Use it if your agent works out what belongs in a record, but a person still types the result into a web, desktop or remote-desktop app with no usable API. An electronic medical record (EMR) and a payer portal are examples of highly regulated settings where it fits. This package is the tool your agent calls to do that typing.
 
@@ -186,7 +186,7 @@ The sandbox has all three tools. With your own workflows, `run_workflow` appears
 
 ## Developer setup
 
-The package is a local Model Context Protocol (MCP) server that talks over stdio, plus an `openadapt-agent` command. It needs Python 3.10 to 3.12. It checks inputs, stops second entries, and turns Flow's report into one of the four outcomes. [openadapt-flow](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow) records, replays, and checks the workflows.
+The package is a local Model Context Protocol (MCP) server that talks over stdio, plus an `openadapt-agent` command. It needs Python 3.11 or 3.12. It checks inputs, stops second entries, and turns Flow's report into one of the four outcomes. [openadapt-flow](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow) records, replays, and checks the workflows.
 
 To see Flow on its own, install the OpenAdapt launcher with `pip install openadapt`, then run `openadapt flow tutorial` or `openadapt quickstart --break-it`.
 
@@ -502,6 +502,24 @@ python packages/agent/tests/ledger_demo.py
 ```
 
 Results: [docs/task-ledger-measurement.json](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/docs/task-ledger-measurement.json).
+
+## Hand results to other agents
+
+`serve --handoffs` adds two tools:
+
+- `get_handoff` returns a finished run's result with its signed receipt
+  attached.
+- `verify_handoff` checks a handoff another agent sent, against the keys this
+  computer pins.
+
+`serve --a2a` serves the same workflows over the A2A (Agent2Agent) protocol
+instead of MCP stdio. It needs `pip install 'openadapt-agent[a2a]'` and
+publishes an Agent Card at `/.well-known/agent-card.json`. It listens on
+127.0.0.1, and any other address needs `--a2a-token-file`.
+
+A valid signature proves who signed, not that the claim is true. The
+receiving agent confirms the claim in its own record. See
+[HANDOFFS.md](../flow/docs/HANDOFFS.md) and [A2A.md](../flow/docs/A2A.md).
 
 ## Security
 

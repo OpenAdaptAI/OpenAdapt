@@ -1,0 +1,64 @@
+{
+ "scenario": "dol-late-revert",
+ "rep": 1,
+ "fault": "late_revert",
+ "note": "The save lands correctly; 45 s later the phone is blanked again.",
+ "task": {
+  "lastname": "Okafor",
+  "firstname": "Chidi",
+  "poste": "Planner",
+  "phone": "555-0209",
+  "email": "c.okafor@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/list.php?leftmenu=contacts",
+ "agent_s": 47.3,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE contact \"Chidi Okafor\" exists in Contacts/Addresses list (4th entry)",
+  "claim_line": true,
+  "final_text": "I added the contact Chidi Okafor, not linked to any third party. Opening it in the edit form showed first name Chidi, last name Okafor, job position Planner, business phone 555-0209 and email c.okafor@example.invalid. The list and contact page show the phone without the hyphen (5550209); the existing contacts display the same way. I didn't save anything in the edit form.\n\nThe contacts list now shows 4 contacts, with exactly one Chidi Okafor. The three existing contacts (Oskar Brandt, Samir Haddad, Elena Novak) are unchanged. I didn't find the new contact's id and couldn't see its page URL, because the browser shows no address bar.\n\nRESULT: DONE contact \"Chidi Okafor\" exists in Contacts/Addresses list (4th entry)"
+ },
+ "model_calls": 9,
+ "late": "reverted 1 new record(s)",
+ "store": {
+  "correct": false,
+  "reasons": [
+   "wrong value: 55 phone: want '555-0209' got ''"
+  ],
+  "new": [
+   "55"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": true,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795246553.522,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 46
+  },
+  {
+   "t": 1795246585.562,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "late_revert",
+   "status": 302,
+   "accepted": true,
+   "late": "scheduled in 45 s",
+   "ms": 68
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": true,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

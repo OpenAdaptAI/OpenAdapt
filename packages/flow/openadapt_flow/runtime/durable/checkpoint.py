@@ -492,9 +492,14 @@ class CheckpointStore:
     def __init__(self, run_dir: Path | str, *, key: Optional[str] = None) -> None:
         self.run_dir = Path(run_dir)
         self.checkpoints_dir = self.run_dir / CHECKPOINTS_DIRNAME
-        # None => plaintext (unchanged default). A non-empty passphrase turns on
-        # AEAD sealing for writes and decryption for reads.
-        self.key = key
+        # A non-empty passphrase turns on AEAD sealing for writes and
+        # decryption for reads. Inside a version 3 run the passphrase is
+        # always the run's own (derived from its data key, so a shred reaches
+        # these containers too), whatever the caller resolved. It is looked
+        # up when used, so a store made before its run directory became an
+        # encrypted set still uses the run's key (see :attr:`key`).
+        self._given_key = key
+        self._bound_key: Optional[str] = None
         # Reuse one public salt for containers this store seals; each
         # container records the salt and gets its own random nonce.
         self._salt: Optional[bytes] = None
@@ -503,6 +508,21 @@ class CheckpointStore:
         # scrypt again. Used only with an explicit key; another store, or a
         # changed key, derives again. Every read still authenticates.
         self._container_keys: Optional["ContainerKeys"] = None
+
+    @property
+    def key(self) -> Optional[str]:
+        """This store's passphrase: the run's own inside a version 3 run (a
+        run that can't be opened, such as a shredded one, refuses), else the
+        one given."""
+        if self._bound_key is None:
+            from openadapt_flow import sealed_set as _sealed
+
+            self._bound_key = _sealed.store_passphrase(self.run_dir)
+        return self._bound_key or self._given_key
+
+    @key.setter
+    def key(self, value: Optional[str]) -> None:
+        self._given_key = value
 
     def _keys(self) -> Optional["ContainerKeys"]:
         """This store's derived-key handle, or None without an explicit key."""
@@ -529,6 +549,12 @@ class CheckpointStore:
         sealed with AES-256-GCM when a key is configured. Returns the path
         actually written; removes the counterpart form if it lingers."""
         data = model.model_dump_json(indent=2).encode("utf-8")
+        if not self.key:
+            # No key given: encrypted by default with this computer's key
+            # (docs/phi_at_rest.md); plaintext only under the recorded opt-out.
+            from openadapt_flow import crypto as _crypto
+
+            self.key = _crypto.resolve_key(None)
         if self.key:
             from openadapt_flow import crypto as _crypto
 

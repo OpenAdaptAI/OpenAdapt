@@ -42,6 +42,49 @@ _READ_SCREEN = """
 }
 """
 
+#: What the page's form controls hold, as ``[key, value]`` pairs in document
+#: order (``key`` is the tag, the id or name, and the position among controls
+#: with that id or name). ``innerText`` leaves out the value of an ``<input>``,
+#: ``<select>`` or ``<textarea>``, so a form that opens already filled in
+#: would look empty. Password, hidden and file inputs are left out. Read by
+#: the readiness contamination check only; the identity check reads
+#: :data:`_READ_SCREEN`.
+_READ_FORM_VALUES = """
+() => {
+  const out = [];
+  const seen = {};
+  const skip = new Set(['password', 'hidden', 'file', 'submit', 'button', 'reset', 'image']);
+  for (const el of document.querySelectorAll('input, select, textarea, [contenteditable]')) {
+    if (el.closest('#' + %(notice)s)) { continue; }
+    const tag = el.tagName.toLowerCase();
+    const base = tag + ':' + (el.id || el.getAttribute('name') || '');
+    seen[base] = (seen[base] || 0) + 1;
+    const key = base + ':' + seen[base];
+    let value = null;
+    if (tag === 'input') {
+      const type = (el.getAttribute('type') || 'text').toLowerCase();
+      if (skip.has(type)) { continue; }
+      if (type === 'checkbox' || type === 'radio') {
+        value = el.checked ? el.value : '';
+      } else {
+        value = el.value || '';
+      }
+    } else if (tag === 'select') {
+      const opts = Array.from(el.selectedOptions || []);
+      value = opts.map(o => (o.text && o.text !== o.value) ? o.value + ' ' + o.text : o.value).join(String.fromCharCode(10));
+    } else if (tag === 'textarea') {
+      value = el.value || '';
+    } else if (el.isContentEditable) {
+      value = el.innerText || '';
+    } else {
+      continue;
+    }
+    out.push([key, value]);
+  }
+  return out;
+}
+"""
+
 _NOTIFY = """
 (message, level) => {
   let box = document.getElementById(%(notice)s);
@@ -119,7 +162,9 @@ class CdpGuardPage:
         requests it decided."""
 
         decided = 0
-        while self._paused:
+        # Only what was queued on entry: a page that sends faster than the
+        # guard decides must not keep the caller's loop here forever.
+        for _ in range(len(self._paused)):
             held = HeldRequest.from_cdp(self._paused.pop(0))
             self._open[held.request_id] = held
             try:
@@ -225,6 +270,52 @@ class CdpGuardPage:
             return None
         value = (out.get("result") or {}).get("value")
         return value if isinstance(value, str) else None
+
+    def form_values(self) -> Optional[list[tuple[str, str]]]:
+        """The form controls' values (see :data:`_READ_FORM_VALUES`), or None
+        when the page can't be read."""
+
+        try:
+            out = self.cdp.send(
+                "Runtime.callFunctionOn",
+                {
+                    "functionDeclaration": _call(_READ_FORM_VALUES),
+                    "executionContextId": self._context_id(),
+                    "returnByValue": True,
+                },
+            )
+        except Exception:  # noqa: BLE001 - unreadable: the check says so
+            return None
+        value = (out.get("result") or {}).get("value")
+        if not isinstance(value, list):
+            return None
+        return [
+            (str(item[0]), str(item[1]))
+            for item in value
+            if isinstance(item, list) and len(item) == 2
+        ]
+
+    def form_controls(self) -> Optional[list[dict[str, Any]]]:
+        """The form controls' values and labels at this moment
+        (:data:`~.screen_values.READ_CONTROLS_JS`), or None when unreadable."""
+
+        from openadapt_flow.agent_guard.screen_values import (
+            READ_CONTROLS_JS,
+            controls_from,
+        )
+
+        try:
+            out = self.cdp.send(
+                "Runtime.callFunctionOn",
+                {
+                    "functionDeclaration": _call(READ_CONTROLS_JS),
+                    "executionContextId": self._context_id(),
+                    "returnByValue": True,
+                },
+            )
+        except Exception:  # noqa: BLE001 - unreadable: the card says so
+            return None
+        return controls_from((out.get("result") or {}).get("value"))
 
     def screenshot(self) -> Optional[bytes]:
         try:

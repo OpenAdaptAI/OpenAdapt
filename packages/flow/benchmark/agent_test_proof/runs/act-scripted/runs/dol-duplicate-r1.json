@@ -1,0 +1,64 @@
+{
+ "scenario": "dol-duplicate",
+ "rep": 1,
+ "fault": "duplicate",
+ "note": "The save is delivered twice.",
+ "task": {
+  "lastname": "Ferrand",
+  "firstname": "Lucie",
+  "poste": "Receptionist",
+  "phone": "555-0205",
+  "email": "l.ferrand@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/card.php?id=36",
+ "agent_s": 3.1,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE http://127.0.0.1:9681/contact/card.php?id=36",
+  "claim_line": true,
+  "final_text": "RESULT: DONE http://127.0.0.1:9681/contact/card.php?id=36"
+ },
+ "model_calls": 0,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "2 new records"
+  ],
+  "new": [
+   "36",
+   "37"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": true,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795245635.152,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 48
+  },
+  {
+   "t": 1795245637.31,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "duplicate",
+   "status": "302+302",
+   "accepted": true,
+   "second_accepted": true,
+   "ms": 180
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": true,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

@@ -5,7 +5,7 @@ loads: the contract, its required and forbidden effects, the oracle recipe,
 and (when certified) a self-signed certificate with the calibration counts
 beside it. :func:`write_bundle` writes one from the effects and oracle a
 caller passes; tests, the benchmark harnesses and the ``serve-reward`` demo
-seed (:mod:`openadapt_flow.reward.seed`) all build their bundles with it.
+seed (the demo reward seed) all build their bundles with it.
 
 Nothing here is a production recipe. A production-scope certificate is
 calibrated on a held-out corpus by the OpenAdapt control service.
@@ -42,11 +42,11 @@ from openadapt_flow.reward.models import (
 )
 from openadapt_flow.runtime.effects.effect import Effect
 
-#: The task and environment a synthetic bundle's contract names. The values
-#: are the ones the ``serve-reward`` demo seed has always used, so a bundle's
-#: digests do not change with the module it was written from.
-SYNTHETIC_TASK_ID = "task_mockmed_encounter_note"
-SYNTHETIC_ENVIRONMENT_ID = "environment_mockmed_synthetic"
+#: Default task and environment IDs for a synthetic reward bundle when the
+#: caller does not supply its own.
+SYNTHETIC_TASK_ID = "task_synthetic_record_write"
+SYNTHETIC_ENVIRONMENT_ID = "environment_synthetic"
+DEFAULT_CERTIFICATE_ID = "reward_certificate_synthetic"
 CERTIFICATE_EXPIRY_UPDATES = 1000
 CALIBRATION_FILE = "calibration.json"
 #: Trials run before the synthetic certificate is signed. 300 trials with
@@ -55,11 +55,12 @@ CALIBRATION_TRIALS = 300
 CALIBRATION_SEED = 20260901
 CALIBRATION_CONFIDENCE = 0.95
 
-#: Effects a bundle requires and forbids when the caller passes none.
+#: Domain-neutral effects a synthetic bundle requires and forbids when the
+#: caller does not supply its own.
 DEFAULT_REQUIRED_EFFECTS: list[dict[str, Any]] = [
     {
         "kind": "record_written",
-        "match": {"patient_id": {"param": "patient_id"}, "type": "Triage"},
+        "match": {"record_id": {"param": "record_id"}, "status": "committed"},
         "expected_count": 1,
         # The claim is about what this episode added, not about what the
         # store happens to hold. Without it a rollout that did nothing
@@ -71,10 +72,12 @@ DEFAULT_REQUIRED_EFFECTS: list[dict[str, Any]] = [
 DEFAULT_FORBIDDEN_EFFECTS: list[dict[str, Any]] = [
     {
         "kind": "record_written",
-        "match": {"patient_id": {"param": "patient_id"}, "type": "Discharge"},
+        "match": {"record_id": {"param": "record_id"}, "status": "voided"},
         "expected_count": 1,
     }
 ]
+
+DEFAULT_IDENTITY_KEYS: list[str] = ["record_id"]
 
 
 def write_bundle(
@@ -89,6 +92,9 @@ def write_bundle(
     required_effects: list[dict[str, Any]] | None = None,
     forbidden_effects: list[dict[str, Any]] | None = None,
     identity_keys: list[str] | None = None,
+    task_id: str = SYNTHETIC_TASK_ID,
+    environment_id: str = SYNTHETIC_ENVIRONMENT_ID,
+    certificate_id: str = DEFAULT_CERTIFICATE_ID,
 ) -> None:
     """Write one synthetic bundle. Tests pass their own effects and keys."""
 
@@ -96,11 +102,27 @@ def write_bundle(
     required = _canonical(
         DEFAULT_REQUIRED_EFFECTS if required_effects is None else required_effects
     )
-    forbidden = _canonical(
-        DEFAULT_FORBIDDEN_EFFECTS if forbidden_effects is None else forbidden_effects
-    )
+    if forbidden_effects is None:
+        forbidden = _canonical(
+            DEFAULT_FORBIDDEN_EFFECTS if required_effects is None else []
+        )
+    else:
+        forbidden = _canonical(forbidden_effects)
     oracle_doc = _canonical(oracle)
-    keys = ["patient_id"] if identity_keys is None else list(identity_keys)
+    if identity_keys is None:
+        if required_effects is not None:
+            derived_keys = sorted(
+                {
+                    param
+                    for item in (*required, *forbidden)
+                    for param in Effect.model_validate(item).referenced_params()
+                }
+            )
+            keys = derived_keys or list(DEFAULT_IDENTITY_KEYS)
+        else:
+            keys = list(DEFAULT_IDENTITY_KEYS)
+    else:
+        keys = list(identity_keys)
     # The corpus a certificate is calibrated on comes from the contract's own
     # effects, so its digest is computed here and not chosen.
     corpus_digest = corpus_digest_for(
@@ -112,12 +134,10 @@ def write_bundle(
         {
             "contract_id": contract_id,
             "contract_version": "version_0001",
-            "task_id": SYNTHETIC_TASK_ID,
-            "task_digest": _digest_payload({"task": SYNTHETIC_TASK_ID}),
-            "environment_id": SYNTHETIC_ENVIRONMENT_ID,
-            "environment_digest": _digest_payload(
-                {"environment": SYNTHETIC_ENVIRONMENT_ID}
-            ),
+            "task_id": task_id,
+            "task_digest": _digest_payload({"task": task_id}),
+            "environment_id": environment_id,
+            "environment_digest": _digest_payload({"environment": environment_id}),
             "required_effect_contract_digest": _digest_payload(required),
             "forbidden_effect_contract_digest": _digest_payload(forbidden),
             "oracle": {
@@ -128,7 +148,13 @@ def write_bundle(
             "components": [{"name": "terminal_effect", "weight": 1.0}],
             # The synthetic banner lie yields 0, not the default -1 penalty:
             # this fixture demonstrates "no reward", not a tuned penalty.
-            "scoring": {"wrong_effect_reward": 0.0},
+            # Asking a person after the right record landed earns half the
+            # verified reward. The contract declares it: an undeclared
+            # escalation earns nothing (openadapt-types 0.24.1).
+            "scoring": {
+                "wrong_effect_reward": 0.0,
+                "escalated_after_effect_reward": 0.5,
+            },
             "certificate_policy": {
                 "epsilon": 0.05,
                 "delta": 0.05,
@@ -152,6 +178,7 @@ def write_bundle(
             expiry_policy_updates=CERTIFICATE_EXPIRY_UPDATES,
             epsilon=calibration.epsilon,
             delta=confidence_delta(calibration.confidence),
+            certificate_id=certificate_id,
         )
         _write(directory / CERTIFICATE_FILE, certificate.model_dump(mode="json"))
         _write(directory / CALIBRATION_FILE, calibration.as_metadata())
@@ -207,7 +234,7 @@ def self_signed_certificate(
     expiry_policy_updates: int,
     epsilon: float,
     delta: float,
-    certificate_id: str = "reward_certificate_mockmed",
+    certificate_id: str = DEFAULT_CERTIFICATE_ID,
 ) -> RewardCertificateV1:
     """A certificate signed by the local key, synthetic scope.
 

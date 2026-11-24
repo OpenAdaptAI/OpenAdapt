@@ -2,6 +2,21 @@
 
 Releases up to v2.2.0 are recorded in the [openadapt-agent repository](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/CHANGELOG.md).
 
+## v2.2.4 (2026-11-24)
+
+- Accept `openadapt-flow` 4.x (`openadapt-flow[vision]>=2.2.0,<5` and
+  `tutorial` extra `openadapt-flow[browser,macos,vision]>=2.2.0,<5`) so
+  `openadapt 1.24.0` can resolve with `openadapt-flow 4.0.0`.
+
+## v2.2.3 (2026-11-22)
+
+- Restore Official MCP Registry (`registry.modelcontextprotocol.io`) auto-syndication from the monorepo `release-package.yml` workflow via GitHub OIDC (`mcp-publisher`) for packages shipping `server.json`.
+- Refresh `server.json` metadata (`websiteUrl` -> `https://openadapt.ai/proof` and verified local execution / read-back checks / signed receipts / zero-egress description).
+- New `a2a` extra for `openadapt-agent serve --a2a`, the A2A (Agent2Agent)
+  protocol adapter in openadapt-flow (docs/A2A.md). `--handoffs` adds
+  `get_handoff` and `verify_handoff`. Both need an openadapt-flow that has
+  them.
+
 ## v2.2.2 (2026-11-14)
 
 - Accept `openadapt-flow` 3.x. Flow 3 moved its vision stack to the `vision`

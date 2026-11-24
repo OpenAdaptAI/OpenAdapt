@@ -78,16 +78,97 @@
       'signature',
       '^sig$',
       '^otp$',
+      '(^|[_-])otp($|[_-])',
       '^pin$',
+      '(^|[_-])pin($|[_-])',
+      'one[_-]?time[_-]?code',
+      'mfa',
+      '2fa',
+      'totp',
+      'authenticator',
+      'passkey',
+      'webauthn',
+      '(^|[_-])duo($|[_-])',
+      'verification[_-]?code',
+      'sms[_-]?code',
+      'security[_-]?code',
       '^ssn$',
+      '(^|[_-])ssn($|[_-])',
+      'user[_-]?ssn',
+      'social[_-]?security',
       'card[_-]?(number|num|no)',
+      'cc[-_]?num(ber)?',
+      'cc[-_]?csc',
+      'cc[-_]?exp',
       '^cvv$',
+      '(^|[_-])cvv($|[_-])',
       '^cvc$',
+      '(^|[_-])cvc($|[_-])',
       '^code$',
       'credential',
     ].join('|'),
     'i'
   );
+  // Token-based secret field names, shared with the engine. Identifiers are
+  // split at camelCase / PascalCase boundaries and non-alphanumerics, then
+  // lowercased; a phrase must appear as whole consecutive tokens, so
+  // patientSsn and "Card CVV" match but pinnedItems does not.
+  // secret-field-vocabulary:begin (copy of openadapt_flow/secret_field_vocabulary.json)
+  const SECRET_FIELD_PHRASES = [
+    "password",
+    "passwd",
+    "pwd",
+    "passphrase",
+    "passcode",
+    "pin",
+    "ssn",
+    "social security",
+    "sin",
+    "tax id",
+    "cvv",
+    "cvv2",
+    "cvc",
+    "cvc2",
+    "csc",
+    "card number",
+    "cc number",
+    "iban",
+    "account number",
+    "routing",
+    "otp",
+    "one time code",
+    "verification code",
+    "mfa",
+    "totp",
+    "2fa",
+    "sms code",
+    "api key",
+    "access token",
+    "refresh token",
+    "secret",
+    "auth"
+  ];
+  // secret-field-vocabulary:end
+  const SECRET_PHRASE_TOKENS = SECRET_FIELD_PHRASES.map((p) => p.split(' '));
+
+  function fieldTokens(value) {
+    return String(value == null ? '' : value)
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean);
+  }
+
+  function namesSecretField(value) {
+    const tokens = fieldTokens(value);
+    return SECRET_PHRASE_TOKENS.some((phrase) => {
+      for (let start = 0; start + phrase.length <= tokens.length; start++) {
+        if (phrase.every((word, i) => tokens[start + i] === word)) return true;
+      }
+      return false;
+    });
+  }
   const SECRET_VALUE = [
     /^\s*(bearer|basic|digest|token)\s+\S+/i,
     /eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*/, // JWT
@@ -231,7 +312,8 @@
   }
 
   function isSecretKey(key) {
-    return SECRET_KEY.test(String(key || ''));
+    const text = String(key || '');
+    return SECRET_KEY.test(text) || namesSecretField(text);
   }
 
   function headerName(name) {
