@@ -818,12 +818,15 @@ def test_sidepanel_idle_running_text_input_badge_and_scroll(chrome_copilot):
         timeout=10000
     )
 
-    # Verify Chrome action badge shows HALT while not recording, and REC takes precedence when recording.
+    # Verify Chrome action badge shows HALT while not recording, REC takes
+    # precedence when recording, and clearing any password-field auth pause
+    # restores HALT once recording stops.
     badge_halt = worker.evaluate("() => chrome.action.getBadgeText({})")
     assert badge_halt == "HALT"
     worker.evaluate("() => __openadaptExtensionBackground.setRecording(true)")
     assert worker.evaluate("() => chrome.action.getBadgeText({})") == "REC"
     worker.evaluate("() => __openadaptExtensionBackground.setRecording(false)")
+    worker.evaluate("() => __openadaptExtensionBackground.resumeAfterAuth()")
     assert worker.evaluate("() => chrome.action.getBadgeText({})") == "HALT"
 
     # Verify first attention element (#coverage-tier below 1400px spacer) scrolled into view.
