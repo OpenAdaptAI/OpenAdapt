@@ -549,7 +549,15 @@ class _ByocVetoRequestHandler(BaseHTTPRequestHandler):
                 {"decision": VetoDecision.HALT_ESCALATE.value, "error": str(exc)},
             )
             return
-        except Exception as exc:  # noqa: BLE001
+        except (
+            RuntimeError,
+            OSError,
+            TimeoutError,
+            LookupError,
+            TypeError,
+            ArithmeticError,
+            ValidationError,
+        ) as exc:
             self._send_json(
                 HTTPStatus.SERVICE_UNAVAILABLE,
                 {
@@ -888,7 +896,7 @@ def post_verify_request(
         parsed = urllib.parse.urlparse(base_url)
         scheme = (parsed.scheme or "").lower()
         host = (parsed.hostname or "").lower()
-    except Exception as exc:  # noqa: BLE001
+    except (ValueError, TypeError, AttributeError) as exc:
         return _fail_closed_outcome(
             payload,
             reason=f"Fail-closed client URL error: {type(exc).__name__}",
@@ -929,7 +937,16 @@ def post_verify_request(
         return _fail_closed_outcome(
             payload, reason=f"Fail-closed client HTTP error: {exc.code}"
         )
-    except Exception as exc:  # noqa: BLE001
+    except (
+        urllib.error.URLError,
+        OSError,
+        TimeoutError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        ValidationError,
+        ValueError,
+        TypeError,
+    ) as exc:
         return _fail_closed_outcome(
             payload, reason=f"Fail-closed client error: {type(exc).__name__}"
         )
