@@ -195,6 +195,11 @@ def site_page(browser):
     site.close()
 
 
+@pytest.fixture(autouse=True)
+def _allow_raw_capture_plaintext(monkeypatch):
+    monkeypatch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "synthetic test fixture")
+
+
 def binding_from_browser(tmp_path: Path, site: Site, page: Any):
     """Capture the real normal submit, then propose and test-admit its binding."""
     recording = tmp_path / "recording"

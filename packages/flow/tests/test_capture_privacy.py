@@ -88,9 +88,19 @@ def _decoded(data: bytes) -> list[bytes]:
 
 
 def _leaks(root: Path, values: tuple[str, ...] = PHI) -> list[tuple[str, str]]:
+    from openadapt_flow import sealed_set
+
     found = []
     for path in sorted(p for p in root.rglob("*") if p.is_file()):
-        blobs = _decoded(_plain(path.read_bytes()))
+        if (
+            sealed_set.is_sealed_path(path)
+            and path.name != sealed_set.HEADER
+            and path.name.endswith(".enc")
+        ):
+            raw = sealed_set.read_bytes(path.with_name(path.name[:-4]))
+        else:
+            raw = path.read_bytes()
+        blobs = _decoded(_plain(raw))
         for value in values:
             if any(form in blob for blob in blobs for form in _forms(value)):
                 found.append((str(path.relative_to(root)), value))
@@ -607,7 +617,9 @@ def _capture(**kw: Any) -> tuple[nc.NetworkCapture, Any, Any]:
 
 
 def _rows(tmp_path: Path) -> list[dict[str, Any]]:
-    text = (tmp_path / nc.NETWORK_FILE).read_text()
+    from openadapt_flow import sealed_set
+
+    text = sealed_set.read_text(tmp_path / nc.NETWORK_FILE)
     return [json.loads(line) for line in text.splitlines()[1:]]
 
 
@@ -774,12 +786,14 @@ def test_recording_meta_app_url_query_is_minimized(tmp_path: Path) -> None:
     finished(_Request(url, "GET", None, None, _Response(200, "text/html", b"")))
     out = rec.finish()
     assert _leaks(out) == []
-    meta = json.loads((out / "meta.json").read_text())
+    from openadapt_flow import sealed_set
+
+    meta = json.loads(sealed_set.read_text(out / "meta.json"))
     assert "id=51" in meta["app_url"]
     assert meta["app_url"] == _rows(out)[0]["url"]  # same key as network.jsonl
     assert urlsplit_host(meta["app_url"]) == "app.test"
     plain = Recorder(_recorder_backend(), tmp_path / "plain", app_url=url).finish()
-    assert json.loads((plain / "meta.json").read_text())["app_url"] == url
+    assert json.loads(sealed_set.read_text(plain / "meta.json"))["app_url"] == url
 
 
 def urlsplit_host(url: str) -> str:

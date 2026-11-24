@@ -185,6 +185,11 @@ def gui_save(page, title):
     page.wait_for_load_state("networkidle")
 
 
+@pytest.fixture(autouse=True)
+def _allow_raw_capture_plaintext(monkeypatch):
+    monkeypatch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "synthetic test fixture")
+
+
 def capture_save(app, context, page, tmp_path):
     rec = tmp_path / "capture"
     rec.mkdir()

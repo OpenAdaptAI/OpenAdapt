@@ -124,7 +124,10 @@ def django_admin(tmp_path: Path):
             proc.kill()
 
 
-def test_a_django_admin_recording_keeps_no_rendered_token(django_admin, tmp_path):
+def test_a_django_admin_recording_keeps_no_rendered_token(
+    django_admin, tmp_path, monkeypatch
+):
+    monkeypatch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "synthetic test fixture")
     sync_api = pytest.importorskip("playwright.sync_api")
     base, password = django_admin
     with sync_api.sync_playwright() as pw:
