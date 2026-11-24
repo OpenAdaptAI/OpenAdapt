@@ -1,0 +1,33 @@
+# Official Odoo 17 + Postgres 16 for Real-App Verification Matrix
+# Synthetic vendor-bill test data only.
+services:
+  db:
+    image: postgres:16
+    restart: "no"
+    environment:
+      POSTGRES_DB: ${ODOO_DB_NAME:-odoo_synthetic}
+      POSTGRES_USER: ${ODOO_DB_USER:-odoo}
+      POSTGRES_PASSWORD: ${ODOO_DB_PW:-odoo_synthetic_pw}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ODOO_DB_USER:-odoo} -d ${ODOO_DB_NAME:-odoo_synthetic}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  odoo:
+    image: odoo:17
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${ODOO_HTTP_PORT:-18069}:8069"
+    environment:
+      HOST: db
+      USER: ${ODOO_DB_USER:-odoo}
+      PASSWORD: ${ODOO_DB_PW:-odoo_synthetic_pw}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8069/web/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20

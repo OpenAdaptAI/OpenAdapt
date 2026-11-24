@@ -74,3 +74,8 @@ def _isolated_flow_at_rest(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "test suite: synthetic data")
     monkeypatch.delenv("OPENADAPT_FLOW_AT_REST", raising=False)
     monkeypatch.delenv("OPENADAPT_LEDGER_AUTHORITY_CONFIG", raising=False)
+    # Never the OS keychain from tests: no dialog, no login-keychain write.
+    monkeypatch.setenv("OPENADAPT_FLOW_KEY_STORE", "file")
+    monkeypatch.delenv("OPENADAPT_ENCRYPT_AT_REST", raising=False)
+    monkeypatch.delenv("OPENADAPT_POLICY", raising=False)
+    monkeypatch.delenv("OPENADAPT_RECOVERY_CODE", raising=False)

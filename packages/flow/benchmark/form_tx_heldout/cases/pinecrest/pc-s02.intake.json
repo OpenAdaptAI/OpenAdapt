@@ -1,0 +1,21 @@
+{
+  "case_id": "pc-s02",
+  "facts": {
+    "coverage.deductible": 5000,
+    "coverage.effective_date": "2027-01-15",
+    "history.prior_claims_5yr": 0,
+    "property.address_line1": "4400 Summit Overlook Dr",
+    "property.burglar_alarm": true,
+    "property.city": "Tamarack Ridge",
+    "property.construction_type": "steel / concrete",
+    "property.finish_level": "luxury",
+    "property.heating_type": "heat pump",
+    "property.roof_material": "metal",
+    "property.roof_year": 2008,
+    "property.square_feet": 3400,
+    "property.state": "ID",
+    "property.stories": "2",
+    "property.year_built": 2008,
+    "property.zip": "83616"
+  }
+}
