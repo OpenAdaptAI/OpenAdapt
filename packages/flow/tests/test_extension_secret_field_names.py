@@ -128,14 +128,18 @@ def test_content_script_flags_aria_label_card_cvv() -> None:
 
 
 def test_content_script_flags_secret_autocomplete_tokens() -> None:
-    assert _content_is_secret([{"autocomplete": "cc-csc"}, {"autocomplete": "name"}]) == [
+    assert _content_is_secret(
+        [{"autocomplete": "cc-csc"}, {"autocomplete": "name"}]
+    ) == [
         True,
         False,
     ]
 
 
 def test_content_script_leaves_lookalike_names_clear() -> None:
-    attr_sets = [{attr: n} for n in CLEAR_NAMES for attr in ("name", "id", "aria-label")]
+    attr_sets = [
+        {attr: n} for n in CLEAR_NAMES for attr in ("name", "id", "aria-label")
+    ]
     flags = _content_is_secret(attr_sets)
     flagged = [a for a, flag in zip(attr_sets, flags) if flag]
     assert flagged == []

@@ -23,6 +23,7 @@ from typing import Any, Iterable, Mapping, MutableMapping, Optional
 from urllib.parse import urlsplit
 
 from openadapt_flow.extension_network import NETWORK_SAVE_KIND, redact_network_save
+from openadapt_flow.secret_field_names import names_secret_field
 
 EVIDENCE_FILE = "extension_evidence.jsonl"
 SCHEMA = "openadapt.extension-evidence/1"
@@ -110,7 +111,9 @@ def is_secret_field(
     if (input_type or "").lower() == "password":
         return True
     for candidate in (name, field_id):
-        if candidate and SECRET_NAME.search(str(candidate)):
+        if candidate and (
+            SECRET_NAME.search(str(candidate)) or names_secret_field(candidate)
+        ):
             return True
     _ = tag  # reserved for future tag-based rules
     return False

@@ -46,7 +46,10 @@ and in the engine on ingest, on write and on load.
   recorded.
 - **Body.** Kept only when it parses as JSON (raw body with a JSON or absent
   content type) or form data, under 64 KiB, at most 32 levels deep and 5000
-  nodes. Values under a secret-looking key (the whole subtree) and
+  nodes. A key is secret-looking when it matches the key pattern or contains
+  a phrase from `openadapt_flow/secret_field_vocabulary.json` as whole tokens
+  after camelCase splitting (`userPin`, `otpCode`, `cardCvv`). Values under a
+  secret-looking key (the whole subtree) and
   credential-shaped values (bearer/basic schemes, JWTs, known key prefixes,
   long opaque tokens) become `<secret>`. Any other body (multipart, file
   uploads, text, binary, oversized) is dropped; only
