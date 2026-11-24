@@ -250,3 +250,116 @@ def test_disjoint_split_manifest_rejects_overlap() -> None:
         validate_disjoint_split("workarena", [0, 1], [1, 2])
     m = validate_disjoint_split("workarena", [0], [1, 2, 3])
     assert len(m.split_sha256) == 64
+
+
+def test_p0_p1_ast_parsing_nodeid_duplicates_disagreement_empty_label_and_custom_oracle() -> None:
+    """Regression probes for AST action parsing, nodeId collision, duplicate/conflicting
+    bids, empty labels, no focused_label fallback, and empty expected_state with custom oracle."""
+    policy = PolicyConfig(allowed_origins=("https://app.example.com",))
+    obs = {
+        "url": "https://app.example.com/settings",
+        "axtree_txt": "[s1] button 'Search'\n[a42] button 'Delete account'",
+    }
+
+    # P0: multi-actions, keyword bids, drag_and_drop, coordinate/keyboard actions
+    for bad_action in (
+        "noop()\nclick('a42')",
+        "scroll(0, 100); click('a42')",
+        "click('s1')\nclick('a42')",
+        "mouse_click(120, 340)",
+        "keyboard_press('Enter')",
+    ):
+        d = evaluate_policy(bad_action, obs, policy)
+        assert not d.allowed and d.verdict == "ABSTAIN", f"expected ABSTAIN for {bad_action!r}, got {d}"
+
+    d_kw = evaluate_policy("click(bid='a42')", obs, policy)
+    assert not d_kw.allowed and d_kw.verdict == "HALT"
+
+    d_dnd = evaluate_policy("drag_and_drop('a42', 's1')", obs, policy)
+    assert not d_dnd.allowed and d_dnd.verdict == "HALT"
+
+    # P0: CDP nodeId='42' must NEVER shadow browsergym_id='42'
+    obs_nodeid = {
+        "url": "https://app.example.com/settings",
+        "axtree_object": {
+            "nodes": [
+                {"nodeId": "42", "role": {"value": "StaticText"}, "name": {"value": "Home"}},
+                {"browsergym_id": "42", "role": {"value": "button"}, "name": {"value": "Delete account"}},
+            ]
+        },
+    }
+    d_nodeid = evaluate_policy("click('42')", obs_nodeid, policy)
+    assert not d_nodeid.allowed and d_nodeid.verdict == "HALT"
+
+    # P1: duplicate bids in axtree_txt -> ABSTAIN
+    obs_dup = {
+        "url": "https://app.example.com/settings",
+        "axtree_txt": "[a1] button 'Search'\n[a1] button 'Delete account'",
+    }
+    assert evaluate_policy("click('a1')", obs_dup, policy).verdict == "ABSTAIN"
+
+    # P1: disagreeing sources (axtree_object vs axtree_txt) -> ABSTAIN
+    obs_conflict = {
+        "url": "https://app.example.com/settings",
+        "axtree_object": {
+            "nodes": [{"browsergym_id": "a1", "role": {"value": "button"}, "name": {"value": "Search"}}]
+        },
+        "axtree_txt": "[a1] button 'Delete account'",
+    }
+    assert evaluate_policy("click('a1')", obs_conflict, policy).verdict == "ABSTAIN"
+
+    # P1: unresolved bid with focused_label present -> ABSTAIN (no fallback)
+    obs_focus = {
+        "url": "https://app.example.com/settings",
+        "axtree_txt": "[s1] button 'Search'",
+        "focused_label": "Search",
+    }
+    assert evaluate_policy("click('zz')", obs_focus, policy).verdict == "ABSTAIN"
+
+    # P1: empty role & name -> unresolved -> ABSTAIN
+    obs_empty = {
+        "url": "https://app.example.com/settings",
+        "axtree_object": {"nodes": [{"browsergym_id": "i1", "role": {"value": ""}, "name": {"value": ""}}]},
+    }
+    assert evaluate_policy("click('i1')", obs_empty, policy).verdict == "ABSTAIN"
+
+    # P1: custom oracle must NOT return VERIFIED when expected_state={}
+    oracle_called = False
+
+    def always_verify(_obs, _exp):
+        nonlocal oracle_called
+        oracle_called = True
+        return ReadbackResult(verified=True, verdict="VERIFIED", reason="always")
+
+    class _OneStepEnv:
+        def reset(self, **_kwargs):
+            return (
+                {
+                    "url": "https://app.example.com/form",
+                    "axtree_txt": "[s1] button 'Save'",
+                },
+                {},
+            )
+
+        def step(self, _action):
+            return (
+                {
+                    "url": "https://app.example.com/form",
+                    "axtree_txt": "[s1] button 'Save'",
+                    "persisted_state": {"ok": True},
+                },
+                1.0,
+                True,
+                False,
+                {},
+            )
+
+    env = _OneStepEnv()
+    wrapper = OpenAdaptBrowserGymWrapper(env, policy=policy, readback_oracle=always_verify)
+    wrapper.reset()
+    _, reward, terminated, _, info = wrapper.step("click('s1')", expected_state={})
+    assert info["openadapt_verdict"] == "HALT"
+    assert info["openadapt_readback_reason"] == "empty_expected_state"
+    assert reward == 0.0
+    assert terminated is True
+    assert oracle_called is False

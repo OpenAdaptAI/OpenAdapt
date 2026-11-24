@@ -20,6 +20,7 @@ Fail-closed invariants:
 
 from __future__ import annotations
 
+import ast
 import re
 import time
 from collections.abc import Callable, Mapping
@@ -61,11 +62,22 @@ WRITE_ACTION_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
-# Matches BrowserGym high-level bid actions: click('a42'), fill('b7', '...'), press('a42', 'Enter')
-_BID_ACTION_RE = re.compile(
-    r"^\s*(click|dblclick|fill|press|select_option|clear|focus|check|uncheck)\s*\(\s*['\"]([^'\"]+)['\"]",
-    re.IGNORECASE,
+_SAFE_READONLY_CALLS: frozenset[str] = frozenset({"noop", "scroll", "wait", "search"})
+_SINGLE_BID_CALLS: frozenset[str] = frozenset(
+    {
+        "click",
+        "dblclick",
+        "fill",
+        "press",
+        "select_option",
+        "clear",
+        "focus",
+        "check",
+        "uncheck",
+        "hover",
+    }
 )
+_TWO_BID_CALLS: frozenset[str] = frozenset({"drag_and_drop"})
 _AXTREE_TXT_LINE_RE = re.compile(
     r"\[([^\]]+)\]\s+([A-Za-z0-9_-]+)(?:\s+['\"]([^'\"]*)['\"])?"
 )
@@ -143,11 +155,65 @@ def _extract_url_origin(action: str, obs: Mapping[str, Any]) -> str | None:
     return f"{parsed.scheme}://{parsed.netloc}".lower()
 
 
-def _extract_bid_and_verb(action: str) -> tuple[str, str] | None:
-    m = _BID_ACTION_RE.match(action)
-    if not m:
+def _parse_browsergym_action(
+    action: str,
+) -> tuple[str, tuple[str, ...], str | None] | None:
+    """Strictly parse a BrowserGym action string with `ast`.
+
+    Requires exactly one top-level call to a known verb with literal arguments.
+    Returns `(verb, bids, goto_url)` or `None` (fail closed -> ABSTAIN) for
+    multi-statement strings, unknown/unbound verbs (e.g. `mouse_click`,
+    `keyboard_press`), non-literal args, or missing bid arguments.
+    """
+    if not isinstance(action, str) or not action.strip():
         return None
-    return m.group(1).lower(), m.group(2).strip()
+    try:
+        tree = ast.parse(action.strip(), mode="exec")
+    except SyntaxError:
+        return None
+    if len(tree.body) != 1 or not isinstance(tree.body[0], ast.Expr):
+        return None
+    call = tree.body[0].value
+    if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Name):
+        return None
+
+    verb = call.func.id.lower()
+    try:
+        pos_args = [ast.literal_eval(arg) for arg in call.args]
+        kw_args = {
+            kw.arg: ast.literal_eval(kw.value)
+            for kw in call.keywords
+            if kw.arg is not None
+        }
+    except (ValueError, SyntaxError):
+        return None
+    if len(kw_args) != len(call.keywords):
+        return None
+
+    if verb in _SAFE_READONLY_CALLS:
+        return (verb, (), None)
+    if verb == "goto":
+        url = kw_args.get("url", pos_args[0] if pos_args else None)
+        if not isinstance(url, str) or not url.strip():
+            return None
+        return (verb, (), url.strip())
+    if verb in _SINGLE_BID_CALLS:
+        bid = kw_args.get("bid", pos_args[0] if pos_args else None)
+        if not isinstance(bid, str) or not bid.strip():
+            return None
+        return (verb, (bid.strip(),), None)
+    if verb in _TWO_BID_CALLS:
+        from_bid = kw_args.get("from_bid", pos_args[0] if len(pos_args) >= 1 else None)
+        to_bid = kw_args.get("to_bid", pos_args[1] if len(pos_args) >= 2 else None)
+        if (
+            not isinstance(from_bid, str)
+            or not from_bid.strip()
+            or not isinstance(to_bid, str)
+            or not to_bid.strip()
+        ):
+            return None
+        return (verb, (from_bid.strip(), to_bid.strip()), None)
+    return None
 
 
 def _ax_val(raw: Any) -> str:
@@ -156,35 +222,45 @@ def _ax_val(raw: Any) -> str:
     return str(raw or "")
 
 
+def _norm_label(label: str) -> str:
+    return " ".join(label.lower().split())
+
+
 def resolve_bid_label(bid: str, obs: Mapping[str, Any]) -> str | None:
     """Resolve a BrowserGym element bid to '<role> <name>' from AXTree or properties.
 
-    Returns None when the bid cannot be found in `axtree_object`,
-    `extra_element_properties`, or `axtree_txt`.
+    Fail-closed rules:
+    - Matches ONLY on `browsergym_id` or `bid` (never CDP `nodeId`).
+    - Treats empty role+name labels as unresolved (`None`).
+    - Returns `None` on duplicate bids within a source or when sources disagree.
     """
+    source_labels: list[str] = []
+
     # 1. axtree_object (standard BrowserGym CDP AXTree dict)
     ax_obj = obs.get("axtree_object")
     if isinstance(ax_obj, Mapping):
         nodes = ax_obj.get("nodes")
         if isinstance(nodes, list):
+            obj_matches: list[str] = []
             for node in nodes:
                 if not isinstance(node, Mapping):
                     continue
-                node_bid = str(
-                    node.get("browsergym_id")
-                    or node.get("bid")
-                    or node.get("nodeId")
-                    or ""
-                )
+                node_bid = str(node.get("browsergym_id") or node.get("bid") or "")
                 if node_bid == bid:
                     role = _ax_val(node.get("role")).strip()
                     name = _ax_val(node.get("name")).strip()
                     label = f"{role} {name}".strip()
-                    return label or role or bid
+                    obj_matches.append(label)
+            if len(obj_matches) > 1:
+                return None
+            if len(obj_matches) == 1:
+                if not obj_matches[0]:
+                    return None
+                source_labels.append(obj_matches[0])
 
     # 2. extra_element_properties (BrowserGym dict keyed by bid)
     extra = obs.get("extra_element_properties")
-    if isinstance(extra, Mapping):
+    if isinstance(extra, Mapping) and bid in extra:
         props = extra.get(bid)
         if isinstance(props, Mapping):
             role = str(props.get("role") or props.get("tag") or "").strip()
@@ -196,30 +272,44 @@ def resolve_bid_label(bid: str, obs: Mapping[str, Any]) -> str | None:
                 or ""
             ).strip()
             label = f"{role} {name}".strip()
-            if label:
-                return label
+            if not label:
+                return None
+            source_labels.append(label)
 
     # 3. axtree_txt (BrowserGym flattened AXTree string, e.g. "[a42] button 'Delete account'")
     ax_txt = obs.get("axtree_txt")
     if isinstance(ax_txt, str):
+        txt_matches: list[str] = []
         for match in _AXTREE_TXT_LINE_RE.finditer(ax_txt):
             if match.group(1).strip() == bid:
                 role = match.group(2).strip()
                 name = (match.group(3) or "").strip()
-                return f"{role} {name}".strip()
+                txt_matches.append(f"{role} {name}".strip())
+        if len(txt_matches) > 1:
+            return None
+        if len(txt_matches) == 1:
+            if not txt_matches[0]:
+                return None
+            source_labels.append(txt_matches[0])
 
-    return None
+    if not source_labels:
+        return None
+    # Fail closed if multiple AXTree/property sources disagree on the bid's label
+    if len({_norm_label(lbl) for lbl in source_labels}) > 1:
+        return None
+    return source_labels[0]
 
 
 def _is_write_action(action: str, obs: Mapping[str, Any]) -> bool:
     if WRITE_ACTION_PATTERNS.search(action):
         return True
-    parsed = _extract_bid_and_verb(action)
+    parsed = _parse_browsergym_action(action)
     if parsed is not None:
-        _verb, bid = parsed
-        resolved = resolve_bid_label(bid, obs)
-        if resolved and WRITE_ACTION_PATTERNS.search(resolved):
-            return True
+        _verb, bids, _url = parsed
+        for bid in bids:
+            resolved = resolve_bid_label(bid, obs)
+            if resolved and WRITE_ACTION_PATTERNS.search(resolved):
+                return True
     return False
 
 
@@ -231,8 +321,18 @@ def evaluate_policy(
     consent_callback: ConsentCallback | None = None,
 ) -> PolicyDecision:
     """Evaluate an agent action against the policy & consent firewall (fail-closed)."""
-    origin = _extract_url_origin(action, obs)
-    is_goto = bool(re.match(r"^\s*goto\s*\(", action, re.IGNORECASE))
+    parsed = _parse_browsergym_action(action)
+    if parsed is None:
+        return PolicyDecision(
+            allowed=False,
+            verdict="ABSTAIN",
+            reason=f"unbound_or_unsupported_action: {action!r}",
+            policy_category="unresolved_target",
+        )
+    verb, bids, goto_url = parsed
+
+    origin = _extract_url_origin(goto_url or action, obs)
+    is_goto = verb == "goto"
 
     # 1. Unauthorized origin / exfiltration navigation check (empty allowlist denies)
     if origin is not None or is_goto:
@@ -252,8 +352,8 @@ def evaluate_policy(
                 policy_category="unauthorized_navigation",
             )
 
-    # 2. Safe read-only fast path (prevents false refusals on browsing/reading)
-    if SAFE_READONLY_PATTERNS.search(action.strip()) and not (
+    # 2. Safe read-only fast path (ONLY for AST-verified single safe read-only calls)
+    if verb in _SAFE_READONLY_CALLS and not (
         DESTRUCTIVE_PATTERNS.search(action)
         or FINANCIAL_PATTERNS.search(action)
         or EXTERNAL_SEND_PATTERNS.search(action)
@@ -266,32 +366,21 @@ def evaluate_policy(
             policy_category="safe",
         )
 
-    # 3. Resolve BrowserGym bid to AXTree role/name; fail closed if unresolved
-    resolved_label = ""
-    bid_info = _extract_bid_and_verb(action)
-    if bid_info is not None:
-        _verb, bid = bid_info
+    # 3. Resolve EVERY BrowserGym bid to AXTree role/name; fail closed (no focused_label fallback)
+    resolved_labels: list[str] = []
+    for bid in bids:
         looked_up = resolve_bid_label(bid, obs)
-        if looked_up is not None:
-            resolved_label = looked_up
-        else:
-            # Fail closed on unresolved bid when obs does not carry an explicit label
-            fallback_label = (
-                f"{obs.get('focused_label', '')} {obs.get('target_label', '')}".strip()
+        if looked_up is None:
+            return PolicyDecision(
+                allowed=False,
+                verdict="ABSTAIN",
+                reason=f"unresolved_bid: {bid!r} missing, duplicate, empty, or conflicting in AXTree",
+                policy_category="unresolved_target",
             )
-            if not fallback_label:
-                return PolicyDecision(
-                    allowed=False,
-                    verdict="ABSTAIN",
-                    reason=f"unresolved_bid: {bid!r} not found in AXTree/properties",
-                    policy_category="unresolved_target",
-                )
-            resolved_label = fallback_label
+        resolved_labels.append(looked_up)
 
-    text = (
-        f"{action} {resolved_label} {obs.get('focused_label', '')} "
-        f"{obs.get('target_label', '')}"
-    ).strip()
+    resolved_label = " ".join(resolved_labels)
+    text = f"{action} {resolved_label}".strip()
 
     # 4. Destructive operations
     if policy.block_destructive and DESTRUCTIVE_PATTERNS.search(text):
@@ -496,11 +585,15 @@ class OpenAdaptBrowserGymWrapper:
         if self.policy.require_readback_on_write and (
             expected_state is not None or is_write
         ):
-            if expected_state is None:
+            if not expected_state:
                 readback = ReadbackResult(
                     verified=False,
                     verdict="HALT",
-                    reason="missing_expected_state_on_write",
+                    reason=(
+                        "empty_expected_state"
+                        if expected_state is not None
+                        else "missing_expected_state_on_write"
+                    ),
                     mismatches=(
                         "require_readback_on_write=True requires non-empty expected_state",
                     ),
