@@ -102,7 +102,13 @@ def create_app(
             backend is constructed from ``config.backend`` and loaded on startup.
     """
     cfg = config or ServiceConfig.from_env()
-    bk = backend if backend is not None else build_backend(cfg.backend, cfg.model)
+    if backend is not None:
+        bk = backend
+    elif (cfg.backend or "stub").lower() == "vllm":
+        # VLM_VLLM_URL names the vLLM server; only that backend takes it.
+        bk = build_backend(cfg.backend, cfg.model, base_url=cfg.vllm_url)
+    else:
+        bk = build_backend(cfg.backend, cfg.model)
 
     def _handle(payload: object) -> object:
         """Blocking per-request work; runs in the batcher's worker thread."""

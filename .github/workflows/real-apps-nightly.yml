@@ -1,0 +1,83 @@
+name: Real-App Contract Matrix (Nightly)
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      app:
+        description: "App ID to run (all, openemr, odoo17)"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - openemr
+          - odoo17
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-apps-nightly-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  select-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.set-matrix.outputs.apps }}
+    steps:
+      - id: set-matrix
+        run: |
+          APP="${{ inputs.app || 'all' }}"
+          if [ "$APP" = "all" ]; then
+            echo 'apps=["openemr","odoo17"]' >> "$GITHUB_OUTPUT"
+          else
+            echo "apps=[\"$APP\"]" >> "$GITHUB_OUTPUT"
+          fi
+
+  verify-app:
+    needs: select-matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.select-matrix.outputs.apps) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Validate Docker Compose manifest
+        run: |
+          docker compose -f "benchmarks/real_apps/apps/${{ matrix.app }}/docker-compose.yml" config -q
+
+      - name: Run Real-App Contract Matrix (in-process stub)
+        run: |
+          mkdir -p artifacts/real-apps
+          python -m benchmarks.real_apps run \
+            --app "${{ matrix.app }}" \
+            --mode contract \
+            --output-json "artifacts/real-apps/${{ matrix.app }}-scoreboard.json" \
+            --output-md "artifacts/real-apps/${{ matrix.app }}-scoreboard.md"
+
+      - name: Append contract scoreboard to step summary
+        if: always()
+        run: |
+          if [ -f "artifacts/real-apps/${{ matrix.app }}-scoreboard.md" ]; then
+            cat "artifacts/real-apps/${{ matrix.app }}-scoreboard.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload Real-App Contract Scoreboard artifact
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: real-apps-contract-scoreboard-${{ matrix.app }}
+          path: artifacts/real-apps/
+          retention-days: 14

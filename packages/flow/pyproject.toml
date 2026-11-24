@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-flow"
-version = "3.4.0"
+version = "4.0.0"
 description = "Verified local execution layer for computer-use agents: compile web/desktop tasks into deterministic programs with read-back checks, signed DSSE receipts, and MCP/A2A support"
 readme = "README.md"
 keywords = [
@@ -47,7 +47,7 @@ license = { text = "MIT" }
 # publish Python 3.13-compatible releases. Keep the package boundary aligned
 # with the runtime we actually qualify; migrating OCR engines requires rerunning
 # the identity and dense-surface safety evidence first.
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.11,<3.13"
 authors = [{ name = "OpenAdapt.AI" }]
 # The Python classifiers feed the PyPI "python versions" badge; keep them in
 # step with requires-python above.
@@ -63,7 +63,6 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Office/Business",
@@ -89,7 +88,6 @@ dependencies = [
     # shipped example policies load them. Tiny, pure-Python, core so `certify`
     # works out of the box.
     "pyyaml>=6.0",
-    "tomli>=2.0; python_version < '3.11'",
     # Opt-in encryption-at-rest for compiled bundles and durable checkpoints
     # (openadapt_flow.crypto: AES-256-GCM sealed containers). Core so
     # Workflow.save(encrypt=True) / load(key=...) and encrypted checkpoints work
@@ -202,8 +200,7 @@ dev = [
     # (tests/test_native_census_real_apps.py).
     "uiautomation>=2.0.20; sys_platform == 'win32'",
     # The registry's Sigstore attestation tests; see the `registry` extra.
-    # Python 3.11+: on 3.10 it pulls dnspython 2.8, which has an open advisory.
-    "sigstore>=4.5,<5; python_version >= '3.11'",
+    "sigstore>=4.5,<5",
 ]
 grounder = ["anthropic>=0.40"]
 # PRIMARY grounding rung: OCR text-anchoring via openadapt-grounding
@@ -277,14 +274,13 @@ reward = [
 ]
 # Standard RL environments (openadapt_flow.rl_env): the record-checked apps
 # served over the OpenEnv protocol (BSD-3-Clause) and rewarded by verify-run.
-# See environments/openenv/README.md. Python 3.11+: on 3.10 the OpenEnv stack
-# resolves to a dnspython release with a known advisory (GHSA-45c3-73f7-pv4m).
+# See environments/openenv/README.md.
 openenv = [
     "openadapt-flow[vision]",
-    "openenv>=0.11,<0.12; python_version >= '3.11'",
-    "playwright>=1.44; python_version >= '3.11'",
-    "fastapi>=0.110; python_version >= '3.11'",
-    "uvicorn>=0.29; python_version >= '3.11'",
+    "openenv>=0.11,<0.12",
+    "playwright>=1.44",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
 ]
 # Native macOS window capture/input. Imported lazily; other platforms never
 # install or import these framework bindings.
@@ -308,7 +304,7 @@ rdp = ["aardwolf==0.2.14", "openadapt-flow[vision]"]
 # `pull` from the skills registry: verifies the release workflow's Sigstore
 # attestation of the index (openadapt_flow.registry_attest), offline against
 # the pinned trusted root. Only `pull` of a remote index needs it.
-registry = ["sigstore>=4.5,<5; python_version >= '3.11'"]
+registry = ["sigstore>=4.5,<5"]
 # PHI/PII scrubbing on persist/log paths (Presidio-backed). Optional: the
 # runtime imports openadapt_flow.privacy unconditionally, but it degrades to a
 # no-op when this extra is absent (OPENADAPT_FLOW_SCRUB=auto). A regulated
@@ -575,7 +571,7 @@ version_toml = ["pyproject.toml:project.version"]
 version_variables = ["openadapt_flow/__init__.py:__version__"]
 commit_message = "chore: release {version}"
 # Semantic Release runs its build inside a Python 3.14 container, while Flow's
-# validated runtime is Python 3.10-3.12. Stamp only the editable root lock entry
+# validated runtime is Python 3.11-3.12. Stamp only the editable root lock entry
 # instead of asking uv to resolve the project under an unsupported interpreter.
 build_command = "python -m ensurepip --upgrade && python -m pip install --disable-pip-version-check uv==0.11.29 && python scripts/check_release_consistency.py --sync && git add uv.lock && uv build --wheel --sdist && python scripts/check_release_consistency.py --require-dist"
 
@@ -617,23 +613,13 @@ patch_tags = ["fix", "perf"]
 # make the resolver keep a version with a wheel for the oldest supported
 # Python on each platform CI runs.
 required-environments = [
-    "python_version == '3.10' and sys_platform == 'linux'",
-    "python_version == '3.10' and sys_platform == 'darwin'",
-    "python_version == '3.10' and sys_platform == 'win32'",
-]
-
-# Lockfile-only floors for security fixes that require Python 3.11+ (Pillow
-# 13.0.0 is the first release fixing GHSA-332p-7hrc-92wf and the other 2026
-# Pillow advisories; filelock 4.2.1 and dnspython 2.9.2 likewise). Python 3.10
-# keeps the last compatible release until the 3.10 floor is dropped.
-constraint-dependencies = [
-    "pillow>=13.0.0; python_full_version >= '3.11'",
-    "filelock>=4.2.1; python_full_version >= '3.11'",
-    "dnspython>=2.9.2; python_full_version >= '3.11'",
+    "python_version == '3.11' and sys_platform == 'linux'",
+    "python_version == '3.11' and sys_platform == 'darwin'",
+    "python_version == '3.11' and sys_platform == 'win32'",
 ]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 88
 # Generated / non-package trees at the repo root are not part of the lint
 # surface. The benchmark harness (benchmark/harness/) is linted by naming it
@@ -684,7 +670,7 @@ indent-style = "space"
 # Scoped to the core package (not tests, not the benchmark harness).
 # --------------------------------------------------------------------------
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 files = ["openadapt_flow"]
 # Optional extras (aardwolf, openadapt_grounding, openadapt_capture, mlx_vlm,
 # rapidocr, cv2, …) are imported lazily and have no stubs — don't fail on them.
@@ -696,7 +682,7 @@ disallow_untyped_defs = false
 check_untyped_defs = false
 
 # numpy 2.x ships stubs that use 3.12-only `type` statement syntax; parsing
-# them under our 3.10 target crashes mypy. We don't type-check against numpy's
+# them under our 3.11 target crashes mypy. We don't type-check against numpy's
 # internals, so skip following into it (and treat it as untyped). (scikit-image
 # -> tifffile has the same issue, but its only consumer here — the pixel probe —
 # is in the ignore-errors debt list below, so mypy never follows into it.)

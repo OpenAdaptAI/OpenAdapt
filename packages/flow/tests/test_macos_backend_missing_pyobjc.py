@@ -108,3 +108,26 @@ def test_granted_permissions_still_read_as_trusted(
     client = MacWindowClient()
     assert client.capture_trusted() is True
     assert client.input_trusted() is True
+
+
+@pytest.mark.parametrize("version", ["27.2", "27.3", "27.10.0", "28.0", ""])
+@pytest.mark.parametrize("trusted", [True, False])
+def test_new_permission_setup_never_uses_the_legacy_consent_prompt(
+    monkeypatch, version, trusted
+):
+    from openadapt_flow.backends import remote_display
+
+    monkeypatch.setattr(
+        "openadapt_flow.macos_permissions.platform.mac_ver", lambda: (version, (), "")
+    )
+    prompts = []
+    services = types.SimpleNamespace(
+        AXIsProcessTrusted=lambda: trusted,
+        AXIsProcessTrustedWithOptions=lambda options: (
+            prompts.append(options) or trusted
+        ),
+        kAXTrustedCheckOptionPrompt="prompt",
+    )
+    monkeypatch.setattr(remote_display, "_pyobjc_module", lambda _name: services)
+    assert MacWindowClient().request_input_access() is trusted
+    assert prompts == ([{"prompt": True}] if version == "27.2" else [])

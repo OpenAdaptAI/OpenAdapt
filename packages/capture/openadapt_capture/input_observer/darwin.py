@@ -6,6 +6,8 @@ import threading
 import time
 from typing import Any
 
+from openadapt_capture.macos_permissions import control_permission_guidance
+
 from .base import (
     InputCallback,
     InputObserverError,
@@ -167,8 +169,8 @@ class DarwinInputObserver(ThreadedInputObserver):
                 )
         if not self._has_active_filter_permission():
             raise InputObserverPermissionError(
-                "macOS denied the ordered input barrier. In System Settings > "
-                f"Privacy & Security > Accessibility, {_PERMISSION_TARGET}"
+                "macOS process trust for the ordered input barrier is not confirmed. "
+                + control_permission_guidance()["instructions"]
             )
 
         event_mask = 0
@@ -243,7 +245,7 @@ class DarwinInputObserver(ThreadedInputObserver):
         if callable(accessibility_check):
             return bool(accessibility_check())
         raise InputObserverUnavailableError(
-            "macOS does not expose the Accessibility permission required for "
+            "macOS does not expose the process-trust check required for "
             "ordered input"
         )
 
