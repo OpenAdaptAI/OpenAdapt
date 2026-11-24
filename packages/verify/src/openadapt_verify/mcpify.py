@@ -835,8 +835,7 @@ def default_readback_oracle(
             return ReadbackResult(
                 verdict="ABSTAIN",
                 reason=(
-                    f"Applied write(s) did not target read-back JSON file "
-                    f"{file_path}"
+                    f"Applied write(s) did not target read-back JSON file {file_path}"
                 ),
                 observed={"applied_targets": list(applied_targets)},
             )
