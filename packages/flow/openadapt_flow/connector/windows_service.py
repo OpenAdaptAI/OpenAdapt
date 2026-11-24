@@ -238,6 +238,11 @@ def serve(
             config_file(config_dir),
         )
         return 2
+    try:
+        settings.validate_run_config()
+    except ConnectorConfigError as exc:
+        logger.error("connector run: %s", exc)
+        return 2
     rotation = None
     # The administrator owns the bootstrap and destination. Explicit
     # environment credentials or destinations keep their operator-managed

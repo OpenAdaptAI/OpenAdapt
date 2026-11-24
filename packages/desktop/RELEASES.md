@@ -13,7 +13,7 @@ launcher's.
    `--version X.Y.Z`). It sets `pyproject.toml`, `openadapt_desktop/__init__.py`,
    `uv.lock` and the five native installer version files, and writes a dated
    `CHANGELOG.md` section from the conventional commits since the last version.
-2. The `desktop release intent` check fails a pull request with a `feat`, `fix`
+2. The `Desktop release intent` check (run inside `fast-checks`) fails a pull request with a `feat`, `fix`
    or `perf` commit under `packages/desktop` that keeps the version, and prints
    the command above. It also requires every version source, native included,
    to carry the one version.

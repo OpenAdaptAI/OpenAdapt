@@ -1084,23 +1084,21 @@ class Confirming(_Base):
         frame_png: bytes,
         result: Optional[StepResult],
     ) -> list[Any]:
-        """Give each deterministically-failed, render-drift-sensitive
-        postcondition one confirmation pass through the VLM state-verifier.
+        """Ask the VLM state-verifier about each deterministically-failed,
+        render-drift-sensitive postcondition, as a hint for the reviewer.
 
-        VETO-SAFE by construction:
+        A model "yes" never clears a failed postcondition: every one stays
+        failed, so the step halts and goes to a person. A "yes" is recorded on
+        ``result.postcondition_drift_rescues`` (and printed) so the reviewer
+        sees that the failure may be render drift.
 
         * The caller never invokes this on an irreversible or effect-bearing
           step (see :meth:`_postcondition_confirms_a_write`).
-        * Only ``text_present`` and ``region_stable`` are eligible — the kinds
-          a theme/scale/font re-render can legitimately break. Structural
-          postconditions (``url_changed`` etc.) and ``text_absent`` are NEVER
-          rescued: those failures are real, not render drift.
-        * A postcondition is rescued ONLY on a confident ``"yes"``; ``"no"``,
-          ``"uncertain"``, and any appliance outage keep it failed (halt).
-        * Every call and every rescue is recorded on ``result`` for the report
-          (and counted as a model call), so a rescue is auditable, never silent.
+        * Only ``text_present`` and ``region_stable`` are asked about — the
+          kinds a theme/scale/font re-render can legitimately break.
+        * Every call is recorded on ``result`` and counted as a model call.
 
-        Returns the postconditions that remain failed after the pass.
+        Returns the postconditions that remain failed: all of ``failed_pcs``.
         """
         assert self.state_verifier is not None  # guaranteed by the caller (line ~2618)
         survivors: list[Any] = []
@@ -1115,13 +1113,11 @@ class Confirming(_Base):
                 confirmed = self.state_verifier.holds(frame_png, expected)
             except Exception:
                 confirmed = False  # fail-safe: any error keeps the halt
-            if confirmed:
-                if result is not None:
-                    result.postcondition_drift_rescues.append(
-                        self._describe_postcondition(pc)
-                    )
-            else:
-                survivors.append(pc)
+            if confirmed and result is not None:
+                result.postcondition_drift_rescues.append(
+                    self._describe_postcondition(pc)
+                )
+            survivors.append(pc)  # a model "yes" is a hint, never a pass
         return survivors
 
     @staticmethod

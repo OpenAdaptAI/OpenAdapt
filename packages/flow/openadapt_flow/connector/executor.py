@@ -64,6 +64,7 @@ from openadapt_flow.runtime.durable.authority import (
     REMOTE_AUTHORITY_URL_ENV,
     REMOTE_DISPATCH_SESSION_ID_ENV,
 )
+from openadapt_flow.wire_check import mask_secrets
 
 #: A run-gate refusal (fail-closed admission denied) exits 2 before the replay
 #: creates report.json.
@@ -76,6 +77,7 @@ class RunOutcome:
 
     returncode: int
     report: dict[str, Any] = field(default_factory=dict)
+    output: str = field(default="", repr=False)
 
 
 #: A runner maps argv -> RunOutcome. The default shells the governed ``run`` CLI
@@ -92,12 +94,14 @@ class ExecutionResult:
     halt: Optional[dict[str, Any]]
     report_ref: Optional[str]
     #: Local, operator-facing detail. NEVER sent: it can name paths or values.
-    error: Optional[str] = None
+    error: Optional[str] = field(default=None, repr=False)
     verified_bundle_sha256: Optional[str] = None
     failure_signal: Optional[dict[str, Any]] = None
     outcome: Optional[dict[str, Any]] = None
     #: Closed code that may leave the machine (ack ``error_code``).
     error_code: Optional[str] = None
+    child_output: str = field(default="", repr=False)
+    local_diagnostics_unavailable: bool = False
 
 
 # --- Wrap programs: admission and independent read-back -----------------------
@@ -280,6 +284,8 @@ class _CancelledBeforeStart(RuntimeError):
 def _subprocess_runner(
     argv: list[str], run_dir: Path, child_env: Mapping[str, str]
 ) -> RunOutcome:
+    from openadapt_flow.connector.diagnostics import child_output
+
     job_id = getattr(_CURRENT, "job_id", None)
     # Order cancellation and registration at one boundary. A control that
     # wins the lock prevents launch; a control that follows can stop the PID.
@@ -289,8 +295,8 @@ def _subprocess_runner(
         try:
             proc = subprocess.Popen(  # nosec - fixed argv and exact process-local env
                 argv,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 env=dict(child_env),
                 # Its own session: an operator Ctrl-C or a service stop signals
                 # the daemon's process group, not the governed child. The daemon
@@ -302,7 +308,7 @@ def _subprocess_runner(
         if job_id:
             _CHILDREN.procs[job_id] = proc
     try:
-        proc.wait()
+        output = child_output(proc)
     except BaseException:
         # Interrupted while waiting (an inline run's Ctrl-C): never leave the
         # child running in its own session. The interrupt still propagates,
@@ -310,12 +316,14 @@ def _subprocess_runner(
         _stop(proc)
         raise
     finally:
+        proc.wait()
         if job_id:
             with _CHILDREN.lock:
                 _CHILDREN.procs.pop(job_id, None)
     return RunOutcome(
         returncode=proc.returncode,
         report=_read_report(run_dir / "report.json", key=_run_key(child_env)),
+        output=output,
     )
 
 
@@ -647,24 +655,70 @@ def execute_job(
     ``error_code`` (which may leave the machine) and a local ``error`` detail
     (which never does).
     """
+    from openadapt_flow.crypto import ENV_KEY
+
+    known_secrets = [
+        value
+        for value in (
+            job.run_token,
+            settings.token,
+            settings.pending_token,
+            os.environ.get(ENV_KEY),
+        )
+        if value
+    ]
+
+    def remember_secrets(values: list[str]) -> None:
+        known_secrets.extend(values)
+        if on_secrets is not None:
+            on_secrets(values)
+
     _CURRENT.job_id = job.lease_job_id
     try:
-        return _execute_job(
+        result = _execute_job(
             job,
             settings,
             storage,
             runner=runner,
             require_run_token=require_run_token,
-            on_secrets=on_secrets,
+            on_secrets=remember_secrets,
             on_child_start=on_child_start,
         )
+        if result.error or (result.status != "success" and result.child_output):
+            sink = getattr(storage, "write_diagnostics", None)
+            if callable(sink):
+                try:
+                    sink(
+                        job.report_ref(),
+                        {
+                            "run_id": job.run_id,
+                            "error_code": result.error_code,
+                            "detail": mask_secrets(result.error, known_secrets)
+                            if result.error
+                            else None,
+                            "child_output": mask_secrets(
+                                result.child_output, known_secrets
+                            ),
+                        },
+                    )
+                except Exception:
+                    # Losing an optional local diagnostic cannot change the run outcome.
+                    result.local_diagnostics_unavailable = True
+        result.child_output = ""
+        return result
     finally:
         _CURRENT.job_id = None
 
 
-def _refused(job: ByocJob, code: str, detail: str, **extra: Any) -> ExecutionResult:
+def _refused(code: str, detail: str, **extra: Any) -> ExecutionResult:
     return ExecutionResult(
-        "failed", {}, None, job.report_ref(), detail, error_code=code, **extra
+        status="failed",
+        metrics={},
+        halt=None,
+        report_ref=None,
+        error=detail,
+        error_code=code,
+        **extra,
     )
 
 
@@ -683,7 +737,7 @@ def _execute_job(
         job.ensure_governed(require_run_token=require_run_token)
         _assert_managed_authority_is_pinned(job, settings)
     except ByocGovernanceError as exc:
-        return _refused(job, "governance_refused", str(exc))
+        return _refused("governance_refused", str(exc))
     admission = job.program_admission()
     if admission is not None and (
         admission["public_key_hex"] not in settings.pinned_admission_keys()
@@ -691,27 +745,23 @@ def _execute_job(
         # The control plane can name an admission key, but only this machine's
         # own configuration decides which admitters it trusts.
         return _refused(
-            job,
             "admission_key_not_pinned",
             "the program's admission key is not pinned in trusted_admission_keys",
         )
     if admission is not None and admission.get("admission_mode") == "admitter_key":
         if not settings.admission_key_dir:
             return _refused(
-                job,
                 "admission_registry_required",
                 "admitter jobs require current local public trust",
             )
     if admission is None and not settings.qualification_authority_file:
         return _refused(
-            job,
             "qualification_authority_unavailable",
             "qualified jobs need independent local context",
         )
     if not _grounding_env_available(job):
         gm = job.grounding_model
         return _refused(
-            job,
             "grounding_unavailable",
             f"org requires grounding model {gm.model or gm.provider!r} but its "
             f"api key env {gm.api_key_env!r} is not set on this connector",
@@ -721,7 +771,7 @@ def _execute_job(
             job.secrets_ref or settings.default_secrets_ref
         )
     except SecretStoreError as exc:
-        return _refused(job, "secrets_unavailable", str(exc))
+        return _refused("secrets_unavailable", str(exc))
     if on_secrets is not None and secret_env:
         on_secrets(list(secret_env.values()))
     signers_json: Optional[str] = None
@@ -732,7 +782,7 @@ def _execute_job(
             )
         except OSError:
             return _refused(
-                job, "signers_unavailable", "qualification signer registry unreadable"
+                "signers_unavailable", "qualification signer registry unreadable"
             )
 
     with tempfile.TemporaryDirectory(prefix="oa-byoc-") as tmp:
@@ -769,7 +819,6 @@ def _execute_job(
             bundle_dir = bundle_scratch
         except Exception as exc:  # storage failure: fail closed
             return _refused(
-                job,
                 "bundle_fetch_failed",
                 f"customer-storage bundle fetch failed: {type(exc).__name__}",
             )
@@ -784,7 +833,6 @@ def _execute_job(
                 or not readback_sha256
             ):
                 return _refused(
-                    job,
                     "program_admission_refused",
                     "the archive is not an admitted program with a read-back check",
                     verified_bundle_sha256=observed_sha256,
@@ -794,7 +842,6 @@ def _execute_job(
                 != admission["admission_sha256"]
             ):
                 return _refused(
-                    job,
                     "program_admission_refused",
                     "the archive's admission is not the dispatched one",
                     verified_bundle_sha256=observed_sha256,
@@ -814,7 +861,6 @@ def _execute_job(
                 _verify_program_reference(job, bundle_dir, key_dir)
             except Exception:
                 return _refused(
-                    job,
                     "program_admission_refused",
                     "signed program or current local principal refused",
                     verified_bundle_sha256=observed_sha256,
@@ -827,7 +873,6 @@ def _execute_job(
                 )
             except Exception:
                 return _refused(
-                    job,
                     "qualification_authority_refused",
                     "local qualification context refused",
                     verified_bundle_sha256=observed_sha256,
@@ -908,14 +953,12 @@ def _execute_job(
             )
             if job_cancelled(job.lease_job_id):
                 return _refused(
-                    job,
                     "cancelled_by_control_plane",
                     "cancelled before the governed child started",
                     verified_bundle_sha256=observed_sha256,
                 )
         except Exception as exc:
             return _refused(
-                job,
                 "child_invocation_failed",
                 f"governed child invocation failed: {type(exc).__name__}",
                 verified_bundle_sha256=observed_sha256,
@@ -925,14 +968,12 @@ def _execute_job(
             outcome = runner(argv, run_dir, child_env)
         except _CancelledBeforeStart:
             return _refused(
-                job,
                 "cancelled_by_control_plane",
                 "cancelled before the governed child started",
                 verified_bundle_sha256=observed_sha256,
             )
         except _ChildNotStarted as exc:
             return _refused(
-                job,
                 "child_invocation_failed",
                 f"governed child did not start: {exc}",
                 verified_bundle_sha256=observed_sha256,
@@ -991,6 +1032,13 @@ def _execute_job(
             outcome_error = (
                 "cancelled after child start; reconcile the system of record"
             )
+        elif report_target_kind is not None and report_target_kind != job.target_kind:
+            status = "failed"
+            error_code = "target_kind_mismatch"
+            outcome_error = (
+                "governed child report execution_target_kind does not match "
+                "the signed dispatch target_kind (fail closed)"
+            )
         elif outcome_unknown:
             status = "halt"
             error_code = "child_outcome_unknown"
@@ -999,12 +1047,13 @@ def _execute_job(
                 "(cancelled, stopped or killed while running, or killed after "
                 "reporting success), so a write may have landed"
             )
-        elif report_target_kind != job.target_kind:
-            status = "failed"
-            error_code = "target_kind_mismatch"
+        elif report_target_kind is None:
+            # Exit status alone cannot establish what happened to the record.
+            status = "halt"
+            error_code = "child_report_missing_target"
             outcome_error = (
-                "governed child report execution_target_kind does not match "
-                "the signed dispatch target_kind (fail closed)"
+                f"governed child exited with code {outcome.returncode} and "
+                "no execution_target_kind in its report"
             )
         else:
             outcome_error = None
@@ -1045,14 +1094,13 @@ def _execute_job(
                 )
 
         # 4. The PHI-bearing report body goes to the CUSTOMER'S store, never ours.
-        report_ref: Optional[str] = job.report_ref()
-        if (
-            error_code in ("cancelled_after_child_start", "child_outcome_unknown")
-            and not report
-        ):
-            report_ref = None
+        # An absent or unreadable report has no bytes to bind in a Receipt.
+        report_ref: Optional[str] = job.report_ref() if report else None
         halt = halt_object(report)
-        if error_code in ("cancelled_after_child_start", "child_outcome_unknown"):
+        if status == "halt" and (
+            halt is None
+            or error_code in ("cancelled_after_child_start", "child_outcome_unknown")
+        ):
             halt = {"present": True}
         if error_code is not None and outcome_envelope is not None:
             # An uncertain or mismatched run never reports a success envelope.
@@ -1097,4 +1145,5 @@ def _execute_job(
             failure_signal=automation_failure_signal(report, status, job.target_kind),
             outcome=outcome_envelope,
             error_code=error_code,
+            child_output=outcome.output,
         )

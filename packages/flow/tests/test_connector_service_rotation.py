@@ -48,6 +48,9 @@ class CredentialSet:
 @pytest.fixture(autouse=True)
 def service_environment(monkeypatch, tmp_path):
     monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path))
+    profile = tmp_path / "deployment.yaml"
+    profile.write_text("runtime: {profile: standard}\n", encoding="utf-8")
+    monkeypatch.setenv("BYOC_PROFILE", str(profile))
     for name in ("BYOC_CONNECTOR_TOKEN", "BYOC_ORG_ID", "CONTROL_PLANE_URL"):
         monkeypatch.delenv(name, raising=False)
 

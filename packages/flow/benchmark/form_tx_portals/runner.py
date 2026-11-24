@@ -61,6 +61,9 @@ class CaseScore:
     elapsed_ms: float
     outcome: str
     notes: str = ""
+    # The server oracle's verdict on the saved record alone, independent of
+    # any receipt or outcome (None where the arm does not record it).
+    saved_record_accurate: Optional[bool] = None
 
 
 @dataclass
@@ -510,6 +513,7 @@ def run_portal_benchmark(*, ppr_delay_ms: int = 80) -> PortalBenchmarkReport:
                         silent_corrupt_commit=(
                             res.outcome == FormTxOutcome.VERIFIED_DONE and not accurate
                         ),
+                        saved_record_accurate=accurate,
                         human_decisions=human_steps,
                         fields_filled_auto=res.fields_filled_auto,
                         receipt_verified=rcpt_ok,

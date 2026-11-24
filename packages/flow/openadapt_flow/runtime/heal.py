@@ -281,6 +281,37 @@ def apply_heal(workflow: Workflow, event: HealEvent) -> None:
     raise ValueError(f"workflow has no step {event.step_id!r}")
 
 
+def heal_frame_path(run_dir: Path | str, step_id: str) -> Path:
+    """Where a step's heal evidence frame lives: ``run_dir/heals/<id>/screen.png``."""
+    return Path(run_dir) / "heals" / step_id / _HEAL_SCREEN_NAME
+
+
+def write_heal_frame(run_dir: Path | str, step_id: str, frame_png: bytes) -> Path:
+    """Write a step's heal evidence frame as given (its digest is taken over
+    these bytes), through the sealed set when ``run_dir`` is in one, so a
+    screenshot never lands in plaintext inside an encrypted run."""
+    from openadapt_flow import sealed_set
+
+    path = heal_frame_path(run_dir, step_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    sealed_set.write_bytes(path, frame_png)
+    return path
+
+
+def has_heal_frame(run_dir: Path | str, step_id: str) -> bool:
+    """Whether ``run_dir`` holds a heal evidence frame for ``step_id``."""
+    from openadapt_flow import sealed_set
+
+    return sealed_set.is_file(heal_frame_path(run_dir, step_id))
+
+
+def read_heal_frame(run_dir: Path | str, step_id: str) -> bytes:
+    """A step's heal evidence frame, decrypted in memory when sealed."""
+    from openadapt_flow import sealed_set
+
+    return sealed_set.read_bytes(heal_frame_path(run_dir, step_id))
+
+
 def persist_heal(
     event: HealEvent,
     crop_png: bytes,
@@ -311,7 +342,7 @@ def persist_heal(
     from openadapt_flow import sealed_set
 
     sealed_set.write_bytes(heal_dir / _HEAL_TEMPLATE_NAME, _scrub_png(crop_png))
-    sealed_set.write_bytes(heal_dir / _HEAL_SCREEN_NAME, _scrub_png(frame_png))
+    write_heal_frame(run_dir, event.step_id, _scrub_png(frame_png))
     event.screenshot = f"heals/{event.step_id}/{_HEAL_SCREEN_NAME}"
     sealed_set.write_text(heal_dir / _HEAL_JSON_NAME, event.model_dump_json(indent=2))
     return heal_dir

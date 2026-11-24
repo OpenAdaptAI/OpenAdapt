@@ -105,15 +105,20 @@ def _fixtures() -> dict[str, Fixture]:
 def _record_with_capture(fixture: Fixture, url: str, out: Path) -> Path:
     """The demo driver's recording, with the browser's traffic captured."""
     from openadapt_flow import demo_driver
-    from openadapt_flow.network_capture import NetworkCapture
+    from openadapt_flow.network_capture import NetworkCapture, require_raw_ready
 
+    # Raw bodies (synthetic data) need OPENADAPT_FLOW_PLAINTEXT_AT_REST here.
+    require_raw_ready(out)
     original = demo_driver.PlaywrightBackend.launch
     captures: list[tuple[NetworkCapture, float]] = []
 
     def launch(*args: Any, **kwargs: Any):
         backend, close = original(*args, **kwargs)
         captures.append(
-            (NetworkCapture(backend.page.context).start(), time.monotonic())
+            (
+                NetworkCapture(backend.page.context, bodies="raw").start(),
+                time.monotonic(),
+            )
         )
         return backend, close
 
