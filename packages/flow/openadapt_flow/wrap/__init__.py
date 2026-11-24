@@ -10,6 +10,13 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
+from openadapt_flow.wrap.dirty_and_provenance import (
+    DirtyBufferMonitor as DirtyBufferMonitor,
+)
+from openadapt_flow.wrap.dirty_and_provenance import (
+    SsaIdentifierGuard as SsaIdentifierGuard,
+)
+
 if TYPE_CHECKING:
     # Imported lazily: the agent integrations pull in POSIX-only modules,
     # and building the openadapt-flow parser imports this package.
