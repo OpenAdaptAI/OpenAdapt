@@ -26,17 +26,29 @@ from openadapt_flow.write_receipt import Verification as PortableReceiptVerifica
 from openadapt_flow.write_receipt import verify as verify_receipt
 
 from openadapt_verify.guard import checked_write, verified
+from openadapt_verify.portal_readback import (
+    ConfirmationPdfOracle,
+    FieldCheck,
+    FreshReloadSummaryOracle,
+    PortalReadbackResult,
+    ReloadProof,
+)
 
 __version__ = "0.2.1"
 
 __all__ = [
     "Actor",
     "AlreadyWritten",
+    "ConfirmationPdfOracle",
     "Contract",
+    "FieldCheck",
+    "FreshReloadSummaryOracle",
     "LocalSealVerification",
     "Outcome",
+    "PortalReadbackResult",
     "PortableReceiptVerification",
     "ReceiptError",
+    "ReloadProof",
     "Scope",
     "WriteBlocked",
     "WriteGuard",
