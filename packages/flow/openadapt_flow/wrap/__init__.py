@@ -16,6 +16,12 @@ from openadapt_flow.wrap.checkpoint_spec import (
 from openadapt_flow.wrap.checkpoint_spec import (
     compile_checkpoint_spec as compile_checkpoint_spec,
 )
+from openadapt_flow.wrap.dirty_and_provenance import (
+    DirtyBufferMonitor as DirtyBufferMonitor,
+)
+from openadapt_flow.wrap.dirty_and_provenance import (
+    SsaIdentifierGuard as SsaIdentifierGuard,
+)
 from openadapt_flow.wrap.entity_ledger import (
     CheckpointEnforcer as CheckpointEnforcer,
 )
