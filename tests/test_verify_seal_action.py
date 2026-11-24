@@ -19,10 +19,19 @@ ACTION_YML = ACTION_DIR / "action.yml"
 VECTORS = ROOT / "packages" / "types" / "tests" / "vectors" / "record-run-v1"
 
 
-def _load_module() -> Any:
+def _ensure_in_tree_types() -> None:
     types_dir = str(ROOT / "packages" / "types")
     if types_dir not in sys.path:
         sys.path.insert(0, types_dir)
+    pkg = sys.modules.get("openadapt_types")
+    if pkg is not None and hasattr(pkg, "__path__"):
+        in_tree_pkg = str(ROOT / "packages" / "types" / "openadapt_types")
+        if in_tree_pkg not in pkg.__path__:
+            pkg.__path__.insert(0, in_tree_pkg)
+
+
+def _load_module() -> Any:
+    _ensure_in_tree_types()
     spec = importlib.util.spec_from_file_location("verify_seal_action", SCRIPT_PATH)
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
@@ -46,9 +55,7 @@ def _make_signed_receipt(
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-    types_dir = str(ROOT / "packages" / "types")
-    if types_dir not in sys.path:
-        sys.path.insert(0, types_dir)
+    _ensure_in_tree_types()
     from openadapt_types import receipt as r
 
     priv = Ed25519PrivateKey.generate()
