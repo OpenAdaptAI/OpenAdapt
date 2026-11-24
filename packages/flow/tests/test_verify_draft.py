@@ -549,3 +549,148 @@ def test_a_skip_of_a_table_that_never_moves_is_refused(mockloan: Path) -> None:
     assert not outcome.admitted
     problems = [a for a in outcome.admissions[0].attribution if a.problem]
     assert any(a.table == "metadata" and "skipped table" in a.problem for a in problems)
+
+
+def test_masked_redacts_all_secret_shapes() -> None:
+    """Every secret shape probed in review is masked before reaching a model."""
+    from openadapt_flow.verify_draft.inputs import masked
+    from openadapt_flow.verify_draft.sandbox import Request
+
+    # 1. JSON list under a secret key
+    r1 = masked(
+        Request(
+            method="POST",
+            url="https://app.test/api/auth",
+            headers={},
+            body='{"token": ["tok-alpha", "tok-beta"], "user": "ada"}',
+            mime="application/json",
+            status=200,
+            response='{"ok": true}',
+        )
+    )
+    assert "tok-alpha" not in (r1["body"] or "")
+    assert "tok-beta" not in (r1["body"] or "")
+    assert '"ada"' in (r1["body"] or "")
+
+    # 2. credential, pin, otp, jwt keys
+    r2 = masked(
+        Request(
+            method="POST",
+            url="https://app.test/api/login",
+            headers={},
+            body='{"credential": "c-val", "pin": "4321", "otp": "998877", "jwt": "eyJ.secret.sig", "title": "note"}',
+            mime="application/json",
+            status=200,
+            response=None,
+        )
+    )
+    for leak in ("c-val", "4321", "998877", "eyJ.secret.sig"):
+        assert leak not in (r2["body"] or "")
+    assert '"note"' in (r2["body"] or "")
+
+    # 3. multipart/form-data password
+    boundary = "----TestBoundary7MA4YWxkTrZu0gW"
+    mp_body = (
+        f"--{boundary}\r\n"
+        'Content-Disposition: form-data; name="username"\r\n\r\n'
+        "ada\r\n"
+        f"--{boundary}\r\n"
+        'Content-Disposition: form-data; name="password"\r\n\r\n'
+        "super-secret-pw\r\n"
+        f"--{boundary}--\r\n"
+    )
+    r3 = masked(
+        Request(
+            method="POST",
+            url="https://app.test/login",
+            headers={},
+            body=mp_body,
+            mime=f"multipart/form-data; boundary={boundary}",
+            status=200,
+            response=None,
+        )
+    )
+    assert "super-secret-pw" not in (r3["body"] or "")
+    assert "ada" in (r3["body"] or "")
+
+    # 4. text/plain body replaced with placeholder
+    r4 = masked(
+        Request(
+            method="POST",
+            url="https://app.test/raw",
+            headers={},
+            body="Bearer raw-secret-token-123",
+            mime="text/plain",
+            status=200,
+            response=None,
+        )
+    )
+    assert "raw-secret-token-123" not in (r4["body"] or "")
+    assert r4["body"] == "<redacted body>"
+
+    # 5. HTML response with csrf_token input replaced with placeholder
+    r5 = masked(
+        Request(
+            method="GET",
+            url="https://app.test/form",
+            headers={},
+            body=None,
+            mime="",
+            status=200,
+            response='<form><input type="hidden" name="csrf_token" value="csrf-secret-999"></form>',
+        )
+    )
+    assert "csrf-secret-999" not in (r5["response"] or "")
+    assert r5["response"] == "<redacted non-json response>"
+
+    # 6. Secret inside a JSON response list (refresh)
+    r6 = masked(
+        Request(
+            method="POST",
+            url="https://app.test/sessions",
+            headers={},
+            body=None,
+            mime="",
+            status=200,
+            response='[{"id": 1, "refresh": "ref-secret-xyz"}]',
+        )
+    )
+    assert "ref-secret-xyz" not in (r6["response"] or "")
+    assert '"***"' in (r6["response"] or "")
+
+
+def test_qualifier_run_records_sqlite_driver_error_as_error_case(
+    mockloan: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A DB driver error (e.g. sqlite3.OperationalError) becomes an ERROR case
+    rather than aborting the whole qualification report."""
+    import sqlite3
+
+    from openadapt_flow.verify_draft import admit as A
+    from openadapt_flow.verify_draft import inputs as I
+    from openadapt_flow.verify_draft import sandbox as S
+
+    cfg = S.load_sandbox(mockloan / "sandbox.yaml")
+    task = I.load_task(mockloan / "task.yaml")
+    store = S.Store(cfg.store)
+    app = S.App(cfg)
+    writes = I.writes(
+        I.load_trace(mockloan / "trace.har"), skip_paths=app.login_paths()
+    )
+    base = store.read()
+    demo = A.record_demo(store, app, writes, task.params, base)
+    contract = A.prepare(GOOD, cfg)
+
+    q = A.Qualifier(cfg, store, app, demo)
+    case = A.Case("clean", "clean-1", "db fault", "confirmed")
+
+    def boom(_base: Any) -> Any:
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(store, "read_moved", boom)
+    got = q.run(contract, case, values=demo.params)
+    assert got is None
+    assert case.outcome == "ERROR"
+    assert any("OperationalError" in r for r in case.reasons)
+    q._judge(case)
+    assert case.passed is False

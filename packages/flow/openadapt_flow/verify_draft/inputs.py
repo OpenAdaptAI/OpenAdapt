@@ -25,7 +25,14 @@ from openadapt_flow.verify_draft.sandbox import Request
 
 #: Longest description text sent to the model.
 MAX_DESCRIPTION_CHARS = 40_000
-_SECRET = re.compile(r"pass(word)?|secret|token|api[-_]?key|session|csrf|auth", re.I)
+#: Shared secret-looking field/header/column name pattern (also imported by admit.py).
+SECRET_NAME_RE = re.compile(
+    r"pass(word)?|secret|token|api[-_]?key|hash|salt|session|csrf|auth"
+    r"|credential|bearer|refresh|private[-_]?key|access[-_]?key"
+    r"|(^|[^a-z0-9])(cred|pin|otp|tfa|jwt)([^a-z0-9]|$)",
+    re.I,
+)
+_SECRET = SECRET_NAME_RE
 _SECRET_HEADERS = frozenset(
     {
         "authorization",
@@ -239,39 +246,81 @@ def writes(
     return [r for r in trace if r.method not in _READS and r.path not in skip_paths]
 
 
-def _mask_json(value: Any) -> Any:
+def _mask_json(value: Any, *, mask_scalars: bool = False) -> Any:
     if isinstance(value, dict):
         return {
-            k: (
-                "***"
-                if _SECRET.search(str(k)) and not isinstance(v, (dict, list))
-                else _mask_json(v)
+            k: _mask_json(
+                v,
+                mask_scalars=mask_scalars or bool(SECRET_NAME_RE.search(str(k))),
             )
             for k, v in value.items()
         }
     if isinstance(value, list):
-        return [_mask_json(v) for v in value]
-    return value
+        return [_mask_json(v, mask_scalars=mask_scalars) for v in value]
+    return "***" if mask_scalars else value
+
+
+def _mask_multipart(body: str, mime: str) -> str:
+    from email.parser import BytesParser
+    from email.policy import default
+
+    raw = f"Content-Type: {mime}\r\nMIME-Version: 1.0\r\n\r\n".encode(
+        "utf-8"
+    ) + body.encode("utf-8", errors="replace")
+    msg = BytesParser(policy=default).parsebytes(raw)
+    if not msg.is_multipart():
+        return "<redacted multipart body>"
+    fields: list[dict[str, str]] = []
+    for part in msg.iter_parts():
+        name = str(part.get_param("name", header="content-disposition") or "")
+        filename = part.get_filename()
+        if filename is not None:
+            fields.append({"name": name, "filename": str(filename), "value": "***"})
+            continue
+        if not name or SECRET_NAME_RE.search(name):
+            fields.append({"name": name, "value": "***"})
+            continue
+        payload = part.get_content()
+        text_val = payload if isinstance(payload, str) else "<redacted binary>"
+        fields.append({"name": name, "value": text_val[:500]})
+    if not fields:
+        return "<redacted multipart body>"
+    return json.dumps({"multipart_fields": fields})[:2000]
 
 
 def _mask_body(body: Optional[str], mime: str) -> Optional[str]:
     if body is None:
         return None
-    if "json" in mime:
+    mime_low = (mime or "").lower()
+    if "json" in mime_low:
         try:
-            return json.dumps(_mask_json(json.loads(body)))
+            return json.dumps(_mask_json(json.loads(body)))[:2000]
         except ValueError:
             return "***"
-    if "x-www-form-urlencoded" in mime:
+    if "x-www-form-urlencoded" in mime_low:
         from urllib.parse import parse_qsl, urlencode
 
         return urlencode(
             [
-                (k, "***" if _SECRET.search(k) else v)
+                (k, "***" if SECRET_NAME_RE.search(k) else v)
                 for k, v in parse_qsl(body, keep_blank_values=True)
             ]
-        )
-    return body[:2000]
+        )[:2000]
+    if "multipart/form-data" in mime_low:
+        return _mask_multipart(body, mime)
+    return "<redacted body>"
+
+
+def _mask_response(response: Optional[str], *, response_chars: int) -> Optional[str]:
+    if response is None:
+        return None
+    stripped = response.lstrip()
+    if stripped[:1] in "{[":
+        try:
+            return json.dumps(_mask_json(json.loads(response)))[:response_chars] or None
+        except ValueError:
+            return "<redacted non-json response>"
+    return "<redacted non-json response>"
 
 
 def masked(req: Request, *, response_chars: int = 1500) -> dict[str, Any]:
@@ -283,24 +332,20 @@ def masked(req: Request, *, response_chars: int = 1500) -> dict[str, Any]:
     parts = urlsplit(req.url)
     query = urlencode(
         [
-            (k, "***" if _SECRET.search(k) else v)
+            (k, "***" if SECRET_NAME_RE.search(k) else v)
             for k, v in parse_qsl(parts.query, keep_blank_values=True)
         ]
     )
-    response = req.response
-    if response is not None:
-        response = _mask_body(
-            response, "json" if response.lstrip()[:1] in "{[" else "text"
-        )
+    response = _mask_response(req.response, response_chars=response_chars)
     return {
         "method": req.method,
         "url": urlunsplit(("", "", parts.path, query, "")),
         "headers": {
             k: v
             for k, v in req.headers.items()
-            if k.lower() not in _SECRET_HEADERS and not _SECRET.search(k)
+            if k.lower() not in _SECRET_HEADERS and not SECRET_NAME_RE.search(k)
         },
         "body": _mask_body(req.body, req.mime),
         "status": req.status,
-        "response": (response or "")[:response_chars] or None,
+        "response": response,
     }

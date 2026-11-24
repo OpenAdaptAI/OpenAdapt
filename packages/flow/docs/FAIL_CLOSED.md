@@ -291,6 +291,9 @@ Done:
 - [x] `receipt_record._tally_lines` (C2 C3): fix: a line check nobody listed
   keeps the run from VERIFIED and counts as not checked.
 - [x] `tx/wire_tap.relay_redirect_location` (C6): registered after #2470.
+- [x] `verify_draft.judge_case` (C3 C5): admission cases settle on the verdict
+  kernel via allow-listed outcome maps; untestable, error, or unknown codes
+  never hold.
 
 Next, most bug-prone first:
 

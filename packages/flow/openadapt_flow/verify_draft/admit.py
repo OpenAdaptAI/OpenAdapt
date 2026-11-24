@@ -52,7 +52,21 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
+from openadapt_flow.verdict import (
+    Errored,
+    FailClosed,
+    Obligations,
+    Observed,
+    Result,
+    Settlement,
+    Status,
+    Subject,
+    observe,
+    settle,
+)
+from openadapt_flow.verdict_sites import verdict_site
 from openadapt_flow.verifier import Outcome
+from openadapt_flow.verify_draft.inputs import SECRET_NAME_RE
 from openadapt_flow.verify_draft.sandbox import (
     App,
     Move,
@@ -146,15 +160,8 @@ _ATTRIBUTION_KEYS = frozenset(
         "server_set",
     }
 )
-_SECRET_COLUMN = re.compile(
-    r"pass(word)?|secret|token|api[-_]?key|hash|salt|(^|_)(otp|tfa)(_|$)", re.I
-)
+_SECRET_COLUMN = SECRET_NAME_RE
 _IDENTIFIER = re.compile(r"(^|_)(id|key|no|number|code|slug|mrn|ref|uuid)$", re.I)
-_EXPECT_CONFIRMED = "confirmed"
-_CONFIRMED_LABEL = Outcome.CONFIRMED.value
-_ERROR_LABEL = "ERROR"
-_OK_RECHECKS = ("", _CONFIRMED_LABEL, "NONE")
-_BROKEN_LABELS = ("", _ERROR_LABEL, "NO_BASELINE")
 
 
 class DraftProblem(ValueError):
@@ -541,6 +548,74 @@ def _perturb(value: Any) -> Any:
     return s + " X"
 
 
+@verdict_site("verify_draft.judge_case", classes="C3 C5")
+def judge_case(case: Case) -> Settlement:
+    """Settle one admission case against its expected verifier outcome.
+
+    An untestable case, an empty/error/no-baseline outcome, or any unknown
+    outcome or expectation code settles as ``NOT_CHECKED`` and never passes.
+    """
+    subject = Subject("case", case.name or "case")
+    if case.untestable:
+        return settle(
+            Obligations.fix([subject], source="verify_draft"),
+            [Result(subject, Status.NOT_CHECKED, reason="untestable")],
+        )
+    if not case.applicable:
+        return settle(
+            Obligations.fix([subject], source="verify_draft"),
+            [Result.held(subject, Observed("not_applicable"), reason="not_applicable")],
+        )
+    if case.expect == "confirmed":
+        obligations = [subject]
+        results = [
+            Result.from_code(
+                subject,
+                case.outcome,
+                held=frozenset({"CONFIRMED"}),
+                refuted=frozenset({"REFUTED"}),
+            )
+        ]
+        if case.recheck:
+            recheck_subject = Subject("recheck", case.name or "case")
+            obligations.append(recheck_subject)
+            results.append(
+                Result.from_code(
+                    recheck_subject,
+                    case.recheck,
+                    held=frozenset({"CONFIRMED", "NONE"}),
+                    refuted=frozenset({"REFUTED"}),
+                )
+            )
+        return settle(Obligations.fix(obligations, source="verify_draft"), results)
+    if case.expect == "refuted":
+        final_subject = Subject("final", case.name or "case")
+        final_code = case.recheck or case.outcome
+        return settle(
+            Obligations.fix([subject, final_subject], source="verify_draft"),
+            [
+                Result.from_code(
+                    subject,
+                    case.outcome,
+                    held=frozenset(
+                        {"CONFIRMED", "REFUTED", "UNCERTAIN", "INDETERMINATE"}
+                    ),
+                    refuted=frozenset(),
+                ),
+                Result.from_code(
+                    final_subject,
+                    final_code,
+                    held=frozenset({"REFUTED", "UNCERTAIN", "INDETERMINATE"}),
+                    refuted=frozenset({"CONFIRMED", "NONE"}),
+                ),
+            ],
+        )
+    return settle(
+        Obligations.fix([subject], source="verify_draft"),
+        [Result(subject, Status.NOT_CHECKED, reason=f"unknown expect {case.expect!r}")],
+    )
+
+
 class Qualifier:
     """Runs one draft through the admission suite on the sandbox."""
 
@@ -614,114 +689,99 @@ class Qualifier:
         )
 
         started = time.monotonic()
-        try:
-            data = self._fast(contract)
-            c = Contract.from_dict(data, name="draft")
-            params = self._params(values, actor)
-            self.store.restore(self.demo.base)
-            ledger = Ledger(MemoryLedger())
+        draft_problem: list[DraftProblem] = []
+
+        def _execute() -> Optional[tuple[Rows, Rows]]:
             try:
-                pending = begin_write(
-                    c,
-                    params,
-                    actor=Actor("agent", f"verify-draft-{actor}"),
-                    ledger=ledger,
-                    write_key=uuid.uuid4().hex,
-                    workdir=self.workdir,
-                )
-            except (WriteBlocked, VerifierError) as exc:
-                case.outcome = "NO_BASELINE"
-                case.reasons = [str(exc)]
-                return None
-            if before is not None:
-                note = before()
-                if note:
-                    case.untestable = True  # the setup step itself failed
-                    case.note = note
-                    return None
-            statuses = self.app.send(
-                self.demo.writes, actor, swap_map(self.demo.params, values)
-            )
-            if any(s >= 400 for s in statuses):
-                # For a clean write: the values were invalid (the caller
-                # skips them). For anything else the case can't be built.
-                self.refused_statuses = list(statuses)
-                case.applicable = False
-                case.untestable = case.group != "clean"
-                case.note = f"the app refused the write (HTTP {max(statuses)})"
-                return None
-            pre = self.demo.base
-            post = self.store.read_moved(pre)
-            if fault is not None:
-                fault(pre, post)
-                post = self.store.read_moved(pre)
-            result = verify_write(pending, seal=False)
-            case.outcome = result.outcome.value
-            case.reasons = list(result.reasons)
-            case.moved = list(
-                ((result.evidence or {}).get("frame") or {}).get("moves") or []
-            )[:20]
-            if rechecks and result.outcome.value == _CONFIRMED_LABEL:
-                if result.recheck is None:
-                    case.recheck = "NONE"
-                    case.reasons.append(
-                        "no recheck was scheduled: set frame.database.recheck_after_s"
-                    )
-                else:
-                    if revert is not None:
-                        revert(pre, post)
-                    rr = recheck(
+                data = self._fast(contract)
+                c = Contract.from_dict(data, name="draft")
+                params = self._params(values, actor)
+                self.store.restore(self.demo.base)
+                ledger = Ledger(MemoryLedger())
+                try:
+                    pending = begin_write(
                         c,
-                        result,
-                        params=params,
+                        params,
                         actor=Actor("agent", f"verify-draft-{actor}"),
-                        wait=True,
                         ledger=ledger,
+                        write_key=uuid.uuid4().hex,
+                        workdir=self.workdir,
                     )
-                    case.recheck = str(getattr(rr.outcome, "value", rr.outcome))
-                    case.reasons += list(rr.reasons)
-            return pre, post
-        except DraftProblem:
-            raise
-        except (
-            _NotApplicable,
-            _Untestable,
-            VerifierError,
-            WriteBlocked,
-            OSError,
-            RuntimeError,
-            ValueError,
-            TypeError,
-            LookupError,
-            ArithmeticError,
-        ) as exc:
-            case.outcome = case.outcome or _ERROR_LABEL
-            case.reasons.append(f"{type(exc).__name__}: {exc}")
+                except (WriteBlocked, VerifierError) as exc:
+                    case.outcome = "NO_BASELINE"
+                    case.reasons = [str(exc)]
+                    return None
+                if before is not None:
+                    note = before()
+                    if note:
+                        case.untestable = True  # the setup step itself failed
+                        case.note = note
+                        return None
+                statuses = self.app.send(
+                    self.demo.writes, actor, swap_map(self.demo.params, values)
+                )
+                if any(s >= 400 for s in statuses):
+                    # For a clean write: the values were invalid (the caller
+                    # skips them). For anything else the case can't be built.
+                    self.refused_statuses = list(statuses)
+                    case.applicable = False
+                    case.untestable = case.group != "clean"
+                    case.note = f"the app refused the write (HTTP {max(statuses)})"
+                    return None
+                pre = self.demo.base
+                post = self.store.read_moved(pre)
+                if fault is not None:
+                    fault(pre, post)
+                    post = self.store.read_moved(pre)
+                result = verify_write(pending, seal=False)
+                case.outcome = result.outcome.value
+                case.reasons = list(result.reasons)
+                case.moved = list(
+                    ((result.evidence or {}).get("frame") or {}).get("moves") or []
+                )[:20]
+                if rechecks and result.outcome is Outcome.CONFIRMED:
+                    if result.recheck is None:
+                        case.recheck = "NONE"
+                        case.reasons.append(
+                            "no recheck was scheduled: set frame.database.recheck_after_s"
+                        )
+                    else:
+                        if revert is not None:
+                            revert(pre, post)
+                        rr = recheck(
+                            c,
+                            result,
+                            params=params,
+                            actor=Actor("agent", f"verify-draft-{actor}"),
+                            wait=True,
+                            ledger=ledger,
+                        )
+                        case.recheck = str(getattr(rr.outcome, "value", rr.outcome))
+                        case.reasons += list(rr.reasons)
+                return pre, post
+            except DraftProblem as exc:
+                draft_problem.append(exc)
+                raise FailClosed(str(exc)) from exc
+
+        try:
+            obs = observe(_execute)
+            if isinstance(obs, Errored):
+                case.outcome = case.outcome or "ERROR"
+                case.reasons.append(f"{obs.exc_type}: {obs.reason}")
+                return None
+            if isinstance(obs, Observed):
+                return obs.value  # type: ignore[return-value]
             return None
+        except FailClosed:
+            if draft_problem:
+                raise draft_problem[0] from None
+            raise
         finally:
             case.seconds = round(time.monotonic() - started, 2)
 
     @staticmethod
     def _judge(case: Case) -> None:
-        if case.untestable:
-            case.passed = False
-            return
-        if not case.applicable:
-            case.passed = True
-            return
-        if case.expect == _EXPECT_CONFIRMED:
-            # No recheck scheduled is the late-revert case's failure, not a
-            # false stop on a clean write.
-            case.passed = (
-                case.outcome == _CONFIRMED_LABEL and case.recheck in _OK_RECHECKS
-            )
-        else:
-            final = case.recheck or case.outcome
-            case.passed = (
-                case.outcome not in _BROKEN_LABELS
-                and final != _CONFIRMED_LABEL
-                and final != "NONE"
-            )
+        case.passed = judge_case(case).passes
 
     # -- the suite
 
@@ -1047,7 +1107,7 @@ class Qualifier:
                     self.store.update(m.table, m.key, {c: m.b[c] for c in m.columns})
 
             self.run(contract, case, values=values, revert=undo, rechecks=True)
-            if case.outcome == _CONFIRMED_LABEL and not case.recheck:
+            if case.outcome == Outcome.CONFIRMED.value and not case.recheck:
                 case.recheck = "NONE"
             return [case]
 
@@ -1137,7 +1197,7 @@ class Qualifier:
             self.run(contract, case, values=values, fault=guarded)
         finally:
             if not case.applicable or case.untestable:
-                case.outcome = case.outcome if case.outcome != _ERROR_LABEL else ""
+                case.outcome = ""
                 case.reasons = [
                     r
                     for r in case.reasons
