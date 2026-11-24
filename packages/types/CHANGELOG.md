@@ -1,9 +1,25 @@
 # CHANGELOG
 
 
-## Unreleased
+## v0.24.2 (2026-11-23)
 
-### Features
+0.24.1 was stamped on main but never published. 0.24.2 is the first
+published release with this content, and the version to install. Its first
+main push runs failed on unrelated Flow jobs, which
+[#2589](https://github.com/OpenAdaptAI/OpenAdapt/pull/2589),
+[#2600](https://github.com/OpenAdaptAI/OpenAdapt/pull/2600) and
+[#2616](https://github.com/OpenAdaptAI/OpenAdapt/pull/2616) fixed. The
+run for [#2495](https://github.com/OpenAdaptAI/OpenAdapt/pull/2495) then failed on a Flow `__main__` module that ran on
+import, which [#2639](https://github.com/OpenAdaptAI/OpenAdapt/pull/2639) fixed, so it publishes from the run after
+that fix and includes #2495's additions below.
+
+openadapt-flow 3.4.0 imports `openadapt_types.receipt`, which 0.24.0 does not
+have. This release adds it and the other modules Flow imports on main
+(openadapt-flow 4.0.0 will require it). It stays
+within the `<0.25.0` range every released Flow 3 accepts, so upgrading this
+package repairs a Flow 3.4.0 install.
+
+### Also in this release ([#2495](https://github.com/OpenAdaptAI/OpenAdapt/pull/2495))
 
 - `check_level`: the basis (`separate_session` is level 3; `system_api`,
   `activity_log`, `db_frame` and `owned_connection` are level 4), the receipt
@@ -22,22 +38,6 @@
   separate-session read) when the contract's minimum is exactly
   `independent_session`. Every other contract keeps the tier-2 floor, and
   every receipt that validated before still validates.
-
-## v0.24.2 (2026-11-23)
-
-0.24.1 was stamped on main but never published. 0.24.2 is the first
-published release with this content, and the version to install. Its first
-main push runs failed on unrelated Flow jobs, which
-[#2589](https://github.com/OpenAdaptAI/OpenAdapt/pull/2589),
-[#2600](https://github.com/OpenAdaptAI/OpenAdapt/pull/2600) and
-[#2616](https://github.com/OpenAdaptAI/OpenAdapt/pull/2616) fixed, so it
-publishes from the run after those fixes.
-
-openadapt-flow 3.4.0 imports `openadapt_types.receipt`, which 0.24.0 does not
-have. This release adds it and the other modules Flow imports on main
-(openadapt-flow 4.0.0 will require it). It stays
-within the `<0.25.0` range every released Flow 3 accepts, so upgrading this
-package repairs a Flow 3.4.0 install.
 
 ### Features
 
