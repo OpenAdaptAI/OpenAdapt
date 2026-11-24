@@ -6,13 +6,16 @@ The sandbox is MockLoan's fault server (SQLite, in-process).
 
 from __future__ import annotations
 
+import copy
 import json
+import re
 import shutil
 import subprocess
 import sys
 import textwrap
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 import pytest
 import requests
@@ -95,6 +98,10 @@ def mockloan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
     from openadapt_flow.mockloan import fault_server
 
     monkeypatch.setenv("OPENADAPT_LOCAL_SEAL", "off")
+    # Admission records are signed with this computer's key: keep it here.
+    monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal"))
+    monkeypatch.delenv("OPENADAPT_SEAL_KEY", raising=False)
+    monkeypatch.delenv("OPENADAPT_SEAL_KEY_FILE", raising=False)
     url, db, stop = fault_server.serve(0)
     base = url.rstrip("/")
     for loan, prod, amt in [("LN-1", "Auto", "10.00"), ("LN-2", "Home", "20.00")]:
@@ -694,3 +701,448 @@ def test_qualifier_run_records_sqlite_driver_error_as_error_case(
     assert any("OperationalError" in r for r in case.reasons)
     q._judge(case)
     assert case.passed is False
+
+
+# -- fix-forward for #2438 (Grok's review, issuecomment-7135157858) -------------
+
+
+def _qualifier(root: Path) -> tuple[A.Qualifier, dict[str, Any]]:
+    from openadapt_flow.verify_draft import sandbox as S
+
+    cfg = S.load_sandbox(root / "sandbox.yaml")
+    task = I.load_task(root / "task.yaml")
+    store = S.Store(cfg.store)
+    app = S.App(cfg)
+    writes = I.writes(I.load_trace(root / "trace.har"), skip_paths=app.login_paths())
+    demo = A.record_demo(store, app, writes, task.params, store.read())
+    return A.Qualifier(cfg, store, app, demo), A.prepare(GOOD, cfg)
+
+
+@pytest.mark.timeout(300)
+def test_a_crashed_recheck_never_passes_a_clean_case(
+    mockloan: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Finding 1: a clean write confirmed, then its recheck raised
+    ``database is locked``. Before the fix every clean case passed with
+    ``recheck=''``."""
+    import sqlite3
+
+    import openadapt_flow.verifier as V
+
+    def locked(*_a: Any, **_k: Any) -> Any:
+        raise sqlite3.OperationalError("database is locked")
+
+    q, contract = _qualifier(mockloan)
+    monkeypatch.setattr(V, "recheck", locked)
+    for i, payload in enumerate(PAYLOADS[: A.CLEAN_PROBES]):
+        case = A.Case("clean", f"clean-{i + 1}", "recheck crashes", "confirmed")
+        q.run(contract, case, values=q._values(payload), rechecks=True)
+        assert case.outcome == "CONFIRMED", case.line()
+        assert case.recheck == "ERROR", case.line()
+        assert any("database is locked" in r for r in case.reasons)
+        q._judge(case)
+        assert case.passed is False, case.line()
+    adm = q.qualify(contract, PAYLOADS, attribute=False)
+    assert adm.admitted is False
+    assert not any(c.passed for c in adm.cases if c.group == "clean")
+
+
+# Finding 2: names the old pattern let through, and names it over-masked.
+MASKED_NAMES = [
+    "totp",
+    "otpCode",
+    "userPin",
+    "mfa_code",
+    "cookie",
+    "code",
+    "sig",
+    "X-Amz-Signature",
+    # what the old pattern caught must stay caught
+    "token",
+    "csrf_token",
+    "credential",
+    "jwt",
+    "refresh",
+    "password",
+    "api_key",
+    "session_id",
+    "private_key",
+    "access_key",
+    "password_hash",
+    "salt",
+    "bearer",
+    "X-Amz-Credential",
+    # Grok's round-2 review on #2635: masked on main, must stay masked
+    "session",
+    "SESSION",
+    "JSESSIONID",
+    "PHPSESSID",
+    "sessid",
+    "sso_session",
+    "laravel_session",
+    "session_key",
+    "sessionKey",
+    "x-session",
+    "authorization",
+    "proxy-authorization",
+    "oauth_verifier",
+    "authn",
+    # Grok's round-3 review on #2635: compound names main's pattern masked
+    "authorization_code",
+    "authorizationCode",
+    "sessionkey",
+    "SESSIONKEY",
+    "session_data",
+    "sessionData",
+    "sessiondata",
+    "session_value",
+    "sessionValue",
+    "session_handle",
+    "sessionHandle",
+    "session_ticket",
+    "sessionTicket",
+    "usersession",
+    "pwdhash",
+    "passhash",
+    "hashkey",
+    "authkey",
+    "authid",
+    "authz",
+    "session_state",
+    "sessionState",
+    "oauth_state",
+    "oauthState",
+    "oauth_nonce",
+]
+CLEAR_NAMES = [
+    "author",
+    "author_id",
+    "authored_at",
+    "session_count",
+    "record_key",
+    "productCode",
+    "refresh_interval",
+    "authorization_id",
+    "memo",
+]
+
+#: The pattern #2438 shipped (``inputs.SECRET_NAME_RE`` before this fix),
+#: kept here only to prove nothing it masked is now sent in clear.
+OLD_SECRET_NAME_RE = re.compile(
+    r"pass(word)?|secret|token|api[-_]?key|hash|salt|session|csrf|auth"
+    r"|credential|bearer|refresh|private[-_]?key|access[-_]?key"
+    r"|(^|[^a-z0-9])(cred|pin|otp|tfa|jwt)([^a-z0-9]|$)",
+    re.I,
+)
+#: Names the old pattern matched only by a substring, and that are not
+#: secrets: the one allowlist :func:`I.is_secret_name` sends in clear.
+OLD_OVERMASKED = I.LEGACY_FALSE_POSITIVES
+#: Every name either list names, plus lookalikes the old pattern matched.
+NAME_CORPUS = sorted(
+    {*MASKED_NAMES, *CLEAR_NAMES, *OLD_OVERMASKED}
+    | {
+        "user_password",
+        "secretAnswer",
+        "idToken",
+        "apiKey",
+        "content_hash",
+        "pwSalt",
+        "sessionToken",
+        "xsrf-token",
+        "oauth_token",
+        "client_credentials",
+        "bearer_token",
+        "refresh_token",
+        "privateKey",
+        "accessKey",
+        "user-pin",
+        "otp",
+        "tfa",
+        "jwt",
+        "cred",
+        "authToken",
+        "auth",
+        "authCode",
+    }
+)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        n
+        for n in NAME_CORPUS
+        if OLD_SECRET_NAME_RE.search(n) and n not in OLD_OVERMASKED
+    ],
+)
+def test_every_name_the_old_pattern_masked_is_still_masked(name: str) -> None:
+    from openadapt_flow.verify_draft.inputs import is_secret_name
+
+    assert is_secret_name(name), f"{name} was masked on main and now is not"
+
+
+def _generated_names() -> list[str]:
+    """Every old-pattern stem with prefixes, suffixes and casings."""
+    stems = [
+        "pass", "password", "passwd", "pwd", "secret", "token", "apikey",
+        "api_key", "api-key", "hash", "salt", "session", "csrf", "auth",
+        "authz", "authorization", "credential", "bearer", "refresh",
+        "privatekey", "private_key", "accesskey", "access_key", "cred",
+        "pin", "otp", "tfa", "jwt",
+    ]  # fmt: skip
+    prefixes = ["", "user_", "user", "x-", "oauth_", "my", "sso_", "client"]
+    suffixes = ["", "_id", "id", "key", "Key", "_data", "Hash", "_state",
+                "value", "_ticket", "_code", "Count"]  # fmt: skip
+    names = set()
+    for stem in stems:
+        for pre in prefixes:
+            for suf in suffixes:
+                name = pre + stem + suf
+                names.update({name, name.upper(), name.lower()})
+    return sorted(names)
+
+
+def test_no_name_the_old_pattern_masked_is_sent_in_clear() -> None:
+    """For a broad generated corpus: matched by main's pattern and not an
+    allowlisted false positive implies masked, at every call site."""
+    from openadapt_flow.verify_draft.inputs import masked
+    from openadapt_flow.verify_draft.sandbox import Request
+
+    corpus = sorted({*_generated_names(), *NAME_CORPUS})
+    expected = [
+        n
+        for n in corpus
+        if OLD_SECRET_NAME_RE.search(n) and n.lower() not in OLD_OVERMASKED
+    ]
+    assert len(expected) > 2000
+    leaked = [n for n in expected if not I.is_secret_name(n)]
+    assert leaked == []
+    columns = [n for n in expected if n.strip().lower() != "code"]
+    assert [n for n in columns if not A._secret_column(n)] == []
+    value = "corpus-leak-value"
+    for n in expected[::7]:  # every call site, on a sample
+        got = masked(
+            Request(
+                method="POST",
+                url="https://app.test/x?" + urlencode({n: value}),
+                headers={n: value},
+                body=json.dumps({n: value}),
+                mime="application/json",
+                status=200,
+                response=json.dumps({n: value}),
+            )
+        )
+        assert value not in json.dumps(got), n
+
+
+@pytest.mark.parametrize("name", sorted(OLD_OVERMASKED))
+def test_the_old_overmasked_names_are_clear(name: str) -> None:
+    assert {"author", "session_count", "authorization_id"} <= OLD_OVERMASKED
+    from openadapt_flow.verify_draft.inputs import is_secret_name
+
+    assert OLD_SECRET_NAME_RE.search(name), name  # the list stays honest
+    assert not is_secret_name(name)
+
+
+@pytest.mark.parametrize("name", MASKED_NAMES)
+def test_secret_names_are_masked_everywhere(name: str) -> None:
+    from urllib.parse import urlencode
+
+    from openadapt_flow.verify_draft.inputs import masked
+    from openadapt_flow.verify_draft.sandbox import Request
+
+    value = f"leak-{len(name):02d}-value"
+    json_body = masked(
+        Request(
+            method="POST",
+            url="https://app.test/api/x?" + urlencode({name: value, "page": "2"}),
+            headers={name: value, "Accept": "application/json"},
+            body=json.dumps({name: value, "nested": {name: value}, "title": "kept"}),
+            mime="application/json",
+            status=200,
+            response=json.dumps([{name: value, "id": 1}]),
+        )
+    )
+    form_body = masked(
+        Request(
+            method="POST",
+            url="https://app.test/form",
+            headers={},
+            body=urlencode({name: value, "title": "kept"}),
+            mime="application/x-www-form-urlencoded",
+            status=200,
+            response=None,
+        )
+    )
+    for got in (json_body, form_body):
+        assert value not in json.dumps(got), f"{name} reached the model: {got}"
+    assert "page=2" in json_body["url"] and "kept" in (json_body["body"] or "")
+    assert json_body["headers"] == {"Accept": "application/json"}
+
+
+@pytest.mark.parametrize("name", CLEAR_NAMES)
+def test_ordinary_names_are_not_masked(name: str) -> None:
+    from openadapt_flow.verify_draft.inputs import masked
+    from openadapt_flow.verify_draft.sandbox import Request
+
+    value = f"plain-{len(name):02d}-value"
+    got = masked(
+        Request(
+            method="POST",
+            url="https://app.test/api/x",
+            headers={name: value},
+            body=json.dumps({name: value}),
+            mime="application/json",
+            status=200,
+            response=json.dumps({name: value}),
+        )
+    )
+    assert json.loads(got["body"]) == {name: value}
+    assert json.loads(got["response"]) == {name: value}
+    assert got["headers"] == {name: value}
+    assert A._secret_column(name) is False
+
+
+def test_secret_columns_use_the_shared_names() -> None:
+    for name in MASKED_NAMES:
+        if name != "code":  # a column named code is an identifier
+            assert A._secret_column(name), name
+    assert A._secret_column("code") is False
+
+
+def test_a_json_cookie_key_is_masked() -> None:
+    from openadapt_flow.verify_draft.inputs import masked
+    from openadapt_flow.verify_draft.sandbox import Request
+
+    got = masked(
+        Request(
+            method="POST",
+            url="https://app.test/api/session",
+            headers={},
+            body=json.dumps(
+                {"cookie": "sessionid=abc123secret; path=/", "user": "ada"}
+            ),
+            mime="application/json",
+            status=200,
+            response=None,
+        )
+    )
+    assert "abc123secret" not in (got["body"] or "")
+    assert json.loads(got["body"])["user"] == "ada"
+
+
+# Finding 3: a forged --check record.
+
+
+def _located(text_: str) -> dict[str, Any]:
+    """A draft pointed at a store, as :func:`A.prepare` leaves it."""
+    data = yaml.safe_load(text_)
+    location = {"sqlite_database": "/nonexistent/verify-draft.sqlite3"}
+    data["verifier"]["surfaces"]["record"].update(location)
+    data["frame"]["database"]["read"] = dict(location)
+    return data
+
+
+def _admitted_contract(home: Path) -> dict[str, Any]:
+    contract = _located(GOOD)
+    contract["provenance"] = {
+        "drafted_by": {"model": M.MODEL},
+        "admission": {
+            "suite": D.SUITE,
+            "check_sha256": A.check_sha256(contract),
+            "rounds": 1,
+            "admitted_at": "2026-11-24T12:00:00Z",
+            "recheck_window_tested_s": 2.0,
+            "faults": {"wrong_row": "refuted", "late_revert": "refuted"},
+            "clean_writes_confirmed": 5,
+            "attribution_probe_writes": 5,
+            "bookkeeping_confirmed_by_person": [],
+        },
+    }
+    return D.sign_admission(contract, home=home)
+
+
+def _write(path: Path, contract: dict[str, Any]) -> Path:
+    path.write_text(yaml.safe_dump(contract, sort_keys=False))
+    return path
+
+
+def test_a_signed_admission_record_passes_check(tmp_path: Path) -> None:
+    home = tmp_path / "seal"
+    path = _write(tmp_path / "contract.yaml", _admitted_contract(home))
+    assert D.admission_problem(path, home=home) is None
+
+
+def test_a_forged_admission_record_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Grok's probe: a WEAK contract with a self-computed check digest."""
+    home = tmp_path / "seal"
+    monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(home))
+    _admitted_contract(home)  # this computer has a key
+    weak = _located(WEAK)
+    weak["provenance"] = {
+        "admission": {"suite": D.SUITE, "check_sha256": A.check_sha256(weak)}
+    }
+    path = _write(tmp_path / "forged.yaml", weak)
+    assert D.admission_problem(path, home=home) == "the admission record is not signed"
+    assert D.main(["--check", str(path)]) == 1
+
+
+def test_a_signature_moved_onto_another_check_is_refused(tmp_path: Path) -> None:
+    home = tmp_path / "seal"
+    good = _admitted_contract(home)
+    weak = _located(WEAK)
+    weak["provenance"] = copy.deepcopy(good["provenance"])
+    weak["provenance"]["admission"]["check_sha256"] = A.check_sha256(weak)
+    path = _write(tmp_path / "moved.yaml", weak)
+    assert (
+        D.admission_problem(path, home=home)
+        == "the admission record changed after it was signed"
+    )
+
+
+def test_an_edited_admission_record_is_refused(tmp_path: Path) -> None:
+    home = tmp_path / "seal"
+    contract = _admitted_contract(home)
+    contract["provenance"]["admission"]["faults"]["wrong_row"] = "refuted (edited)"
+    path = _write(tmp_path / "edited.yaml", contract)
+    assert (
+        D.admission_problem(path, home=home)
+        == "the admission record changed after it was signed"
+    )
+
+
+def test_a_record_signed_by_another_key_is_refused_unless_pinned(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow.offline_seal import public_key_entry
+
+    other = tmp_path / "other-seal"
+    mine = tmp_path / "my-seal"
+    path = _write(tmp_path / "foreign.yaml", _admitted_contract(other))
+    got = D.admission_problem(path, home=mine)
+    assert got is not None and "unknown_key" in got
+    registry = tmp_path / "keys.json"
+    registry.write_text(json.dumps({"keys": [public_key_entry(other)]}))
+    assert D.admission_problem(path, keys=registry, home=mine) is None
+    monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(mine))
+    monkeypatch.delenv("OPENADAPT_SEAL_KEY", raising=False)
+    monkeypatch.delenv("OPENADAPT_SEAL_KEY_FILE", raising=False)
+    assert D.main(["--check", str(path)]) == 1
+    assert D.main(["--check", str(path), "--keys", str(registry)]) == 0
+
+
+def test_an_unsignable_admission_writes_no_contract(
+    mockloan: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow.offline_seal import LocalSealError
+
+    def no_key(*_a: Any, **_k: Any) -> Any:
+        raise LocalSealError("key_unavailable", "test")
+
+    monkeypatch.setattr(D, "sign_subject", no_key)
+    outcome = _run(mockloan, Fixed(GOOD), rounds=1)
+    assert outcome.admitted is False
+    assert "could not be signed" in outcome.reason
+    assert not (mockloan / "out" / "contract.yaml").exists()
