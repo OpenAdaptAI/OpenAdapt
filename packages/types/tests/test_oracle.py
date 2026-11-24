@@ -162,10 +162,21 @@ def test_second_session_adapter_is_valid_and_cannot_seal() -> None:
     assert obs.tier is OracleTier.INDEPENDENT_SESSION
     with pytest.raises(ProductionSealRefused, match="oracle tier 2 or 3"):
         issue_production_verified(obs)
-    with pytest.raises(ValidationError, match="oracle tier 2 or 3"):
+    # On the one ladder a separate-session read is check level 3: a receipt
+    # may say verified when its contract opted in to independent_session,
+    # but it still can't mint a production Seal (tier 2 or 3, above).
+    receipt = _receipt(
+        contracts=_contract(
+            minimum_effect_strength=EffectStrengthV1.INDEPENDENT_SESSION,
+            observed_effect_strength=EffectStrengthV1.INDEPENDENT_SESSION,
+        ),
+        oracle_tier=1,
+    )
+    assert receipt.outcome is ExecuteTerminalOutcomeV1.VERIFIED
+    # A contract that didn't opt in keeps the tier-2 floor.
+    with pytest.raises(ValidationError):
         _receipt(
             contracts=_contract(
-                minimum_effect_strength=EffectStrengthV1.INDEPENDENT_SESSION,
                 observed_effect_strength=EffectStrengthV1.INDEPENDENT_SESSION,
             ),
             oracle_tier=1,
