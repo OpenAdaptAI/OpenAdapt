@@ -420,12 +420,18 @@ class Contract:
     def null_unsafe_params(self) -> dict[str, str]:
         """Each parameter that may not be ``None``, with where it is used.
 
-        A null binds only in an effect's ``match``, ``new_records`` and
-        ``value``, where it must equal a stored null. Anywhere else (a query
-        or path parameter, an idempotency or composite key, a read-back
-        field, the frame) a null has no value to send or compare, so
+        A null binds in an effect's ``match``, ``new_records`` and ``value``,
+        where it must equal a stored null, and in a SQL verifier's
+        ``sql_query_params`` when every placeholder occurrence in
+        ``sql_query`` is a provably null-safe exact column equality in
+        ``WHERE``/``ON``/``HAVING`` (rewritten to ``IS NULL`` or bound to
+        ``IS NOT DISTINCT FROM`` / ``<=>``). Anywhere else (other query or
+        path parameters, an idempotency or composite key, a read-back field,
+        the frame) a null has no value to send or compare, so
         :func:`begin_write` refuses it before anything is read.
         """
+
+        from openadapt_flow.runtime.effects.sql import sql_param_is_null_safe
 
         found: dict[str, str] = {}
 
@@ -440,9 +446,39 @@ class Contract:
                 for item in value:
                     walk(item, where)
 
+        def walk_verifier(body: Any, where: str) -> None:
+            if not isinstance(body, Mapping):
+                walk(body, where)
+                return
+            is_sql = body.get("kind") == "sql"
+            sql_query = body.get("sql_query") if is_sql else None
+            for key, item in body.items():
+                if key == "surfaces" and isinstance(item, Mapping):
+                    for surface_name, surface_body in item.items():
+                        walk_verifier(surface_body, f"{where}.surfaces.{surface_name}")
+                elif key == "candidates" and isinstance(item, (list, tuple)):
+                    for idx, candidate in enumerate(item):
+                        walk_verifier(candidate, f"{where}.candidates[{idx}]")
+                elif (
+                    key == "sql_query_params"
+                    and is_sql
+                    and isinstance(sql_query, str)
+                    and isinstance(item, Mapping)
+                ):
+                    for qk, expr in item.items():
+                        if isinstance(qk, str) and sql_param_is_null_safe(
+                            sql_query, qk
+                        ):
+                            continue
+                        walk(expr, f"{where}.sql_query_params.{qk}")
+                else:
+                    walk(item, f"{where}.{key}" if key != where else where)
+
         dumped = self.config.model_dump(mode="json")
         for section, body in dumped.items():
-            if section != "effects":
+            if section == "verifier":
+                walk_verifier(body, section)
+            elif section != "effects":
                 walk(body, section)
         for index, effect in enumerate(dumped.get("effects") or []):
             for key, body in effect.items():
@@ -2382,6 +2418,10 @@ _VERSION_REASONS = {
     "no_new_version": "the target changed in the window but no new version of it was read",
     "history_changed": "a version of the target read before the write is gone after it, "
     "so a save in the window could be hidden",
+    "ambiguous_xmax": "the target's row was replaced under a shared lock, so one "
+    "save can't be told from two",
+    "created_target": "the record an update or found check names was created in "
+    "the window, not saved over",
 }
 
 
@@ -2890,7 +2930,11 @@ def _recheck_attempt(
 
     if isinstance(write, WriteResult):
         write_id, key = write.write_id, write.write_key
-        if ledger is _NO_LEDGER and write.ledger is not None:
+        if ledger is _NO_LEDGER:
+            # The ledger the write was begun under. A write begun with no
+            # ledger (``begin_write(ledger=None)``) has no attempt to bind,
+            # so its recheck uses none either: resolving the default ledger
+            # here would find no attempt and hold a correct write UNCERTAIN.
             ledger = write.ledger
     else:
         receipt = write.payload.get("receipt") or {}
@@ -3479,7 +3523,13 @@ def _judge_recheck(
     if wait_s > 0:
         if not wait:
             raise RecheckNotDue(state.due_at, wait_s)
-        time.sleep(wait_s)
+        # Sleep until the wall clock, not only the sleep timer, has reached
+        # the due time: the read time is the wall clock truncated to the
+        # second, and a wake a few milliseconds early would make a correct
+        # recheck read "not yet due" (held UNCERTAIN).
+        while wait_s > 0:
+            time.sleep(wait_s + 0.05)
+            wait_s = seconds_until(state.due_at)
     excused: list[tuple[Mapping[str, Any], Mapping[str, object]]] = []
     for i, other in enumerate(excused_by):
         later = other.recheck if isinstance(other, WriteResult) else other
@@ -3658,7 +3708,7 @@ def capture_database(
     caps data rows across tables and auxiliary queries; exceeding it refuses
     the read without returning a partial snapshot.
 
-    ``profile`` (``openemr``) applies an app profile's bookkeeping rules, the
+    ``profile`` (by app-profile name) applies an app profile's bookkeeping rules, the
     same ones the frame uses (``openadapt_flow.app_profiles``); its own-row
     rules need the acting user's sign-in names (``actor_names``), whose ids
     are read in the same transaction. ``before``: a snapshot taken earlier

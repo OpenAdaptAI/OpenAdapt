@@ -87,6 +87,8 @@ DEFAULT_HOST = "https://app.openadapt.ai"
 TOKEN_ENV = "OPENADAPT_INGEST_TOKEN"
 KEYRING_SERVICE = "openadapt-flow"
 PAIRING_SECRET_RE = re.compile(r"^oap_[A-Za-z0-9_-]{43}$")
+#: RFC 7636 section 4.1: 43 to 128 unreserved characters.
+PKCE_VERIFIER_RE = re.compile(r"^[A-Za-z0-9\-._~]{43,128}$")
 
 #: Environment variable naming the deployment lane (``cloud`` | ``byoc`` |
 #: ``regulated``). Falls back to ``config.toml`` ``[hosted] deployment_lane``.
@@ -726,8 +728,14 @@ def connect(
     device_name: Optional[str] = None,
     destination_kind: Optional[str] = None,
     trusted_hosts: Optional[list[str]] = None,
+    code_verifier: Optional[str] = None,
 ) -> dict[str, Any]:
     """Claim a five-minute browser pairing without clobbering a working token.
+
+    ``code_verifier`` is the RFC 7636 verifier for a pairing that a browser
+    login (:mod:`openadapt_flow.browser_login`) bound to an S256 challenge.
+    Cloud refuses such a pairing without it, so a code seen in transit is
+    useless on its own.
 
     The one-time secret authorizes only ``POST /api/local-bridge/pairings/claim``.
     The previous canonical token is snapshotted before the claim. The returned
@@ -759,11 +767,16 @@ def connect(
 
     clean_device = re.sub(r"[\x00-\x1f\x7f]", "", device_name or socket.gethostname())
     clean_device = clean_device.strip()[:80] or "this computer"
+    if code_verifier is not None and not PKCE_VERIFIER_RE.fullmatch(code_verifier):
+        raise HostedError("Login proof is malformed")
+    claim_body: dict[str, str] = {"pairing_secret": secret, "device_name": clean_device}
+    if code_verifier is not None:
+        claim_body["code_verifier"] = code_verifier
     claim_url = f"{resolved_host}/api/local-bridge/pairings/claim"
     try:
         response = httpx.post(
             claim_url,
-            json={"pairing_secret": secret, "device_name": clean_device},
+            json=claim_body,
             timeout=_API_TIMEOUT,
             follow_redirects=False,
         )
@@ -1752,19 +1765,23 @@ def report_break(
     from openadapt_flow.ir import RunReport
 
     run_path = Path(run_dir)
+    from openadapt_flow import sealed_set
+
     report_path = run_path / "report.json"
-    if not report_path.is_file():
-        raise HostedError(f"No report.json in {run_path} — nothing to report.")
     try:
-        report_size = report_path.stat().st_size
-    except OSError as exc:
+        # An encrypted run directory is read in memory (docs/phi_at_rest.md).
+        if not sealed_set.is_file(report_path):
+            raise HostedError(f"No report.json in {run_path} — nothing to report.")
+        report_bytes = sealed_set.read_bytes(report_path)
+    except (OSError, sealed_set.SealedSetError) as exc:
         raise HostedError("Could not inspect report.json") from exc
+    report_size = len(report_bytes)
     if report_size > _MAX_RUN_REPORT_BYTES:
         raise HostedError(
             f"report.json exceeds the {_MAX_RUN_REPORT_BYTES}-byte reporting limit"
         )
     try:
-        report = RunReport.model_validate_json(report_path.read_text(encoding="utf-8"))
+        report = RunReport.model_validate_json(report_bytes.decode("utf-8"))
     except (OSError, ValueError) as exc:
         raise HostedError("report.json is unreadable or invalid") from exc
 
@@ -1915,6 +1932,44 @@ def _coarse_status_for_outcome(
     raise HostedError("report contains an unknown execution outcome")
 
 
+def _sealed_client_run_id(run_path: Path, id_path: Path) -> str:
+    """The client run id of an encrypted run directory, kept in its sealed
+    index (a random UUID, so a structural file), never as a stray plaintext
+    file the set's readers would refuse. Created once, under its own lock,
+    so a retry reports the same id."""
+    import hashlib
+    import uuid
+
+    from openadapt_flow import at_rest, sealed_set
+    from openadapt_flow.sealed_maintenance import mutation_lock
+
+    # Its own lock (a private folder per run path), not the set's: the
+    # sealed write below takes the set's lock itself.
+    lock_dir = (
+        at_rest._home()
+        / "locks"
+        / (
+            "report-run-id-"
+            + hashlib.sha256(os.fsencode(os.path.abspath(run_path))).hexdigest()[:32]
+        )
+    )
+    try:
+        at_rest._private_dir(lock_dir.parent)
+        at_rest._private_dir(lock_dir)
+        with mutation_lock(lock_dir):
+            if sealed_set.is_file(id_path):
+                raw = sealed_set.read_text(id_path)
+                parsed = str(UUID(raw.strip()))
+                if raw not in {parsed, f"{parsed}\n"}:
+                    raise ValueError("run report id is not canonical")
+                return parsed
+            fresh = str(uuid.uuid4())
+            sealed_set.write_text(id_path, fresh + "\n")
+            return fresh
+    except (OSError, ValueError) as exc:  # a SealedSetError is a ValueError
+        raise HostedError("run report id is unreadable or invalid") from exc
+
+
 def _client_run_id(run_path: Path) -> str:
     """The stable, client-generated UUID for this run directory.
 
@@ -1926,6 +1981,10 @@ def _client_run_id(run_path: Path) -> str:
     import uuid
 
     id_path = run_path / _RUN_REPORT_ID_FILE
+    from openadapt_flow import sealed_set
+
+    if sealed_set.is_sealed_path(run_path):
+        return _sealed_client_run_id(run_path, id_path)
 
     def read_existing(metadata: os.stat_result) -> str:
         """Read one exact existing entry, allowing its creator to finish.
@@ -2412,19 +2471,24 @@ def report_run(
     from openadapt_flow.ir import RunReport
 
     run_path = Path(run_dir)
+    from openadapt_flow import sealed_set
+
     report_path = run_path / "report.json"
-    if not report_path.is_file():
-        raise HostedError(f"No report.json in {run_path} — nothing to report.")
     try:
-        report_size = report_path.stat().st_size
-    except OSError as exc:
+        # An encrypted run directory is read in memory (docs/phi_at_rest.md).
+        if not sealed_set.is_file(report_path):
+            raise HostedError(f"No report.json in {run_path} — nothing to report.")
+        report_bytes = sealed_set.read_bytes(report_path)
+    except (OSError, sealed_set.SealedSetError) as exc:
         raise HostedError("Could not inspect report.json") from exc
+    report_size = len(report_bytes)
     if report_size > _MAX_RUN_REPORT_BYTES:
         raise HostedError(
             f"report.json exceeds the {_MAX_RUN_REPORT_BYTES}-byte reporting limit"
         )
     try:
-        report = RunReport.model_validate_json(report_path.read_text(encoding="utf-8"))
+        # The bytes already read (decrypted in memory for an encrypted run).
+        report = RunReport.model_validate_json(report_bytes.decode("utf-8"))
     except (OSError, ValueError) as exc:
         raise HostedError("report.json is unreadable or invalid") from exc
 

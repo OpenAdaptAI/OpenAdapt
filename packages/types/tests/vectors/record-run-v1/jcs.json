@@ -1,0 +1,77 @@
+{
+  "cases": [
+    {
+      "canonical": "0",
+      "input": 0.0
+    },
+    {
+      "canonical": "1",
+      "input": 1.0
+    },
+    {
+      "canonical": "-0.5",
+      "input": -0.5
+    },
+    {
+      "canonical": "4.5",
+      "input": 4.5
+    },
+    {
+      "canonical": "1e-7",
+      "input": 1e-07
+    },
+    {
+      "canonical": "0.000001",
+      "input": 1e-06
+    },
+    {
+      "canonical": "100000000000000000000",
+      "input": 1e+20
+    },
+    {
+      "canonical": "1e+21",
+      "input": 1e+21
+    },
+    {
+      "canonical": "123.456",
+      "input": 123.456
+    },
+    {
+      "canonical": "9007199254740991",
+      "input": 9007199254740991
+    },
+    {
+      "canonical": "\"caf\u00e9\\n\\t\\\"q\\\"\"",
+      "input": "caf\u00e9\n\t\"q\""
+    },
+    {
+      "canonical": "{\"a\":\"x\",\"b\":[1,{\"c\":null,\"d\":0.1}]}",
+      "input": {
+        "a": "x",
+        "b": [
+          1,
+          {
+            "c": null,
+            "d": 0.1
+          }
+        ]
+      }
+    },
+    {
+      "canonical": "{\"z\":3,\"\u20ac\":1,\"\ud83d\ude00\":2}",
+      "input": {
+        "z": 3,
+        "\u20ac": 1,
+        "\ud83d\ude00": 2
+      }
+    },
+    {
+      "canonical": "{\"\ud83d\ude00\":2,\"\uffff\":1}",
+      "input": {
+        "\uffff": 1,
+        "\ud83d\ude00": 2
+      }
+    }
+  ],
+  "description": "RFC 8785 canonical JSON cases (input as JSON, expected canonical text)."
+}

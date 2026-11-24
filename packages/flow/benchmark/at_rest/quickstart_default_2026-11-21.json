@@ -1,0 +1,24 @@
+{
+  "schema": "openadapt.flow.benchmark.at-rest-quickstart/v1",
+  "what": "openadapt quickstart --headless (MockMed), wall clock per run, before (origin/main 4d9dc90c6: run folders, recording and bundle plaintext) and after (this branch: all sealed-set v3)",
+  "machine": "2026 MacBook (Apple silicon), shared with other agent sessions; device key in a file store (OPENADAPT_FLOW_KEY_STORE=file), so no keychain call",
+  "method": "interleaved before/after, one run each in turn, same venv, PYTHONPATH selects the code; each run in a fresh output folder; 1-minute load average at the end of each run",
+  "date": "2026-11-21",
+  "runs": [
+    {"code": "before", "seconds": 127.1, "load_1m": 34.73, "note": "first run of the round"},
+    {"code": "after", "seconds": 98.04, "load_1m": 34.85},
+    {"code": "before", "seconds": 90.62, "load_1m": 24.78},
+    {"code": "after", "seconds": 94.5, "load_1m": 36.72},
+    {"code": "before", "seconds": 88.87, "load_1m": 29.48},
+    {"code": "after", "seconds": 89.78, "load_1m": 30.24},
+    {"code": "before", "seconds": 91.17, "load_1m": 32.23},
+    {"code": "after", "seconds": 243.57, "load_1m": 21.91, "excluded": "system Chrome failed to launch (Playwright 180 s timeout) before the quickstart fell back to its own Chromium; unrelated to encryption"}
+  ],
+  "summary": {
+    "before_median_s": 90.62,
+    "after_median_s": 94.5,
+    "before_n": 3,
+    "after_n": 3,
+    "note": "medians exclude the first before run (warm-up) and the Chrome-timeout run; the machine was loaded (load 25-37), so the 4% gap is within run-to-run noise (before ranged 88.9-127.1 s). An earlier trial of the branch alone at load 32-57 took 78.1 s."
+  }
+}

@@ -49,6 +49,7 @@ this module must not depend on `openadapt_flow.vision`.
 
 from __future__ import annotations
 
+import copy
 import io
 import json
 import time
@@ -61,6 +62,7 @@ from typing import Any, Callable, Optional
 from PIL import Image, ImageDraw
 
 from openadapt_flow import sealed_set as _sealed
+from openadapt_flow.at_rest import POLICY
 from openadapt_flow.backend import (
     Backend,
     PageCloseExpectationBackend,
@@ -74,6 +76,7 @@ from openadapt_flow.ir import (
     StructuralLocator,
 )
 from openadapt_flow.native_selection_capture import demonstrated_native_choice
+from openadapt_flow.second_factor import ONE_TIME_CODE_MARKER, ONE_TIME_CODE_PARAM
 
 #: Bound on waiting for a newly opened page's first navigation.
 _NEW_PAGE_LOAD_TIMEOUT_S = 10.0
@@ -167,6 +170,20 @@ def _census_has_twin(census: dict[str, Any]) -> bool:
     )
 
 
+class CredentialFieldError(ValueError):
+    """A sign-in field was about to receive a value the recorder can't withhold.
+
+    Raised BEFORE anything is typed or written: a password or username field
+    (``CredentialFieldBackend``) takes only a value that is exactly one
+    declared input, so the program can name it as a secret parameter.
+    """
+
+
+#: A region that blacks out a whole frame, for a credential field whose box
+#: could not be read.
+_WHOLE_FRAME = (0, 0, 1_000_000, 1_000_000)
+
+
 @dataclass
 class _NativeSelectObservation:
     backend: Any
@@ -212,7 +229,7 @@ class Recorder:
         surface_id: str = PRIMARY_SURFACE_ID,
         surface_kind: Optional[str] = None,
         page_backend_factory: Optional[Callable[[Any], Backend]] = None,
-        encryption_key: Optional[str] = None,
+        encryption_key: Optional[str] | object = POLICY,
         finalize_on_finish: bool = True,
         capture_hover: bool = False,
         event_clock: Optional[list[float]] = None,
@@ -257,6 +274,11 @@ class Recorder:
         # sealed set that is finalized (indexed) when the recording finishes.
         self._sealed_writer: Optional[_sealed.SealedSetWriter] = None
         self._finalize_on_finish = finalize_on_finish
+        # Encrypted by default (the at-rest policy decides); an explicit
+        # ``None`` is plaintext that strict mode refuses and the ledger records.
+        encryption_key = _sealed.new_artifact_key(
+            encryption_key, "a recording", self._dir
+        )
         if encryption_key:
             self._sealed_writer = _sealed.SealedSetWriter(
                 self._dir, "recording", encryption_key
@@ -287,6 +309,14 @@ class Recorder:
         self._params: dict[str, str] = {}
         # Names of parameters declared secret (never their values).
         self._withheld_param_names: set[str] = set()
+        # Declared input value -> its name (None when two inputs share it),
+        # for values a sign-in field may receive. None until a caller opts in
+        # (withhold_credentials): other recordings keep their own handling.
+        self._credential_inputs: Optional[dict[str, Optional[str]]] = None
+        # Sign-in fields typed into so far: (surface, kind, region). Every
+        # later frame that still shows one has it blacked out.
+        self._credential_fields: list[tuple[Any, str, tuple[int, int, int, int]]] = []
+        self.last_type_withheld = False
         self._native_select_pending: Optional[_NativeSelectObservation] = None
         self._i = 0
         self._t0 = time.monotonic()
@@ -339,6 +369,27 @@ class Recorder:
             lambda: backend.drag(int(x), int(y), int(end_x), int(end_y)),
         )
 
+    def withhold_credentials(self, inputs: dict[str, str]) -> None:
+        """Declare the run's inputs (name -> value) that a sign-in may use.
+
+        When the focused field is a password field, or the username field of
+        a sign-in form (``CredentialFieldBackend``), the typed text must be
+        exactly one of these values. The event then records the input's
+        NAME as a secret parameter and never its text, and the field is
+        blacked out in every frame that shows it. Text matching none of
+        them is refused before it is typed (:class:`CredentialFieldError`).
+        """
+        from openadapt_flow.secret_inputs import require_credential_observation
+
+        require_credential_observation(self._backend)
+        values: dict[str, Optional[str]] = {}
+        for name, value in inputs.items():
+            text = str(value)
+            if not text:
+                continue
+            values[text] = None if text in values else str(name)
+        self._credential_inputs = values
+
     def type_text(self, text: str, param: Optional[str] = None) -> None:
         """Type text into the focused element, recording the event.
 
@@ -354,16 +405,110 @@ class Recorder:
             param: If set, the typed value is a workflow parameter with this
                 name; it is included on the event and in ``meta.json`` params.
         """
+        credential = (
+            self._focused_credential() if self._credential_inputs is not None else None
+        )
         event: dict[str, Any] = {"kind": "type", "text": text}
         # Read the label BEFORE acting: focus is already on the receiving
         # field (the demonstrator clicked it), and typing may navigate.
         field_label = self._focused_field_label()
         if field_label:
             event["field_label"] = field_label
-        if param is not None:
-            event["param"] = param
-            self._params[param] = text
+        if credential is not None and credential[0] == "one-time-code":
+            self._type_one_time_code(event, text, credential[1])
+            return
+        if text == ONE_TIME_CODE_MARKER:
+            raise CredentialFieldError(
+                "the one-time code marker was typed into a field that does not "
+                "ask for a one-time code; nothing was typed"
+            )
+        if credential is not None and credential[0] == "unknown":
+            if text in (self._credential_inputs or {}):
+                raise CredentialFieldError(
+                    "the focused field could not be read, so a declared input "
+                    "can't be typed into it (it may be a sign-in field); "
+                    "nothing was typed"
+                )
+            credential = None
+        if credential is not None:
+            kind, region = credential
+            name = param or (self._credential_inputs or {}).get(text)
+            if not name:
+                raise CredentialFieldError(
+                    f"a {kind} field takes only one of the task's declared "
+                    "inputs, so the value can be withheld as a secret "
+                    "parameter; nothing was typed"
+                )
+            event.pop("text")
+            event.update(param=name, secret=True, credential=kind)
+            event["redacted_region"] = list(region)
+            self._withheld_param_names.add(name)
+            self._params.pop(name, None)
+            self._credential_fields.append((self._active_surface, kind, region))
+        else:
+            withheld = [
+                value
+                for value, name in (self._credential_inputs or {}).items()
+                if name in self._withheld_param_names and value in text
+            ]
+            if withheld:
+                # A sign-in value already withheld must not reappear as text in
+                # another field (a slip, or a "show password" text box).
+                raise CredentialFieldError(
+                    "a sign-in value withheld as a secret parameter was about to "
+                    "be typed into a field that is not a credential field; "
+                    "nothing was typed"
+                )
+            if param is not None:
+                event["param"] = param
+                self._params[param] = text
+        #: Whether the last TYPE was withheld as a secret (callers that log
+        #: what they typed must not log it).
+        self.last_type_withheld = credential is not None
         self._record(event, lambda: self._backend.type_text(text))
+
+    def _type_one_time_code(
+        self, event: dict[str, Any], text: str, region: tuple[int, int, int, int]
+    ) -> None:
+        """Type a code a person supplies into the focused one-time-code field.
+
+        The agent's text is discarded (it never has the code), unless it is a
+        declared input, which is refused: a code field takes only a code. The
+        handoff (:mod:`openadapt_flow.runtime.second_factor_step`) binds the
+        field, masks it on screen, asks, re-checks and types once. The event
+        names :data:`ONE_TIME_CODE_PARAM` and holds no value.
+        """
+        from openadapt_flow import second_factor
+        from openadapt_flow.backends.one_time_field import one_time_field_for
+        from openadapt_flow.runtime.second_factor_step import DeliveryLedger, Handoff
+
+        if text in (self._credential_inputs or {}):
+            raise CredentialFieldError(
+                "a one-time code field takes only a code from a person, not a "
+                "declared input; nothing was typed"
+            )
+        event.pop("text", None)
+        event.update(
+            param=ONE_TIME_CODE_PARAM,
+            secret=True,
+            one_time="code",
+            credential="one-time-code",
+            redacted_region=list(region),
+        )
+        self._credential_fields.append((self._active_surface, "one-time-code", region))
+        self.last_type_withheld = True
+        ledger = self.__dict__.setdefault("_second_factor_ledger", DeliveryLedger())
+        handoff = Handoff(one_time_field_for(self._backend), ledger)
+
+        def deliver() -> None:
+            try:
+                handoff.deliver_code("recording", key=f"recording:{self._i}")
+            except second_factor.SecondFactorRefused as refused:
+                raise CredentialFieldError(
+                    f"a one-time code field needs a code from a person ({refused})"
+                ) from None
+
+        self._record(event, deliver)
 
     def press(self, key: str) -> None:
         """Press a key or chord (e.g. ``'Enter'``), recording the event."""
@@ -892,10 +1037,13 @@ class Recorder:
     def _record_action(self, event: dict[str, Any], act: Callable[[], None]) -> None:
         """Capture before frame, act, wait settle, capture after, log event."""
         before = self._backend.screenshot()
+        # Sign-in fields this frame shows, read with it (the action may
+        # navigate away before the frame is written).
+        hidden_before = self._shown_credential_fields()
         structural_before = self._structural_state()
         # Who has the focus before and after a key press, for a key that moves
         # the focus and changes nothing visible (the ``focus_on``
-        # postcondition). Key events only.
+        # postcondition), and the receiving target of native text input.
         focus_before = self._focus_identity(event)
         # Structured identity of the clicked target (DOM / a11y text), when
         # the backend exposes it: captured on the BEFORE frame, before the
@@ -1019,13 +1167,12 @@ class Recorder:
             quiet_before=quiet_before,
         )
         if focus_before is not None:
+            # Preserve the actual input target even when the input navigates
+            # or closes the window and its after-focus is no longer readable.
+            event = {**event, "focus_before": focus_before}
             focus_after = self._focus_identity(event)
             if focus_after is not None:
-                event = {
-                    **event,
-                    "focus_before": focus_before,
-                    "focus_after": focus_after,
-                }
+                event = {**event, "focus_after": focus_after}
         opened = self._claim_new_pages(self._i)
         if opened:
             event = {**event, "opens": opened}
@@ -1034,11 +1181,15 @@ class Recorder:
         if self._closed_its_page(event):
             event = {**event, "closes_surface": True}
         if hover_png is not None:
+            for region in hidden_before:
+                hover_png = self._redact(hover_png, region)
             _sealed.write_bytes(
                 self._frames_dir / f"{self._i:04d}_hover.png", hover_png
             )
         event = self._finish_native_select(event)
-        self._commit(event, before, after, structural_before)
+        self._commit(
+            event, before, after, structural_before, hidden_before=hidden_before
+        )
 
     def _hover_frame(self, event: dict[str, Any]) -> Optional[bytes]:
         """Rest the pointer on a click target and capture the settled frame.
@@ -1159,8 +1310,13 @@ class Recorder:
         redact_region: Optional[tuple[int, int, int, int]] = None,
         structural_after: Optional[dict[str, Any]] = None,
         observed_at: Optional[float] = None,
+        hidden_before: Optional[list[tuple[int, int, int, int]]] = None,
     ) -> None:
         """Write this step's before/after frames and its events.jsonl line.
+
+        Every sign-in field typed into so far that a frame still shows is
+        blacked out too: ``hidden_before`` names the ones the before frame
+        showed when it was taken (read now when None).
 
         ``redact_region`` (when given) is blacked out in both frames before
         they hit disk — the single choke point that keeps a secret field's
@@ -1177,6 +1333,15 @@ class Recorder:
         if redact_region is not None:
             before_png = self._redact(before_png, redact_region)
             after_png = self._redact(after_png, redact_region)
+        if self._credential_fields:
+            for region in (
+                self._shown_credential_fields()
+                if hidden_before is None
+                else hidden_before
+            ):
+                before_png = self._redact(before_png, region)
+            for region in self._shown_credential_fields():
+                after_png = self._redact(after_png, region)
         _sealed.write_bytes(self._frames_dir / f"{i:04d}_before.png", before_png)
         _sealed.write_bytes(self._frames_dir / f"{i:04d}_after.png", after_png)
         with Image.open(io.BytesIO(before_png)) as before_image:
@@ -1275,6 +1440,66 @@ class Recorder:
         frame.save(out, format="PNG")
         return out.getvalue()
 
+    def _focused_credential(
+        self,
+    ) -> Optional[tuple[str, tuple[int, int, int, int]]]:
+        """``(kind, region)`` when the focused field takes a sign-in credential.
+
+        Credential withholding requires ``focused_field_credential``
+        (:class:`openadapt_flow.backend.CredentialFieldBackend`). A field whose
+        box can't be read blacks out the whole frame. A seam lost after
+        preflight is unknown, never an ordinary field.
+        """
+        try:
+            getter = getattr(self._backend, "focused_field_credential", None)
+            if not callable(getter):
+                return "unknown", _WHOLE_FRAME
+            found = getter()
+        except Exception:
+            found = {"kind": "unknown"}
+        if found is None:
+            return None
+        if not isinstance(found, dict) or found.get("kind") not in (
+            "password",
+            "new-password",
+            "username",
+            "one-time-code",
+        ):
+            # A seam that answered but could not say: fail closed.
+            return "unknown", _WHOLE_FRAME
+        box = found.get("box")
+        try:
+            x, y, w, h = (int(v) for v in box)  # type: ignore[union-attr]
+            region = (x, y, w, h) if w > 0 and h > 0 else _WHOLE_FRAME
+        except (TypeError, ValueError):
+            region = _WHOLE_FRAME
+        return str(found["kind"]), region
+
+    def _shown_credential_fields(self) -> list[tuple[int, int, int, int]]:
+        """Regions of the sign-in fields typed into that the screen shows now.
+
+        A field still shows when the backend finds a credential field at its
+        center (``credential_field_at``). A backend that
+        can't say, or a failed read, counts as showing: over-redacting a
+        frame is the safe direction.
+        """
+        at = getattr(self._backend, "credential_field_at", None)
+        shown = []
+        for surface, kind, region in self._credential_fields:
+            if surface != self._active_surface:
+                continue
+            if region == _WHOLE_FRAME or not callable(at):
+                shown.append(region)
+                continue
+            x, y, w, h = region
+            try:
+                found = at(x + w // 2, y + h // 2)
+            except Exception:
+                found = "unknown"
+            if found is not None:
+                shown.append(region)
+        return shown
+
     def _focused_field_label(self) -> Optional[str]:
         """Best available label of the focused field, if the backend can say.
 
@@ -1368,18 +1593,18 @@ class Recorder:
         return census if isinstance(census, dict) else None
 
     def _focus_identity(self, event: dict[str, Any]) -> Optional[dict[str, Any]]:
-        """The focused element's identity around a key event, if readable."""
+        """The focused element before/after keyboard input, if readable."""
 
-        if event.get("kind") not in ("key", "hotkey"):
+        if event.get("kind") not in ("type", "key", "hotkey"):
             return None
         reader = getattr(self._backend, "focus_identity", None)
         if not callable(reader):
             return None
         try:
             value = reader()
+            return copy.deepcopy(value) if isinstance(value, dict) else None
         except Exception:
             return None
-        return value if isinstance(value, dict) else None
 
     def _structural_state(self) -> dict[str, Any]:
         """Structural observations the backend can provide right now.

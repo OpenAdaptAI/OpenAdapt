@@ -1,0 +1,106 @@
+{
+  "note": "development run before the id-placed cursor (cursor on server time alone); kept for the record",
+  "summary": {
+    "clean": {
+      "n": 300,
+      "receipts": 300,
+      "seconds_p50": 0.481,
+      "seconds_p95": 1.076,
+      "stop_codes": [
+        "audit_lag"
+      ],
+      "stop_rate": 0.0033,
+      "stops": 1,
+      "verified": 299
+    },
+    "exposed_faults_missed": [],
+    "faults": {
+      "collateral_other_actor/create": {
+        "codes": {
+          "audit_lag": 2
+        },
+        "exposed": false,
+        "landed": 10,
+        "n": 10,
+        "stopped": 2
+      },
+      "collateral_same_actor/comment": {
+        "codes": {
+          "collateral_mutation": 10
+        },
+        "exposed": true,
+        "landed": 10,
+        "n": 10,
+        "stopped": 10
+      },
+      "collateral_same_actor/create": {
+        "codes": {
+          "collateral_mutation": 10
+        },
+        "exposed": true,
+        "landed": 10,
+        "n": 10,
+        "stopped": 10
+      },
+      "collateral_same_actor_unlogged/create": {
+        "codes": {},
+        "exposed": false,
+        "landed": 10,
+        "n": 10,
+        "stopped": 0
+      },
+      "duplicate/comment": {
+        "codes": {
+          "duplicate_write": 10
+        },
+        "exposed": true,
+        "landed": 10,
+        "n": 10,
+        "stopped": 10
+      },
+      "duplicate/create": {
+        "codes": {
+          "duplicate_write": 10
+        },
+        "exposed": true,
+        "landed": 10,
+        "n": 10,
+        "stopped": 10
+      },
+      "partial_write/create": {
+        "codes": {
+          "partial_write": 10
+        },
+        "exposed": true,
+        "landed": 10,
+        "n": 10,
+        "stopped": 10
+      },
+      "wrong_value/create": {
+        "codes": {
+          "wrong_value": 10
+        },
+        "exposed": true,
+        "landed": 10,
+        "n": 10,
+        "stopped": 10
+      },
+      "wrong_value/edit": {
+        "codes": {
+          "wrong_value": 10
+        },
+        "exposed": true,
+        "landed": 10,
+        "n": 10,
+        "stopped": 10
+      }
+    },
+    "kill": false,
+    "retry": {
+      "n": 10,
+      "regenerated_refused": 10,
+      "same_payload_replayed": 10
+    }
+  },
+  "system": "gitea"
+}

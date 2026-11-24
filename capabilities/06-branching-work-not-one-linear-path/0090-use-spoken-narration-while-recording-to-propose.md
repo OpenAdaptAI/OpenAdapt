@@ -1,0 +1,1 @@
+| Use spoken narration while recording to propose the rule behind a branch | Released ([#1291](https://github.com/OpenAdaptAI/OpenAdapt/pull/1291)) | Synthetic (generated audio) | `openadapt-capture[audio,privacy]` |

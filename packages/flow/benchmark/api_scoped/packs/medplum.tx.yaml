@@ -1,0 +1,77 @@
+# Medplum (FHIR R4) through its REST API, checked against its AuditEvent log
+# (the server must keep AuditEvents as resources: MEDPLUM_SAVE_AUDIT_EVENTS).
+# Measured (RESULTS.md): every create, update, read and history read is an
+# AuditEvent naming the client application and the resource. A repeated
+# identical PUT is logged again even when the version doesn't change.
+# Medplum 5.2.8 serves no system-level _history (400), so collateral
+# changes are found in AuditEvent, not _history.
+schema_version: openadapt.tx/v1
+systems:
+  - name: medplum
+    kind: rest
+    base_url_env: MEDPLUM_URL
+    auth: {header: Authorization, prefix: "Bearer ", value_env: MEDPLUM_TOKEN}
+    audit:
+      pattern: fhir_audit_event
+      path: /fhir/R4/AuditEvent
+      params: {_sort: "-_lastUpdated", _count: "100"}
+      items: entry.*.resource
+      paging: {kind: link, path: "link[relation=next].url"}
+      fields:
+        id: id
+        # The list is sorted by _lastUpdated, so the window is cut on it.
+        at: meta.lastUpdated
+        actor: agent.*.who.reference
+        resource: entity.*.what.reference
+        action: subtype.*.code
+      actions:
+        create: [create]
+        update: [update, patch]
+        delete: [delete]
+        read: [read, vread, history-instance, history, search-type, search, search-system, operation, capabilities]
+      logs: [create, update, delete]
+      actor: {value_env: MEDPLUM_ACTOR}
+      lag: {attempts: 12, wait_s: 0.25}
+      # Measured: AuditEvent times run up to about 2 s out of request order.
+      skew_s: 5
+    collections:
+      - name: patient
+        list: {path: /fhir/R4/Patient}
+        read: {path: "/fhir/R4/Patient/{id}"}
+        create: {method: POST, path: /fhir/R4/Patient}
+        # The read's ETag (W/"<versionId>") goes out as If-Match. Probed on
+        # Medplum 5.2.8 (probe_precondition.py, results/
+        # medplum_precondition_probe.json): a PUT or DELETE with a version
+        # that doesn't match is refused with 412 and changes nothing. The
+        # refused request is logged as an AuditEvent, so the adapter's own
+        # probe isn't used on this system; the record below is the evidence.
+        update:
+          method: PUT
+          path: "/fhir/R4/Patient/{id}"
+          replace: true
+          precondition:
+            enforcement: {status: 412, observed: "2026-11-22", server: "Medplum 5.2.8"}
+        delete:
+          method: DELETE
+          path: "/fhir/R4/Patient/{id}"
+          precondition:
+            enforcement: {status: 412, observed: "2026-11-22", server: "Medplum 5.2.8"}
+        scoped:
+          audit_ref: "Patient/{id}"
+          identity: [name]
+          create_body: {resourceType: Patient}
+          # The create carries a marker identifier; the server refuses a
+          # second create holding it (FHIR conditional create).
+          marker: {identifier: [{system: "urn:openadapt:idempotency", value: "{marker}"}]}
+          condition_header: {If-None-Exist: "identifier=urn:openadapt:idempotency|{marker}"}
+          search: "/fhir/R4/Patient?identifier=urn:openadapt:idempotency|{marker}"
+          search_items: entry.*.resource
+          # Only entries marked as matches count; an OperationOutcome
+          # warning or error about the search is not a found record.
+          search_match:
+            path: search.mode
+            equals: match
+          search_empty:
+            equals: {resourceType: Bundle, type: searchset}
+            absent: ["link[relation=next]"]
+          volatile: ["meta", "meta.*"]

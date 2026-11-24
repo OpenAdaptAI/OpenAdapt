@@ -63,9 +63,11 @@ from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
     runtime_inputs_digest,
 )
+from openadapt_flow.runtime.durable import resume
 from openadapt_flow.runtime.durable.approval import (
     ApprovalRecord,
     ApprovalRequired,
+    StateDiverged,
     approval_pause_digest,
     enforce_resume_authorization,
 )
@@ -105,6 +107,11 @@ from openadapt_flow.runtime.effects import (
 from openadapt_flow.runtime.effects.adapter import CandidateEffectVerifier
 from openadapt_flow.runtime.replayer import Replayer
 from openadapt_flow.verification import VerificationTier
+from tests.test_durable_runtime import (
+    _approval,
+    _run_to_checkpointed_observation_pause,
+    _with_checkpointed_observation_prefix,
+)
 from tests.test_replayer import (
     FakeBackend,
     FakeVision,
@@ -1217,35 +1224,42 @@ def test_program_continue_commits_exact_receipt_without_reactuating_source(tmp_p
     )
 
 
+class InitialRefutingRecords:
+    substrate = "independent-test-records"
+    verification_tier = VerificationTier.INDEPENDENT_SYSTEM
+
+    def capture_pre_state(self, context=None):
+        return EffectState(substrate=self.substrate, reachable=True, records=[])
+
+    def verify(self, effect, before):
+        return EffectVerdict(
+            verdict=Verdict.REFUTED,
+            kind=effect.kind,
+            substrate=self.substrate,
+            reason="the first verification did not find the record",
+        )
+
+
 def test_program_continue_persists_current_readback_effect_evidence(tmp_path):
-    workflow = _attended_effect_program()
+    workflow = _with_checkpointed_observation_prefix(_attended_effect_program())
     bundle = tmp_path / "bundle"
     run = tmp_path / "run"
     workflow.save(bundle)
 
-    class InitialRefutingRecords:
-        substrate = "independent-test-records"
-        verification_tier = VerificationTier.INDEPENDENT_SYSTEM
-
-        def capture_pre_state(self, context=None):
-            return EffectState(substrate=self.substrate, reachable=True, records=[])
-
-        def verify(self, effect, before):
-            return EffectVerdict(
-                verdict=Verdict.REFUTED,
-                kind=effect.kind,
-                substrate=self.substrate,
-                reason="the first verification did not find the record",
-            )
-
     initial_backend = FakeBackend()
-    report = Replayer(
-        initial_backend,
-        vision=FakeVision(),
-        effect_verifier=InitialRefutingRecords(),
-        durable=True,
-        poll_interval_s=0.0,
-    ).run(workflow, bundle_dir=bundle, run_dir=run)
+    # Use a real committed observation boundary, then admit the original A.
+    records = InitialRefutingRecords()
+    _run_to_checkpointed_observation_pause(workflow, bundle, run, verifier=records)
+    report = resume(
+        run,
+        Replayer(
+            initial_backend,
+            vision=FakeVision(),
+            effect_verifier=records,
+            poll_interval_s=0.0,
+        ),
+        approval=_approval(bundle, run),
+    )
     assert report.success is False
     store = CheckpointStore(run)
     capability = AttendedActionStore(run).read()
@@ -1285,7 +1299,9 @@ def test_program_continue_persists_current_readback_effect_evidence(tmp_path):
     )
 
     assert decision.status == "completed"
-    checkpoint = store.program_checkpoints()[0]
+    prefix, checkpoint = store.program_checkpoints()
+    assert prefix.verified_state_id == "__observation_prefix__" and prefix.seq == 1
+    assert checkpoint.verified_state_id == "human" and checkpoint.seq == 2
     assert checkpoint is not None
     assert len(checkpoint.new_effect_keys) == 1
     assert len(checkpoint.new_effects) == 1
@@ -3895,3 +3911,45 @@ def test_a_rejection_still_ends_the_run_when_the_report_is_unreadable(tmp_path):
     # And the corrupt file was not overwritten with a partial report.
     assert (run / "report.json").read_text(encoding="utf-8") == "{not json"
     assert not list(run.glob("*.rejecting"))
+
+
+def test_fresh_refuted_program_retains_hold_without_attended_authority(tmp_path):
+    workflow = _attended_effect_program()
+    bundle, run = tmp_path / "bundle", tmp_path / "run"
+    workflow.save(bundle)
+    backend = FakeBackend()
+    report = Replayer(
+        backend,
+        vision=FakeVision(),
+        effect_verifier=InitialRefutingRecords(),
+        durable=True,
+        poll_interval_s=0.0,
+    ).run(workflow, bundle_dir=bundle, run_dir=run)
+    store = CheckpointStore(run)
+    pending = store.read_pending()
+    assert report.success is False and backend.actions == [("press", "A")]
+    assert pending is not None and pending.delivery_uncertainty is not None
+    assert pending.category == "delivery_uncertain"
+    assert pending.delivery_uncertainty.operation == "first_local_delivery"
+    assert pending.state_id == "human" and pending.step_id == "human-step"
+    assert store.program_checkpoints() == []
+    digest = approval_pause_digest(pending)
+    with pytest.raises(
+        AttendedActionRefused, match="no valid engine-issued attended capability"
+    ):
+        AttendedActionStore(run).read()
+    with pytest.raises(ApprovalRequired, match="first_local_delivery_held"):
+        _approval(bundle, run, authorize_uncertain_retry=True)
+    contender = FakeBackend()
+    with pytest.raises(StateDiverged, match="first_local_delivery_held"):
+        resume(
+            run,
+            Replayer(
+                contender, vision=FakeVision(), effect_verifier=InitialRefutingRecords()
+            ),
+            approval=_approval(bundle, run),
+        )
+    assert contender.actions == []
+    assert backend.actions == [("press", "A")]
+    assert store.program_checkpoints() == []
+    assert approval_pause_digest(store.read_pending()) == digest

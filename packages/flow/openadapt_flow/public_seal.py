@@ -38,7 +38,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 import os
 import re
 from dataclasses import dataclass
@@ -284,9 +283,16 @@ def _verified_private_seal(run_dir: Path) -> tuple[LocalSealV1, dict[str, Any]]:
     _check_signature(seal)
     for name in ("report.json", "report.pre-seal.json"):
         path = run_dir / name
-        if not path.is_file():
+        from openadapt_flow.offline_seal import _report_bytes, _report_is_file
+
+        if not _report_is_file(path):
             continue
-        raw = path.read_bytes()
+        # The card's report_sha256 is the receipt's subject: the digest of the
+        # plaintext report, decrypted in memory when the run is encrypted.
+        try:
+            raw = _report_bytes(path)
+        except OSError as exc:
+            raise PublicSealError("report_unreadable", str(path)) from exc
         if hashlib.sha256(raw).hexdigest() != seal.subject_sha256:
             continue
         try:
@@ -391,10 +397,9 @@ def _name(value: Any, what: str) -> Optional[str]:
 
 def _provenance(run_dir: Path) -> Provenance:
     """``synthetic-tutorial`` only when the run's own receipt says so."""
-    try:
-        receipt = json.loads((run_dir / "receipt.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return "production"
+    from openadapt_flow.receipt import read_run_summary
+
+    receipt = read_run_summary(run_dir)
     if isinstance(receipt, dict) and receipt.get("provenance") == "synthetic-tutorial":
         return "synthetic-tutorial"
     return "production"

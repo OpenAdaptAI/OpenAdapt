@@ -675,7 +675,7 @@ DIFF_THRESHOLD = 25
 # Tolerance for REGION_STABLE postconditions. The structural (edge-based)
 # phash distance is ~0 for identical screens, <= 12 for cosmetic drift
 # (theme palettes, relocated buttons elsewhere in the region) and >= 30 for
-# semantic drift (e.g. a blocking modal), measured on MockMed; 16 splits
+# semantic drift (e.g. a blocking modal), measured on synthetic fixtures; 16 splits
 # those populations with margin.
 REGION_STABLE_TOLERANCE = 16
 
@@ -722,7 +722,7 @@ LABEL_MATCH_RATIO = 0.85
 # openadapt_flow.volatility): clock times, dates near the recording date,
 # digit/punctuation-dominated fragments, and low-entropy noise all name a
 # moment or a count, not an invariant screen state, and cannot survive
-# replay against live data. Observed on OpenEMR: a stray ':01' clock-minute
+# replay against live data. Observed on live apps: a stray ':01' clock-minute
 # fragment was mined and false-halted every later replay. Dates FAR from
 # the recording date (a DOB in an identity banner) are deliberately kept —
 # they are identity data, not chronology.
@@ -919,6 +919,129 @@ def _crop_png(png: bytes, region: Region) -> bytes:
     if encoded is None:
         raise ValueError("could not encode crop as PNG")
     return encoded
+
+
+def _shows_blackout(png: Optional[bytes], region: Region) -> bool:
+    """Whether ``region`` of the frame is the recorder's solid black box.
+
+    The recorder fills a withheld credential field with black in every frame
+    that still shows it (``Recorder._redact``). Undecodable input counts as
+    blacked out, the safe direction for dropping a pixel invariant.
+    """
+    if png is None:
+        return False
+    img = imgops.decode_bgr(png)
+    if img is None:
+        return True
+    x, y, w, h = region
+    crop = img[max(y, 0) : max(y, 0) + h, max(x, 0) : max(x, 0) + w]
+    if crop.size == 0:
+        return False
+    return bool((crop <= 8).all(axis=-1).mean() >= 0.95)
+
+
+def _clip_away(region: Region, box: Region) -> Optional[Region]:
+    """The largest part of ``region`` above, below, left or right of ``box``."""
+    x, y, w, h = region
+    bx, by, bw, bh = box
+    parts = [
+        (x, y, w, by - y),
+        (x, by + bh, w, y + h - (by + bh)),
+        (x, y, bx - x, h),
+        (bx + bw, y, x + w - (bx + bw), h),
+    ]
+    parts = [p for p in parts if p[2] >= 8 and p[3] >= 8]
+    return max(parts, key=lambda p: p[2] * p[3]) if parts else None
+
+
+def _checks_without_withheld_fields(
+    step: Step,
+    after_png: Optional[bytes],
+    boxes: list[Region],
+    bundle: Path,
+) -> list[dict[str, Any]]:
+    """Keep ``step``'s pixel checks off withheld credential fields.
+
+    The recorder fills a withheld field with black in every frame that still
+    shows it, so a REGION_STABLE crop over one froze a black box that no live
+    screen shows and would refute every run. The check is clipped to the part
+    of its region clear of the box, re-cropped from the same recorded frame;
+    a region with no usable part left is dropped. Returns one note per change.
+    """
+    notes: list[dict[str, Any]] = []
+    if not boxes or not step.expect or after_png is None:
+        return notes
+    kept: list[Postcondition] = []
+    for pc in step.expect:
+        hits = [
+            box
+            for box in boxes
+            if pc.kind is PostconditionKind.REGION_STABLE
+            and pc.region is not None
+            and _regions_intersect(pc.region, box)
+            and _shows_blackout(after_png, box)
+        ]
+        if not hits:
+            kept.append(pc)
+            continue
+        region: Optional[Region] = pc.region
+        for box in hits:
+            if region is not None and _regions_intersect(region, box):
+                region = _clip_away(region, box)
+        if region is not None and any(_regions_intersect(region, b) for b in hits):
+            region = None
+        note = {"step": step.id, "region": list(pc.region or ())}
+        if region is None:
+            notes.append(
+                {
+                    **note,
+                    "change": "drop_region_stable_over_withheld_field",
+                    "evidence": "the recorded crop holds a withheld field's black box",
+                }
+            )
+            continue
+        rel = pc.template or f"templates/{step.id}_expect.png"
+        _sealed.write_bytes(bundle / rel, _crop_png(after_png, region))
+        kept.append(
+            pc.model_copy(
+                update={
+                    "region": region,
+                    "phash": phash_png(after_png, region=region),
+                    "template": rel,
+                }
+            )
+        )
+        notes.append(
+            {
+                **note,
+                "change": "clip_region_stable_off_withheld_field",
+                "evidence": "the recorded crop held a withheld field's black box",
+                "clipped_region": list(region),
+            }
+        )
+    step.expect = kept
+    return notes
+
+
+def _record_withheld_field_changes(
+    changes: list[dict[str, Any]],
+    param_region_drops: list[tuple[str, Region, str]],
+) -> None:
+    """Log each clip; record each drop in ``param_hygiene.json`` like the
+    other dropped REGION_STABLE checks (no new bundle file)."""
+    for change in changes:
+        if change["change"].startswith("drop_"):
+            param_region_drops.append(
+                (change["step"], tuple(change["region"]), "<withheld credential field>")
+            )
+        else:
+            logger.info(
+                "compile-pass %s: REGION_STABLE %s clipped to %s, clear of a "
+                "withheld credential field",
+                change["step"],
+                change["region"],
+                change["clipped_region"],
+            )
 
 
 def _regions_intersect(a: Region, b: Region) -> bool:
@@ -1246,7 +1369,7 @@ def _param_text_in_region(
     and no single fragment need carry it. The reverse containment
     ``_contains_excluded`` also accepts (excluded value CONTAINS the text) must
     NOT disqualify a region: an application's own literal word is frequently a
-    substring of a longer demonstrated value (MockMed's ``Triage`` inside the
+    substring of a longer demonstrated value (a short option label inside the
     note ``E2E triage booking three months``), and treating that as
     contamination would disarm perfectly stable regions.
 
@@ -2222,7 +2345,7 @@ def _hover_evidence(
         return None  # nothing answered the pointer: no evidence to keep
     crop_rel = f"{HOVER_CROP_DIR}/{step_id}.png"
     (bundle / HOVER_CROP_DIR).mkdir(parents=True, exist_ok=True)
-    (bundle / crop_rel).write_bytes(response.crop)
+    _sealed.write_bytes(bundle / crop_rel, response.crop)
     return HoverEvidence(
         response=True,
         region=hover_mod.relative(response.region, click),
@@ -2790,7 +2913,7 @@ def _compile_recording(
             (``compiler.effect_mining``). When True, each step gets candidate
             typed ``Effect``s auto-derived from what the demonstration observed:
             a real ``record_written`` / ``field_equals`` from a captured
-            ``/api/db``-style SoR delta, a flagged placeholder for a
+            REST SoR delta, a flagged placeholder for a
             consequential step whose binding is app-specific (not derivable),
             or nothing (with an honest "no verifiable effect derivable" log).
             Default False keeps the bundle byte-identical to before; even when
@@ -3453,22 +3576,27 @@ def _compile_recording(
                 intent = f"type <{param}>"
             else:
                 intent = f"type '{_text_preview(text or '')}'"
-            pending.append(
-                (
-                    Step(
-                        id=step_id,
-                        intent=intent,
-                        action=ActionKind.TYPE,
-                        text=text,
-                        param=param,
-                        secret=secret,
-                        field_label=field_label,
-                    ),
-                    before_png,
-                    after_png,
-                    event,
-                )
+            typed = Step(
+                id=step_id,
+                intent=intent,
+                action=ActionKind.TYPE,
+                text=text,
+                param=param,
+                secret=secret,
+                field_label=field_label,
             )
+            if secret and event.get("one_time") == "code":
+                # A sign-in's one-time code: a person supplies it when the
+                # step runs, into the field the previous click focused
+                # (openadapt_flow.runtime.second_factor_step).
+                typed = Step(
+                    id=step_id,
+                    intent="type the one-time sign-in code",
+                    action=ActionKind.SECOND_FACTOR,
+                    one_time="code",
+                    field_label=field_label,
+                )
+            pending.append((typed, before_png, after_png, event))
         elif kind == "key":
             key = event["key"]
             pending.append(
@@ -3604,6 +3732,16 @@ def _compile_recording(
                 stamped.opens = [str(sid) for sid in event["opens"]]
             if event.get("closes_surface") is True:
                 stamped.closes_surface = True
+
+    from openadapt_flow.compiler.native_focus import anchor_native_keyboard
+
+    pending = anchor_native_keyboard(
+        pending,
+        bundle=bundle,
+        meta_identifier_region=meta_identifier_region,
+        reference_date=reference_date,
+        cached_lines=cached_lines,
+    )
 
     # Native HTML evidence binds the whole focus-only CLICK + TYPE + Enter
     # gesture. Replaying the popup-opening click separately would leave it open.
@@ -3835,6 +3973,9 @@ def _compile_recording(
     # changed region rendered a demonstrated parameter value. Reported (not
     # raised) below — the drop is the safe outcome, but it must not be silent.
     param_region_drops: list[tuple[str, Region, str]] = []
+    # Boxes of withheld credential fields seen so far (recorder
+    # ``redacted_region``); recorded frames show them blacked out.
+    secret_field_regions: list[Region] = []
     # Submit-binding observations recorded on click events (unlabeled
     # controls only), attached once every risk decision is final.
     binding_observations: dict[str, object] = {}
@@ -3920,6 +4061,18 @@ def _compile_recording(
         )
         for region, matched in step_region_drops:
             param_region_drops.append((step.id, region, matched))
+        # A withheld credential field is blacked out in this and every later
+        # recorded frame; keep pixel checks off it (_checks_without_withheld_fields).
+        redacted = event.get("redacted_region")
+        if isinstance(redacted, (list, tuple)) and len(redacted) == 4:
+            x0, y0, x1, y1 = (int(v) for v in redacted)
+            secret_field_regions.append((x0, y0, x1, y1))
+        _record_withheld_field_changes(
+            _checks_without_withheld_fields(
+                step, step_after, secret_field_regions, bundle
+            ),
+            param_region_drops,
+        )
         if not step.expect:
             # Nothing visual survived mining: fall back to structural
             # postconditions (URL/title change, new tab) so the step is not
@@ -3960,7 +4113,12 @@ def _compile_recording(
     # form, whatever the screen did after the click (a slow recording can
     # capture the page before it changes). Explicit risk_overrides below
     # still win.
-    for step in _form_submit_steps(steps, binding_observations):
+    credential_kinds = {
+        step.id: str(event["credential"])
+        for step, _before, _after, event in pending
+        if step.secret and isinstance(event.get("credential"), str)
+    }
+    for step in _form_submit_steps(steps, binding_observations, credential_kinds):
         if step.risk != "irreversible":
             step.risk = "irreversible"
             step.risk_explanation = "it submits the form the run typed into"
@@ -4258,6 +4416,9 @@ def _compile_recording(
                 len(decisions),
             )
 
+    # Each postcondition stays on its producing step. Later display persistence,
+    # reversible risk and target identity do not authorize delaying that check.
+
     # Default fix-up passes (see compiler.fixup_passes): replace a demonstrated
     # gesture that asserts nothing with an equivalent checked one, using only
     # the recording's own frames. Every change is recorded in
@@ -4277,7 +4438,28 @@ def _compile_recording(
         pixel_verify_enabled=pixel_verify_enabled,
         drop_redundant_keys=drop_redundant_keys,
     )
-    compile_notes = [*compile_notes, *guard_notes, *native_selection_notes]
+    # The focused-field pass above crops the clicked box from the recorded
+    # after-frame, which can still show a neighbouring withheld credential
+    # field as the recorder's black box. Apply the same rule as mining.
+    withheld_boxes: list[Region] = []
+    after_by_step: dict[str, tuple[Optional[bytes], list[Region]]] = {}
+    for step, _sb, after_png, event in pending:
+        redacted = event.get("redacted_region")
+        if isinstance(redacted, (list, tuple)) and len(redacted) == 4:
+            x0, y0, x1, y1 = (int(v) for v in redacted)
+            withheld_boxes.append((x0, y0, x1, y1))
+        after_by_step[step.id] = (after_png, list(withheld_boxes))
+    for step in steps:
+        after, boxes = after_by_step.get(step.id, (None, []))
+        _record_withheld_field_changes(
+            _checks_without_withheld_fields(step, after, boxes, bundle),
+            param_region_drops,
+        )
+    compile_notes = [
+        *compile_notes,
+        *guard_notes,
+        *native_selection_notes,
+    ]
     for note in compile_notes:
         logger.info("compile-pass %s: %s", note["step"], note["change"])
 
@@ -4654,27 +4836,68 @@ def _compile_recording(
 
 
 def _form_submit_steps(
-    steps: list[Step], observations: dict[str, object]
+    steps: list[Step],
+    observations: dict[str, object],
+    credential_kinds: Optional[dict[str, str]] = None,
 ) -> list[Step]:
     """Clicks on the labelled submit button of the one form owning every
-    field typed into since the previous such click."""
+    field typed into since the previous such click.
 
+    A sign-in is not a save: when the fields typed since the previous such
+    click are exactly a username and a current password the recorder withheld
+    (``credential_kinds``, from each secret TYPE event's ``credential``), its
+    submit button signs in and writes no record. So does a form holding the
+    three with a one-time sign-in code. A form holding only a code signs in
+    only when the form submitted just before it was such a sign-in: on its
+    own, a code with a "Verify" button can confirm a payment or a transfer.
+    A lone password (a PIN or a re-authentication), a ``new-password`` field
+    (a password change or sign-up) or any other typed field keeps the
+    escalation, and the keyword risk inference still classifies the button
+    on its own label.
+    """
+
+    kinds = credential_kinds or {}
     found: list[Step] = []
     typed = False
+    typed_kinds: list[Optional[str]] = []
+    # A username-and-password submit arms one code-only exemption. Only the
+    # click that focuses the code field may come between them; anything else,
+    # or that exemption's use, disarms it.
+    armed = False
+    clicks = 0
     for step in steps:
+        if step.action is ActionKind.SECOND_FACTOR and step.one_time == "code":
+            typed = True
+            typed_kinds.append("one-time-code")
+            continue
         if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
             typed = True
+            typed_kinds.append(kinds.get(step.id) if step.secret else None)
             continue
+        pointer = step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
         raw = observations.get(step.id)
-        if (
-            typed
-            and raw is not None
-            and step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
-            and _is_form_save(raw)
-        ):
-            found.append(step)
+        if typed and raw is not None and pointer and _is_form_save(raw):
+            fields = sorted(map(str, typed_kinds))
+            exempt = fields in _SIGN_IN_FIELD_SETS or (
+                armed and fields == ["one-time-code"]
+            )
+            if not exempt:
+                found.append(step)
+            armed, clicks = fields == ["password", "username"], 0
             typed = False
+            typed_kinds = []
+        elif not typed and step.action is not ActionKind.WAIT:
+            clicks += 1
+            armed = armed and pointer and clicks <= 1
     return found
+
+
+#: Typed fields whose form submit signs in and saves nothing: a username and
+#: current password, alone or with a one-time code on the same form.
+_SIGN_IN_FIELD_SETS = (
+    ["password", "username"],
+    ["one-time-code", "password", "username"],
+)
 
 
 def _is_form_save(raw: object) -> bool:

@@ -11,12 +11,18 @@ from typing import Any
 
 from openadapt_flow.wrap import TaskArgumentsError, WrappedTask
 
+#: The documented one-liner (docs/WRAP.md): the launcher's ``wrap`` extra
+#: brings the built-in agent's SDK, which the base launcher leaves out.
+WRAP_EXAMPLE_COMMAND = "uvx --python 3.12 'openadapt[wrap]@latest' wrap --example"
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="openadapt wrap",
         allow_abbrev=False,
         epilog=(
+            "openadapt wrap --example runs the whole loop on a bundled synthetic "
+            "task (see its --help). "
             "openadapt wrap export --bundle BUNDLE --out NEW_DIR prepares an "
             "untrusted local candidate (see docs/WRAP_CANDIDATE.md). "
             "openadapt wrap publish --task TASK publishes the task's admitted "
@@ -60,7 +66,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--max-cost-usd", type=float, help="Explicit model spend cap for a cache miss"
     )
-    parser.add_argument("--param", action="append", default=[], metavar="NAME=VALUE")
+    parser.add_argument(
+        "--param",
+        action="append",
+        default=[],
+        metavar="NAME=VALUE",
+        help="A task input. A sign-in input (a password, or the username "
+        "paired with it) may instead come from OPENADAPT_FLOW_SECRET_<NAME>, "
+        "so it is not on the command line",
+    )
     parser.add_argument(
         "--request-id", help="Reuse this ID when checking the same request"
     )
@@ -84,6 +98,32 @@ def _params(rows: Sequence[str]) -> dict[str, str]:
             raise TaskArgumentsError("--param requires unique NAME=VALUE pairs")
         values[name] = value
     return values
+
+
+def _with_secret_env(
+    values: dict[str, str], parameters: Sequence[str]
+) -> dict[str, str]:
+    """Fill each missing input from ``OPENADAPT_FLOW_SECRET_<NAME>`` when set.
+
+    A sign-in value then never appears in argv or shell history. It is held
+    in memory for this run only, like a ``--param`` value.
+    """
+    import os
+
+    from openadapt_flow.runtime.replayer import secret_env_var, secret_env_vars
+
+    out = dict(values)
+    # Before compilation these can still be ordinary public inputs. Only the
+    # names actually sourced from the secret environment need a slot here;
+    # explicit public values must not acquire a new case-folding restriction.
+    sourced = [
+        name
+        for name in parameters
+        if name not in out and os.environ.get(secret_env_var(name))
+    ]
+    for name, key in secret_env_vars(sourced).items():
+        out[name] = os.environ[key]
+    return out
 
 
 def _prices(rows: Sequence[str]) -> dict[str, float] | None:
@@ -202,8 +242,147 @@ def _task(args: argparse.Namespace, parser: argparse.ArgumentParser) -> WrappedT
     )
 
 
+def build_example_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="openadapt wrap --example",
+        allow_abbrev=False,
+        description=(
+            "Run the whole wrap loop on a bundled synthetic task: the built-in "
+            "agent does it once, the run is compiled and admitted, then a new "
+            "input runs the program with no model calls. Headless; needs "
+            "ANTHROPIC_API_KEY (or OPENAI_API_KEY with --provider openai, "
+            "--model and its --price values)."
+        ),
+    )
+    parser.add_argument("--example", action="store_true", required=True)
+    parser.add_argument("--provider", choices=("claude", "openai"))
+    parser.add_argument("--model")
+    parser.add_argument(
+        "--max-cost-usd",
+        type=float,
+        default=2.0,
+        help="Model spend cap for run 1 (default 2.00)",
+    )
+    parser.add_argument("--max-turns", type=int, default=30)
+    parser.add_argument("--max-run-seconds", type=float, default=120)
+    parser.add_argument("--request-timeout-seconds", type=float, default=60)
+    parser.add_argument(
+        "--price",
+        action="append",
+        default=[],
+        metavar="KIND=USD_PER_MTOK",
+        help="Explicit input, output, cache_write and cache_read model prices",
+    )
+    parser.add_argument("--price-model", help="Exact model covered by supplied prices")
+    parser.add_argument("--pricing-source-url", help="Primary source for model prices")
+    parser.add_argument("--pricing-verified-at", help="Date prices were verified")
+    parser.add_argument(
+        "--out",
+        help="New folder for the example's files "
+        "(default ~/.openadapt/wrap/example/<time>)",
+    )
+    parser.add_argument("--json", action="store_true", help="Print one JSON result")
+    return parser
+
+
+def example_main(rows: Sequence[str], *, client: Any = None) -> int:
+    """``openadapt wrap --example``. ``client`` is a test-only model client."""
+
+    import importlib.util
+    import time
+    from pathlib import Path
+
+    from openadapt_flow.jit.keys import PROVIDER_ENV, MissingModelKey
+    from openadapt_flow.wrap.example import ExampleError, choose_provider, run_example
+
+    parser = build_example_parser()
+    args = parser.parse_args(list(rows))
+    provider = choose_provider(args.provider)
+    if provider is None:
+        print(
+            "openadapt wrap --example: no model key. Set ANTHROPIC_API_KEY, or "
+            "OPENAI_API_KEY with --provider openai, --model and its --price "
+            "values, then run it again [MISSING_MODEL_KEY]",
+            file=sys.stderr,
+        )
+        return 2
+    cap = args.max_cost_usd
+    if not math.isfinite(cap) or cap <= 0:
+        parser.error("--max-cost-usd must be positive")
+    sdk = "anthropic" if provider == "claude" else "agents"
+    if client is None and importlib.util.find_spec(sdk) is None:
+        if provider == "claude":
+            print(
+                "openadapt wrap --example: the built-in agent needs the wrap "
+                f"extra; run: {WRAP_EXAMPLE_COMMAND}",
+                file=sys.stderr,
+            )
+            return 2
+        print(
+            "openadapt wrap --example: the openai-agents package is not "
+            "installed; install it next to OpenAdapt (pip install openai-agents)",
+            file=sys.stderr,
+        )
+        return 2
+    key_provider = "anthropic" if provider == "claude" else "openai"
+    try:
+        from openadapt_flow.integrations.agents.providers import build_agent
+        from openadapt_flow.jit.keys import load_customer_model_key
+
+        model_key = load_customer_model_key(key_provider)
+        agent = build_agent(
+            "claude" if provider == "claude" else "openai",
+            model=args.model,
+            max_turns=args.max_turns,
+            max_cost_usd=cap,
+            prices=_prices(args.price),
+            max_run_seconds=args.max_run_seconds,
+            request_timeout_seconds=args.request_timeout_seconds,
+            price_model=args.price_model,
+            pricing_source_url=args.pricing_source_url,
+            pricing_verified_at=args.pricing_verified_at,
+            client=client,
+        )
+    except MissingModelKey:
+        print(
+            f"openadapt wrap --example: no model key; set {PROVIDER_ENV[key_provider]} "
+            f"(--provider {provider}) [MISSING_MODEL_KEY]",
+            file=sys.stderr,
+        )
+        return 2
+    except (TaskArgumentsError, ValueError) as exc:
+        # Pricing and limits are local configuration, never a provider reply.
+        parser.error(str(exc))
+    import os
+
+    home = Path(os.environ.get("OPENADAPT_HOME") or "~/.openadapt").expanduser()
+    out = (
+        Path(args.out)
+        if args.out
+        else home / "wrap" / "example" / time.strftime("%Y%m%dT%H%M%S")
+    )
+    try:
+        return run_example(
+            agent=agent, model_key=model_key, out_dir=out, as_json=args.json
+        )
+    except ExampleError as exc:
+        print(f"openadapt wrap --example: {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:  # noqa: BLE001 - do not reflect provider values
+        # Name the failure's type only; its message can carry provider text.
+        print(
+            f"openadapt wrap --example: the example failed ({type(exc).__name__}); "
+            f"its files are in {out}",
+            file=sys.stderr,
+        )
+        return 2
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     rows = list(sys.argv[1:] if argv is None else argv)
+    head = rows[: rows.index("--")] if "--" in rows else rows
+    if "--example" in head:
+        return example_main(head)
     if rows[:1] == ["export"]:
         from openadapt_flow.wrap.candidate import main as candidate_main
 
@@ -228,7 +407,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             serve(task)
             return 0
-        result = task.call(args.request_id, values)
+        result = task.call(args.request_id, _with_secret_env(values, task.parameters))
     except TaskArgumentsError as exc:
         parser.error(str(exc))
     except MissingModelKey:

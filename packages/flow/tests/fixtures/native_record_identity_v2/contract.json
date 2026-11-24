@@ -1,0 +1,90 @@
+{
+  "schema": "openadapt.synthetic-native-record-identity/v2",
+  "case_id": "patient-notes-native-record-identity-v2",
+  "base_source": {
+    "path": "scripts/desktop/patient_notes.ps1",
+    "sha256": "0e3dcd2e8347b0f5574577c206e7c5f9c341093b3802ae45f89581fab58f1193",
+    "line_endings": "canonical LF"
+  },
+  "database_source": {
+    "path": "scripts/desktop/pn_db.py",
+    "sha256": "b36bc38ac2bd1166e8136c52e9cfa9b2ef2b7b5f6eab55c3d6c6ba4fd1af936a"
+  },
+  "database_mapping": {
+    "table": "patients",
+    "key": "id",
+    "key_type": "INTEGER",
+    "value": "note",
+    "value_type": "TEXT"
+  },
+  "identity_binding": {
+    "control": "currentRecordId",
+    "control_class": "System.Windows.Forms.TextBox",
+    "readonly": true,
+    "password": false,
+    "selected_cell": "id",
+    "loaded_field": "id",
+    "save_target_cell": "id",
+    "domain": "canonical signed int64 string"
+  },
+  "read_requirements": {
+    "route": "/uia/read",
+    "require_editable": false,
+    "value_contract": "openadapt.native-value-read/v3",
+    "proof_schema": "openadapt.native-value-completeness/v3",
+    "runtime_protocol_qualified": false,
+    "shared_helper_ref": "4be4b543da10286105090950c57a89d5e7a9a497",
+    "identity_match": "exact canonical signed int64 string",
+    "identity_match_qualified": false,
+    "protocol_source_reference_seen": "1a2503da4e240ba24620845cf85737d087c38e39",
+    "protocol_source_finalized": false
+  },
+  "readback_template": {
+    "search": {
+      "box": {
+        "automation_id": "searchBox"
+      },
+      "query": {
+        "param": "patient_search"
+      },
+      "submit": {
+        "automation_id": "searchButton"
+      }
+    },
+    "ready": {
+      "automation_id": "currentRecordId"
+    },
+    "identity": {
+      "reader": {
+        "automation_id": "currentRecordId"
+      },
+      "value": {
+        "param": "record_id"
+      },
+      "field": "id"
+    },
+    "fields": {
+      "note": {
+        "control": {
+          "automation_id": "noteBox"
+        }
+      }
+    }
+  },
+  "qualification": {
+    "source_only": true,
+    "native_value_proof": null,
+    "database_to_control_binding_proof": null,
+    "combined_campaign": null,
+    "held_out_case": null,
+    "row_count_evidence": false
+  },
+  "native_validation_required": [
+    "known-non-password readonly Edit; complete UIA/native agreement with proof v3",
+    "actual selected id = get.id = native observed id = independently queried SQLite id",
+    "no selection, list/get failure, missing/wrong row and mid-load selection replacement clear identity",
+    "target note and every sibling checked directly in SQLite",
+    "unsupported/truncated/sensitive values refuse before field verification",
+    "generic identity consumer rejects noncanonical/delimited display values; no caption substring matching"
+  ]
+}

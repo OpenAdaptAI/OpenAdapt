@@ -101,11 +101,12 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 
 | Workflow | Job | PR tier | Queue tier | Post-merge tier |
 |---|---|---|---|---|
-| main.yml | `run-ci` | ubuntu-latest, Python 3.12 | ubuntu-latest, Python 3.12 | ubuntu-latest and macos-latest, Python 3.10 to 3.12 |
+| main.yml | `run-ci` | ubuntu-latest, Python 3.12 | ubuntu-latest, Python 3.12 | ubuntu-latest, Python 3.10 to 3.12, and macos-latest, Python 3.12; nightly and dispatch add macOS 3.10 and 3.11 |
 | main.yml | `unsupported-python-guard` | no | no | Python 3.13 and 3.14 |
 | packages.yml | `types`, `agent` | Python 3.12 | Python 3.12 | Python 3.10 and 3.12 |
+| packages.yml | `verify-clean-install` | Python 3.12 | Python 3.12 | Python 3.10 and 3.12 |
 | packages.yml | `flow-lint`, `flow-critical`, `flow-onprem-offline` | yes | yes | yes |
-| ci.yml | `smoke` (with the file-size ratchet against the base), `ci` | yes | yes | no |
+| ci.yml | `smoke` (with the file-size ratchet against the base and the generated-page check), `ci` | yes | yes | no |
 | packages.yml | `flow-unit` | 3 shards packed by measured time, fast lane (without `nightly_only.txt`) | no | 2 shards, without the `live ` entries (nightly runs them) |
 | packages.yml | `flow-native-census` | no | no | Windows and macOS |
 | packages.yml | `capture-linux` | Python 3.12 | Python 3.12 | Python 3.10 (ubuntu-22.04), 3.11, 3.12 |
@@ -117,18 +118,37 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 | packages.yml | `tray-contract`, `tray-desktop-ipc`, `program-graph`, `install-weight` | yes | yes | yes |
 | packages.yml | `desktop-release-intent` | yes | no | no |
 | desktop-test.yml | `test-python` | ubuntu-latest, Python 3.12 | ubuntu-latest, Python 3.12 | Linux, macOS and Windows, Python 3.11 and 3.12 |
+| desktop-test.yml | `release-intent-tests` | ubuntu-latest, Python 3.12 | ubuntu-latest, Python 3.12 | Linux, macOS and Windows, Python 3.11 and 3.12 |
 | desktop-test.yml | `qualification-contract` | yes | yes | yes |
 | desktop-build.yml | `frontend`, `python-distribution` | yes | yes | yes |
 | desktop-build.yml | `python-sidecar` | ubuntu-22.04 | no | Linux, macOS 15 arm64 and Windows |
 | desktop-build.yml | `native-installers` | no | no | macOS arm64, macOS Intel, Windows, Linux bundles |
 | desktop-dependency-audit.yml | `python`, `npm`, `rust` | when Desktop changes | no | when Desktop changes, and weekly |
 | desktop-dependency-audit.yml | `python-macos-intel` | no | no | when Desktop changes, and weekly |
-| desktop-replay.yml | `replay` (Patient Notes through WindowsBackend, judged from SQLite), `freerdp` (FreeRDP transport round trip over a loopback RDP session) | when the Windows path changes; not required | no | nightly |
+| desktop-replay.yml | `replay` (Patient Notes through WindowsBackend, judged from SQLite), `freerdp` (FreeRDP transport round trip over a loopback RDP session), `check-it-gtk` | when Flow or the Windows path changes, not on drafts; not required | no | nightly |
+| flow-mcp-compat.yml | `flow-mcp-compat` (MCP SDK 1.28.0 and 2.3.0) | when MCP-facing Flow code, its tests or the pinned requirements change, not on drafts; not required | no | every push to main that changes Flow, Types or `scripts/ci` |
 | apt-install-selftest.yml | `fallback`, `warm-cache`, `playwright-deps`, `total-outage` | when `.github/actions/apt-install` changes; not required | no | no |
 | apt-cache-seed.yml | `seed` (one per cached Ubuntu package set) | no | no | daily, and when the action changes |
-| codeql.yml | `Analyze` (Python, JavaScript/TypeScript, Rust) | per changed language | per changed language | all languages on main and weekly |
+| codeql.yml | `Analyze` (Python, JavaScript/TypeScript, Rust) | per changed language | per changed language | all languages on main (one analysis at a time, newest waiting push wins) and weekly |
 | secret-scan.yml, dependency-review.yml, platform-manifest.yml | all | yes | yes | yes |
 | docs.yml, link-check.yml (internal), production-lifecycle.yml, release-health.yml (self-test) | all | yes | no | main only |
+| refresh-generated.yml | `refresh` (opens a draft pull request that regenerates CAPABILITIES.md and llms-full.txt) | no | no | when their sources change on main, daily, and on dispatch |
+
+## Generated pages
+
+CAPABILITIES.md and llms-full.txt are generated, and nearly every pull request
+changes their sources. When each pull request regenerated them, every merge
+made the other open pull requests conflict. Now a pull request edits only the
+sources (a row file under `capabilities/`, a command file, README.md, ...),
+and `refresh-generated.yml` regenerates both pages after the change lands. It
+opens a draft pull request from `bot/refresh-generated-<sha>-<run>` and closes the
+one it replaces; it never pushes to main. GitHub starts no workflows for a
+pull request the workflow token opens, so the pull request is a draft, and
+marking it ready runs CI. On a pull request, the smoke job's
+`build_capabilities.py --check-pr HEAD^1` fails only a hand edit of a page (a
+page that matches neither its sources nor the base), since the refresh would
+drop it. Main can trail its sources until the refresh merges; nothing strict
+runs on main or nightly, so a pending refresh never turns main red.
 
 Ubuntu package callers use the composite at the immutable
 `OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68`.
@@ -162,6 +182,46 @@ the median. Refresh the times from a run's shard logs with
 `python scripts/ci/flow_shards.py --from-logs <logs>` when the shards drift
 apart by more than a minute or two. A test file that can't share the runner with others
 should get its own serial step rather than turning xdist off.
+
+## Where the runner time goes
+
+Measured over 20.7 hours of OpenAdapt Actions history (2026-11-20 05:55 to
+2026-11-21 02:38 UTC): 2,000 workflow runs and 10,522 jobs, covering 119
+pull-request commits and 35 merges. Counting only jobs that ran to a pass or
+a failure, the repository used about 13,600 runner-minutes: 57% on pull
+requests and 39% on pushes to main. Running jobs had a median of 12, and at
+the 90th percentile they filled the org's 20 runners. A sample on
+2026-11-21 from 02:56 to 03:02 UTC found 16 to 21 jobs running and 102 to 121
+waiting across the org. A typical pull-request commit ran 29 jobs (90th
+percentile 39) and used 79 runner-minutes.
+
+Pull-request jobs by runner-minutes:
+
+| Job | Runs | Median min | p90 min | Runner-min | Failed commits (only failing job) |
+|---|---|---|---|---|---|
+| `flow core unit` (3 shards) | 218 | 14.8 | 19.4 | 3,280 | 24 (16) |
+| `flow core critical` | 78 | 6.7 | 8.2 | 528 | 0 |
+| Desktop replay `windows replay` | 85 | 5.5 | 7.6 | 474 | 9 (6) |
+| CodeQL `Analyze (python)` | 108 | 2.7 | 8.1 | 405 | 0 |
+| `flow on-prem offline` | 82 | 4.2 | 4.5 | 333 | 0 |
+| `verify facade` | 88 | 3.7 | 4.1 | 325 | 1 (1) |
+| `flow agent frameworks` | 83 | 3.0 | 3.5 | 249 | 0 |
+| `launcher / run-ci` | 112 | 2.5 | 2.8 | 201 | 7 (2) |
+| `verify clean install` py3.10 | 88 | 1.9 | 2.1 | 168 | 0 |
+| `flow core lint` | 87 | 1.9 | 2.3 | 166 | 5 (3) |
+| Flow MCP compatibility (2 SDKs) | 214 | 0.5 | 0.6 | 114 | 0 |
+
+On main, every merge ran the full post-merge tier: Flow's two unit shards
+(about 27 minutes each), CodeQL on all three languages (563 runner-minutes
+in the window), and the launcher on six Python and OS lanes, three of them on
+macOS.
+
+`flow core unit` takes 42% of pull-request runner time, and it sets how long
+`ci` takes. Its shards take about 15 minutes, against the five this file
+planned for. Of the fast lane's 128 worker-minutes, 56 are cases over 5 s
+outside the safety exemptions in `packages/flow/tests/nightly_only.txt`,
+which was profiled on 2026-10-28. In the failing pull-request runs
+measured, only 1 of 23 failed on those cases alone.
 
 ## Releases
 
@@ -225,6 +285,15 @@ concurrency:
 
 The release workflows, `desktop-release.yml` among them, keep a fixed group
 and never cancel, so releases run one at a time.
+
+Two workflows that no release reads, `codeql.yml` and `flow-mcp-compat.yml`,
+key a push to main on the branch instead of the run ID. One run goes at a
+time and nothing that has started is cancelled. When several merges land
+while one runs, the newest waiting push replaces the older waiting ones,
+because its tree contains their code. Never do this for `packages.yml`,
+`main.yml` or any workflow `scripts/ci/newest_green.py` or
+`desktop-release.yml` reads: releases need a passed push run on the exact
+commit that changed the package (see below).
 
 `packages.yml` follows the same rule as the others (its group is named
 `packages-…`). It used to let a push to main without a Desktop change cancel

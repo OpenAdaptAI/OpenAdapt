@@ -1,0 +1,21 @@
+{
+  "case_id": "pc-s04",
+  "facts": {
+    "coverage.deductible": 1000,
+    "coverage.effective_date": "2027-01-01",
+    "history.prior_claims_5yr": 1,
+    "property.address_line1": "17 Larch Hollow Ct",
+    "property.burglar_alarm": true,
+    "property.city": "Bayard Crossing",
+    "property.construction_type": "wood frame",
+    "property.finish_level": "semi-custom",
+    "property.heating_type": "gas furnace",
+    "property.roof_material": "asphalt shingle",
+    "property.roof_year": 2019,
+    "property.square_feet": 2650,
+    "property.state": "NC",
+    "property.stories": "2",
+    "property.year_built": 2003,
+    "property.zip": "27510"
+  }
+}

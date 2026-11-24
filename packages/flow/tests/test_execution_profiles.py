@@ -91,7 +91,11 @@ from openadapt_flow.runtime.effects.onscreen import OnScreenReadbackVerifier
 from openadapt_flow.runtime.replayer import Replayer as _RuntimeReplayer
 from openadapt_flow.verification import VerificationTier
 from openadapt_flow.vision.ocr import OcrLine
-from tests.test_durable_runtime import FakeSoRVerifier, _approval, _retry_approval
+from tests.test_durable_runtime import (
+    FakeSoRVerifier,
+    _approval,
+    _StopBeforeInput,
+)
 from tests.test_replayer import FakeBackend, FakeVision, make_png
 
 _KEY = "profile-test-key"
@@ -277,6 +281,9 @@ class _ReadyVision(FakeVision):
 
 
 class _CountingStateVerifier:
+    # A remote verifier: its calls are the run's external network evidence.
+    MAY_EGRESS = True
+
     def __init__(self, *, holds: bool) -> None:
         self.result = holds
         self.calls = 0
@@ -2869,6 +2876,7 @@ def test_resume_preserves_failed_leg_model_and_network_evidence(tmp_path):
         FakeBackend(),
         vision=_ReadyVision(),
         state_verifier=verifier,
+        allow_model_grounding=True,
         governed_authorization=authorization,
         durable=True,
         require_settled=True,
@@ -3053,14 +3061,34 @@ def test_standard_program_resume_preserves_exact_loop_contracts_without_reactuat
     verifier.verification_tier = VerificationTier.INDEPENDENT_SYSTEM
     verifier.refute.add((("patient", "Bob"),))
     run_dir = tmp_path / "run"
-    initial = Replayer(
-        FakeBackend(),
+    initial_backend = FakeBackend()
+    initial_replayer = _StopBeforeInput(
+        initial_backend,
         vision=_ReadyVision(),
         effect_verifier=verifier,
         governed_authorization=authorization,
         durable=True,
         require_settled=True,
-    ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
+        production_qualification_guard=_PreviouslyQualifiedTestGuard(),
+    )
+    initial_replayer.stop_before_step = "write"
+    initial_replayer.stop_before_params = {"patient": "Bob"}
+    initial = initial_replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)
+    pending = CheckpointStore(run_dir).read_pending()
+    assert pending is not None and pending.delivery_uncertainty is None
+    assert pending.params["patient"] == "Bob" and pending.program_checkpoint_seq == 1
+    assert pending.program_frames[-1].loop.row_index == 1
+    assert initial_backend.actions == [("press", "Enter")]
+    assert (
+        next(
+            r for r in reversed(initial.results) if r.step_id == "write"
+        ).delivery_attempted
+        is False
+    )
+    assert (
+        CheckpointStore(run_dir).program_checkpoints()[0].bound_params["patient"]
+        == "Alice"
+    )
 
     assert initial.execution_outcome == ExecutionOutcome.HALTED.value
     assert len(CheckpointStore(run_dir).program_checkpoints()) == 1, (
@@ -3076,7 +3104,7 @@ def test_standard_program_resume_preserves_exact_loop_contracts_without_reactuat
             effect_verifier=verifier,
             require_settled=True,
         ),
-        approval=_retry_approval(bundle),
+        approval=_approval(bundle, run_dir),
     )
 
     assert resumed.execution_outcome == ExecutionOutcome.VERIFIED.value

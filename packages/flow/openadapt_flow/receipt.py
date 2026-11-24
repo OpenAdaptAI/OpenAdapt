@@ -339,10 +339,13 @@ class RunReceipt(BaseModel):
             and self.effect_assurance != _ASSURANCE_BY_TIER[self.effect_tier_reached]
         ):
             raise ValueError("effect assurance disagrees with the effect tier")
-        if (self.model_calls > 0) != ("model" in self.evidence_classes):
-            raise ValueError("model-call count and evidence class disagree")
-        if self.model_calls > 0 and self.external_network_calls != "observed":
-            raise ValueError("model calls require observed external network calls")
+        # ``model_calls`` is off-box calls only; in-process ones never count.
+        from openadapt_flow.model_call_evidence import model_call_evidence_error
+
+        if error := model_call_evidence_error(
+            self.model_calls, self.evidence_classes, self.external_network_calls
+        ):
+            raise ValueError(error)
         expected = hashlib.sha256(self.canonical_json(include_digest=False)).hexdigest()
         if self.receipt_digest != expected:
             raise ValueError("receipt digest does not match its canonical payload")
@@ -1216,8 +1219,29 @@ def render_receipt_png(receipt: RunReceipt) -> Any:
     return image
 
 
+#: The run summary's files. Before Flow 3.5 the summary was ``receipt.json``;
+#: that name now holds the run's signed receipt (``record/run/v1``).
+SUMMARY_STEM = "run-summary"
+
+
+def read_run_summary(run_dir: Path | str) -> Optional[dict[str, Any]]:
+    """The run's ``run-receipt/v2`` summary, from ``run-summary.json`` or an older ``receipt.json``."""
+    import json as _json
+
+    for name in (f"{SUMMARY_STEM}.json", "receipt.json"):
+        try:
+            data = _json.loads((Path(run_dir) / name).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        # A summary, never the signed receipt (a DSSE envelope) that now
+        # holds the receipt.json name.
+        if isinstance(data, dict) and "payloadType" not in data:
+            return data
+    return None
+
+
 def write_receipt(receipt: RunReceipt, out_dir: Path | str) -> dict[str, Path]:
-    """Write ``receipt.json``, ``receipt.md``, and ``receipt.png`` locally.
+    """Write the run summary: ``run-summary.json``, ``.md`` and ``.png``, locally.
 
     Purely local: this function performs no network I/O and never uploads.
     """
@@ -1228,10 +1252,10 @@ def write_receipt(receipt: RunReceipt, out_dir: Path | str) -> dict[str, Path]:
         raise ReceiptError(f"receipt failed integrity validation: {exc}") from exc
     directory = Path(out_dir)
     directory.mkdir(parents=True, exist_ok=True)
-    json_path = directory / "receipt.json"
+    json_path = directory / f"{SUMMARY_STEM}.json"
     json_path.write_bytes(receipt.canonical_json() + b"\n")
-    md_path = directory / "receipt.md"
+    md_path = directory / f"{SUMMARY_STEM}.md"
     md_path.write_text(render_receipt_markdown(receipt), encoding="utf-8")
-    png_path = directory / "receipt.png"
+    png_path = directory / f"{SUMMARY_STEM}.png"
     render_receipt_png(receipt).save(png_path, format="PNG")
     return {"json": json_path, "markdown": md_path, "png": png_path}

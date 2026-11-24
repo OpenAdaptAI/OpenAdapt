@@ -94,7 +94,6 @@ def _matches(shape: dict[str, Any], authorization: Any) -> bool:
 
 @pytest.fixture
 def program(tmp_path: Path) -> dict[str, Any]:
-    bundle = tmp_path / "bundle"
     steps = [
         Step(id="step_000", intent="type", action=ActionKind.TYPE, text="x"),
         Step(
@@ -108,6 +107,13 @@ def program(tmp_path: Path) -> dict[str, Any]:
             ],
         ),
     ]
+    return _signed_program(tmp_path, steps)
+
+
+def _signed_program(
+    tmp_path: Path, steps: list[Step], *, policy: str = "clinical-write"
+) -> dict[str, Any]:
+    bundle = tmp_path / "bundle"
     Workflow(name="t", steps=steps).save(bundle)
     (bundle / ha.READBACK_PATH).parent.mkdir(parents=True)
     (bundle / ha.READBACK_PATH).write_text(CHECKS)
@@ -115,7 +121,7 @@ def program(tmp_path: Path) -> dict[str, Any]:
     _admit(bundle, keys)
     _host(bundle, keys)
     workflow = Workflow.load(bundle)
-    shape = ha.run_shape(bundle, workflow, policy_source="clinical-write")
+    shape = ha.run_shape(bundle, workflow, policy_source=policy)
     return {"bundle": bundle, "keys": keys, "workflow": workflow, "shape": shape}
 
 
@@ -332,20 +338,39 @@ def runner(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
             update={"gates": [g for g in report.gates if g.passed]}
         )
 
+    monkeypatch.setattr(run_gate, "evaluate_run_gate", gate)
+    return _capture_replay_handoff(monkeypatch)
+
+
+def _capture_replay_handoff(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """Capture the verified binding at the CLI replay boundary."""
     seen: dict[str, Any] = {}
 
     def replay(args: argparse.Namespace) -> int:
         seen["authorization"] = getattr(args, "_governed_run_authorization", None)
+        seen["binding"] = getattr(args, "_managed_dispatch_binding", None)
         seen["effects"] = cli._deployment_sections(args)[1]
         return 0
 
-    monkeypatch.setattr(run_gate, "evaluate_run_gate", gate)
+    monkeypatch.setenv(
+        "OPENADAPT_DURABLE_DISPATCH_SESSION_ID", "30000000-0000-4000-8000-000000000001"
+    )
+    monkeypatch.setenv(
+        "OPENADAPT_DURABLE_AUTHORITY_URL",
+        "https://cloud.test/api/internal/managed-delivery-permit",
+    )
     monkeypatch.setattr(cli, "_cmd_replay", replay)
     monkeypatch.setattr(cli, "_attach_cloud_seal", lambda _args: None)
     return seen
 
 
-def _run(tmp_path: Path, program: dict[str, Any], dispatch: Path, profile: str) -> int:
+def _run(
+    tmp_path: Path,
+    program: dict[str, Any],
+    dispatch: Path,
+    profile: str,
+    policy_args: tuple[str, ...] = ("--policy", "clinical-write"),
+) -> int:
     params = tmp_path / "params.json"
     params.write_text("{}")
     return cli.main(
@@ -354,8 +379,7 @@ def _run(tmp_path: Path, program: dict[str, Any], dispatch: Path, profile: str) 
             str(program["bundle"]),
             "--profile",
             profile,
-            "--policy",
-            "clinical-write",
+            *policy_args,
             "--params-file",
             str(params),
             "--allow-unencrypted",
@@ -367,6 +391,79 @@ def _run(tmp_path: Path, program: dict[str, Any], dispatch: Path, profile: str) 
             "https://app.example.com/",
         ]
     )
+
+
+@pytest.mark.parametrize("setting", ["default", "cli_override", "deployment_file"])
+def test_run_and_resume_recheck_the_locally_admitted_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    setting: str,
+) -> None:
+    from openadapt_flow.cli_program_dispatch import restore_verified_program_dispatch
+    from openadapt_flow.policy import load_policy, policy_contract_sha256
+
+    replay_handoff = _capture_replay_handoff(monkeypatch)
+    policy = "clinical-write"
+    options = ()
+    if setting != "default":
+        file = tmp_path / "site.yaml"
+        file.write_text("name: local-site-policy\nprohibit_unarmed_clicks: true\n")
+        config = tmp_path / "deployment.json"
+        config.write_text(json.dumps({"policy": {"policy": str(file)}}))
+        options = ("--config", str(config))
+        policy = str(file)
+        if setting == "cli_override":
+            policy = "permissive"
+            options += ("--policy", policy)
+    # This signed program passes the real Standard gate.
+    program = _signed_program(
+        tmp_path,
+        [Step(id="type", intent="type", action=ActionKind.TYPE, text="x")],
+        policy=policy,
+    )
+    monkeypatch.setenv(lifecycle.KEY_DIR_ENV, str(program["keys"]))
+    assert (
+        _run(tmp_path, program, _dispatch(tmp_path, program), "standard", options) == 0
+    )
+    binding = replay_handoff["binding"]
+    assert binding.authorization.admitted_policy_name == policy
+    assert (
+        binding.authorization.admitted_policy_contract_sha256
+        == policy_contract_sha256(load_policy(policy))
+    )
+    workflow = program["workflow"]
+    manifest = SimpleNamespace(
+        governed_authorization=binding.authorization,
+        bundle_dir=program["bundle"],
+        params={},
+        worklists={},
+    )
+    # Resume receives the current deployment's policy. An explicit run-time
+    # override must be selected on the resuming deployment too.
+    resumed, _ = restore_verified_program_dispatch(
+        binding,
+        manifest,
+        workflow,
+        policy_source=None if setting == "default" else policy,
+        effect_verifier=None,
+        api_actuator=None,
+    )
+    for current in (binding, resumed):
+        assert (
+            ha.program_admission_edge_refusal(
+                current.authorization, workflow, managed_dispatch_binding=current
+            )
+            is None
+        )
+    if setting == "deployment_file":
+        file.write_text("name: local-site-policy\nprohibit_unarmed_clicks: false\n")
+        for current in (binding, resumed):
+            assert (
+                ha.program_admission_edge_refusal(
+                    current.authorization, workflow, managed_dispatch_binding=current
+                )
+                == "the managed program policy changed after verification"
+            )
 
 
 def test_cli_admits_the_published_shape_through_the_managed_gate(
@@ -389,6 +486,13 @@ def test_cli_admits_the_published_shape_through_the_managed_gate(
     assert _matches(program["shape"], authorization)
     # The replay reads back through the bundled verify.yaml.
     assert runner["effects"].kind == "rest"
+    # The runtime receives a verified capability for this exact dispatch;
+    # there is no process-global admission allow-list.
+    from openadapt_flow.jit.dispatch_authority import ProgramDispatchAuthority
+
+    assert isinstance(
+        runner["binding"].program_admission_authority, ProgramDispatchAuthority
+    )
 
 
 @pytest.mark.parametrize(
@@ -678,3 +782,154 @@ def test_the_hosted_read_back_names_its_confirmer_only_by_hmac(
     load_verify_config(path)
     # A file that names no person is copied byte for byte.
     assert ha.hosted_readback(CHECKS, tmp_path) == CHECKS
+
+
+# -- a program that signs in: secret parameters come only from the runner env --
+
+
+def test_cli_admits_a_signed_in_program_with_secrets_only_in_the_environment(
+    runner: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The managed invocation the hosted runner builds: value parameters in
+    the params file and the authorization, secrets only as
+    OPENADAPT_FLOW_SECRET_<NAME> (runner/modal_app.py flow_secret_env)."""
+
+    from openadapt_flow.runner.dispatch_envelope import (
+        ManagedDispatchEnvelope,
+        dispatch_binding_sha256,
+        write_managed_dispatch_envelope_value,
+    )
+    from openadapt_flow.runtime.authorization import runtime_inputs_digest
+
+    bundle = tmp_path / "bundle"
+    steps = [
+        Step(
+            id="step_000",
+            intent="type <username> (secret)",
+            action=ActionKind.TYPE,
+            param="username",
+            secret=True,
+        ),
+        Step(
+            id="step_001",
+            intent="type <password> (secret)",
+            action=ActionKind.TYPE,
+            param="password",
+            secret=True,
+        ),
+        Step(id="step_002", intent="type note", action=ActionKind.TYPE, param="note"),
+        Step(
+            id="step_003",
+            intent="click Save",
+            action=ActionKind.CLICK,
+            effects=[
+                Effect(
+                    kind=EffectKind.RECORD_WRITTEN, match={"type": "note"}, field="note"
+                )
+            ],
+        ),
+    ]
+    Workflow(
+        name="t",
+        steps=steps,
+        params={"note": "demonstrated"},
+        secret_params=["password", "username"],
+    ).save(bundle)
+    (bundle / ha.READBACK_PATH).parent.mkdir(parents=True)
+    (bundle / ha.READBACK_PATH).write_text(CHECKS)
+    keys = _keys(tmp_path / "keys")
+    _admit(bundle, keys)
+    _host(bundle, keys)
+    workflow = Workflow.load(bundle)
+    shape = ha.run_shape(bundle, workflow, policy_source="clinical-write")
+    values = {"note": "from the call"}
+    inputs = runtime_inputs_digest(workflow, values, {})
+    authorization = _authorization(shape, runtime_inputs_digest=inputs)
+    run_id = "55555555-5555-4555-8555-555555555556"
+    dispatch = write_managed_dispatch_envelope_value(
+        tmp_path / "managed-dispatch.json",
+        ManagedDispatchEnvelope(
+            run_id=run_id,
+            bundle_content_digest=shape["bundle_content_digest"],
+            runtime_inputs_digest=inputs,
+            authorization=authorization,
+            dispatch_binding_sha256=dispatch_binding_sha256(run_id, authorization),
+        ),
+    )
+    monkeypatch.setenv(lifecycle.KEY_DIR_ENV, str(keys))
+    monkeypatch.setenv("OPENADAPT_FLOW_SECRET_USERNAME", "synthetic-user")
+    monkeypatch.setenv("OPENADAPT_FLOW_SECRET_PASSWORD", "synthetic-password")
+    params = tmp_path / "params.json"
+    params.write_text(json.dumps(values))
+    rc = cli.main(
+        [
+            "run",
+            str(bundle),
+            "--profile",
+            "standard",
+            "--policy",
+            "clinical-write",
+            "--params-file",
+            str(params),
+            "--allow-unencrypted",
+            "--managed-dispatch-file",
+            str(dispatch),
+            "--backend",
+            "web",
+            "--url",
+            "https://app.example.com/",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert runner["authorization"] is not None
+    assert "synthetic-password" not in out and "synthetic-user" not in out
+
+    # Even an otherwise matching dispatch cannot authorize a secret in the
+    # params file. Refusal is about provenance, not only a digest mismatch.
+    contaminated = {**values, "password": "synthetic-password"}
+    contaminated_digest = runtime_inputs_digest(workflow, contaminated, {})
+    contaminated_authorization = _authorization(
+        shape, runtime_inputs_digest=contaminated_digest
+    )
+    dispatch = write_managed_dispatch_envelope_value(
+        tmp_path / "contaminated-dispatch.json",
+        ManagedDispatchEnvelope(
+            run_id=run_id,
+            bundle_content_digest=shape["bundle_content_digest"],
+            runtime_inputs_digest=contaminated_digest,
+            authorization=contaminated_authorization,
+            dispatch_binding_sha256=dispatch_binding_sha256(
+                run_id, contaminated_authorization
+            ),
+        ),
+    )
+    params.write_text(json.dumps(contaminated))
+    runner["authorization"] = None
+    rc = cli.main(
+        [
+            "run",
+            str(bundle),
+            "--profile",
+            "standard",
+            "--policy",
+            "clinical-write",
+            "--params-file",
+            str(params),
+            "--allow-unencrypted",
+            "--managed-dispatch-file",
+            str(dispatch),
+            "--backend",
+            "web",
+            "--url",
+            "https://app.example.com/",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert "never the params file" in out
+    assert runner["authorization"] is None
+    assert "synthetic-password" not in out

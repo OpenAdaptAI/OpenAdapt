@@ -1,6 +1,85 @@
 # CHANGELOG
 
 
+## v0.24.2 (2026-11-23)
+
+0.24.1 was stamped on main but never published. 0.24.2 is the first
+published release with this content, and the version to install. Its first
+main push run failed on an unrelated Flow job that #2423 broke, which
+[#2589](https://github.com/OpenAdaptAI/OpenAdapt/pull/2589) fixed, so it
+publishes from the run after that fix.
+
+openadapt-flow 3.4.0 imports `openadapt_types.receipt`, which 0.24.0 does not
+have. This release adds it and the other modules Flow imports on main
+(openadapt-flow 4.0.0 will require it). It stays
+within the `<0.25.0` range every released Flow 3 accepts, so upgrading this
+package repairs a Flow 3.4.0 install.
+
+### Features
+
+- `openadapt_types.receipt`: the `record/run/v1` signed run receipt. It
+  covers building, signing and verifying the statement, the public card
+  (`receipt.card.json`) with only allow-listed values opened, private
+  openings, role keys and a key registry, counterparty confirmation lines,
+  and follow-up statements. Signing and verifying import `cryptography` only
+  when called ([#2394](https://github.com/OpenAdaptAI/OpenAdapt/pull/2394),
+  [#2410](https://github.com/OpenAdaptAI/OpenAdapt/pull/2410),
+  [#2412](https://github.com/OpenAdaptAI/OpenAdapt/pull/2412),
+  [#2426](https://github.com/OpenAdaptAI/OpenAdapt/pull/2426)).
+- `openadapt_types.receipt_callback`: checks a managed callback's settled
+  report against its pinned signer and final outcome
+  ([#2412](https://github.com/OpenAdaptAI/OpenAdapt/pull/2412)).
+- `openadapt_types.run_ledger`: `openadapt.run-ledger/v1` (`RunLedgerRowV1`)
+  and `openadapt.agent-run-summary/v1` (`AgentRunSummaryV1`), one value-free
+  accounting row per run. Every string field is closed by a pattern or an
+  enum. The names are exported from `openadapt_types`
+  ([#2478](https://github.com/OpenAdaptAI/OpenAdapt/pull/2478)).
+- `openadapt_types.exception_card`: `openadapt.exception-card/v1` and
+  `openadapt.exception-answer/v1`, with seven closed kinds and five closed
+  answers. Import it by its submodule path; it is not exported from
+  `openadapt_types` ([#2494](https://github.com/OpenAdaptAI/OpenAdapt/pull/2494)).
+- Reward contracts: the `escalated_after_effect` outcome, for an episode
+  whose required effects are all in the system of record but which asked a
+  person instead of declaring the task done. It earns the contract's
+  `escalated_after_effect_reward`: at least 0, below 1 and below its
+  `verified_reward`. A declared value at or above `verified_reward` is
+  refused, because asking would then pay as much as finishing. The default
+  is 0: a contract that doesn't declare it earns nothing for this outcome
+  ([#1824](https://github.com/OpenAdaptAI/OpenAdapt/pull/1824)).
+- `openadapt_types.managed_job`: domain-neutral inbox, outbox, tool result
+  and MCP tool contracts (`openadapt.managed-*/v1`), with four new packaged
+  schemas. `openadapt_types.clinic_job` stays as the compatibility module for
+  `openadapt.clinic-*/v1` payloads; its exception and enum names are now
+  aliases of the `Managed*` ones
+  ([#2487](https://github.com/OpenAdaptAI/OpenAdapt/pull/2487)).
+- Domain-neutral names beside the v1 ones: `StepClass.HIGH_RISK_WRITE`
+  (wire value `clinical_write`), `ApproverPolicyRefusal.HIGH_RISK_WRITE_NEEDS_OPT_IN`
+  and `OutcomeSourceV1.MANAGED_TOOL_STATUS`. Approval records and policies
+  also accept the input keys `high_risk_write`, `high_risk_write_opt_in_sha256`
+  and step class `high_risk_write`; plain outcome inputs accept
+  `managed_tool_status`, and `plain_outcome()` takes a
+  `managed_tool_status=` argument beside `clinic_tool_status=`. Each is
+  stored and written as its v1 form, so
+  output is byte-identical to 0.24.0. The packaged schemas, and readers
+  older than 0.24.2, accept only the v1 forms
+  ([#2487](https://github.com/OpenAdaptAI/OpenAdapt/pull/2487)).
+
+### Compatibility
+
+- Contracts written or certified under 0.24.0 behave as before. They load
+  (including any positive `verified_reward`), hash to the same digest, keep
+  their certificates, and score every outcome 0.24.0 had the same way. The
+  new `escalated_after_effect` outcome earns 0 under them, since they never
+  declared it. A test checks this against contracts and certificates
+  issued by openadapt-types 0.24.0 from PyPI.
+- Every 0.24.0 approval record, approver policy and identity, clinic payload
+  and plain outcome loads and serializes to the same bytes and digests, and
+  every 0.24.0 name and enum member still exists under its 0.24.0 name.
+- `escalated_after_effect_reward` is serialized, and so hashed, only when it
+  differs from 0, so a file 0.24.2 writes for an undeclared contract is one
+  0.24.0 can read. A contract that declares a non-zero value can't be read
+  by 0.24.0, which forbids unknown fields.
+
 ## v0.24.0 (2026-10-20)
 
 The models live in this package again, and it depends only on `pydantic>=2.5`; the Python 3.13 cap is gone. `openadapt-flow` 2.3.0 and later depend on it, and `openadapt_flow.contracts` returns the same modules as `openadapt_types` ([#1270](https://github.com/OpenAdaptAI/OpenAdapt/pull/1270)). Upgrade `openadapt-flow` to 2.3.0 together with this package: openadapt-flow 2.2.0 carries its own copy of the models, so with 0.24.0 alone, `isinstance` checks between the two copies fail.

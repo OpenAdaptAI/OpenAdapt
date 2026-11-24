@@ -21,6 +21,16 @@ WORKFLOWS = sorted((ROOT / ".github" / "workflows").glob("*.yml"))
 # Local composite actions run steps for the workflows that call them.
 ACTIONS = sorted((ROOT / ".github" / "actions").glob("*/action.yml"))
 
+# One intentional user-style resolve, with extras on its exact local candidate.
+VERIFY_CLEAN_INSTALL = (
+    "packages.yml",
+    '"$RUNNER_TEMP/tests/bin/python" -m pip install --quiet --no-cache-dir '
+    '--find-links "$RUNNER_TEMP/dist" "${verify_wheels[0]}[mysql]" '
+    '"$RUNNER_TEMP"/dist/openadapt_types-*.whl '
+    '"$RUNNER_TEMP"/dist/openadapt_flow-*.whl '
+    "'psycopg[binary]' pytest==9.2.0",
+)
+
 # Installs that resolve on purpose, each with the reason.
 ALLOWED = {
     # The launcher's Python-support job checks what a user's pip picks.
@@ -28,7 +38,7 @@ ALLOWED = {
     ("main.yml", "pip install dist/*.whl"),
     # openadapt-verify's clean-install job checks what a user's pip resolves
     # (its install script runs the measured `pip install openadapt-verify`).
-    ("packages.yml", "--find-links \"$RUNNER_TEMP/dist\" 'openadapt-verify[mysql]'"),
+    VERIFY_CLEAN_INSTALL,
     # Bootstraps uv itself: one exact, dependency-free wheel.
     ("desktop-release.yml", "pip install --disable-pip-version-check uv==0.11.29"),
     # The same bootstrap in the Windows build desktop-release.yml shares.
@@ -84,7 +94,15 @@ COMMANDS = _commands()
 
 
 def _allowed(workflow: str, line: str) -> bool:
-    return any(workflow == name and fragment in line for name, fragment in ALLOWED)
+    return any(
+        workflow == name
+        and (
+            line == fragment
+            if (name, fragment) == VERIFY_CLEAN_INSTALL
+            else fragment in line
+        )
+        for name, fragment in ALLOWED
+    )
 
 
 def _offenders(pattern: str, ok: str | None = None) -> list[tuple[str, str]]:
@@ -203,3 +221,32 @@ def test_pip_check_fails_only_on_what_the_helper_installed() -> None:
         [],
         [],
     )
+
+
+def test_verify_candidate_exception_is_exact() -> None:
+    workflow, command = VERIFY_CLEAN_INSTALL
+    assert _allowed(workflow, command)
+    assert not _allowed("another-workflow.yml", command)
+
+
+@pytest.mark.parametrize(
+    "replacement",
+    (
+        "'openadapt-verify[mysql]'",
+        "'openadapt-verify[mysql]' \"$RUNNER_TEMP\"/dist/openadapt_verify-*.whl",
+        '"${verify_wheels[0]}"',
+        '"${verify_wheels[0]}[dev,mysql]"',
+    ),
+)
+def test_verify_candidate_exception_refuses_other_sources_or_extras(
+    replacement: str,
+) -> None:
+    workflow, command = VERIFY_CLEAN_INSTALL
+    changed = command.replace('"${verify_wheels[0]}[mysql]"', replacement)
+    assert changed != command
+    assert not _allowed(workflow, changed)
+
+
+def test_verify_candidate_exception_cannot_add_an_unlocked_requirement() -> None:
+    workflow, command = VERIFY_CLEAN_INSTALL
+    assert not _allowed(workflow, command + " an-unpinned-test-tool")

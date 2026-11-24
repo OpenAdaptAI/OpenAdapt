@@ -464,3 +464,106 @@ re-run; by the rules, their verdicts are the same: every item made one save,
 on MockMed's empty store or next to OpenEMR records it left untouched; item
 40's save created a record on another patient (wrong record either way) and
 item 30's showed no new record (unconfirmed, the earlier "no change").
+
+## Amendment 15 (2026-11-20, before either run): claims versus the read-back on OpenEMR, rerun on the released verify-run, then a held-out set
+
+Run `2026-10-19-a` (Amendment 7) judged with a verify-run that missed the 5
+`collateral_edit` items; #1375 fixed that, and Amendment 9 re-judged them on
+rebuilt state, not on a new agent run. This amendment reruns the whole
+experiment with an agent, and then a second set of faults written for it.
+
+- **Run `2026-11-20-a`.** The same 7 faults, 5 items each (items 1101 to
+  1135), the same agent (Claude Sonnet 5.5 computer use, the current
+  Sonnet, `run.AGENT_MODEL`), and the same instruction, fixture image and
+  one seeded chart. verify-run is the released openadapt-flow 3.3.0,
+  installed on its own and passed as `--verify-python`; the harness is this
+  checkout's `main`. Between v3.3.0 and that `main`, verify-run and the
+  REST effect code are the same (only `ui_readback.py` differs, which REST
+  verify-run doesn't use).
+- **Ground truth, stricter.** It now also compares every column of every
+  existing `patient_data` row (binary and text columns as hex), not only the
+  referral fields. In the no-agent plumbing check every fault of both sets
+  was labelled as intended, and the clean saves stayed `correct`.
+- **Held-out run `heldout-2026-11-20-a`** (`--heldout`, items 1201 to 1235),
+  written after `2026-10-19-a`'s results were known and frozen in this
+  commit before any held-out item was judged. Three existing charts are
+  seeded. Each fault changes what a check written for the first set could
+  overfit: `h_partial` blanks the street, `h_wrong_value` moves the date of
+  birth a day (both by trigger); `h_duplicate` adds a second chart with the
+  new chart's name and another email; `h_no_persist` overwrites the new
+  chart's last name and email 3 s after the save; `h_collateral_loss`
+  deletes the newest existing chart, not the oldest; `h_collateral_edit`
+  changes one field of the middle existing chart, a different field by item
+  (street, date of birth, first name, city, email). `h_ok` is the clean
+  control. The plumbing check ran no verify-run on the held-out faults.
+- **Fixes.** If either run misses a bad save, the fix is general (no app
+  names in engine code, fails closed), and the run that follows it needs
+  another fresh set of faults. At most one fix cycle; the numbers of every
+  run stay in its own table, never merged.
+- **Fixture.** The pinned 8.0.0.3 fixture (`benchmark/openemr_local`) on the
+  podman VM, ports 9981/9980 (the throughput project's volumes, so the
+  baseline's keys match), lane 1.
+
+## Amendment 16 (2026-11-21, after the runs of Amendment 15)
+
+- **Fixture.** `heldout-2026-11-20-a` ran at the same time as `2026-11-20-a`,
+  on a second copy of the same fixture (the throughput2 project, ports
+  9983/9982), not after it on the first. Both restore the same baseline
+  (a1b14e00) before every item.
+- **Fault not reached, and replacements.** In items 1120 (`duplicate`) and
+  1230 (`h_collateral_loss`) the agent saved a chart whose email was not
+  the one asked for. The poller finds the new chart by its email, so it
+  never fired. The build counts both as "fault not reached", as in
+  Amendment 7, and items 1136 and 1236 were run in their place. verify-run
+  flagged both charts. In control item 1205 (`h_ok`) the agent made the
+  same mistake: no fault was injected, so it counts as a bad save the agent
+  made itself, which verify-run flagged. Item 1237 was run as an extra
+  clean control, so the held-out run has 5 clean saves.
+- **Claims.** The success rule (`run.reported_success`) reads a final
+  answer that contains "couldn't" or "can't" as not claiming success. In
+  items 1107, 1136, 1205, 1216, 1227 and 1237 the agent said it had saved the
+  chart, then that it couldn't see the whole email field. The rows keep the
+  rule's verdict; hand_check.json quotes each answer.
+- **Controls.** `h_ok` starts a poller that only records when the new chart
+  appeared, so its `fault_applied` is set. The build now treats `ok` and
+  `h_ok` alike as controls (`build.CONTROLS`).
+
+## Amendment 17 (2026-11-21, after review of Amendment 16): the hand check reads each whole answer
+
+The first hand check of these two runs stamped one sentence per row from the
+success rule. It was redone by reading every final answer in full. Each
+`hand_check.json` entry now gives that reading in `claimed_success`, which
+can differ from the row's word rule.
+
+- **`2026-11-20-a`.** On all 30 bad saves the agent said it had saved the
+  chart, and it noticed none of the injected failures. In 5 of them (1107,
+  1123, 1125, 1126, 1136) it added that it couldn't see or didn't check the
+  whole email field. The rule counts 1107 and 1136 as not claiming success,
+  because they say "couldn't".
+- **`heldout-2026-11-20-a`.** In all 5 `h_wrong_value` items the agent saw
+  that the saved date of birth differed from the one it entered, and said
+  so. The rule counts them as claiming success, and the reading doesn't, so
+  the build shows the ledger agreeing with the row on 27 of 32.
+- **Correction to Amendment 16.** In items 1120, 1205 and 1230 every email
+  the ledger shows the agent typing was the right one, but the saved chart
+  didn't hold it. Amendment 16 said the agent "saved a chart whose email was
+  not the one asked for", which is right, and the PR text said it "typed a
+  wrong email", which isn't.
+- The table's "Agent claimed success" columns stay the rule's counts.
+
+## Amendment 18 (2026-11-21, after review): the denominators of a headline
+
+A claims run's "all" row counts every bad save, whatever caused it. A
+headline about the read-back states which count it uses. Each claims run in
+SCOREBOARD.md now has a "Denominators" line, computed by the build:
+
+- `2026-11-20-a`: verify-run caught 30 of 30 bad saves where an injected
+  fault fired. The agent made no bad save on a control item. Item 1120
+  (fault not reached; the saved chart didn't hold the email asked for)
+  was not reported as verified, and it is outside the 30.
+- `heldout-2026-11-20-a`: verify-run caught 30 of 30 bad saves where an
+  injected fault fired, and 1 of 1 bad save the agent made itself on a
+  control item (1205). That makes the "all" row's 31 of 31. Item 1230
+  (fault not reached) was not reported as verified, and it is outside the
+  31.
+- In both runs verify-run confirmed 5 of 5 clean saves, with 0 false alarms.

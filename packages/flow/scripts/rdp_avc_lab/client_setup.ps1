@@ -36,7 +36,7 @@ Move-Item (Get-ChildItem C:\oa\unz | Select-Object -First 1).FullName C:\oa\src
 Remove-Item C:\oa\unz, C:\oa\src.zip -Recurse -Force
 & $py -m pip install --quiet --upgrade pip
 # openadapt-types from the same checkout, so flow's pin is met at this ref.
-& $py -m pip install --quiet "C:\oa\src\packages\types" "C:\oa\src\packages\flow"
+& $py -m pip install --quiet "C:\oa\src\packages\types" "C:\oa\src\packages\flow[vision]"
 if ($LASTEXITCODE -ne 0) { throw "openadapt-flow install failed" }
 Set-Content C:\oa\ref.txt $Ref
 

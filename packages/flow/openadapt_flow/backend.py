@@ -130,6 +130,27 @@ class FreshActuationRequired(RuntimeError):
         self.frame_size = frame_size
 
 
+class KeyboardFrameChangedBeforeInput(FreshActuationRequired):
+    """A known one-shot keyboard lease refused before its keyboard gesture.
+
+    Earlier phases (such as a focusing click) may have happened. Only the
+    keyboard phase may be reacquired, after complete fresh revalidation.
+    """
+
+    def __init__(
+        self, *, lease_sha256: str, target_fingerprint: str, **kwargs: Any
+    ) -> None:
+        import re
+
+        if not re.fullmatch(r"[a-f0-9]{64}", lease_sha256) or not re.fullmatch(
+            r"[a-f0-9]{64}", target_fingerprint
+        ):
+            raise ValueError("keyboard lease evidence requires exact digests")
+        super().__init__(**kwargs)
+        self.lease_sha256 = lease_sha256
+        self.target_fingerprint = target_fingerprint
+
+
 @runtime_checkable
 class SystemOfRecordBackend(Protocol):
     """Optional system-of-record observation a backend MAY expose.
@@ -138,7 +159,7 @@ class SystemOfRecordBackend(Protocol):
     write actually reached the system of record — a partial save, a phantom
     optimistic-UI success, a duplicate submission all look identical on screen
     (``docs/LIMITS.md`` "5 of 7 write faults silent"). A backend that can read
-    the app's authoritative store (a JSON ``/api/db`` endpoint, an EMR's own
+    the app's authoritative store (a JSON records endpoint, an app's own
     API) exposes it here; the recorder snapshots it before and after each event
     (``sor_before`` / ``sor_after`` on the event, exactly as it already records
     ``url_before`` / ``url_after``), and the compiler's effect miner
@@ -308,6 +329,30 @@ class FieldLabelBackend(Protocol):
 
         Whitespace-collapsed; None when no field is focused, the backend has
         no structured layer, or on any momentary failure (never raises).
+        """
+        ...
+
+
+@runtime_checkable
+class CredentialFieldBackend(Protocol):
+    """Optional RECORD-TIME capability: does the focused field take a sign-in
+    credential?
+
+    The recorder asks before an agent-driven TYPE. A ``password`` or
+    ``username`` field's typed value becomes a SECRET parameter (see
+    ``ir.Step.secret``): the event carries no text and the field's pixels are
+    blacked out in every frame that shows it. The answer comes from the
+    page's own markup only (field type, ``autocomplete`` and the sign-in
+    form's field order), never from the value or a label's wording. Never
+    called at replay.
+    """
+
+    def focused_field_credential(self) -> Optional[dict[str, Any]]:
+        """Return password/new-password/username/unknown and an optional box.
+
+        None means an observed ordinary control. Unknown means unreadable;
+        absence of this capability is unsupported when withholding is requested.
+        Never raises.
         """
         ...
 
@@ -507,6 +552,15 @@ class FocusedElementActuationLeaseBackend(Protocol):
     def cancel_focused_element_lease(self) -> None:
         """Cancel an unconsumed focused-element binding."""
         ...
+
+
+@runtime_checkable
+class NativeKeyboardLeaseBackend(Protocol):
+    """A backend exposes actual native focus and its current one-shot lease."""
+
+    def native_keyboard_lease_available(self) -> bool: ...
+
+    def guarded_keyboard_target_fingerprint(self) -> Optional[str]: ...
 
 
 @runtime_checkable

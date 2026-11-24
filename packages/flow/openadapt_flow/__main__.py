@@ -6,7 +6,7 @@ imported lazily inside each handler so ``--help`` always works):
 - ``record`` — record a demonstration into the format ``compile`` consumes.
   With no ``--backend`` and no ``--url``, capture the desktop on this OS.
   ``--url`` without ``--backend`` still records the browser.
-- ``demo-record`` — serve MockMed locally and record the canonical demo.
+- ``demo-record`` — serve the bundled demo locally and record the canonical demo.
 - ``compile`` — compile a recording directory into a workflow bundle.
 - ``induce`` — induce a parameterized PROGRAM bundle from MULTIPLE recordings
   (multi-trace induction); refuses (nonzero exit) when intent is
@@ -24,7 +24,7 @@ imported lazily inside each handler so ``--help`` always works):
   capabilities (each child a ``QualificationAdmissionEnvelope``). Not compose.
   ``certify`` / ``run`` execute the parent; ``replay`` refuses it. The
   launcher form is ``openadapt flow process``.
-- ``replay`` — replay a bundle; serves the bundled MockMed demo app when no
+- ``replay`` — replay a bundle; serves the bundled demo app when --demo-app is passed
   ``--url`` is given (with optional ``--drift`` to demonstrate healing).
   ``--worklist`` drives a program's loop over a CLI-supplied relation; effect
   verification and API actuation are wired from ``--config`` / flags.
@@ -36,7 +36,7 @@ imported lazily inside each handler so ``--help`` always works):
   demonstration (induce + gate + validate the correction, promote only a
   verified revision), writing an updated bundle. Refuses bad fixes.
 - ``approve`` — mark a durably-paused run's pending escalation approved.
-- ``bench`` — replay a bundle N times against MockMed and aggregate.
+- ``bench`` — replay a bundle N times against the demo app and aggregate.
 - ``visualize`` — SEE what a demonstration compiled into: emit a program-graph
   view of a bundle or a composed parent (child bundles, --after DAG,
   effect-bound handoffs) as self-contained HTML, Mermaid, or the shared JSON
@@ -98,6 +98,9 @@ from typing import (
 from urllib.parse import urlsplit
 from uuid import UUID
 
+from openadapt_flow import cli_at_rest as _at_rest_cli
+from openadapt_flow.cli_params import _parse_params as _parse_params
+from openadapt_flow.cli_params import _replay_params as _replay_params
 from openadapt_flow.private_file import open_binary
 from openadapt_flow.run_invocation import invocation_kwargs
 from openadapt_flow.vision_hint import vision_hint
@@ -110,17 +113,6 @@ if TYPE_CHECKING:  # pragma: no cover
     from openadapt_flow.tutorial import BreakItResult
 
 _VIEWPORT = {"width": 1280, "height": 800}
-
-
-def _parse_params(pairs: Sequence[str] | None) -> dict[str, str]:
-    """Parse repeated ``--param k=v`` flags into a dict."""
-    params: dict[str, str] = {}
-    for pair in pairs or []:
-        if "=" not in pair:
-            raise SystemExit(f"--param expects k=v, got {pair!r}")
-        key, value = pair.split("=", 1)
-        params[key] = value
-    return params
 
 
 def _parse_identifier_region_arg(
@@ -290,45 +282,8 @@ def _resolve_record_capture_window(
     return {"owner": owner, "title": title}
 
 
-def _replay_params(
-    pairs: Sequence[str] | None,
-    params_file: str | None = None,
-) -> dict[str, "RuntimeParamScalar"]:
-    """Load replay bindings without requiring sensitive values in argv.
-
-    ``--params-file`` is intended for managed runners: the file can be staged
-    inside the per-run boundary while process listings contain only its path.
-    Explicit ``--param`` flags remain supported and override file values.
-    """
-    import json
-
-    from openadapt_flow.runtime.authorization import is_runtime_param_scalar
-
-    params: dict[str, RuntimeParamScalar] = {}
-    if params_file:
-        path = Path(params_file)
-        try:
-            from openadapt_flow import sealed_set
-
-            raw = json.loads(sealed_set.read_text(path))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise SystemExit(f"--params-file could not be read as JSON: {exc}") from exc
-        if not isinstance(raw, dict):
-            raise SystemExit("--params-file must contain one JSON object")
-        if len(raw) > 100:
-            raise SystemExit("--params-file may contain at most 100 parameters")
-        for key, value in raw.items():
-            if not isinstance(key, str) or not key:
-                raise SystemExit("--params-file keys must be non-empty strings")
-            if not is_runtime_param_scalar(value):
-                raise SystemExit(f"--params-file value for {key!r} must be a scalar")
-            params[key] = value
-    params.update(_parse_params(pairs))
-    return params
-
-
 def _with_drift(url: str, drift: str | None) -> str:
-    """Append a ``?drift=...`` query to a MockMed base URL."""
+    """Append a ``?drift=...`` query to a demo app base URL."""
     if not drift:
         return url
     return f"{url.rstrip('/')}/?drift={drift}"
@@ -549,15 +504,9 @@ def _enforce_surface_binding(
 def _recording_encryption_key(args: argparse.Namespace, backend: str) -> Optional[str]:
     """The passphrase that encrypts this recording, or ``None`` for plaintext.
 
-    The web recorder encrypts every file from the first frame under
-    ``OPENADAPT_RECORDING_KEY`` or ``OPENADAPT_BUNDLE_KEY``, and under the
-    local key in strict mode (:mod:`openadapt_flow.at_rest`); otherwise the
-    plaintext recording is logged. ``--no-encrypt`` and
-    ``OPENADAPT_FLOW_PLAINTEXT_AT_REST`` opt out, with a warning and a ledger
-    line. The desktop recorders write a raw capture session through
-    openadapt-capture that Flow cannot encrypt yet: by default they record in
-    plaintext and name the directory on stderr and in the ledger;
-    ``OPENADAPT_FLOW_AT_REST=strict`` and a configured recording key refuse.
+    Recordings are encrypted by default (docs/phi_at_rest.md): the web
+    recorder from the first frame, a desktop recording once converted.
+    ``--no-encrypt`` and the opt-out record plaintext, with a warning.
     """
     import os
 
@@ -572,17 +521,7 @@ def _recording_encryption_key(args: argparse.Namespace, backend: str) -> Optiona
             return None
         explicit = os.environ.get(sealed_set.RECORDING_ENV_KEY) or None
         if backend != "web":
-            if explicit:
-                raise SystemExit(
-                    f"record: {sealed_set.RECORDING_ENV_KEY} is set, but the "
-                    f"{backend} recorder writes its raw capture session "
-                    "(database, video) through openadapt-capture, which Flow "
-                    "cannot encrypt yet. Nothing was recorded. Record on an "
-                    "encrypted volume and pass --no-encrypt, or use --backend web."
-                )
-            if not at_rest.plaintext_allowed(f"a desktop recording at {out}"):
-                at_rest.unsealed_write(f"a {backend} recording", out)
-            return None
+            return _at_rest_cli.desktop_recording_key(backend, out, explicit)
     except at_rest.AtRestRefused as exc:
         raise SystemExit(f"record: {exc}") from exc
     if explicit or os.environ.get(crypto.ENV_KEY):
@@ -1155,7 +1094,7 @@ def _undo_run_target_problem(args: argparse.Namespace, workflow) -> Optional[str
 
     Resolves ``--config`` and the backend flags the way replay does. A web
     target with no URL and no attached browser would start the bundled
-    MockMed demo, so the undo would act on the demo and use up its approval.
+    bundled demo, so the undo would act on the demo and use up its approval.
     """
     from openadapt_flow.backends.factory import _normalize_kind
 
@@ -1174,6 +1113,18 @@ def _undo_run_target_problem(args: argparse.Namespace, workflow) -> Optional[str
         "name the application to undo in: --url, a --config whose backend has "
         "a url, an attached browser, or a non-web --backend"
     )
+
+
+def _print_terminal_receipt(
+    run_dir: Path, report, *, require_opt_in: bool = False
+) -> None:
+    from openadapt_flow.receipt_record import receipt_after_run
+
+    note = receipt_after_run(
+        run_dir, require_opt_in=require_opt_in, expected_report=report
+    )
+    if note:
+        print(note, file=sys.stderr)
 
 
 def _finish_replay(
@@ -1222,6 +1173,8 @@ def _finish_replay(
             print("\n" + "\n".join(rolled))
     _maybe_report_break(run_dir, report)
     _maybe_report_run(run_dir, report, args, backend_kind=backend_kind)
+    if args is not None:
+        _print_terminal_receipt(run_dir, report)
     _maybe_attest_run(run_dir, report, args)
     if getattr(report, "execution_profile", None) in {"standard", "regulated"}:
         return 0 if outcome == "VERIFIED" else 1
@@ -1265,8 +1218,8 @@ def _replay_desktop(
 ) -> int:
     """Replay against a non-browser native/remote backend built by the factory.
 
-    No Playwright browser, no bundled MockMed, no session video — those are
-    web-only. ``--drift`` (a MockMed teaching aid) is refused. The backend is
+    No Playwright browser, no bundled demo app, no session video — those are
+    web-only. ``--drift`` (a demo teaching aid) is refused. The backend is
     built from the resolved ``BackendConfig`` and the shared replayer wiring runs
     exactly as it does for the web path. With ``rollback_plan``, a GUI
     compensation starts from the run's start screen (the halt cleanup and its
@@ -1278,7 +1231,7 @@ def _replay_desktop(
 
     if args.drift:
         raise SystemExit(
-            "--drift only demonstrates healing on the bundled MockMed web demo; "
+            "--drift only demonstrates healing on the bundled web demo; "
             f"it does not apply to the {backend_cfg.kind!r} backend."
         )
     try:
@@ -1300,7 +1253,7 @@ def _replay_desktop(
             effect_verifier=effect_verifier,
             api_actuator=api_actuator,
             durable=durable,
-            # No MockMed drift here, so the deterministic structural rung is
+            # No demo drift here, so the deterministic structural rung is
             # preferred exactly as in a non-drift web replay.
             use_structural=True,
             pixel_verify_enabled=pixel_verify_enabled,
@@ -1528,7 +1481,7 @@ def _cmd_record_capture(args: argparse.Namespace) -> int:
         getattr(args, "browser_cdp_endpoint", None)
         or getattr(args, "browser_page_url", None)
     )
-    recording_key = _recording_encryption_key(args, backend)
+    recording_key = args._recording_key = _recording_encryption_key(args, backend)
     if backend in ("windows", "macos", "linux", "rdp", "citrix"):
         if getattr(args, "capture_network", False):
             raise SystemExit(
@@ -1838,10 +1791,11 @@ def _cmd_record_surfaces(args: argparse.Namespace) -> int:
             "--surface WINDOW). Nothing was recorded."
         )
     # A capture session runs for every cross-window recording, and Flow
-    # cannot encrypt it yet: the desktop recording policy applies.
-    _recording_encryption_key(
+    # cannot encrypt a cross-window recording yet: logged (strict refuses).
+    if _recording_encryption_key(
         args, surfaces[0].kind if surfaces else host_surface_kind()
-    )
+    ):
+        _at_rest_cli.note_plaintext_recording("a cross-window recording", args.out)
     desktop_params: dict[str, str] = {}
     web_params: list[str] = []
     for entry in args.param or ():
@@ -1989,6 +1943,7 @@ def _cmd_record_desktop(args: argparse.Namespace, backend: str) -> int:
         replay_window_title=getattr(args, "rdp_window_title", None),
         readiness_text=getattr(args, "rdp_readiness_text", None),
         stop=_record_until_stop(args),
+        encryption_key=getattr(args, "_recording_key", None),
     )
     _stamp_recording_surface(out, backend)
     print(f"Recording written to {out}")
@@ -2016,7 +1971,7 @@ def _cmd_record_desktop(args: argparse.Namespace, backend: str) -> int:
 
 def _cmd_demo_record(args: argparse.Namespace) -> int:
     from openadapt_flow.demo_driver import record_triage_demo
-    from openadapt_flow.mockmed.server import serve
+    from openadapt_flow.tutorial import serve_demo_app as serve
 
     url, stop = serve(port=0)
     try:
@@ -3147,7 +3102,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         )
     if args.drift and not demo_app:
         raise SystemExit(
-            "--drift only applies to the bundled MockMed demo app (--demo-app); "
+            "--drift only applies to the bundled demo app (--demo-app); "
             "drift your own app for real."
         )
     if (
@@ -3157,7 +3112,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     ):
         raise SystemExit(
             "replay needs a target: pass --url, set backend.url in --config, or "
-            "pass --demo-app to replay against the bundled MockMed demo app."
+            "pass --demo-app to replay against the bundled demo app."
         )
     refuse_unqualified_skill(bundle, target_url=url)
 
@@ -3169,7 +3124,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         # The browser backend is built through the same factory as the
         # desktop backends; the grounding / identity / deployment wiring and
         # the run are shared (see _build_and_run_replayer). ``--drift`` (a
-        # MockMed teaching aid) forces the visual floor so the healing ladder
+        # demo teaching aid) forces the visual floor so the healing ladder
         # is exercised instead of the structural rung resolving it.
         backend = build_backend(backend_cfg, page=page)
         held_backend.append(backend)
@@ -3247,12 +3202,12 @@ def _cmd_replay(args: argparse.Namespace) -> int:
 
     stop = None
     if url is None and demo_app:
-        from openadapt_flow.mockmed.server import serve
+        from openadapt_flow.tutorial import serve_demo_app as serve
 
         url, stop = serve(port=0)
         url = _with_drift(url, args.drift)
         drift_note = f" (drift: {args.drift})" if args.drift else ""
-        print(f"--demo-app: replaying against bundled MockMed{drift_note}")
+        print(f"--demo-app: replaying against bundled demo app{drift_note}")
 
     video_dir = getattr(args, "record_video", None)
     from playwright.sync_api import sync_playwright
@@ -3328,32 +3283,17 @@ def _pinned_lineage(args: argparse.Namespace, cfg: Any) -> Any:
     return pinned_lineage(args, cfg)
 
 
-#: The run-authorization fields a managed dispatch must agree on with the
-#: authorization this runner builds for the same bundle and inputs.
-MANAGED_SAFETY_FIELDS = (
-    "bundle_content_digest",
-    "runtime_inputs_digest",
-    "admitted_policy_name",
-    "admitted_policy_contract_sha256",
-    "execution_profile",
-    "minimum_effect_tier",
-    "qualified_effect_requirements",
-    "required_identity_step_ids",
-    "unverified_write_approvals",
+from openadapt_flow.runner.dispatch_envelope import (  # noqa: E402
+    MANAGED_SAFETY_FIELDS as MANAGED_SAFETY_FIELDS,
 )
 
 
 def managed_authorization_mismatch(authorization: Any, local: Any) -> bool:
-    """Whether Cloud's run authorization disagrees with the local one.
+    from openadapt_flow.runner.dispatch_envelope import (
+        managed_authorization_mismatch as check,
+    )
 
-    Cloud may admit only API steps the bundle itself admits. An API step Cloud
-    doesn't name runs on the GUI, so naming fewer is allowed.
-    """
-
-    return any(
-        getattr(authorization, field) != getattr(local, field)
-        for field in MANAGED_SAFETY_FIELDS
-    ) or any(row not in local.api_steps for row in authorization.api_steps)
+    return check(authorization, local)
 
 
 def _replay_worklist_pool(
@@ -3617,88 +3557,29 @@ def _refuse_unverified_managed_qualification_admission(
     authorization: object,
     workflow: object | None = None,
 ) -> int | None:
-    """Verify the signed admission already bound on a Cloud authorization."""
+    from openadapt_flow.cli_program_dispatch import refuse_managed_qualification
 
-    from openadapt_flow.production_qualification import (
-        managed_qualification_edge_refusal,
-    )
-
-    admission = getattr(authorization, "qualification_admission", None)
-    if admission is None:
-        print(
-            "run REFUSED: Standard and Regulated actuation requires a signed "
-            "qualification admission. Nothing was executed."
-        )
-        return 2
-    refusal = managed_qualification_edge_refusal(authorization, workflow)
-    if refusal is not None:
-        print(
-            "run REFUSED: the Production qualification authority is invalid, "
-            "expired, revoked, or does not match this exact run. Nothing was "
-            "executed."
-        )
-        return 2
-    return None
+    return refuse_managed_qualification(authorization, workflow)
 
 
 def _resolve_run_approval_mode(args: argparse.Namespace, cfg, profile_value):
-    """The approval mode a ``run`` uses, or ``None`` for an ungated run.
+    from openadapt_flow.cli_program_dispatch import resolve_run_approval_mode
 
-    A direct ``--approval-mode`` wins over ``runtime.approval_mode``. Every
-    run is gated by default: a missing or unknown value means ``each_item``,
-    so a person approves each save whatever the profile. The only way to turn
-    the gate off is to name ``not_gated``, and the report records that choice.
-    """
-    from openadapt_flow.approval_mode.model import resolve_approval_mode
-
-    requested = getattr(args, "approval_mode", None)
-    if requested is None:
-        requested = getattr(getattr(cfg, "runtime", None), "approval_mode", None)
-    if requested is None:
-        requested = _admitted_approval_mode(args)
-    return resolve_approval_mode(requested)
+    return resolve_run_approval_mode(
+        args, cfg, profile_value, admitted_mode=_admitted_approval_mode
+    )
 
 
 def _admitted_approval_mode(args: argparse.Namespace) -> Optional[str]:
-    """The approval mode the bundle's admission gives it, or ``None``.
+    from openadapt_flow.cli_program_dispatch import admitted_approval_mode
 
-    An accepted ``openadapt-flow admit`` sets ``problems_only`` for that exact
-    bundle. A flag or ``runtime.approval_mode`` still wins. A bundle changed
-    since admission, or an agent's admission whose person-signed grant no
-    longer verifies, falls back to the default (a person approves each save)
-    and says why.
-    """
-
-    bundle = getattr(args, "bundle", None)
-    if not bundle:
-        return None
-    from openadapt_flow.admit_pipeline import admitted_approval_mode
-
-    admitted = admitted_approval_mode(Path(bundle))
-    if admitted.refusal is not None:
-        print(
-            f"admission approval mode not used ({admitted.refusal}): a person "
-            "approves each save."
-        )
-        return None
-    if admitted.approval_mode is not None and admitted.admitted_by is not None:
-        print(
-            f"Admitted by {admitted.admitted_by.label()}: this workflow uses "
-            f"{admitted.approval_mode}."
-        )
-    return admitted.approval_mode
+    return admitted_approval_mode(args)
 
 
 def _approval_wait_seconds(args: argparse.Namespace) -> float:
-    from openadapt_flow.approval_mode.item_approval import (
-        DEFAULT_APPROVAL_WAIT_S,
-        MAX_APPROVAL_WAIT_S,
-    )
+    from openadapt_flow.cli_program_dispatch import approval_wait_seconds
 
-    raw = getattr(args, "approval_wait", None)
-    if raw is None:
-        return DEFAULT_APPROVAL_WAIT_S
-    return max(0.0, min(float(raw), MAX_APPROVAL_WAIT_S))
+    return approval_wait_seconds(args)
 
 
 def _deployment_approvers(args: argparse.Namespace) -> Any:
@@ -3939,49 +3820,9 @@ def _approval_gate_for_run(
 
 
 def _bind_approval_mode(args: argparse.Namespace) -> Optional[int]:
-    """Bind the resolved approval mode into the run's authorization.
+    from openadapt_flow.cli_program_dispatch import bind_approval_mode
 
-    The mode is then part of the authorization the run checks at every input
-    edge and retains for a resume. A Cloud dispatch keeps its binding digest:
-    the mode is a runner-local field.
-    """
-    mode = getattr(args, "_approval_mode", None)
-    authorization = getattr(args, "_governed_run_authorization", None)
-    if mode is None or authorization is None:
-        return None
-    existing = getattr(authorization, "approval_mode", None)
-    if existing is not None and existing != mode.value:
-        print(
-            f"run REFUSED: this run's authorization names the {existing} approval "
-            f"mode, not {mode.value}. Nothing was executed."
-        )
-        return 2
-    bound = authorization.model_copy(update={"approval_mode": mode.value})
-    binding = getattr(args, "_managed_dispatch_binding", None)
-    if binding is not None:
-        from openadapt_flow.runner.dispatch_envelope import (
-            ManagedDispatchEnvelopeError,
-            with_runner_local_authorization,
-        )
-
-        try:
-            args._managed_dispatch_binding = with_runner_local_authorization(
-                binding, bound
-            )
-        except ManagedDispatchEnvelopeError:
-            print(
-                "run REFUSED: managed dispatch binding is invalid. Nothing was "
-                "executed."
-            )
-            return 2
-    args._governed_run_authorization = bound
-    labels = {
-        "each_item": "a person approves each save",
-        "problems_only": "only problems go to a person",
-        "not_gated": "no per-item pause",
-    }
-    print(f"Approval mode: {mode.value} ({labels[mode.value]}).")
-    return None
+    return bind_approval_mode(args)
 
 
 def _attach_cloud_seal(args: argparse.Namespace) -> None:
@@ -4134,34 +3975,9 @@ def _cmd_verify_run(args: argparse.Namespace) -> int:
 def _stage_admitted_program_readback(
     args: argparse.Namespace, bundle: Path
 ) -> Optional[int]:
-    """Use the bundled read-back check for a managed admitted-program run.
+    from openadapt_flow.cli_program_dispatch import stage_admitted_program_readback
 
-    Call only after the run's authority is decided: the dispatch rests on
-    the program's own admission (``managed_admission_refusal`` returned
-    None) and no production authority file or qualification admission is in
-    play. Every other run ignores ``readback/verify.yaml`` and reads back
-    through its deployment config (jit/hosted_authority.py).
-    """
-
-    if not getattr(args, "managed_dispatch_file", None):
-        return None
-    from openadapt_flow.jit.hosted_authority import (
-        HostedAuthorityError,
-        is_admitted_program,
-        readback_effects,
-    )
-
-    if not is_admitted_program(bundle):
-        return None
-    try:
-        args._admitted_program_effects = readback_effects(bundle)
-    except HostedAuthorityError:
-        print(
-            "run REFUSED: the admitted program's bundled read-back check is "
-            "invalid. Nothing was executed."
-        )
-        return 2
-    return None
+    return stage_admitted_program_readback(args, bundle)
 
 
 def _admitted_bundle_refusal(
@@ -4219,7 +4035,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     ``--dry-run`` / ``--explain`` print the coverage report and stop before
     execution. Once admitted, it delegates to the shared executor (the same
     backend / effect / actuation / durable runtime as ``replay``), with
-    ``--drift`` (a MockMed-only teaching aid) forced off.
+    ``--drift`` (a demo-only teaching aid) forced off.
     """
     from openadapt_flow.composition import is_composition_artifact
     from openadapt_flow.execution_profiles import (
@@ -4390,6 +4206,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     dispatch_file = getattr(args, "managed_dispatch_file", None)
     managed_binding = None
     authorization = None
+    admitted_program = False
     if dispatch_file:
         try:
             managed_binding = read_managed_dispatch_envelope(Path(dispatch_file))
@@ -4515,6 +4332,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
         )
         return 2
     runtime_params = _replay_params(args.param, getattr(args, "params_file", None))
+    if dispatch_file and set(runtime_params) & set(workflow.secret_params):
+        print(
+            "run REFUSED: secret parameters must come from the runner's vault "
+            "environment, never the params file. Nothing was executed."
+        )
+        return 2
     runtime_worklists = (
         qualification_case["worklists"]
         if qualification_case is not None
@@ -4683,6 +4506,22 @@ def _cmd_run(args: argparse.Namespace) -> int:
     refused = _bind_approval_mode(args)
     if refused is not None:
         return refused
+
+    if dispatch_file and admitted_program:
+        from openadapt_flow.cli_program_dispatch import bind_verified_program_run
+
+        refused = bind_verified_program_run(
+            args,
+            bundle=bundle,
+            workflow=workflow,
+            params=runtime_params,
+            worklists=runtime_worklists,
+            policy_source=policy_source,
+            effect_verifier=effect_verifier,
+            api_actuator=api_actuator,
+        )
+        if refused is not None:
+            return refused
 
     from openadapt_flow.cli_worklist_pool import loop_relation, requested_pool
     from openadapt_flow.runtime.worklist_pool import PoolRefusal
@@ -5165,6 +5004,23 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             getattr(args, "param", None), getattr(args, "params_file", None)
         ),
     )
+    from openadapt_flow.cli_program_dispatch import restore_verified_program_dispatch
+    from openadapt_flow.jit.hosted_authority import HostedAuthorityError
+
+    try:
+        managed_binding, effect_verifier = restore_verified_program_dispatch(
+            managed_binding,
+            manifest,
+            workflow,
+            policy_source=cfg.policy.policy,
+            effect_verifier=effect_verifier,
+            api_actuator=api_actuator,
+        )
+    except (HostedAuthorityError, ValueError, OSError):
+        print(
+            "Resume REFUSED: the exact managed program authority could not be verified again. Nothing was executed."
+        )
+        return 3
     if manifest.delivery_authority_kind == "cloud_runner" and allow_egress:
         print(
             "Resume REFUSED: this managed runner doesn't permit model grounding "
@@ -5223,6 +5079,12 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             replayer,
             key=ckpt_key,
             execution_target_kind=_report_backend_kind(backend_cfg.kind),
+            execution_origin=(
+                f"{urlsplit(backend.page.url).scheme}://{urlsplit(backend.page.url).netloc}"
+                if getattr(backend, "page", None) is not None
+                else None
+            ),
+            execution_target_origin=_surface_target_origin_or_none(backend_cfg),
             surface_override=bool(getattr(args, "_surface_override", False)),
         )
 
@@ -5315,6 +5177,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
         backend_kind=_report_backend_kind(backend_cfg.kind),
     )
     _maybe_attest_run(run_dir, report, args)
+    _print_terminal_receipt(run_dir, report, require_opt_in=True)
     if getattr(report, "execution_profile", None) in {"standard", "regulated"}:
         return 0 if outcome == "VERIFIED" else 1
     return 0 if report.success else 1
@@ -6043,8 +5906,8 @@ def _cmd_bench(args: argparse.Namespace) -> int:
     from openadapt_flow.bench import run_bench
     from openadapt_flow.emit.skill import bundle_surface
     from openadapt_flow.ir import Workflow
-    from openadapt_flow.mockmed.server import serve
     from openadapt_flow.report import render_bench_report
+    from openadapt_flow.tutorial import serve_demo_app as serve
 
     try:
         surface = bundle_surface(Workflow.load(Path(args.bundle)))
@@ -6054,7 +5917,7 @@ def _cmd_bench(args: argparse.Namespace) -> int:
         from openadapt_flow.cli_hints import command
 
         print(
-            "BENCH REFUSED: bench replays a bundle against the bundled MockMed "
+            "BENCH REFUSED: bench replays a bundle against the bundled demo "
             f"web app, and this bundle was recorded on {surface!r}. Measure it "
             "on its own app with repeated "
             f"`{command('run BUNDLE --config deploy.yaml')}`. Nothing was executed."
@@ -7742,15 +7605,12 @@ def _cmd_emit_mcp(args: argparse.Namespace) -> int:
 
 
 def _cmd_login(args: argparse.Namespace) -> int:
-    """Validate an ingest token against the hosted control plane and store the
-    host in config and the token in the OS keychain when saving is enabled.
-
-    Token resolution: ``--token`` -> ``OPENADAPT_INGEST_TOKEN`` env ->
-    OS keychain -> existing config migration token. Mint a
-    token in the dashboard at ``<host>/dashboard/settings/ingest``.
-    """
+    """Browser sign-in when no token is found, else validate the ingest token."""
+    from openadapt_flow import browser_login
     from openadapt_flow.hosted import HostedError, login
 
+    if browser_login.uses_browser(args):
+        return browser_login.run_cli(args)
     try:
         result = login(
             token=args.token,
@@ -8584,17 +8444,18 @@ def _emit_local_receipt(args: argparse.Namespace) -> int:
     ``openadapt_flow.receipt``; the rich local ``REPORT.md`` -- screenshots,
     typed values, OCR identity text, parameters -- is never the source.
     """
+    from openadapt_flow import artifacts
     from openadapt_flow.ir import RunReport
     from openadapt_flow.receipt import ReceiptError, build_receipt, write_receipt
 
     run_dir = Path(args.run_dir)
     report_path = run_dir / "report.json"
-    if not report_path.is_file():
+    if not artifacts.is_file(report_path):
         print(f"report-run failed: no report.json in {run_dir} — nothing to report.")
         return 1
     try:
-        report = RunReport.model_validate_json(report_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        report = RunReport.model_validate_json(artifacts.read_text(report_path))
+    except (OSError, ValueError):  # a SealedSetError is a ValueError
         print("report-run failed: report.json is unreadable or invalid")
         return 1
 
@@ -8630,7 +8491,7 @@ def _emit_local_receipt(args: argparse.Namespace) -> int:
     if records_path is not None:
         print(f"  {records_path} (values read, Seal pointers to this receipt)")
     print(
-        "\nEvery byte that would leave this machine is in receipt.json. "
+        "\nEvery byte that would leave this machine is in run-summary.json. "
         "Publishing is a separate, explicit step."
     )
     print(
@@ -8919,7 +8780,7 @@ def _add_backend_flags(p: argparse.ArgumentParser) -> None:
         default=None,
         metavar="APP",
         help=(
-            "Owner application for --backend macos (e.g. TextEdit). During "
+            "Owner application for --backend macos (e.g. MyApp). During "
             "record this scopes Capture to that local app window; during "
             "replay/run it overrides backend.macos_app."
         ),
@@ -9495,6 +9356,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(
         dest="command", required=True, parser_class=argparse.ArgumentParser
     )
+    __import__("openadapt_flow.exceptions.cli", fromlist=["register"]).register(sub)
 
     p = sub.add_parser(
         "demo",
@@ -9789,7 +9651,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser(
         "demo-record",
-        help="Serve MockMed and record the canonical triage demo",
+        help="Serve the bundled demo app and record the canonical demo",
         allow_abbrev=False,
     )
     p.add_argument("--out", required=True, help="Recording output directory")
@@ -9799,7 +9661,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Note text typed during the demo (recorded as a parameter)",
     )
     p.add_argument("--param-name", default="note", help="Parameter name for the note")
-    p.add_argument("--drift", default=None, help="Comma-separated MockMed drift modes")
+    p.add_argument("--drift", default=None, help="Comma-separated demo drift modes")
     p.add_argument("--headed", action="store_true", help="Run the browser headed")
     p.add_argument(
         "--record-video",
@@ -9928,6 +9790,7 @@ def build_parser() -> argparse.ArgumentParser:
             "an irreversible step on every run."
         ),
     )
+    _at_rest_cli.add_no_encrypt(p)
     p.set_defaults(func=_cmd_compile)
 
     p = sub.add_parser(
@@ -10320,7 +10183,7 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("variant_set", help="Variant-set directory")
     q.set_defaults(func=_cmd_variants)
     p.set_defaults(func=_cmd_variants)
-
+    __import__("openadapt_flow.wrap.dispatch_cli", fromlist=["_"]).register(sub)
     p = sub.add_parser(
         "route",
         help=(
@@ -10369,7 +10232,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--demo-app",
         action="store_true",
         help=(
-            "Serve the bundled MockMed demo app and replay against it (for a "
+            "Serve the bundled demo app and replay against it (for a "
             "bundle recorded on it, such as the tutorial's)"
         ),
     )
@@ -10377,7 +10240,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--drift",
         default=None,
         help=(
-            "Comma-separated MockMed drift modes (theme,move,rename,modal) "
+            "Comma-separated demo drift modes (theme,move,rename,modal) "
             "to demonstrate bounded drift resolution; only with --demo-app"
         ),
     )
@@ -10445,6 +10308,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_browser_session_flags(p)
     _add_deployment_flags(p, worklist=True)
     _add_attest_flags(p)
+    _at_rest_cli.add_no_encrypt(p)
     p.set_defaults(func=_cmd_replay)
 
     p = sub.add_parser(
@@ -10712,6 +10576,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     _add_approval_flags(p)
+    _at_rest_cli.add_no_encrypt(p)
     p.set_defaults(func=_cmd_run)
 
     sa = sub.add_parser(
@@ -10740,6 +10605,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     _register_no_outbound(sub)
 
+    _at_rest_cli.register(sub)
     from openadapt_flow.cli_service import register as _register_service
 
     _register_service(sub)
@@ -11166,7 +11032,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser(
         "bench",
-        help="Replay a bundle N times against MockMed and aggregate",
+        help="Replay a bundle N times against the bundled demo and aggregate",
         allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
@@ -11174,7 +11040,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--drift",
         default=None,
-        help="Comma-separated drift modes forwarded to the MockMed URL",
+        help="Comma-separated drift modes forwarded to the demo URL",
     )
     p.add_argument("--run-root", required=True, help="Directory for per-iteration runs")
     p.add_argument(
@@ -11190,7 +11056,7 @@ def build_parser() -> argparse.ArgumentParser:
         "benchmark",
         help=(
             "Benchmark compiled replay vs. a Claude computer-use agent on "
-            "the MockMed triage task (agent arm needs an Anthropic API key "
+            "the bundled demo task (agent arm needs an Anthropic API key "
             "and costs real money)"
         ),
         allow_abbrev=False,
@@ -11432,23 +11298,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_sections_parser(sub)
 
-    p = sub.add_parser(
-        "seal",
-        help=(
-            "Encrypt every file of a bundle that can hold patient data with "
-            "OPENADAPT_BUNDLE_KEY, bind the whole file set to one sealed "
-            "index, verify it, and publish it atomically at a new path"
-        ),
-        allow_abbrev=False,
-    )
-    p.add_argument("source", help="Existing workflow bundle directory")
-    p.add_argument(
-        "-o",
-        "--out",
-        required=True,
-        help="New destination directory (must not already exist)",
-    )
-    p.set_defaults(func=_cmd_seal)
+    from openadapt_flow.cli_encrypt import register as _register_encrypt
+
+    _register_encrypt(sub, _cmd_seal)
 
     from openadapt_flow.countersign.cli import add_countersign_parser
 
@@ -11716,7 +11568,7 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument(
         "--admit-local",
         action="store_true",
-        help="Sign a MockMed/local-dev admission that production trust maps refuse",
+        help="Sign a local-dev admission that production trust maps refuse",
     )
     q.add_argument("--replace", action="store_true", help="Replace an existing project")
     q.add_argument("--out", default=None, help="Write the accepted proposal JSON")
@@ -11759,7 +11611,7 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument(
         "--admit-local",
         action="store_true",
-        help="Sign a MockMed/local-dev admission that production trust maps refuse",
+        help="Sign a local-dev admission that production trust maps refuse",
     )
     q.add_argument(
         "--proposer",
@@ -12530,8 +12382,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "login",
         help=(
-            "Validate an ingest token against the hosted control plane and "
-            "store it in the OS keychain"
+            "Sign in to OpenAdapt Cloud through the browser, or validate an "
+            "ingest token, and keep the credential in the OS keychain"
         ),
         allow_abbrev=False,
     )
@@ -12574,6 +12426,9 @@ def build_parser() -> argparse.ArgumentParser:
             "is available (insecure fallback)"
         ),
     )
+    from openadapt_flow.browser_login import add_cli_arguments
+
+    add_cli_arguments(p)
     p.set_defaults(func=_cmd_login)
 
     p = sub.add_parser(
@@ -13016,7 +12871,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="DIR",
         help=(
-            "LOCAL ONLY: write a shareable run receipt (receipt.png / .json / "
+            "LOCAL ONLY: write a shareable run summary (run-summary.png / .json / "
             ".md) into DIR instead of contacting any host. The receipt is "
             "generated from a closed allow-list -- closed enums, counts, "
             "digests, versions -- and can carry no screenshot, OCR text, typed "
@@ -13192,7 +13047,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--seed-mockmed",
         action="store_true",
-        help="Write the synthetic MockMed ok and banner-lie admissions",
+        help="Write the synthetic demo ok and banner-lie admissions",
     )
     p.add_argument(
         "--config",
@@ -13221,7 +13076,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Reward contract bundle directory (contract.json, "
             "required_effects.json, forbidden_effects.json, oracle.json, "
-            "optional certificate.json). Defaults to the seeded MockMed "
+            "optional certificate.json). Defaults to the seeded demo "
             "tier-2 bundle when --seed-mockmed is given."
         ),
     )
@@ -13250,7 +13105,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--seed-mockmed",
         action="store_true",
         help=(
-            "Write the synthetic MockMed reward bundles (tier-2 read-only "
+            "Write the synthetic demo reward bundles (tier-2 read-only "
             "SQLite oracle with a calibrated synthetic certificate; tier-0 "
             "screen dump)"
         ),
@@ -13288,81 +13143,21 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--once", action="store_true", help="Run one relay cycle and exit")
     ps.set_defaults(func=_cmd_business_decisions_serve)
 
-    # --- connector: the BYOC (bring-your-own-cloud) outbound-pull daemon -------
-    p = sub.add_parser(
-        "connector",
-        help=(
-            "BYOC connector: enroll this machine with OpenAdapt Cloud and run "
-            "governed jobs LOCALLY (customer owns the data boundary; PHI stays "
-            "on this side)"
-        ),
-        allow_abbrev=False,
-    )
-    csub = p.add_subparsers(dest="connector_cmd", required=True)
+    from openadapt_flow.connector.cli import register_connector_parser
 
-    pe = csub.add_parser(
-        "enroll",
-        help="Enroll against a mock/development control plane and persist its token",
-        allow_abbrev=False,
-    )
-    pe.add_argument(
-        "--control-plane-url", help="Control plane base URL (or CONTROL_PLANE_URL)"
-    )
-    pe.add_argument(
-        "--enrollment-secret", help="Org enrollment secret (or BYOC_ENROLLMENT_SECRET)"
-    )
-    pe.add_argument("--org-id", help="Org id to enroll under (or BYOC_ORG_ID)")
-    pe.add_argument("--name", help="Connector name (or BYOC_CONNECTOR_NAME)")
-    pe.add_argument(
-        "--profile", help="Path to the deployment.yaml governed runs use as --config"
-    )
-    pe.add_argument(
-        "--policy", help="Pinned admitted policy name (else the deployment config's)"
-    )
-    pe.add_argument("--storage-backend", help="Customer storage backend (local)")
-    pe.add_argument(
-        "--storage-root",
-        help="Customer storage root dir (a full-disk-encrypted volume)",
-    )
-    pe.set_defaults(func=_cmd_connector)
-
-    pr = csub.add_parser(
-        "run",
-        help="Poll the control plane and run governed jobs until interrupted",
-        allow_abbrev=False,
-    )
-    pr.add_argument(
-        "--control-plane-url", help="Control plane base URL (or CONTROL_PLANE_URL)"
-    )
-    pr.add_argument("--token", help="Per-connector token (or BYOC_CONNECTOR_TOKEN)")
-    pr.add_argument("--org-id", help="Org id (or BYOC_ORG_ID)")
-    pr.add_argument(
-        "--profile", help="Path to the deployment.yaml governed runs use as --config"
-    )
-    pr.add_argument(
-        "--policy", help="Pinned admitted policy name (else the deployment config's)"
-    )
-    pr.add_argument("--storage-backend", help="Customer storage backend (local)")
-    pr.add_argument("--storage-root", help="Customer storage root dir")
-    pr.add_argument(
-        "--poll-wait", type=int, help="Long-poll wait seconds (or BYOC_POLL_WAIT_S)"
-    )
-    pr.add_argument(
-        "--once", action="store_true", help="Poll once then exit (cron-style)"
-    )
-    pr.set_defaults(func=_cmd_connector)
+    register_connector_parser(sub, _cmd_connector)
 
     from openadapt_flow.cli_admit import register_admit_parser
     from openadapt_flow.cli_api import register_api_parser
     from openadapt_flow.cli_check import register_check_parser
+    from openadapt_flow.cli_deferred import register_deferred_parser
+    from openadapt_flow.run_ledger.cli import register as _register_ledger
 
     register_admit_parser(sub)
     register_check_parser(sub)
     register_api_parser(sub)
-
-    from openadapt_flow.cli_deferred import register_deferred_parser
-
     register_deferred_parser(sub)
+    _register_ledger(sub)
 
     from openadapt_flow.cli_undo import register as _register_undo
 
@@ -13377,45 +13172,41 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    from openadapt_flow.agent_guard.cli import add_parser as _add_guard_parser
+    from openadapt_flow.cli_cleanup import register as _register_cleanup
+    from openadapt_flow.cli_fleet import register_fleet_parser
+    from openadapt_flow.cli_receipt import register as _register_receipt
+    from openadapt_flow.cli_reconcile import register as _register_reconcile
     from openadapt_flow.cli_rollback import register as _register_rollback
+    from openadapt_flow.cli_shadow import register as _register_shadow
+    from openadapt_flow.compile_agent.cli import add_parser as _add_compile_agent_parser
+    from openadapt_flow.flight.cli import add_parser as _add_flight_parser
+    from openadapt_flow.hooks.cli import add_parser as _add_hooks_parser
+    from openadapt_flow.jit.cli import add_parser as _add_jit_parser
+    from openadapt_flow.learn import register as _register_learn
+    from openadapt_flow.txplan.cli import add_parser as _add_plan_parser
+    from openadapt_flow.txplan.proxy_cli import add_parser as _add_proxy_parser
 
     _register_rollback(sub)
-
-    from openadapt_flow.cli_shadow import register as _register_shadow
-
     _register_shadow(sub)
-
-    from openadapt_flow.cli_receipt import register as _register_receipt
-
+    __import__("openadapt_flow.readiness.cli", fromlist=["cli"]).register(sub)
     _register_receipt(sub)
-
-    from openadapt_flow.learn import register as _register_learn
-
     _register_learn(sub)
-
-    from openadapt_flow.cli_reconcile import register as _register_reconcile
-
     _register_reconcile(sub)
-
-    from openadapt_flow.cli_cleanup import register as _register_cleanup
-
     _register_cleanup(sub)
-
-    from openadapt_flow.jit.cli import add_parser as _add_jit_parser
-
     _add_jit_parser(sub)
-
-    from openadapt_flow.compile_agent.cli import add_parser as _add_compile_agent_parser
-
     _add_compile_agent_parser(sub)
-
-    from openadapt_flow.agent_guard.cli import add_parser as _add_guard_parser
-
     _add_guard_parser(sub)
-
-    from openadapt_flow.cli_fleet import register_fleet_parser
-
+    _add_flight_parser(sub)
+    _add_hooks_parser(sub)
+    _add_plan_parser(sub)
+    _add_proxy_parser(sub)
     register_fleet_parser(sub)
+
+    # After any other ``handoff`` verbs: it adds ``list`` to the same group.
+    from openadapt_flow.cli_handoff_list import register_handoff_list
+
+    register_handoff_list(sub)
 
     parser.add_task_help()
     return parser
@@ -13596,43 +13387,28 @@ def _cmd_serve_execute(args: argparse.Namespace) -> int:
     from importlib.util import find_spec
 
     missing = [
-        name
-        for name in ("fastapi", "uvicorn", "openadapt_types")
-        if find_spec(name) is None
+        n for n in ("fastapi", "uvicorn", "openadapt_types") if find_spec(n) is None
     ]
     if missing:
         raise SystemExit(
             f"serve-execute needs {', '.join(missing)} — install the "
             "execute extra:  pip install 'openadapt-flow[execute]'"
         )
-    from openadapt_flow.execute import SELF_SIGNED_NOTICE
-    from openadapt_flow.execute.app import serve
-    from openadapt_flow.execute.service import ExecuteService, default_data_dir
+    from openadapt_flow.execute.app import run_serve_execute
 
-    data_dir = Path(args.data_dir) if args.data_dir else default_data_dir()
-    store = ExecuteService(
-        data_dir,
-        token=args.token,
-        seed_mockmed=bool(args.seed_mockmed),
-        deployment=getattr(args, "config", None),
-    )
-    print("openadapt-flow reference Execute")
-    print(f"  http://{args.host}:{args.port}")
-    print(f"  data dir     {data_dir}")
-    print(f"  token        {store.token}")
-    print("  issuer       self_signed")
-    print(f"  fingerprint  {store.fingerprint}")
-    print(f"  {SELF_SIGNED_NOTICE}")
+    seeded = ()
     if args.seed_mockmed:
-        print("  seeded MockMed admissions (ok + banner-lie)")
-    serve(
-        data_dir,
+        from openadapt_flow.tutorial import demo_execute_admissions
+
+        seeded = demo_execute_admissions()
+    return run_serve_execute(
+        data_dir=Path(args.data_dir) if args.data_dir else None,
         host=args.host,
         port=args.port,
-        token=store.token,
-        service=store,
+        token=args.token,
+        seed_admissions=seeded,
+        deployment=getattr(args, "config", None),
     )
-    return 0
 
 
 def _cmd_serve_reward(args: argparse.Namespace) -> int:
@@ -13655,16 +13431,20 @@ def _cmd_serve_reward(args: argparse.Namespace) -> int:
     data_dir = Path(args.data_dir) if args.data_dir else default_data_dir()
     contract = args.contract
     seeded_paths: dict[str, Path] = {}
+    seeded_store: Optional[tuple[Path, Path]] = None
     if args.seed_mockmed:
         from openadapt_flow.execute.keys import (
             fingerprint_of,
             load_or_create_private_key,
         )
-        from openadapt_flow.reward.seed import seed_mockmed
+        from openadapt_flow.tutorial import seed_demo_reward
 
         key = load_or_create_private_key(data_dir)
         issuer_key_id = "self_signed:" + fingerprint_of(key.public_key())
-        seeded_paths = seed_mockmed(data_dir, key, issuer_key_id)
+        seeded_paths, store_db, store_screen = seed_demo_reward(
+            data_dir, key, issuer_key_id
+        )
+        seeded_store = (store_db, store_screen)
         if contract is None:
             contract = str(seeded_paths["tier2"])
     if contract is None:
@@ -13686,9 +13466,9 @@ def _cmd_serve_reward(args: argparse.Namespace) -> int:
     print(f"  {REWARD_NOTICE}")
     for label, path in seeded_paths.items():
         print(f"  seeded {label:<6} {path}")
-    if seeded_paths:
-        print(f"  store        {data_dir / 'mockmed' / 'records.db'}")
-        print(f"  screen       {data_dir / 'mockmed' / 'screen.json'}")
+    if seeded_store is not None:
+        print(f"  store        {seeded_store[0]}")
+        print(f"  screen       {seeded_store[1]}")
         print(
             "  Register each episode with POST /v1/episodes BEFORE the "
             "rollout runs. A required effect asserts a change, so the worker "
@@ -13699,93 +13479,17 @@ def _cmd_serve_reward(args: argparse.Namespace) -> int:
 
 
 def _connector_flags(args: argparse.Namespace) -> dict[str, object]:
-    """Collect the connector CLI flags into the settings-resolution dict."""
-    keys = (
-        "control_plane_url",
-        "token",
-        "org_id",
-        "name",
-        "profile",
-        "policy",
-        "storage_backend",
-        "storage_root",
-        "poll_wait",
-    )
-    return {
-        k: getattr(args, k, None) for k in keys if getattr(args, k, None) is not None
-    }
+    """Keep the historical connector settings helper importable."""
+    from openadapt_flow.connector.cli import _connector_flags as collect
+
+    return collect(args)
 
 
 def _cmd_connector(args: argparse.Namespace) -> int:
-    """The BYOC connector: enroll this machine, or run governed jobs locally.
+    """Dispatch connector commands through the focused CLI helper."""
+    from openadapt_flow.connector.cli import _cmd_connector as command
 
-    Both sub-verbs are thin wrappers over :mod:`openadapt_flow.connector`. The
-    engine ships the connector so a dispatched run is the SAME fail-closed
-    ``openadapt-flow run`` admission gate + governed Replayer the local CLI uses,
-    executed inside the customer perimeter against the customer's own storage.
-    """
-    import os
-
-    from openadapt_flow.connector import (
-        ConnectorClient,
-        ConnectorClientError,
-        load_settings,
-        run_loop,
-        save_enrollment,
-    )
-    from openadapt_flow.connector.config import ConnectorConfigError
-    from openadapt_flow.connector.executor import _subprocess_runner
-
-    verb = getattr(args, "connector_cmd", None)
-    try:
-        settings = load_settings(_connector_flags(args))
-    except ConnectorConfigError as exc:
-        print(f"connector: {exc}")
-        return 2
-
-    if verb == "enroll":
-        enrollment_secret = getattr(args, "enrollment_secret", None) or os.environ.get(
-            "BYOC_ENROLLMENT_SECRET"
-        )
-        client = ConnectorClient(settings.control_plane_url)
-        try:
-            data = client.enroll(
-                enrollment_secret=enrollment_secret,
-                org_id=settings.org_id,
-                name=settings.name,
-            )
-        except ConnectorClientError as exc:
-            print(f"connector enroll failed: {exc}")
-            return 1
-        finally:
-            client.close()
-        settings.token = data.get("token") or settings.token
-        settings.org_id = data.get("org_id") or settings.org_id
-        path = save_enrollment(settings)
-        print(
-            f"enrolled connector {data.get('connector_id', '?')} for org "
-            f"{settings.org_id}; token persisted to {path} (0600)."
-        )
-        return 0
-
-    # verb == "run"
-    if not settings.token:
-        print(
-            "connector run: no token. Create an organization connector in "
-            "OpenAdapt Cloud → Settings, then pass --token or set "
-            "BYOC_CONNECTOR_TOKEN."
-        )
-        return 2
-    client = ConnectorClient(settings.control_plane_url, token=settings.token)
-    try:
-        return run_loop(
-            client,
-            settings,
-            runner=_subprocess_runner,
-            once=bool(getattr(args, "once", False)),
-        )
-    finally:
-        client.close()
+    return command(args)
 
 
 def _cmd_business_decisions_serve(args: argparse.Namespace) -> int:
@@ -13884,6 +13588,7 @@ _SEALED_READY_COMMANDS: frozenset[str] = frozenset(
         "openadapt_flow.cli_undo:_cmd_undo_approve",
         "openadapt_flow.cli_undo:_cmd_undo_run",
     }
+    | _at_rest_cli.SEALED_READY
 )
 
 
@@ -13941,6 +13646,7 @@ _STRICT_SAFE_COMMANDS: frozenset[str] = frozenset(
         "openadapt_flow.agent.seal_cli:cmd_keys_show",
         "openadapt_flow.agent.seal_cli:cmd_verify",
     }
+    | _at_rest_cli.STRICT_SAFE
 )
 
 
@@ -13960,6 +13666,7 @@ _STRICT_SELF_SEALING: frozenset[str] = frozenset(
         "openadapt_flow.__main__:_cmd_push",
         "openadapt_flow.__main__:_cmd_seal",
     }
+    | _at_rest_cli.READ_ONLY
 )
 
 
@@ -14398,12 +14105,12 @@ def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
         )
     for root in sealed:
         kind = sealed_set.header_kind(root)
-        if not sealed_set.passphrase_for(kind):
+        if _at_rest_cli.lacks_key(root, kind):
             return sealed_set.missing_key_message(root, kind)
         try:
             # With no key configured the local key resolves; opening the set
             # tells "sealed with a key that isn't set" apart before any work.
-            sealed_set.open_set(root)
+            _at_rest_cli.precheck_open(root)
         except sealed_set.SealedSetKeyError as exc:
             return str(exc)
     return None
@@ -14477,53 +14184,53 @@ def main(
         return 2
     from openadapt_flow import at_rest
 
-    try:
-        _unsealed_output_check(args)
-    except (at_rest.AtRestRefused, ValueError) as exc:
-        print(f"REFUSED: {safe_errors.message(exc)}", file=sys.stderr)
-        return 2
-    try:
-        # Inject only after the ordinary input/output argument guards. This
-        # object is not a CLI flag, path exemption or serialized capability.
-        if record_check_proof_source is not None:
-            args._record_check_proof_source = record_check_proof_source
-        code = args.func(args)
-        if getattr(args, "command", None) in ("run", "replay"):
-            # Offline Seal by default (OPENADAPT_LOCAL_SEAL=off disables). It
-            # never changes the run's exit code.
-            from openadapt_flow.offline_seal import seal_after_run
+    with _at_rest_cli.no_encrypt_scope(args, _cmd_record):  # this command only
+        try:
+            _unsealed_output_check(args)
+        except (at_rest.AtRestRefused, ValueError) as exc:
+            print(f"REFUSED: {safe_errors.message(exc)}", file=sys.stderr)
+            return 2
+        try:
+            # Inject only after the ordinary input/output argument guards. This
+            # object is not a CLI flag, path exemption or serialized capability.
+            if record_check_proof_source is not None:
+                args._record_check_proof_source = record_check_proof_source
+            code = args.func(args)
+            if getattr(args, "command", None) in ("run", "replay"):
+                # Terminal handlers sign receipts. Keep the old Seal here for one release.
+                from openadapt_flow.receipt_record import after_run_notes
 
-            run_dir = getattr(args, "run_dir", None)
-            note = seal_after_run(Path(run_dir) if run_dir else None)
-            if note:
-                print(note, file=sys.stderr)
-        return code
-    except (sealed_set.SealedSetError, at_rest.AtRestRefused) as exc:
-        # A sealed bundle or encrypted recording that is missing its key,
-        # was changed after sealing, or holds an unknown file, or a write
-        # strict mode refuses: fail closed.
-        print(f"REFUSED: {safe_errors.message(exc)}", file=sys.stderr)
-        return 2
-    except BrowserSupportMissing as exc:
-        # Missing optional browser support is a setup decision, not a crash.
-        print(f"Browser setup required:\n{exc}", file=sys.stderr)
-        return 2
-    except Exception as exc:
-        from openadapt_flow.runtime.known_ids import KnownIdAdmissionHalt
+                run_dir = getattr(args, "run_dir", None)
+                folder = Path(run_dir) if run_dir else None
+                for note in after_run_notes(folder, include_receipt=False):
+                    print(note, file=sys.stderr)
+            return code
+        except (sealed_set.SealedSetError, at_rest.AtRestRefused) as exc:
+            # A sealed bundle or encrypted recording that is missing its key,
+            # was changed after sealing, or holds an unknown file, or a write
+            # strict mode refuses: fail closed.
+            print(f"REFUSED: {safe_errors.message(exc)}", file=sys.stderr)
+            return 2
+        except BrowserSupportMissing as exc:
+            # Missing optional browser support is a setup decision, not a crash.
+            print(f"Browser setup required:\n{exc}", file=sys.stderr)
+            return 2
+        except Exception as exc:
+            from openadapt_flow.runtime.known_ids import KnownIdAdmissionHalt
 
-        if not isinstance(exc, KnownIdAdmissionHalt):
-            if _private_input(args):
-                # A traceback would quote what the command read from sealed
-                # input: name the kind of error only.
-                print(f"FAILED: {safe_errors.withheld(exc)}", file=sys.stderr)
-                return 1
-            raise
-        # The configured known-ID list may not be used: halt before any step
-        # runs, with the named reason.
-        print(
-            f"replay halted before start: {exc.reason}: {exc.detail}", file=sys.stderr
-        )
-        return 3
+            if not isinstance(exc, KnownIdAdmissionHalt):
+                if _private_input(args):
+                    # A traceback would quote what the command read from sealed
+                    # input: name the kind of error only.
+                    print(f"FAILED: {safe_errors.withheld(exc)}", file=sys.stderr)
+                    return 1
+                raise
+            # The known-ID list may not be used: halt before any step runs.
+            print(
+                f"replay halted before start: {exc.reason}: {exc.detail}",
+                file=sys.stderr,
+            )
+            return 3
 
 
 if __name__ == "__main__":

@@ -82,8 +82,10 @@ def test_every_verify_module_imports_without_the_vision_stack(tmp_path):
         import openadapt_verify.audit, openadapt_verify.audit_demo
         import openadapt_verify.quickstart, openadapt_verify.shadow
         import openadapt_verify.mcp
+        import openadapt_verify.tx
         from openadapt_verify import WriteGuard  # the adapters' shared guard
         # Flow's verifier core, as named in the slim-install contract.
+        import openadapt_flow.tx
         import openadapt_flow.verifier, openadapt_flow.verify_run
         import openadapt_flow.write_ledger, openadapt_flow.write_journal_authority
         import openadapt_flow.owned_sqlite_insert, openadapt_flow.write_receipt

@@ -1,7 +1,7 @@
 """Read-only SQL system-of-record :class:`EffectVerifier` + table-delta audit.
 
-Promotes the SQL-audit verification the governed Frappe Lending reference
-matrix proved (``benchmark/frappe_lending/fixture.py``, merged PR #131) from
+Promotes the SQL-audit verification pattern
+proved by the governed reference matrix from
 bespoke benchmark plumbing into a deployable kit component:
 
 - :class:`SqlRecordVerifier` -- a PARAMETERIZED read-only SELECT is the record
@@ -9,7 +9,7 @@ bespoke benchmark plumbing into a deployable kit component:
   idempotency key, field read-back, collateral loss, ``count_new_only``),
   exactly like every other substrate.
 - :func:`audit_table_deltas` -- the EXACT row-count-delta contract lifted from
-  the Frappe fixture: every table named in the contract must move by exactly
+  the reference fixture: every table named in the contract must move by exactly
   the declared delta, and every OTHER table must move by exactly 0 (a write
   that "worked" but also inserted a stray row elsewhere is a violation).
 - :func:`capture_table_counts` -- read-only ``COUNT(*)`` per audited table,
@@ -133,10 +133,10 @@ def _is_word_char(char: str) -> bool:
     return char == "_" or char.isalnum() or ord(char) > 127
 
 
-def _sql_tokens(
+def _sql_token_spans(
     text: str, *, preserve_quoted_case: bool = False
-) -> list[tuple[str, str]]:
-    """Split ``text`` into ``(kind, value)`` tokens, or raise ``ValueError``.
+) -> list[tuple[str, str, int, int]]:
+    """Split ``text`` into ``(kind, value, start, end)`` tokens, or raise ``ValueError``.
 
     Kinds: ``word`` (a bare word, lower-cased), ``quoted`` (a ``"..."`` or
     ```...``` identifier's text, lower-cased), ``string`` (a ``'...'``
@@ -160,7 +160,7 @@ def _sql_tokens(
             "differs by dialect (MySQL escapes, standard SQL does not), so it "
             "is refused"
         )
-    tokens: list[tuple[str, str]] = []
+    tokens: list[tuple[str, str, int, int]] = []
     i, n = 0, len(text)
     while i < n:
         char = text[i]
@@ -185,9 +185,14 @@ def _sql_tokens(
                 j += 1
             value = "".join(body)
             tokens.append(
-                ("string", value)
+                ("string", value, i, j + 1)
                 if char == "'"
-                else ("quoted", value if preserve_quoted_case else value.lower())
+                else (
+                    "quoted",
+                    value if preserve_quoted_case else value.lower(),
+                    i,
+                    j + 1,
+                )
             )
             i = j + 1
             continue
@@ -212,7 +217,7 @@ def _sql_tokens(
             segment = text[i + 1 : close] if close >= 0 else ""
             if any(q in segment for q in "'\"`"):
                 try:
-                    _sql_tokens(segment)
+                    _sql_token_spans(segment)
                 except ValueError:
                     raise ValueError(
                         "sql query has a quote inside [...] that doesn't close "
@@ -226,16 +231,29 @@ def _sql_tokens(
             number = char.isdigit()
             while j < n and (_is_word_char(text[j]) or (text[j] == "$" and not number)):
                 j += 1
-            tokens.append(("word", text[i:j].lower()))
+            tokens.append(("word", text[i:j].lower(), i, j))
             i = j
             continue
-        tokens.append(("punct", char))
+        tokens.append(("punct", char, i, i + 1))
         i += 1
     return tokens
 
 
+def _sql_tokens(
+    text: str, *, preserve_quoted_case: bool = False
+) -> list[tuple[str, str]]:
+    """Split ``text`` into ``(kind, value)`` tokens, or raise ``ValueError``."""
+
+    return [
+        (kind, value)
+        for kind, value, _, _ in _sql_token_spans(
+            text, preserve_quoted_case=preserve_quoted_case
+        )
+    ]
+
+
 #: Audited table names must be plain identifiers (letters / digits / ``_`` /
-#: space -- Frappe's ``tabLoan Application`` has a space). Anything else
+#: space -- some SQL schemas use spaces in table names). Anything else
 #: (quotes, backticks, semicolons, comment tokens) is refused rather than
 #: escaped: the audit runs with read credentials, but identifier smuggling
 #: must still be impossible.
@@ -562,10 +580,464 @@ def assert_read_only_sql(query: str, *, binds: bool = False) -> str:
     return text
 
 
+_CLAUSE_KEYWORDS = frozenset(
+    {
+        "select",
+        "from",
+        "where",
+        "on",
+        "having",
+        "group",
+        "order",
+        "limit",
+        "offset",
+        "union",
+        "intersect",
+        "except",
+        "values",
+        "with",
+    }
+)
+_NULL_SAFE_CLAUSES = frozenset({"where", "on", "having"})
+_PREDICATE_BEFORE = frozenset(
+    {
+        ("word", "where"),
+        ("word", "and"),
+        ("word", "or"),
+        ("word", "on"),
+        ("word", "having"),
+        ("punct", "("),
+    }
+)
+_PREDICATE_AFTER_WORDS = frozenset(
+    {
+        "and",
+        "or",
+        "order",
+        "group",
+        "having",
+        "limit",
+        "offset",
+        "fetch",
+        "union",
+        "intersect",
+        "except",
+    }
+)
+_NON_COLUMN_WORDS = frozenset(
+    {
+        "null",
+        "true",
+        "false",
+        "not",
+        "and",
+        "or",
+        "where",
+        "select",
+        "from",
+        "on",
+        "having",
+        "case",
+        "when",
+        "then",
+        "else",
+        "end",
+        "in",
+        "is",
+        "like",
+        "ilike",
+        "between",
+        "exists",
+        "distinct",
+    }
+)
+
+
+def _is_simple_ident(token: tuple[str, str, int, int]) -> bool:
+    kind, value, _, _ = token
+    if kind == "quoted":
+        return True
+    if kind == "word":
+        return bool(value) and not value[0].isdigit() and value not in _NON_COLUMN_WORDS
+    return False
+
+
+def _col_ref_before(
+    spans: list[tuple[str, str, int, int]], end_idx: int
+) -> Optional[int]:
+    """Return the start token index of a simple column ref ending at ``end_idx``, or None."""
+
+    if end_idx < 1 or not _is_simple_ident(spans[end_idx - 1]):
+        return None
+    start = end_idx - 1
+    dots = 0
+    while (
+        dots < 2
+        and start >= 2
+        and spans[start - 1][0:2] == ("punct", ".")
+        and _is_simple_ident(spans[start - 2])
+    ):
+        start -= 2
+        dots += 1
+    if start > 0 and spans[start - 1][0:2] == ("punct", "."):
+        return None
+    return start
+
+
+def _col_ref_after(
+    spans: list[tuple[str, str, int, int]], start_idx: int
+) -> Optional[int]:
+    """Return the end token index (exclusive) of a simple column ref starting at ``start_idx``, or None."""
+
+    n = len(spans)
+    if start_idx >= n or not _is_simple_ident(spans[start_idx]):
+        return None
+    end = start_idx + 1
+    dots = 0
+    while (
+        dots < 2
+        and end + 1 < n
+        and spans[end][0:2] == ("punct", ".")
+        and _is_simple_ident(spans[end + 1])
+    ):
+        end += 2
+        dots += 1
+    if end < n and spans[end][0:2] == ("punct", "."):
+        return None
+    return end
+
+
+def _is_predicate_before(spans: list[tuple[str, str, int, int]], idx: int) -> bool:
+    """Return True if token ``idx - 1`` can start a standalone boolean predicate."""
+
+    if idx <= 0:
+        return False
+    prev = spans[idx - 1][0:2]
+    if prev == ("punct", "("):
+        # Reject function calls like ``func(col = :p)``: an opening paren is a
+        # grouping paren only when preceded by another predicate boundary.
+        return _is_predicate_before(spans, idx - 1)
+    return prev in _PREDICATE_BEFORE
+
+
+def _is_predicate_after(spans: list[tuple[str, str, int, int]], idx: int) -> bool:
+    """Return True if token ``idx`` cleanly terminates a boolean predicate."""
+
+    n = len(spans)
+    while idx < n and spans[idx][0:2] == ("punct", ")"):
+        idx += 1
+    if idx >= n:
+        return True
+    kind, value = spans[idx][0], spans[idx][1]
+    if (kind, value) == ("punct", ";"):
+        return True
+    return kind == "word" and value in _PREDICATE_AFTER_WORDS
+
+
+def _is_null_safe_op_before(
+    spans: list[tuple[str, str, int, int]], ph_i: int
+) -> Optional[int]:
+    """If ``IS NOT DISTINCT FROM`` or ``<=>`` immediately precedes ``ph_i``, return its start index."""
+
+    if ph_i >= 4 and [s[0:2] for s in spans[ph_i - 4 : ph_i]] == [
+        ("word", "is"),
+        ("word", "not"),
+        ("word", "distinct"),
+        ("word", "from"),
+    ]:
+        return ph_i - 4
+    if (
+        ph_i >= 3
+        and spans[ph_i - 3][0:2] == ("punct", "<")
+        and spans[ph_i - 2][0:2] == ("punct", "=")
+        and spans[ph_i - 1][0:2] == ("punct", ">")
+        and spans[ph_i - 3][3] == spans[ph_i - 2][2]
+        and spans[ph_i - 2][3] == spans[ph_i - 1][2]
+    ):
+        return ph_i - 3
+    return None
+
+
+def _is_null_safe_op_after(
+    spans: list[tuple[str, str, int, int]], ph_j: int
+) -> Optional[int]:
+    """If ``IS NOT DISTINCT FROM`` or ``<=>`` immediately follows ``ph_j``, return its end index."""
+
+    n = len(spans)
+    if ph_j + 4 <= n and [s[0:2] for s in spans[ph_j : ph_j + 4]] == [
+        ("word", "is"),
+        ("word", "not"),
+        ("word", "distinct"),
+        ("word", "from"),
+    ]:
+        return ph_j + 4
+    if (
+        ph_j + 3 <= n
+        and spans[ph_j][0:2] == ("punct", "<")
+        and spans[ph_j + 1][0:2] == ("punct", "=")
+        and spans[ph_j + 2][0:2] == ("punct", ">")
+        and spans[ph_j][3] == spans[ph_j + 1][2]
+        and spans[ph_j + 1][3] == spans[ph_j + 2][2]
+    ):
+        return ph_j + 3
+    return None
+
+
+def _token_clauses(spans: list[tuple[str, str, int, int]]) -> list[str]:
+    """Return the active SQL clause name at each token index."""
+
+    stack: list[str] = [""]
+    clauses: list[str] = []
+    n = len(spans)
+    for idx, (kind, value, _, _) in enumerate(spans):
+        if kind == "punct" and value == "(":
+            clauses.append(stack[-1])
+            stack.append(stack[-1])
+            continue
+        if kind == "punct" and value == ")":
+            if len(stack) > 1:
+                stack.pop()
+            clauses.append(stack[-1])
+            continue
+        if (
+            kind == "word"
+            and value in _CLAUSE_KEYWORDS
+            and not (idx > 0 and spans[idx - 1][0:2] == ("punct", "."))
+            and not (idx + 1 < n and spans[idx + 1][0:2] == ("punct", "."))
+            and not (
+                value == "from"
+                and idx > 0
+                and spans[idx - 1][0:2] == ("word", "distinct")
+            )
+        ):
+            stack[-1] = value
+        clauses.append(stack[-1])
+    return clauses
+
+
+def _find_param_placeholders(
+    text: str, spans: list[tuple[str, str, int, int]], param_name: str
+) -> list[tuple[int, int]]:
+    """Return ``(start_tok, end_tok)`` for every ``:name`` or ``%(name)s`` placeholder."""
+
+    if not param_name:
+        return []
+    found: list[tuple[int, int]] = []
+    n = len(spans)
+    i = 0
+    while i < n:
+        kind, value, s0, e0 = spans[i]
+        if (
+            kind == "punct"
+            and value == ":"
+            and i + 1 < n
+            and not (i > 0 and spans[i - 1][0:2] == ("punct", ":"))
+            and spans[i + 1][0] == "word"
+            and spans[i + 1][2] == e0
+            and text[spans[i + 1][2] : spans[i + 1][3]] == param_name
+        ):
+            found.append((i, i + 2))
+            i += 2
+            continue
+        if (
+            kind == "punct"
+            and value == "%"
+            and i + 4 < n
+            and not (i > 0 and spans[i - 1][0:2] == ("punct", "%"))
+            and spans[i + 1][0:2] == ("punct", "(")
+            and spans[i + 1][2] == e0
+            and spans[i + 2][0] == "word"
+            and spans[i + 2][2] == spans[i + 1][3]
+            and text[spans[i + 2][2] : spans[i + 2][3]] == param_name
+            and spans[i + 3][0:2] == ("punct", ")")
+            and spans[i + 3][2] == spans[i + 2][3]
+            and spans[i + 4][0] == "word"
+            and spans[i + 4][2] == spans[i + 3][3]
+            and text[spans[i + 4][2] : spans[i + 4][3]] == "s"
+        ):
+            found.append((i, i + 5))
+            i += 5
+            continue
+        i += 1
+    return found
+
+
+def _inside_not_group(spans: list[tuple[str, str, int, int]], idx: int) -> bool:
+    """Return True if token ``idx`` sits inside any ``NOT (...)`` grouping."""
+
+    open_stack: list[int] = []
+    for pos in range(idx):
+        tok = spans[pos][0:2]
+        if tok == ("punct", "("):
+            open_stack.append(pos)
+        elif tok == ("punct", ")") and open_stack:
+            open_stack.pop()
+    return any(
+        open_pos > 0 and spans[open_pos - 1][0:2] == ("word", "not")
+        for open_pos in open_stack
+    )
+
+
+def _analyze_null_param(
+    text: str,
+    spans: list[tuple[str, str, int, int]],
+    clauses: list[str],
+    param_name: str,
+) -> Optional[tuple[list[tuple[int, int, str]], bool]]:
+    """Analyze whether ``param_name`` can bind ``None`` safely in ``text``.
+
+    Returns ``(rewrites, keep_param)`` where ``rewrites`` is a list of
+    ``(char_start, char_end, replacement)`` edits and ``keep_param`` is True
+    when at least one occurrence uses native null-safe equality
+    (``IS NOT DISTINCT FROM`` or ``<=>``). Returns ``None`` if any occurrence
+    is outside a provably null-safe exact column equality in ``WHERE``/``ON``/
+    ``HAVING``, or if ``param_name`` does not appear in ``text``.
+    """
+
+    occurrences = _find_param_placeholders(text, spans, param_name)
+    if not occurrences:
+        return None
+    rewrites: list[tuple[int, int, str]] = []
+    keep_param = False
+    for ph_i, ph_j in occurrences:
+        if clauses[ph_i] not in _NULL_SAFE_CLAUSES or _inside_not_group(spans, ph_i):
+            return None
+        ph_s = spans[ph_i][2]
+        ph_e = spans[ph_j - 1][3]
+
+        # Form 1a: <col> IS NOT DISTINCT FROM <ph>  or  <col> <=> <ph>
+        op_before = _is_null_safe_op_before(spans, ph_i)
+        if op_before is not None and _is_predicate_after(spans, ph_j):
+            lhs_start = _col_ref_before(spans, op_before)
+            if lhs_start is not None and _is_predicate_before(spans, lhs_start):
+                keep_param = True
+                continue
+
+        # Form 1b: <ph> IS NOT DISTINCT FROM <col>  or  <ph> <=> <col>
+        op_after = _is_null_safe_op_after(spans, ph_j)
+        if op_after is not None and _is_predicate_before(spans, ph_i):
+            rhs_end = _col_ref_after(spans, op_after)
+            if rhs_end is not None and _is_predicate_after(spans, rhs_end):
+                keep_param = True
+                continue
+
+        # Form 2a: <col> = <ph>  ->  <col> IS NULL
+        if (
+            ph_i >= 2
+            and spans[ph_i - 1][0:2] == ("punct", "=")
+            and not (spans[ph_i - 2][0] == "punct" and spans[ph_i - 2][1] in "!<>=:")
+            and not (
+                ph_j < len(spans)
+                and spans[ph_j][0] == "punct"
+                and spans[ph_j][1] in "=>"
+            )
+            and _is_predicate_after(spans, ph_j)
+        ):
+            lhs_start = _col_ref_before(spans, ph_i - 1)
+            if lhs_start is not None and _is_predicate_before(spans, lhs_start):
+                eq_s = spans[ph_i - 1][2]
+                prefix = " " if eq_s > 0 and not text[eq_s - 1].isspace() else ""
+                suffix = " " if ph_e < len(text) and _is_word_char(text[ph_e]) else ""
+                rewrites.append((eq_s, ph_e, f"{prefix}IS NULL{suffix}"))
+                continue
+
+        # Form 2b: <ph> = <col>  ->  <col> IS NULL
+        if (
+            _is_predicate_before(spans, ph_i)
+            and ph_j < len(spans)
+            and spans[ph_j][0:2] == ("punct", "=")
+            and not (
+                ph_j + 1 < len(spans)
+                and spans[ph_j + 1][0] == "punct"
+                and spans[ph_j + 1][1] in "=>"
+            )
+        ):
+            rhs_end = _col_ref_after(spans, ph_j + 1)
+            if rhs_end is not None and _is_predicate_after(spans, rhs_end):
+                col_s = spans[ph_j + 1][2]
+                col_e = spans[rhs_end - 1][3]
+                prefix = " " if ph_s > 0 and _is_word_char(text[ph_s - 1]) else ""
+                suffix = " " if col_e < len(text) and _is_word_char(text[col_e]) else ""
+                rewrites.append(
+                    (ph_s, col_e, f"{prefix}{text[col_s:col_e]} IS NULL{suffix}")
+                )
+                continue
+
+        return None
+    return rewrites, keep_param
+
+
+def sql_param_is_null_safe(query: str, param_name: str) -> bool:
+    """Return True iff every occurrence of ``param_name`` in ``query`` can bind ``None`` safely.
+
+    A SQL read parameter may bind ``None`` only when ``query`` is a valid
+    read-only SELECT and every occurrence of ``:param_name`` or
+    ``%(param_name)s`` is an exact column equality (``col = :p``,
+    ``:p = col``, ``IS NOT DISTINCT FROM``, or ``<=>``) inside ``WHERE``,
+    ``ON``, or ``HAVING``. Any other position (``:p IS NULL``, ``LIKE``,
+    ``IN``, ``LIMIT``, arithmetic, projections, or an unused parameter)
+    returns ``False`` (fail closed).
+    """
+
+    try:
+        text = assert_read_only_sql(query, binds=True)
+        spans = _sql_token_spans(text)
+    except ValueError:
+        return False
+    clauses = _token_clauses(spans)
+    return _analyze_null_param(text, spans, clauses, param_name) is not None
+
+
+def bind_null_sql_params(
+    query: str, query_params: Optional[Mapping[str, Any]]
+) -> tuple[str, dict[str, Any]]:
+    """Rewrite null-valued SQL equality parameters to ``IS NULL`` (fail closed).
+
+    Non-null parameters are untouched. For each key in ``query_params`` whose
+    value is ``None``, every placeholder occurrence must be a provably
+    null-safe exact column equality in ``WHERE``/``ON``/``HAVING``; otherwise
+    raises :class:`ValueError`.
+    """
+
+    params = dict(query_params or {})
+    text = assert_read_only_sql(query, binds=bool(params))
+    null_keys = [k for k, v in params.items() if v is None]
+    if not null_keys:
+        return text, params
+
+    spans = _sql_token_spans(text)
+    clauses = _token_clauses(spans)
+    all_rewrites: list[tuple[int, int, str]] = []
+    kept_null_keys: set[str] = set()
+    for key in null_keys:
+        analyzed = _analyze_null_param(text, spans, clauses, key)
+        if analyzed is None:
+            raise ValueError(
+                f"null SQL query parameter {key!r} can only bind to an exact "
+                "column equality (=, IS NOT DISTINCT FROM, or <=>) in "
+                "WHERE/ON/HAVING"
+            )
+        rewrites, keep_param = analyzed
+        all_rewrites.extend(rewrites)
+        if keep_param:
+            kept_null_keys.add(key)
+
+    rewritten = text
+    for start, end, replacement in sorted(
+        all_rewrites, key=lambda item: item[0], reverse=True
+    ):
+        rewritten = rewritten[:start] + replacement + rewritten[end:]
+    remaining = {
+        k: v for k, v in params.items() if v is not None or k in kept_null_keys
+    }
+    rewritten = assert_read_only_sql(rewritten, binds=bool(remaining))
+    return rewritten, remaining
+
+
 def read_cell(value: Any) -> Any:
     """A binary column as ``0x`` + hex, so records stay JSON-serializable.
 
-    OpenEMR keys rows by ``uuid binary(16)``; a driver returns those as bytes,
+    Some apps key rows by ``uuid binary(16)``; a driver returns those as bytes,
     which a baseline (JSON) cannot hold. Equal bytes give equal text, so
     record identity and change detection are unaffected.
     """
@@ -627,8 +1099,7 @@ class SqlRecordVerifier(VerifierAdapterBase):
     ) -> None:
         self.drop_fields = tuple(drop_fields)
         self._connect = connect
-        self.query = assert_read_only_sql(query, binds=bool(query_params))
-        self.query_params = dict(query_params or {})
+        self.query, self.query_params = bind_null_sql_params(query, query_params)
         self.timeout_s = timeout_s
         self.poll_interval_s = poll_interval_s
         self._source_metadata = source_metadata
@@ -746,7 +1217,7 @@ class SqlRecordVerifier(VerifierAdapterBase):
             time.sleep(self.poll_interval_s)
 
 
-# -- exact table-delta audit (promoted from benchmark/frappe_lending) --------
+# -- exact table-delta audit ------------------------------------------------
 
 
 def capture_table_counts(
@@ -800,8 +1271,8 @@ def audit_table_deltas(
 ) -> tuple[list[str], dict[str, int]]:
     """Exact-contract table-delta audit; violations plus the full delta map.
 
-    The contract the governed Frappe Lending matrix proved (lifted from
-    ``benchmark/frappe_lending/fixture.py::audit_table_deltas``): every table
+    The contract proved by the governed table-delta reference matrix
+    (``audit_table_deltas``): every table
     in ``expected`` must change by EXACTLY its declared delta, and every other
     observed table must change by exactly 0 -- a "successful" write that also
     perturbed an unrelated table is a violation, not noise.
