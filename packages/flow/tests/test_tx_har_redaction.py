@@ -145,6 +145,11 @@ def test_nonsecret_text_and_binary_remain_usable():
     assert kind == "base64"
     assert base64.b64decode(encoded, validate=True) == body
     entry = _entry(SECRETS[0], b'{"id":"17","status":"saved"}')
+    # Explicit octet-stream is opaque once minimized; labelled JSON keeps id.
+    opaque = load_har(dump_har({"log": {"entries": [entry]}}))["log"]["entries"][0]
+    assert opaque["response"]["status"] == 200
+    assert opaque["response"]["content"]["text"] == ""
+    entry["response"]["content"]["mimeType"] = "application/json"
     out = load_har(dump_har({"log": {"entries": [entry]}}))
     record = out["log"]["entries"][0]
     assert record["response"]["status"] == 200
@@ -195,10 +200,12 @@ def test_live_proxy_export_and_encrypted_saved_har_share_the_privacy_boundary(
             assert response.read() == payload
             conn.close()
             exported = tap.export_har()
-            path = tap.save_har(tmp_path / "session.har")
+            path = tap.save_har(tmp_path / "session.har", raw_bodies=True)
             assert crypto.is_encrypted(path.read_bytes())
             restored = load_har(path)
             assert restored == exported
+            minimized = load_har(tap.save_har(tmp_path / "minimized.har"))
+            assert not carries_secret(json.dumps(minimized), (secret,))
             assert path.stat().st_mode & 0o077 == 0
         serialized = json.dumps(restored)
         assert not carries_secret(serialized, (secret,))

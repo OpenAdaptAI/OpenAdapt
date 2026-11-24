@@ -2,6 +2,12 @@
 
 Releases up to v2.2.0 are recorded in the [openadapt-agent repository](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/CHANGELOG.md).
 
+## v2.2.4 (2026-11-24)
+
+- Accept `openadapt-flow` 4.x (`openadapt-flow[vision]>=2.2.0,<5` and
+  `tutorial` extra `openadapt-flow[browser,macos,vision]>=2.2.0,<5`) so
+  `openadapt 1.24.0` can resolve with `openadapt-flow 4.0.0`.
+
 ## v2.2.3 (2026-11-22)
 
 - Restore Official MCP Registry (`registry.modelcontextprotocol.io`) auto-syndication from the monorepo `release-package.yml` workflow via GitHub OIDC (`mcp-publisher`) for packages shipping `server.json`.

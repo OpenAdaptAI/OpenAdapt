@@ -38,19 +38,31 @@ from openadapt_verify.mcpify import (
     load_workflow_specs,
     verify_mcpify_receipt,
 )
+from openadapt_verify.portal_readback import (
+    ConfirmationPdfOracle,
+    FieldCheck,
+    FreshReloadSummaryOracle,
+    PortalReadbackResult,
+    ReloadProof,
+)
 
 __version__ = "0.2.1"
 
 __all__ = [
     "Actor",
     "AlreadyWritten",
+    "ConfirmationPdfOracle",
     "Contract",
+    "FieldCheck",
+    "FreshReloadSummaryOracle",
     "LocalSealVerification",
     "McpifyServer",
     "Outcome",
+    "PortalReadbackResult",
     "PortableReceiptVerification",
     "ReadbackResult",
     "ReceiptError",
+    "ReloadProof",
     "SafetyPolicy",
     "Scope",
     "SignedReceipt",
