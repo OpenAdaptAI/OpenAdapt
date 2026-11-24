@@ -39,7 +39,9 @@ def _parse_outputs(path: Path) -> dict[str, str]:
     return out
 
 
-def _make_signed_receipt(tmp_path: Path) -> tuple[Path, Path, dict[str, Any]]:
+def _make_signed_receipt(
+    tmp_path: Path, *, outcome: str | None = None
+) -> tuple[Path, Path, dict[str, Any]]:
     """Sign a valid record/run/v1 statement with a fresh Ed25519 keypair."""
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -69,6 +71,8 @@ def _make_signed_receipt(tmp_path: Path) -> tuple[Path, Path, dict[str, Any]]:
     statement = json.loads(
         base64.b64decode(valid_vec["document"]["payload"]).decode("utf-8")
     )
+    if outcome is not None:
+        statement["predicate"]["outcome"] = outcome
     envelope = r.sign_statement(statement, [(r.key_id(raw_pub), priv.sign)])
     receipt_path = tmp_path / "receipt.json"
     receipt_path.write_text(json.dumps(envelope, indent=2), encoding="utf-8")
@@ -202,3 +206,87 @@ def test_action_yml_pins_setup_python_and_avoids_script_injection() -> None:
             in_run = False
         if in_run:
             assert "${{ inputs." not in line
+
+
+@pytest.mark.parametrize("outcome", ["STOPPED", "FAILED", "UNKNOWN"])
+def test_signed_non_verified_outcome_fails_closed_by_default(
+    outcome: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mod = _load_module()
+    receipt_path, pub_path, _ = _make_signed_receipt(tmp_path, outcome=outcome)
+    out_file = tmp_path / "github_output.txt"
+    summary_file = tmp_path / "github_summary.md"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out_file))
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary_file))
+
+    rc = mod.verify_seal_cli(
+        ["--receipt", str(receipt_path), "--public-key", str(pub_path)]
+    )
+    assert rc == 1
+    outputs = _parse_outputs(out_file)
+    assert outputs["verified"] == "false"
+    assert outputs["reason"] == "outcome_not_accepted"
+    assert outputs["outcome"] == outcome
+    assert "❌ OpenAdapt Seal Verification Failed" in summary_file.read_text(
+        encoding="utf-8"
+    )
+
+
+def test_signed_stopped_outcome_passes_when_explicitly_accepted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mod = _load_module()
+    receipt_path, pub_path, _ = _make_signed_receipt(tmp_path, outcome="STOPPED")
+    out_file = tmp_path / "github_output.txt"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out_file))
+
+    rc = mod.verify_seal_cli(
+        [
+            "--receipt",
+            str(receipt_path),
+            "--public-key",
+            str(pub_path),
+            "--accepted-outcomes",
+            "VERIFIED,STOPPED",
+        ]
+    )
+    assert rc == 0
+    outputs = _parse_outputs(out_file)
+    assert outputs["verified"] == "true"
+    assert outputs["outcome"] == "STOPPED"
+
+
+def test_demo_role_signer_fails_closed_unless_allow_demo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mod = _load_module()
+    receipt_path, pub_path, _ = _make_signed_receipt(tmp_path)
+    out_file = tmp_path / "github_output.txt"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out_file))
+
+    rc_refused = mod.verify_seal_cli(
+        [
+            "--receipt",
+            str(receipt_path),
+            "--public-key",
+            str(pub_path),
+            "--key-role",
+            "demo",
+        ]
+    )
+    assert rc_refused == 1
+    assert _parse_outputs(out_file)["reason"] == "demo_signer_rejected"
+
+    rc_allowed = mod.verify_seal_cli(
+        [
+            "--receipt",
+            str(receipt_path),
+            "--public-key",
+            str(pub_path),
+            "--key-role",
+            "demo",
+            "--allow-demo",
+        ]
+    )
+    assert rc_allowed == 0
+    assert _parse_outputs(out_file)["verified"] == "true"

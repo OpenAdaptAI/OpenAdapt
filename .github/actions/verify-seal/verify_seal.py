@@ -125,11 +125,13 @@ def _fail(
     receipt_arg: str,
     reason: str,
     detail: str,
+    receipt_id: str = "",
+    outcome: str = "",
 ) -> int:
     _write_github_outputs(
         verified=False,
-        receipt_id="",
-        outcome="",
+        receipt_id=receipt_id,
+        outcome=outcome,
         reason=reason,
     )
     summary = (
@@ -141,6 +143,8 @@ def _fail(
         f"| **Detail** | {_escape_md_cell(detail)} |\n"
         f"| **Receipt** | `{_escape_md_cell(receipt_arg)}` |\n"
     )
+    if outcome:
+        summary += f"| **Run Outcome** | `{_escape_md_cell(outcome)}` |\n"
     _write_step_summary(summary)
     print(f"OpenAdapt Seal verification FAILED ({reason}): {detail}", file=sys.stderr)
     return 1
@@ -172,6 +176,19 @@ def verify_seal_cli(argv: Optional[list[str]] = None) -> int:
         "--openings",
         default="",
         help="Optional path to receipt.private.json openings sidecar.",
+    )
+    parser.add_argument(
+        "--accepted-outcomes",
+        default="VERIFIED",
+        help=(
+            "Comma-separated list of accepted receipt outcomes "
+            "(default: VERIFIED). Any other outcome fails closed."
+        ),
+    )
+    parser.add_argument(
+        "--allow-demo",
+        action="store_true",
+        help="Allow receipts signed only by a demo-role key (default: refuse).",
     )
     args = parser.parse_args(argv)
 
@@ -263,7 +280,44 @@ def verify_seal_cli(argv: Optional[list[str]] = None) -> int:
         )
 
     receipt_id = _extract_receipt_id(result.statement)
-    outcome = result.outcome or ""
+    outcome = (result.outcome or "").strip()
+    accepted_outcomes = {
+        tok.strip().upper()
+        for tok in args.accepted_outcomes.split(",")
+        if tok.strip()
+    }
+    if not accepted_outcomes:
+        return _fail(
+            receipt_arg=receipt_arg,
+            reason="invalid_accepted_outcomes",
+            detail="accepted-outcomes must name at least one outcome (e.g. VERIFIED)",
+            receipt_id=receipt_id,
+            outcome=outcome,
+        )
+    if result.demo and not args.allow_demo:
+        return _fail(
+            receipt_arg=receipt_arg,
+            reason="demo_signer_rejected",
+            detail=(
+                "receipt is signed only by a demo-role key; pass --allow-demo "
+                "to accept demo receipts"
+            ),
+            receipt_id=receipt_id,
+            outcome=outcome,
+        )
+    if not outcome or outcome.upper() not in accepted_outcomes:
+        allowed_display = ", ".join(sorted(accepted_outcomes))
+        return _fail(
+            receipt_arg=receipt_arg,
+            reason="outcome_not_accepted",
+            detail=(
+                f"receipt signature is valid but run outcome {outcome or '<empty>'!r} "
+                f"is not in accepted outcomes ({allowed_display})"
+            ),
+            receipt_id=receipt_id,
+            outcome=outcome,
+        )
+
     signer_summary = "; ".join(result.signer_lines) or "Valid Ed25519 signature"
     offline_cmd = f"openadapt verify {shlex.quote(receipt_arg)}"
     if args.keys.strip():
