@@ -42,6 +42,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -338,19 +339,20 @@ def verify_endpoint(version: dict[str, Any], port: int, browser_path: str) -> No
         )
 
 
-def send_browser_close(port: int, browser_path: str, timeout: float = 3.0) -> None:
-    """Send ``Browser.close`` over the browser WebSocket (no Origin header)."""
+def _ws_connect(port: int, path: str, timeout: float) -> socket.socket:
+    """Open a loopback WebSocket to ``path`` (no Origin header)."""
 
     key = base64.b64encode(secrets.token_bytes(16)).decode("ascii")
     request = (
-        f"GET {browser_path} HTTP/1.1\r\n"
+        f"GET {path} HTTP/1.1\r\n"
         f"Host: 127.0.0.1:{port}\r\n"
         "Upgrade: websocket\r\n"
         "Connection: Upgrade\r\n"
         f"Sec-WebSocket-Key: {key}\r\n"
         "Sec-WebSocket-Version: 13\r\n\r\n"
     ).encode("ascii")
-    with socket.create_connection(("127.0.0.1", port), timeout=timeout) as sock:
+    sock = socket.create_connection(("127.0.0.1", port), timeout=timeout)
+    try:
         sock.sendall(request)
         reply = b""
         while b"\r\n\r\n" not in reply:
@@ -360,13 +362,65 @@ def send_browser_close(port: int, browser_path: str, timeout: float = 3.0) -> No
             reply += chunk
         if not reply.startswith(b"HTTP/1.1 101"):
             raise ConnectionError("Chrome refused the WebSocket upgrade")
-        payload = json.dumps({"id": 1, "method": "Browser.close"}).encode("utf-8")
-        mask = secrets.token_bytes(4)
-        header = bytes([0x81, 0x80 | len(payload)]) if len(payload) < 126 else b""
-        if not header:
-            header = bytes([0x81, 0x80 | 126]) + len(payload).to_bytes(2, "big")
-        masked = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
-        sock.sendall(header + mask + masked)
+    except BaseException:
+        sock.close()
+        raise
+    return sock
+
+
+def _ws_send(sock: socket.socket, message: dict[str, Any]) -> None:
+    """Send one masked text frame."""
+
+    payload = json.dumps(message).encode("utf-8")
+    mask = secrets.token_bytes(4)
+    if len(payload) < 126:
+        header = bytes([0x81, 0x80 | len(payload)])
+    elif len(payload) < 65536:
+        header = bytes([0x81, 0x80 | 126]) + len(payload).to_bytes(2, "big")
+    else:
+        header = bytes([0x81, 0x80 | 127]) + len(payload).to_bytes(8, "big")
+    masked = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+    sock.sendall(header + mask + masked)
+
+
+def _recv_exact(sock: socket.socket, n: int) -> bytes:
+    data = b""
+    while len(data) < n:
+        chunk = sock.recv(n - len(data))
+        if not chunk:
+            raise ConnectionError("Chrome closed the WebSocket")
+        data += chunk
+    return data
+
+
+def _ws_recv(sock: socket.socket, limit: int = 1 << 20) -> dict[str, Any]:
+    """Read one complete, unmasked text message from Chrome (pings skipped)."""
+
+    while True:
+        first, second = _recv_exact(sock, 2)
+        opcode, length = first & 0x0F, second & 0x7F
+        if length == 126:
+            length = int.from_bytes(_recv_exact(sock, 2), "big")
+        elif length == 127:
+            length = int.from_bytes(_recv_exact(sock, 8), "big")
+        if second & 0x80 or length > limit:
+            raise ConnectionError("unexpected WebSocket frame from Chrome")
+        body = _recv_exact(sock, length)
+        if opcode in (0x9, 0xA):  # ping, pong
+            continue
+        if opcode != 0x1 or not first & 0x80:
+            raise ConnectionError("unexpected WebSocket frame from Chrome")
+        data = json.loads(body)
+        if not isinstance(data, dict):
+            raise ValueError("unexpected CDP message")
+        return data
+
+
+def send_browser_close(port: int, browser_path: str, timeout: float = 3.0) -> None:
+    """Send ``Browser.close`` over the browser WebSocket (no Origin header)."""
+
+    with _ws_connect(port, browser_path, timeout) as sock:
+        _ws_send(sock, {"id": 1, "method": "Browser.close"})
         # Wait briefly for Chrome to acknowledge or close the WebSocket so the
         # socket does not send an abrupt TCP reset before Browser.close is read.
         sock.settimeout(min(timeout, 1.0))
@@ -374,6 +428,34 @@ def send_browser_close(port: int, browser_path: str, timeout: float = 3.0) -> No
             sock.recv(1024)
         except OSError:
             pass
+
+
+_TARGET_ID = re.compile(r"[0-9A-Za-z]{1,64}")
+_PAGE_STATE = "JSON.stringify([String(location.href), String(document.readyState)])"
+
+
+def cdp_page_state(port: int, target_id: str, timeout: float = 3.0) -> tuple[str, str]:
+    """Return a page target's document URL and ``readyState`` over its own CDP socket.
+
+    One read-only ``Runtime.evaluate`` of ``location.href`` and
+    ``document.readyState``. Chrome's error page reports a ``chrome-error://``
+    document URL even when the target keeps the requested address.
+    """
+
+    if not _TARGET_ID.fullmatch(target_id):
+        raise ValueError("unexpected target id")
+    with _ws_connect(port, f"/devtools/page/{target_id}", timeout) as sock:
+        params = {"expression": _PAGE_STATE, "returnByValue": True}
+        _ws_send(sock, {"id": 1, "method": "Runtime.evaluate", "params": params})
+        while True:
+            message = _ws_recv(sock)
+            if message.get("id") == 1:
+                break
+    value = ((message.get("result") or {}).get("result") or {}).get("value")
+    state = json.loads(value) if isinstance(value, str) else None
+    if not (isinstance(state, list) and len(state) == 2 and all(isinstance(v, str) for v in state)):
+        raise ValueError("unexpected page state")
+    return state[0], state[1]
 
 
 # ------------------------------------------------------------------ service
@@ -407,6 +489,7 @@ class ChromeProfileService:
         browser_close: Callable[[int, str], None] = send_browser_close,
         json_list: Callable[[int], list[dict[str, Any]]] = http_json_list,
         json_new: Callable[[int, str], dict[str, Any]] = http_json_new,
+        page_state: Callable[[int, str], tuple[str, str]] = cdp_page_state,
         clock: Callable[[], float] = time.time,
         sleep: Callable[[float], None] = time.sleep,
         start_timeout: float = _START_TIMEOUT_S,
@@ -422,6 +505,7 @@ class ChromeProfileService:
         self._browser_close = browser_close
         self._json_list = json_list
         self._json_new = json_new
+        self._page_state = page_state
         self._clock = clock
         self._sleep = sleep
         self._start_timeout = start_timeout
@@ -702,38 +786,54 @@ class ChromeProfileService:
             self._sleep(0.25)
 
     def _ensure_page(self, owned: _Owned, url: str, *, launched: bool) -> None:
-        """Make a page target land on ``url`` and confirm Chrome reports it there.
+        """Make a tab load ``url`` and confirm over CDP that it loaded.
 
         Chrome usually loads the launch URL in its first tab. It can open that
-        tab blank instead (seen on macOS when another Chrome is running). So
-        after a short wait for the launch tab, Desktop opens a tab at the URL
-        itself, then requires Chrome to report that tab on an http(s) page (a
-        redirect, such as sign-in, may move it). Only the launch tab of a window
-        Desktop just started may count by origin (its own redirect); in a window
-        that was already open, only a tab at the exact URL counts. A page that
-        never lands refuses with ``page_not_loaded``.
+        tab blank instead (seen on macOS when another Chrome is running), and a
+        window can hold other tabs (restored, or already open). A tab counts
+        when Chrome reports it at the exact URL, or, for a window Desktop just
+        started, when it is the launch tab (the only page Chrome lists first)
+        and is on the URL's origin (its own redirect). If no tab counts after a
+        short wait, Desktop opens one at the URL; that tab may then redirect
+        anywhere (sign-in). Each candidate must then show a loaded document:
+        an http(s) ``location.href`` that isn't Chrome's error page, with
+        ``readyState`` interactive or complete. An error page, or no loaded tab
+        by the deadline, refuses with ``page_not_loaded``.
         """
 
         now = self._clock()
         deadline = now + self._start_timeout
         grace = now + min(_PAGE_GRACE_S, self._start_timeout / 2)  # leaves time to open a tab
+        launch_id: str | None = None if launched else ""
         created: str | None = None
+        matched = False
         while True:
             try:
-                targets = self._json_list(owned.port)
-                if created is None and any(page_at(t, url, same_origin=launched) for t in targets):
-                    return
-                if created is None and self._clock() >= grace:
+                pages = [t for t in self._json_list(owned.port) if t.get("type") == "page"]
+                if launch_id is None and pages:
+                    launch_id = str(pages[0].get("id") or "") if len(pages) == 1 else ""
+                if created is None:
+                    candidates = [
+                        t
+                        for t in pages
+                        if page_at(t, url)
+                        or (
+                            launch_id
+                            and t.get("id") == launch_id
+                            and page_at(t, url, same_origin=True)
+                        )
+                    ]
+                else:
+                    candidates = [t for t in pages if created and t.get("id") == created]
+                matched = matched or bool(candidates)
+                for target in candidates:
+                    if self._page_loaded(owned, str(target.get("id") or "")):
+                        return
+                if created is None and not matched and self._clock() >= grace:
                     created = str(self._json_new(owned.port, url).get("id") or "")
-                    targets = self._json_list(owned.port)
-                if created is not None and any(
-                    created
-                    and t.get("id") == created
-                    and t.get("type") == "page"
-                    and urlsplit(str(t.get("url") or "")).scheme in {"http", "https"}
-                    for t in targets
-                ):
-                    return
+                    continue
+            except ChromeProfileError:
+                raise
             except Exception as exc:  # noqa: BLE001 - any failure is unconfirmed
                 logger.info("Chrome page check failed: {}", type(exc).__name__)
             if owned.process.poll() is not None or self._clock() >= deadline:
@@ -742,6 +842,19 @@ class ChromeProfileService:
                     "Chrome opened, but the page didn't load. Check the address and try again.",
                 )
             self._sleep(0.2)
+
+    def _page_loaded(self, owned: _Owned, target_id: str) -> bool:
+        """Whether the tab shows a loaded http(s) document; refuse Chrome's error page."""
+
+        href, ready = self._page_state(owned.port, target_id)
+        scheme = urlsplit(href).scheme
+        if scheme == "chrome-error":
+            raise ChromeProfileError(
+                "page_not_loaded",
+                "Chrome opened, but the page didn't load (Chrome showed its error page). "
+                "Check the address and try again.",
+            )
+        return scheme in {"http", "https"} and ready in {"interactive", "complete"}
 
     def _verify(self, owned: _Owned) -> None:
         if owned.process.poll() is not None:

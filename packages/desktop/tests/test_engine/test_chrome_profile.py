@@ -68,6 +68,12 @@ class Harness:
         self.targets: list[dict[str, Any]] = []
         self.created: list[str] = []
         self.new_tab_url: str | None = None
+        # Tabs Chrome restores next to the launch tab, and per-target
+        # (location.href, readyState) overrides; by default a tab's document
+        # is at its target URL and complete.
+        self.restored: list[str] = []
+        self.states: dict[str, list[tuple[str, str]]] = {}
+        self.state_calls: list[str] = []
         chrome = tmp_path / "Google Chrome"
         chrome.write_text("")
         self.chrome = chrome
@@ -80,6 +86,7 @@ class Harness:
             "browser_close": self._browser_close,
             "json_list": self._json_list,
             "json_new": self._json_new,
+            "page_state": self._page_state,
             "sleep": lambda _s: None,
             "start_timeout": 0.5,
         }
@@ -95,7 +102,18 @@ class Harness:
             (user_data / "DevToolsActivePort").write_text(f"{self.port}\n{GUID}\n")
         launch = args[-1] if self.launch_tab_url is None else self.launch_tab_url
         self.targets.append({"id": f"T{len(self.targets)}", "type": "page", "url": launch})
+        for restored in self.restored:
+            self.targets.append({"id": f"R{len(self.targets)}", "type": "page", "url": restored})
         return process
+
+    def _page_state(self, port: int, target_id: str) -> tuple[str, str]:
+        assert port == self.port
+        self.state_calls.append(target_id)
+        queued = self.states.get(target_id)
+        if queued:
+            return queued.pop(0) if len(queued) > 1 else queued[0]
+        url = next(t["url"] for t in self.targets if t["id"] == target_id)
+        return url, "complete"
 
     def _json_list(self, port: int) -> list[dict[str, Any]]:
         assert port == self.port
@@ -259,11 +277,78 @@ def test_an_unreachable_target_list_is_refused(tmp_path: Path) -> None:
     assert err.value.code == "page_not_loaded"
 
 
+def test_a_restored_tab_on_the_origin_does_not_stand_in_for_the_url(h: Harness) -> None:
+    h.launch_tab_url = "about:blank"
+    h.restored = ["https://portal.example/settings"]
+    h.service.open(h.create(), "https://portal.example/start")
+    assert h.created == ["https://portal.example/start"]
+
+
+def test_only_the_launch_tab_counts_by_origin(h: Harness) -> None:
+    h.launch_tab_url = "https://portal.example/home"
+    h.restored = ["https://portal.example/settings"]
+    h.service.open(h.create(), "https://portal.example/login")
+    # Two pages on the first listing: neither is known to be the launch tab.
+    assert h.created == ["https://portal.example/login"]
+
+
+def test_an_error_page_at_the_requested_address_is_refused(h: Harness) -> None:
+    h.states["T0"] = [("chrome-error://chromewebdata/", "complete")]
+    profile_id = h.create()
+    with pytest.raises(ChromeProfileError) as err:
+        h.service.open(profile_id, "http://127.0.0.1:9/never")
+    assert err.value.code == "page_not_loaded"
+    assert h.created == []  # a second tab would only show the same error
+    assert h.spawned[0].log == ["terminate"]
+
+
+def test_a_new_tab_that_shows_an_error_page_is_refused(h: Harness) -> None:
+    h.launch_tab_url = "about:blank"
+    h.states["N1"] = [("chrome-error://chromewebdata/", "complete")]
+    with pytest.raises(ChromeProfileError) as err:
+        h.service.open(h.create(), "https://portal.example/start")
+    assert err.value.code == "page_not_loaded"
+
+
+def test_open_waits_for_the_document_to_load(tmp_path: Path) -> None:
+    h = Harness(tmp_path, start_timeout=5)
+    h.states["T0"] = [
+        ("about:blank", "loading"),
+        ("https://portal.example/start", "loading"),
+        ("https://portal.example/start", "interactive"),
+    ]
+    h.service.open(h.create(), "https://portal.example/start")
+    assert h.state_calls == ["T0", "T0", "T0"]
+    assert h.created == []  # a tab at the URL that is still loading is waited for
+
+
+def test_a_page_that_stays_loading_is_refused(h: Harness) -> None:
+    h.states["T0"] = [("https://portal.example/start", "loading")]
+    with pytest.raises(ChromeProfileError) as err:
+        h.service.open(h.create(), "https://portal.example/start")
+    assert err.value.code == "page_not_loaded"
+    assert h.created == []
+
+
+def test_an_unreachable_page_socket_is_retried(tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    def flaky(port: int, target_id: str) -> tuple[str, str]:
+        calls.append(target_id)
+        if len(calls) < 3:
+            raise ConnectionRefusedError
+        return "https://portal.example/start", "complete"
+
+    h = Harness(tmp_path, page_state=flaky, start_timeout=5)
+    assert h.service.open(h.create(), "https://portal.example/start")["open"] is True
+    assert len(calls) == 3
+
+
 def test_open_without_a_url_checks_no_page(tmp_path: Path) -> None:
     def never(*_a: Any) -> Any:
         raise AssertionError("no page check without a URL")
 
-    h = Harness(tmp_path, json_list=never, json_new=never)
+    h = Harness(tmp_path, json_list=never, json_new=never, page_state=never)
     assert h.service.open(h.create())["open"] is True
 
 
@@ -579,6 +664,78 @@ def test_devtools_file_parsing(tmp_path: Path) -> None:
     assert cp.read_devtools_active_port(tmp_path) is None
     (tmp_path / "DevToolsActivePort").write_text(f"51234\n{GUID}")
     assert cp.read_devtools_active_port(tmp_path) == (51234, GUID)
+
+
+def _serve_cdp(reply_frames: list[bytes]) -> tuple[int, dict[str, Any], Any]:
+    import threading
+
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    got: dict[str, Any] = {}
+
+    def serve() -> None:
+        conn, _ = server.accept()
+        data = b""
+        while b"\r\n\r\n" not in data:
+            data += conn.recv(4096)
+        got["request"] = data
+        conn.sendall(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n\r\n")
+        got["frame"] = conn.recv(4096)
+        for frame in reply_frames:
+            conn.sendall(frame)
+        conn.close()
+        server.close()
+
+    thread = threading.Thread(target=serve)
+    thread.start()
+    return server.getsockname()[1], got, thread
+
+
+def _server_frame(message: dict[str, Any], opcode: int = 0x1) -> bytes:
+    import json
+
+    body = json.dumps(message).encode()
+    if len(body) < 126:
+        return bytes([0x80 | opcode, len(body)]) + body
+    return bytes([0x80 | opcode, 126]) + len(body).to_bytes(2, "big") + body
+
+
+def test_page_state_evaluates_href_and_ready_state_on_the_page_socket() -> None:
+    import json
+
+    value = json.dumps(["chrome-error://chromewebdata/", "complete"])
+    frames = [
+        bytes([0x89, 0]),  # a ping is skipped
+        _server_frame({"method": "Runtime.executionContextCreated", "params": {"x": "y" * 200}}),
+        _server_frame({"id": 1, "result": {"result": {"type": "string", "value": value}}}),
+    ]
+    port, got, thread = _serve_cdp(frames)
+    state = cp.cdp_page_state(port, "ABCDEF0123")
+    thread.join(5)
+    assert state == ("chrome-error://chromewebdata/", "complete")
+    request = got["request"].decode()
+    assert request.startswith("GET /devtools/page/ABCDEF0123 HTTP/1.1")
+    assert "origin:" not in request.lower()
+    frame = got["frame"]
+    assert frame[0] == 0x81 and frame[1] & 0x80
+    length, start = frame[1] & 0x7F, 2
+    if length == 126:
+        length, start = int.from_bytes(frame[2:4], "big"), 4
+    mask, body = frame[start : start + 4], frame[start + 4 : start + 4 + length]
+    sent = json.loads(bytes(b ^ mask[i % 4] for i, b in enumerate(body)))
+    assert sent["method"] == "Runtime.evaluate"
+    assert "location.href" in sent["params"]["expression"]
+    assert "document.readyState" in sent["params"]["expression"]
+
+
+def test_page_state_refuses_a_bad_target_id_and_a_bad_reply() -> None:
+    with pytest.raises(ValueError):
+        cp.cdp_page_state(1, "../browser/x")
+    port, _got, thread = _serve_cdp([_server_frame({"id": 1, "result": {"result": {}}})])
+    with pytest.raises(ValueError):
+        cp.cdp_page_state(port, "ABC")
+    thread.join(5)
 
 
 def test_browser_close_frame_is_a_masked_cdp_message_without_origin() -> None:
