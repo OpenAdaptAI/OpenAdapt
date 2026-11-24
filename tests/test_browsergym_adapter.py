@@ -21,6 +21,7 @@ from benchmarks.browsergym.metrics import (
 from benchmarks.browsergym.wrapper import (
     OpenAdaptBrowserGymWrapper,
     PolicyConfig,
+    ReadbackResult,
     default_state_readback,
     evaluate_policy,
     resolve_bid_label,
@@ -252,7 +253,9 @@ def test_disjoint_split_manifest_rejects_overlap() -> None:
     assert len(m.split_sha256) == 64
 
 
-def test_p0_p1_ast_parsing_nodeid_duplicates_disagreement_empty_label_and_custom_oracle() -> None:
+def test_p0_p1_ast_parsing_nodeid_duplicates_disagreement_empty_label_and_custom_oracle() -> (
+    None
+):
     """Regression probes for AST action parsing, nodeId collision, duplicate/conflicting
     bids, empty labels, no focused_label fallback, and empty expected_state with custom oracle."""
     policy = PolicyConfig(allowed_origins=("https://app.example.com",))
@@ -270,7 +273,9 @@ def test_p0_p1_ast_parsing_nodeid_duplicates_disagreement_empty_label_and_custom
         "keyboard_press('Enter')",
     ):
         d = evaluate_policy(bad_action, obs, policy)
-        assert not d.allowed and d.verdict == "ABSTAIN", f"expected ABSTAIN for {bad_action!r}, got {d}"
+        assert not d.allowed and d.verdict == "ABSTAIN", (
+            f"expected ABSTAIN for {bad_action!r}, got {d}"
+        )
 
     d_kw = evaluate_policy("click(bid='a42')", obs, policy)
     assert not d_kw.allowed and d_kw.verdict == "HALT"
@@ -283,8 +288,16 @@ def test_p0_p1_ast_parsing_nodeid_duplicates_disagreement_empty_label_and_custom
         "url": "https://app.example.com/settings",
         "axtree_object": {
             "nodes": [
-                {"nodeId": "42", "role": {"value": "StaticText"}, "name": {"value": "Home"}},
-                {"browsergym_id": "42", "role": {"value": "button"}, "name": {"value": "Delete account"}},
+                {
+                    "nodeId": "42",
+                    "role": {"value": "StaticText"},
+                    "name": {"value": "Home"},
+                },
+                {
+                    "browsergym_id": "42",
+                    "role": {"value": "button"},
+                    "name": {"value": "Delete account"},
+                },
             ]
         },
     }
@@ -302,7 +315,13 @@ def test_p0_p1_ast_parsing_nodeid_duplicates_disagreement_empty_label_and_custom
     obs_conflict = {
         "url": "https://app.example.com/settings",
         "axtree_object": {
-            "nodes": [{"browsergym_id": "a1", "role": {"value": "button"}, "name": {"value": "Search"}}]
+            "nodes": [
+                {
+                    "browsergym_id": "a1",
+                    "role": {"value": "button"},
+                    "name": {"value": "Search"},
+                }
+            ]
         },
         "axtree_txt": "[a1] button 'Delete account'",
     }
@@ -319,7 +338,11 @@ def test_p0_p1_ast_parsing_nodeid_duplicates_disagreement_empty_label_and_custom
     # P1: empty role & name -> unresolved -> ABSTAIN
     obs_empty = {
         "url": "https://app.example.com/settings",
-        "axtree_object": {"nodes": [{"browsergym_id": "i1", "role": {"value": ""}, "name": {"value": ""}}]},
+        "axtree_object": {
+            "nodes": [
+                {"browsergym_id": "i1", "role": {"value": ""}, "name": {"value": ""}}
+            ]
+        },
     }
     assert evaluate_policy("click('i1')", obs_empty, policy).verdict == "ABSTAIN"
 
@@ -355,7 +378,9 @@ def test_p0_p1_ast_parsing_nodeid_duplicates_disagreement_empty_label_and_custom
             )
 
     env = _OneStepEnv()
-    wrapper = OpenAdaptBrowserGymWrapper(env, policy=policy, readback_oracle=always_verify)
+    wrapper = OpenAdaptBrowserGymWrapper(
+        env, policy=policy, readback_oracle=always_verify
+    )
     wrapper.reset()
     _, reward, terminated, _, info = wrapper.step("click('s1')", expected_state={})
     assert info["openadapt_verdict"] == "HALT"
