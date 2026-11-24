@@ -39,6 +39,8 @@ from openadapt_flow.wrap.origin_firewall import (
     DECISION_BLOCK as FW_BLOCK,
 )
 from openadapt_flow.wrap.origin_firewall import (
+    PROVENANCE_PACK_TRUSTED,
+    PROVENANCE_UNTRUSTED_DERIVED,
     extract_origins_from_urls,
     parse_origin,
 )
@@ -213,6 +215,100 @@ def test_allows_server_issued_http_302_sso_redirect_and_blocks_third_party_redir
     )
     assert bad_redirect.decision == FW_BLOCK
     assert bad_redirect.code == "untrusted_redirect_target"
+
+
+def test_provenance_split_allows_pack_trusted_rfc1918_and_blocks_untrusted_derived() -> (
+    None
+):
+    fw = OriginCapabilityFirewall(
+        ["https://10.42.10.15:8443", "https://intranet-ehr.corp.local"],
+        resolver=_mock_resolver(
+            {
+                "intranet-ehr.corp.local": ["10.42.10.20"],
+                "unlisted-intranet.corp.local": ["10.42.10.99"],
+            }
+        ),
+    )
+
+    # Explicitly allowlisted RFC1918 literal host with PACK_TRUSTED provenance -> ALLOW
+    ok_literal = fw.check_navigation("https://10.42.10.15:8443/worklist")
+    assert ok_literal.decision == FW_ALLOW
+    assert ok_literal.provenance == PROVENANCE_PACK_TRUSTED
+
+    # Explicitly allowlisted intranet hostname resolving to RFC1918 -> ALLOW
+    ok_dns = fw.check_navigation("https://intranet-ehr.corp.local/records/1")
+    assert ok_dns.decision == FW_ALLOW
+    assert ok_dns.provenance == PROVENANCE_PACK_TRUSTED
+
+    # Unlisted RFC1918 host (literal or DNS) -> BLOCK
+    blocked_literal = fw.check_navigation("https://10.42.10.99:8443/admin")
+    assert blocked_literal.decision == FW_BLOCK
+    assert blocked_literal.code == "ssrf_restricted_target"
+
+    blocked_dns = fw.check_navigation("https://unlisted-intranet.corp.local/admin")
+    assert blocked_dns.decision == FW_BLOCK
+    assert blocked_dns.code == "ssrf_restricted_target"
+
+    # Even on an allowlisted RFC1918 host, UNTRUSTED_DERIVED provenance is blocked
+    blocked_derived = fw.check_navigation(
+        "https://10.42.10.15:8443/admin/delete",
+        provenance=PROVENANCE_UNTRUSTED_DERIVED,
+    )
+    assert blocked_derived.decision == FW_BLOCK
+    assert blocked_derived.code == "ssrf_restricted_target"
+
+
+def test_blocks_cross_origin_get_query_string_exfiltration() -> None:
+    fw = OriginCapabilityFirewall(
+        ["https://source.example.com", "https://partner.example.org"],
+        resolver=_mock_resolver(
+            {
+                "source.example.com": ["93.184.216.34"],
+                "partner.example.org": ["93.184.216.35"],
+            }
+        ),
+    )
+    assert fw.register_sensitive_value(
+        "MRN-87654321",
+        source_origin="https://source.example.com",
+        field_name="record_id",
+    )
+    assert fw.register_sensitive_value(
+        "1965-03-15",
+        source_origin="https://source.example.com",
+        field_name="birth_date",
+    )
+
+    # Same-origin GET search carrying the registered token is allowed
+    same_origin = fw.check_navigation(
+        "https://source.example.com/search?q=MRN-87654321",
+        method="GET",
+    )
+    assert same_origin.decision == FW_ALLOW
+
+    # Cross-origin GET carrying the registered token in query string is blocked,
+    # even when the destination origin is in allowed_origins!
+    cross_origin_plain = fw.check_navigation(
+        "https://partner.example.org/pixel?ref=MRN-87654321",
+        method="GET",
+    )
+    assert cross_origin_plain.decision == FW_BLOCK
+    assert cross_origin_plain.code == "query_string_exfiltration"
+
+    # URL-encoded / compact digits variant is also caught
+    cross_origin_encoded = fw.check_navigation(
+        "https://partner.example.org/track?dob=19650315",
+        method="GET",
+    )
+    assert cross_origin_encoded.decision == FW_BLOCK
+    assert cross_origin_encoded.code == "query_string_exfiltration"
+
+    # Non-GET (e.g., POST body) without query string is not flagged by GET query check
+    post_ok = fw.check_navigation(
+        "https://partner.example.org/api/submit",
+        method="POST",
+    )
+    assert post_ok.decision == FW_ALLOW
 
 
 # --- Hit-Test Pre-Flight & Closed-Loop Delta Oracle tests -----------------------

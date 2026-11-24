@@ -1,21 +1,23 @@
 """Origin-bound capability broker and taint firewall for ``openadapt wrap``.
 
 Prevents prompt-injected cross-origin exfiltration and SSRF during wrapped
-browser runs without breaking legitimate enterprise SSO redirects:
+browser runs without breaking legitimate enterprise SSO redirects or
+explicitly configured on-premises intranet applications:
 
-- Extracts Step-0 allowed origins (scheme, host, port) from initial task URLs.
-- Marks URLs observed in untrusted text, DOM content, or tool outputs as
-  ``TAINTED``.
-- Blocks non-HTTP(S) schemes (``javascript:``, ``data:``, ``file:``, etc.).
-- Blocks RFC1918 private networks, loopback, link-local / cloud-metadata
-  (``169.254.169.254``), multicast, and reserved IP targets via both literal
-  IP inspection and DNS resolution (using a mockable resolver for offline
-  tests), unless that exact origin was explicitly allowlisted at Step 0.
-- Blocks tainted cross-origin URLs outside ``allowed_origins``.
-- Explicitly allows server-issued HTTP 301/302/303/307/308 SSO redirects
-  originating from an allowed or tenant SSO origin to a configured
-  ``tenant_sso_origins`` or ``allowed_origins`` target (while still blocking
-  SSRF targets and untrusted third-party redirect destinations).
+- **Provenance-Split URL Lattice:** Distinguishes ``PACK_TRUSTED`` origins
+  explicitly declared at Step 0 from ``UNTRUSTED_DERIVED`` URLs (observed in
+  untrusted DOM/text/tool output or outside the Step-0 allowlist). RFC1918
+  intranet hosts (for example, on-prem ``10.x.x.x`` apps) are allowed ONLY
+  when explicitly listed in ``allowed_origins`` with ``PACK_TRUSTED``
+  provenance, while RFC1918/loopback/link-local/reserved SSRF targets are
+  strictly blocked for any ``UNTRUSTED_DERIVED`` URL or unlisted host.
+- **GET Query-String Exfiltration Guard:** Blocks outbound ``GET`` URLs whose
+  query string carries registered sensitive entity values to a different
+  origin than the origin where that value was observed.
+- **Server-Issued SSO Redirects:** Explicitly allows server-issued HTTP
+  301/302/303/307/308 redirects between ``allowed_origins`` and configured
+  ``tenant_sso_origins`` while still blocking SSRF targets, query-string
+  exfiltration, and third-party redirect destinations.
 """
 
 from __future__ import annotations
@@ -25,15 +27,19 @@ import re
 import socket
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, unquote_plus, urlsplit
 
 DECISION_ALLOW = "allow"
 DECISION_BLOCK = "block"
+
+PROVENANCE_PACK_TRUSTED = "pack_trusted"
+PROVENANCE_UNTRUSTED_DERIVED = "untrusted_derived"
 
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
 _SERVER_REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 _URL_IN_TEXT_RE = re.compile(r"https?://[^\s<>\"'()\[\]{}]+", re.IGNORECASE)
 _TRAILING_PUNCT = ".,;:!?"
+_MIN_SENSITIVE_LEN = 4
 
 IpResolver = Callable[[str], Sequence[str]]
 
@@ -64,6 +70,17 @@ class TaintRecord:
 
 
 @dataclass(frozen=True)
+class SensitiveValueRecord:
+    """A sensitive entity token bound to the origin where it was observed."""
+
+    value: str
+    normalized: str
+    compact_digits: str
+    source_origin: Origin
+    field_name: str = ""
+
+
+@dataclass(frozen=True)
 class FirewallDecision:
     """Deterministic allow/block decision for a navigation or fetch target."""
 
@@ -73,6 +90,7 @@ class FirewallDecision:
     detail: str
     origin: Origin | None = None
     tainted: bool = False
+    provenance: str = PROVENANCE_UNTRUSTED_DERIVED
 
 
 def parse_origin(url: str) -> Origin | None:
@@ -144,6 +162,10 @@ def _normalize_url_key(url: str) -> str:
     return f"{origin.as_str()}{path}"
 
 
+def _digits_only(text: str) -> str:
+    return "".join(ch for ch in text if ch.isdigit())
+
+
 class OriginCapabilityFirewall:
     """Origin-bound capability broker and taint firewall for wrapped runs."""
 
@@ -165,6 +187,7 @@ class OriginCapabilityFirewall:
         )
         self._tainted_urls: dict[str, TaintRecord] = {}
         self._tainted_origins: dict[Origin, TaintRecord] = {}
+        self._sensitive_values: list[SensitiveValueRecord] = []
 
     @staticmethod
     def _coerce_origins(items: Iterable[str | Origin]) -> list[Origin]:
@@ -181,13 +204,46 @@ class OriginCapabilityFirewall:
 
     @property
     def allowed_origins(self) -> frozenset[Origin]:
-        """Step-0 allowed task origins."""
+        """Step-0 ``PACK_TRUSTED`` task origins."""
         return self._allowed
 
     @property
     def tenant_sso_origins(self) -> frozenset[Origin]:
         """Configured tenant SSO identity-provider origins."""
         return self._sso
+
+    def register_sensitive_value(
+        self,
+        value: str,
+        *,
+        source_origin: str | Origin,
+        field_name: str = "",
+    ) -> bool:
+        """Register a sensitive entity token bound to ``source_origin``.
+
+        Any subsequent outbound ``GET`` carrying this token in its query string
+        to a different origin is blocked as query-string exfiltration.
+        """
+        origin = (
+            source_origin
+            if isinstance(source_origin, Origin)
+            else parse_origin(source_origin)
+        )
+        if origin is None or not isinstance(value, str):
+            return False
+        cleaned = value.strip()
+        if len(cleaned) < _MIN_SENSITIVE_LEN:
+            return False
+        rec = SensitiveValueRecord(
+            value=cleaned,
+            normalized=cleaned.lower(),
+            compact_digits=_digits_only(cleaned),
+            source_origin=origin,
+            field_name=field_name,
+        )
+        if rec not in self._sensitive_values:
+            self._sensitive_values.append(rec)
+        return True
 
     def mark_tainted_url(self, url: str, *, source: str = "dom") -> bool:
         """Mark a URL observed in untrusted content as ``TAINTED``."""
@@ -220,18 +276,21 @@ class OriginCapabilityFirewall:
             or origin in self._tainted_origins
         )
 
-    def _check_ssrf(self, origin: Origin) -> tuple[bool, str]:
-        """Return ``(blocked, detail)`` for literal or DNS-resolved restricted IPs."""
-        # If the exact origin was explicitly allowlisted at Step 0 (for example,
-        # a local test harness on 127.0.0.1:3000), permit that exact origin only.
-        if origin in self._allowed:
+    def _check_ssrf(self, origin: Origin, *, provenance: str) -> tuple[bool, str]:
+        """Enforce Provenance-Split URL Lattice for restricted/RFC1918 targets.
+
+        Only ``PACK_TRUSTED`` origins explicitly listed in ``allowed_origins``
+        may reach RFC1918 intranet or loopback hosts. Any ``UNTRUSTED_DERIVED``
+        URL or unlisted origin resolving to a private, loopback, link-local,
+        or reserved IP is blocked.
+        """
+        if provenance == PROVENANCE_PACK_TRUSTED and origin in self._allowed:
             return False, ""
 
         host = origin.hostname
         if host == "localhost" or host.endswith(".localhost"):
             return True, f"Blocked loopback hostname {host!r}."
 
-        # 1. Literal IP check
         try:
             ipaddress.ip_address(host)
             is_literal_ip = True
@@ -243,7 +302,6 @@ class OriginCapabilityFirewall:
                 return True, f"Blocked restricted IP target {host!r}."
             return False, ""
 
-        # 2. DNS resolution check (stops on uncertainty if resolution fails)
         try:
             resolved_ips = tuple(self._resolver(host))
         except (OSError, ValueError) as exc:
@@ -260,10 +318,44 @@ class OriginCapabilityFirewall:
                 )
         return False, ""
 
+    def _check_query_exfiltration(
+        self, url: str, dest_origin: Origin, *, method: str
+    ) -> tuple[bool, str]:
+        """Block outbound GET query strings carrying sensitive values cross-origin."""
+        if method.upper() != "GET" or not self._sensitive_values:
+            return False, ""
+        raw_query = urlsplit(url).query
+        if not raw_query:
+            return False, ""
+
+        decoded_parts: list[str] = [raw_query.lower(), unquote_plus(raw_query).lower()]
+        for key, val in parse_qsl(raw_query, keep_blank_values=True):
+            decoded_parts.append(key.lower())
+            decoded_parts.append(val.lower())
+        haystack = "\n".join(decoded_parts)
+        haystack_digits = _digits_only(haystack)
+
+        for rec in self._sensitive_values:
+            if dest_origin == rec.source_origin:
+                continue
+            token_found = rec.normalized in haystack
+            if not token_found and len(rec.compact_digits) >= 6:
+                token_found = rec.compact_digits in haystack_digits
+            if token_found:
+                label = rec.field_name or "sensitive_value"
+                return (
+                    True,
+                    f"Blocked GET query-string exfiltration of {label!r} from "
+                    f"{rec.source_origin.as_str()} to {dest_origin.as_str()}.",
+                )
+        return False, ""
+
     def check_navigation(
         self,
         url: str,
         *,
+        method: str = "GET",
+        provenance: str | None = None,
         is_server_redirect: bool = False,
         redirect_status: int | None = None,
         redirect_from_origin: str | Origin | None = None,
@@ -290,9 +382,33 @@ class OriginCapabilityFirewall:
             )
 
         tainted = self.is_tainted(raw)
+        if provenance is None:
+            if origin in self._allowed and not tainted:
+                effective_provenance = PROVENANCE_PACK_TRUSTED
+            else:
+                effective_provenance = PROVENANCE_UNTRUSTED_DERIVED
+        else:
+            effective_provenance = provenance
 
-        # 1. SSRF / private network check (always enforced for non-allowlisted origins)
-        ssrf_blocked, ssrf_detail = self._check_ssrf(origin)
+        # 1. Cross-origin GET query-string exfiltration check
+        exfil_blocked, exfil_detail = self._check_query_exfiltration(
+            raw, origin, method=method
+        )
+        if exfil_blocked:
+            return FirewallDecision(
+                url=raw,
+                decision=DECISION_BLOCK,
+                code="query_string_exfiltration",
+                detail=exfil_detail,
+                origin=origin,
+                tainted=tainted,
+                provenance=effective_provenance,
+            )
+
+        # 2. Provenance-Split SSRF / RFC1918 check
+        ssrf_blocked, ssrf_detail = self._check_ssrf(
+            origin, provenance=effective_provenance
+        )
         if ssrf_blocked:
             return FirewallDecision(
                 url=raw,
@@ -301,9 +417,10 @@ class OriginCapabilityFirewall:
                 detail=ssrf_detail,
                 origin=origin,
                 tainted=tainted,
+                provenance=effective_provenance,
             )
 
-        # 2. Server-issued HTTP 3xx SSO redirect (e.g. app -> IdP -> app callback)
+        # 3. Server-issued HTTP 3xx SSO redirect (e.g. app -> IdP -> app callback)
         if is_server_redirect and redirect_status in _SERVER_REDIRECT_STATUSES:
             from_origin = (
                 redirect_from_origin
@@ -323,6 +440,7 @@ class OriginCapabilityFirewall:
                     ),
                     origin=origin,
                     tainted=tainted,
+                    provenance=effective_provenance,
                 )
             return FirewallDecision(
                 url=raw,
@@ -334,9 +452,10 @@ class OriginCapabilityFirewall:
                 ),
                 origin=origin,
                 tainted=tainted,
+                provenance=effective_provenance,
             )
 
-        # 3. Tainted cross-origin URL outside Step-0 allowlist
+        # 4. Tainted cross-origin URL outside Step-0 allowlist
         if tainted and origin not in self._allowed:
             return FirewallDecision(
                 url=raw,
@@ -347,9 +466,10 @@ class OriginCapabilityFirewall:
                 ),
                 origin=origin,
                 tainted=True,
+                provenance=effective_provenance,
             )
 
-        # 4. Step-0 allowed origin check
+        # 5. Step-0 allowed origin check
         if origin in self._allowed:
             return FirewallDecision(
                 url=raw,
@@ -358,6 +478,7 @@ class OriginCapabilityFirewall:
                 detail=f"Allowed Step-0 origin {origin.as_str()}.",
                 origin=origin,
                 tainted=tainted,
+                provenance=effective_provenance,
             )
 
         return FirewallDecision(
@@ -367,6 +488,7 @@ class OriginCapabilityFirewall:
             detail=f"Blocked navigation to non-allowlisted origin {origin.as_str()}.",
             origin=origin,
             tainted=tainted,
+            provenance=effective_provenance,
         )
 
 
@@ -377,6 +499,9 @@ __all__ = [
     "IpResolver",
     "Origin",
     "OriginCapabilityFirewall",
+    "PROVENANCE_PACK_TRUSTED",
+    "PROVENANCE_UNTRUSTED_DERIVED",
+    "SensitiveValueRecord",
     "TaintRecord",
     "extract_origins_from_urls",
     "parse_origin",
