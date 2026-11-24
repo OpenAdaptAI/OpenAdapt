@@ -696,3 +696,47 @@ def test_structural_scope_checks_complete_census_endpoints_and_fresh_fixed_ident
             assert len(censuses) == 2
         # Observing a replacement once permanently refuses this observation;
         # restoring the old handle/runtime later cannot upgrade the result.
+
+
+@pytest.mark.parametrize(
+    "control_type",
+    [
+        "TableControl",
+        "DataGridControl",
+        "DataItemControl",
+        "HeaderControl",
+        "HeaderItemControl",
+        "ScrollBarControl",
+        "ThumbControl",
+        "ListControl",
+        "ListItemControl",
+    ],
+)
+def test_non_value_windowless_structural_controls_do_not_abort_strict_census(
+    monkeypatch, control_type
+):
+    import sys
+
+    from openadapt_flow.backends.win_agent import native_value
+    from tests.test_approval_form_fields import _UNSUPPORTED_PROPERTY
+
+    target = _Control("EditControl", value="exact")
+    target.AutomationId = "field"
+    sibling = _Control(control_type, value=None, name="grid chrome")
+    sibling.NativeWindowHandle = 0
+    sibling.GetPropertyValueEx = lambda prop, _: (
+        _UNSUPPORTED_PROPERTY
+        if prop == native_value.IS_PASSWORD_PROPERTY
+        else False
+        if prop == 30043
+        else _Control.GetPropertyValueEx(sibling, prop, _)
+    )
+    window = _window(target, sibling)
+    perform = _agent(monkeypatch, window)
+    sys.modules["uiautomation"].GetRootControl = lambda: window
+    monkeypatch.setattr(
+        native_value, "is_uia_not_supported", lambda raw: raw is _UNSUPPORTED_PROPERTY
+    )
+    result = perform("read", {"locator": {"automation_id": "field"}})
+    assert result["match"] == "unique"
+    assert result["complete"] is True and result["text"] == "exact"

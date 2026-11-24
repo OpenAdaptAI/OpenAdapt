@@ -17,6 +17,45 @@
 
 ## Unreleased
 
+### Fixes
+
+- Native approval and structural field reads require exact UIA values to agree
+  with independent native extent/full reads under the same control identity.
+  Missing, sensitive, incomplete or disagreeing values refuse the observation;
+  an advertised native approval channel does not fall back to OCR. Empty
+  complete values remain values. A container cannot hide unread descendants
+  ([#2291](https://github.com/OpenAdaptAI/OpenAdapt/pull/2291)).
+- Value reads negotiate independent client/server read-v3 declarations and
+  require the separate helper proof-v3 contract before any preview or value
+  getter. Incompatible consumers refuse before provider access; versioned
+  refusal-parser imports reject mixed local modules. One
+  current sensitivity guard protects values, previews and capability probes.
+  Failed/unknown capability probes cannot become caption masks. Structural
+  previews and unqualified row inventories do not authorize effect checks.
+- Unavailable native form projections return a closed request-local refusal
+  receipt with stage/channel/reason and already-known numeric metadata. A
+  closed property/guard-phase/result category locates raw-boolean failures;
+  the first unknown stops later probes. Partial fields, names, values, raw COM
+  objects and provider exceptions are excluded. No
+  additional source read, global last-error state, fallback or retry is added.
+- Approval form state reads proven values separately from the remaining OCR
+  pixels, so caret/title-bar display noise need not alter an unchanged field's
+  value digest ([#2189](https://github.com/OpenAdaptAI/OpenAdapt/issues/2189)).
+  Current complete-value approval/structural qualification is pending. The
+  native observation fixture excludes a full Flow save; earlier short-note
+  governed evidence does not qualify this new source or unbounded values.
+
+## v4.0.0 (2026-11-24)
+
+### Breaking Changes
+
+- **Encryption at rest is now enabled by default** (`#2423`): recordings,
+  compiled bundles, and run directories are written as sealed-set v3
+  encrypted containers unless `OPENADAPT_ENCRYPT_AT_REST=0` or `--no-encrypt`
+  is set. Released `openadapt` launcher `1.23.0` (`openadapt-flow<4`) reads
+  run files via plain paths, so this major bump keeps `1.23.0` on Flow 3.4.0
+  while pairing Flow 4.0.0 with `openadapt 1.24.0` (`>=4.0.0,<5.0.0`).
+
 ### Encryption at rest by default
 
 - Recordings (web, the quickstart and tutorial, and desktop once converted),
@@ -64,6 +103,23 @@
 
 ### Features
 
+- One verdict kernel, `openadapt_flow.verdict`, for every check that turns
+  evidence into held, refuted or not checked. It fixes the obligations from
+  the plan first, settles results against them, and never passes an empty
+  set, a truncated or short read, a probe that raised, a result bound to
+  another run, two results that disagree, or a code nobody listed.
+  `Result.nothing_else` holds a "nothing else changed" claim only on a
+  complete read. Functions marked `@verdict_site` are run by a fail-open
+  harness (`tests/failopen`) with 15 generic mutations, which checks the
+  verdict at three levels (refuted, not checked, held), not as one bit. It
+  flags 14 fail-open bugs rebuilt from this repository's history (pinned
+  pre-fix copies) and one live connector site, and passes their fixes.
+  `scripts/check_verdict_folds.py` fails CI when the repository-wide count of
+  a hand-written fold kind rises, including a broad `except` that logs and
+  falls through and a "nothing else changed" test over a set that may be a
+  partial read. See `docs/FAIL_CLOSED.md`.
+- The hard-invariant layer, the frame's version check, `verify-run`'s effect
+  folds and the receipt's line judge and tally are built on the kernel.
 - A sign-in that asks for a second factor (a code by text message or email,
   an authenticator code, or a push approval) no longer has to stop the
   program. A `second_factor` step (`one_time` is `code` or `approval`) waits
@@ -110,33 +166,48 @@
   application vocabulary: month names, yes and no words, currency signs and
   tables come from the pack. See docs/EFFECT_LOCATION.md.
 
+### Changes
+
+- Network captures no longer write raw bodies by default. `record
+  --capture-network` keeps only the `--param` and `--identifier` values of
+  each request and response body, plus a per-capture keyed hash of every
+  other value and of each HTML, text or binary body; undeclared URL query
+  values are hashed too. `dump_har` and `save_har` do the same with the wire
+  policy's id and version fields. `--capture-network-bodies raw` (and
+  `raw_bodies=True`) keeps the redacted bodies, which API step and undo
+  proposals need, and is refused unless the recording is encrypted or
+  `OPENADAPT_FLOW_PLAINTEXT_AT_REST` explicitly allows plaintext. Binary
+  bodies, files and non-text responses are sized and hashed from their
+  bytes as sent; the recording's `app_url` query is minimized too; an
+  explicit `application/octet-stream` body is never parsed as JSON (a
+  missing content type still is); and `load_har` refuses a HAR marked
+  minimized that carries a raw body.
 ### Fixes
 
-- Native approval and structural field reads require exact UIA values to agree
-  with independent native extent/full reads under the same control identity.
-  Missing, sensitive, incomplete or disagreeing values refuse the observation;
-  an advertised native approval channel does not fall back to OCR. Empty
-  complete values remain values. A container cannot hide unread descendants
-  ([#2291](https://github.com/OpenAdaptAI/OpenAdapt/pull/2291)).
-- Value reads negotiate independent client/server read-v3 declarations and
-  require the separate helper proof-v3 contract before any preview or value
-  getter. Incompatible consumers refuse before provider access; versioned
-  refusal-parser imports reject mixed local modules. One
-  current sensitivity guard protects values, previews and capability probes.
-  Failed/unknown capability probes cannot become caption masks. Structural
-  previews and unqualified row inventories do not authorize effect checks.
-- Unavailable native form projections return a closed request-local refusal
-  receipt with stage/channel/reason and already-known numeric metadata. A
-  closed property/guard-phase/result category locates raw-boolean failures;
-  the first unknown stops later probes. Partial fields, names, values, raw COM
-  objects and provider exceptions are excluded. No
-  additional source read, global last-error state, fallback or retry is added.
-- Approval form state reads proven values separately from the remaining OCR
-  pixels, so caret/title-bar display noise need not alter an unchanged field's
-  value digest ([#2189](https://github.com/OpenAdaptAI/OpenAdapt/issues/2189)).
-  Current complete-value approval/structural qualification is pending. The
-  native observation fixture excludes a full Flow save; earlier short-note
-  governed evidence does not qualify this new source or unbounded values.
+- `verify-run`: an effect list that is empty, or tiers that don't pair one to
+  one with the effects, is `INDETERMINATE`, `unknown` and `unchecked`, not
+  `CONFIRMED`, `present` and `independent_readback`. The receipt model already
+  refuses an empty list, so no run changes outcome today.
+- `verify-run`: the effect folds settle against the planned effects, so a
+  planned effect with no verdict is `INDETERMINATE`, and an observed-effect
+  code nobody listed is `unknown` rather than `present`.
+- The frame's version check: a duplicate version row, a version history
+  that lost a row, or a changed target with no new version no longer hides a
+  version saved by another user. The frame is refuted instead of not checked.
+- Receipts: a line check nobody listed keeps the run from `VERIFIED` and is
+  counted as not checked, so the three line counts add up to the lines.
+- The form transaction layer (`form_tx`, an unreleased prototype until this
+  release) reads back every field it typed, selected or kept. Each one gets
+  a `passed`, `failed` or `not_checked` verdict; a field it cannot read back
+  (no read-back declared, the summary control missing or ambiguous, a failed
+  lookup, a value entered only in a popup) is `not_checked` and never
+  passed. A submit with any `not_checked` field ends `readback_incomplete`,
+  never `verified_done`, and gets no receipt. Before, fields typed in a popup
+  estimator had no verdict at all and such a run could end verified.
+  Popup inputs are also re-read just before the popup's apply button, and a
+  mismatch stops the run before apply. The side panel shows refuted and
+  incomplete runs as needing action. Measured on four held-out synthetic
+  quote portals: `benchmark/form_tx_heldout_run/RESULTS.md`.
 - A wrapped sign-in no longer compiles a pixel check that freezes a withheld
   credential field. The recorder blacks out a withheld field in every frame
   that still shows it, so a `REGION_STABLE` crop that overlapped one held a

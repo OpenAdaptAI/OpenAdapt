@@ -1,0 +1,22 @@
+{
+  "case_id": "tw-dev",
+  "facts": {
+    "applicant.date_of_birth": "1979-12-02",
+    "applicant.email": "silas.pemberton@example.test",
+    "applicant.first_name": "Silas",
+    "applicant.last_name": "Pemberton",
+    "history.prior_claims_3yr": 0,
+    "household.driver_count": 1,
+    "property.address_line1": "9 Lantern Wharf Rd",
+    "property.city": "Portsmouth",
+    "property.occupancy": "Owner occupied",
+    "property.roof_year": 2016,
+    "property.square_feet": 1720,
+    "property.state": "NH",
+    "property.year_built": 1988,
+    "property.zip": "03801",
+    "vehicle.make": "Halden",
+    "vehicle.model": "Skerry",
+    "vehicle.year": 2020
+  }
+}

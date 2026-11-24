@@ -1,0 +1,31 @@
+# Dark mode (Windows): Settings > Personalization > Colors > Dark.
+# The check reads the two per-user theme values from the registry with
+# read-only access: 0 is dark, 1 is light.
+schema_version: openadapt.verify/v1
+minimum_effect_strength: independent_system_of_record
+verifier:
+  kind: local-state
+  local_state:
+    - type: windows_registry
+      id: apps_theme
+      hive: HKCU
+      path: Software\Microsoft\Windows\CurrentVersion\Themes\Personalize
+      name: AppsUseLightTheme
+    - type: windows_registry
+      id: system_theme
+      hive: HKCU
+      path: Software\Microsoft\Windows\CurrentVersion\Themes\Personalize
+      name: SystemUsesLightTheme
+frame:
+  target_fields: [present, value, value_type]
+effects:
+  - kind: field_equals
+    match: {id: apps_theme}
+    field: value
+    value: "0"
+    timeout_s: 5
+  - kind: field_equals
+    match: {id: system_theme}
+    field: value
+    value: "0"
+    timeout_s: 5

@@ -1,10 +1,15 @@
 # CHANGELOG
 
 
-## v0.24.2 (2026-11-22)
+## v0.24.2 (2026-11-23)
 
 0.24.1 was stamped on main but never published. 0.24.2 is the first
-published release with this content, and the version to install.
+published release with this content, and the version to install. Its first
+main push runs failed on unrelated Flow jobs, which
+[#2589](https://github.com/OpenAdaptAI/OpenAdapt/pull/2589),
+[#2600](https://github.com/OpenAdaptAI/OpenAdapt/pull/2600) and
+[#2616](https://github.com/OpenAdaptAI/OpenAdapt/pull/2616) fixed, so it
+publishes from the run after those fixes.
 
 openadapt-flow 3.4.0 imports `openadapt_types.receipt`, which 0.24.0 does not
 have. This release adds it and the other modules Flow imports on main

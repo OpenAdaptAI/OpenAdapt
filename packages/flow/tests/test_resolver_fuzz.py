@@ -128,6 +128,8 @@ class FakeVision:
 
 
 class FakeGrounder:
+    MAY_EGRESS = False  # in process; an unmarked grounder counts as egress
+
     def __init__(self, result=None):
         self.result = result
 
