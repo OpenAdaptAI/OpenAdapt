@@ -195,6 +195,11 @@ def site_page(browser):
     site.close()
 
 
+@pytest.fixture(autouse=True)
+def _allow_raw_capture_plaintext(monkeypatch):
+    monkeypatch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "synthetic test fixture")
+
+
 def binding_from_browser(tmp_path: Path, site: Site, page: Any):
     """Capture the real normal submit, then propose and test-admit its binding."""
     recording = tmp_path / "recording"
@@ -203,7 +208,7 @@ def binding_from_browser(tmp_path: Path, site: Site, page: Any):
         json.dumps({"params": {"title": "Note Alpha"}})
     )
     clock = time.monotonic()
-    capture = NetworkCapture(page.context).start()
+    capture = NetworkCapture(page.context, bodies="raw").start()
     try:
         page.goto(site.base + "/compose")
         # Finish capturing the form before recording its first input event.
@@ -349,7 +354,9 @@ def test_declared_multipart_secret_is_scrubbed_before_persistence(
     site.html = FORM.replace(
         'method="post"', 'method="post" enctype="multipart/form-data"'
     ).replace("<button", '<input name="access_code" id="code" type="password"><button')
-    capture = NetworkCapture(page.context, secret_names=["access_code"]).start()
+    capture = NetworkCapture(
+        page.context, secret_names=["access_code"], bodies="raw"
+    ).start()
     try:
         page.goto(site.base + "/compose")
         page.fill("#title", "Note Alpha")

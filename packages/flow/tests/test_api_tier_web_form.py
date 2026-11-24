@@ -160,9 +160,10 @@ class _FakeContext:
         self.handlers.pop(event, None)
 
 
-def test_capture_writes_and_loads_without_static_assets(tmp_path):
+def test_capture_writes_and_loads_without_static_assets(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "synthetic test fixture")
     ctx = _FakeContext()
-    cap = nc.NetworkCapture(ctx).start()
+    cap = nc.NetworkCapture(ctx, bodies="raw").start()
     ctx.handlers["requestfinished"](_FakeRequest("http://app/form"))
     ctx.handlers["requestfinished"](
         _FakeRequest("http://app/a.png", resource_type="image")
