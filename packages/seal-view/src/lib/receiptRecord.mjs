@@ -250,22 +250,24 @@ function validateStatement(s) {
         str(p.approval.approver_kind, APPROVER_KINDS, 'predicate.approval.approver_kind')
         if (!isObj(p.approval.commitments) || Object.keys(p.approval.commitments).length > 3) throw new Refusal('malformed', 'predicate.approval.commitments')
     }
-    if ('evidence_scope' in p && p.evidence_scope !== null) {
+    // Python's canonical round trip refuses a null block, a null optional field
+    // and a missing wire.protocols_parsed, so present means validated here too.
+    if ('evidence_scope' in p) {
         const es = p.evidence_scope
         closed(es, ['schema', 'check_level', 'word', 'wire', 'not_covered'], ['basis', 'read_back_at', 'recheck_window_s'], 'predicate.evidence_scope')
         str(es.schema, [EVIDENCE_SCOPE_SCHEMA], 'predicate.evidence_scope.schema')
         str(es.check_level, CHECK_LEVELS, 'predicate.evidence_scope.check_level')
         str(es.word, OUTCOME_WORDS, 'predicate.evidence_scope.word')
-        if (es.basis != null) str(es.basis, Object.keys(BASIS_LEVEL), 'predicate.evidence_scope.basis')
-        closed(es.wire, ['channel'], ['protocols_parsed'], 'predicate.evidence_scope.wire')
+        if ('basis' in es) str(es.basis, Object.keys(BASIS_LEVEL), 'predicate.evidence_scope.basis')
+        closed(es.wire, ['channel', 'protocols_parsed'], [], 'predicate.evidence_scope.wire')
         str(es.wire.channel, WIRE_CHANNELS, 'predicate.evidence_scope.wire.channel')
-        const protos = es.wire.protocols_parsed ?? []
+        const protos = es.wire.protocols_parsed
         if (!Array.isArray(protos) || protos.length > 7) throw new Refusal('malformed', 'predicate.evidence_scope.wire.protocols_parsed')
         protos.forEach((pr, j) => str(pr, WIRE_PROTOCOLS, `predicate.evidence_scope.wire.protocols_parsed[${j}]`))
         if (new Set(protos).size !== protos.length) throw new Refusal('malformed', 'wire.protocols_parsed repeats a protocol')
         if (es.wire.channel === 'none' && protos.length) throw new Refusal('malformed', 'a run that watched no wire parsed no protocol')
-        if (es.read_back_at != null) str(es.read_back_at, ISO_SECONDS, 'predicate.evidence_scope.read_back_at')
-        if (es.recheck_window_s != null) int(es.recheck_window_s, 0, MAX_RECHECK_S, 'predicate.evidence_scope.recheck_window_s')
+        if ('read_back_at' in es) str(es.read_back_at, ISO_SECONDS, 'predicate.evidence_scope.read_back_at')
+        if ('recheck_window_s' in es) int(es.recheck_window_s, 0, MAX_RECHECK_S, 'predicate.evidence_scope.recheck_window_s')
         if (!Array.isArray(es.not_covered) || es.not_covered.length < 2 || es.not_covered.length > 7) throw new Refusal('malformed', 'predicate.evidence_scope.not_covered')
         es.not_covered.forEach((nc, j) => str(nc, NOT_COVERED, `predicate.evidence_scope.not_covered[${j}]`))
         if (new Set(es.not_covered).size !== es.not_covered.length) throw new Refusal('malformed', 'not_covered repeats a code')
