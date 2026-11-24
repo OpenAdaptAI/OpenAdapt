@@ -6241,13 +6241,10 @@ class EngineDispatcher:
                 "accessibility": True,
                 "input_monitoring": True,
             }
-        screen = _mac_preflight_screen()
-        access = _mac_preflight_accessibility()
-        input_monitoring = _mac_preflight_input_monitoring()
         return {
-            "screen_recording": screen,
-            "accessibility": access,
-            "input_monitoring": input_monitoring,
+            "screen_recording": _mac_preflight_screen(),
+            "accessibility": _mac_preflight_accessibility(),
+            "input_monitoring": _mac_preflight_input_monitoring(),
             "control_permission": control_permission_guidance(),
         }
 
