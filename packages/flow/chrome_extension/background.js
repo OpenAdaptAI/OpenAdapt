@@ -400,6 +400,15 @@ async function resumeAfterAuth(tabId) {
       await pendingAck;
     } catch (e) {}
   }
+  // Guard against a newer pause replacing this entry while awaiting ack.
+  if (authPauseByTab.get(entry.tabId) !== entry) {
+    return {
+      ok: true,
+      resumed: false,
+      stale: true,
+      tabId: entry.tabId,
+    };
+  }
   // If the native host acknowledged the pause, require an explicit matched
   // COPILOT_AUTH_RESUMED_ACK (ok:true) before clearing the pause state.
   if (entry.hostAcked) {
@@ -420,6 +429,16 @@ async function resumeAfterAuth(tabId) {
         error: (reply && reply.error) || 'native_host_rejected',
       };
     }
+  }
+  // Re-check after awaiting the native host so a stale Resume never wipes a
+  // newer MFA pause on the same tab.
+  if (authPauseByTab.get(entry.tabId) !== entry) {
+    return {
+      ok: true,
+      resumed: false,
+      stale: true,
+      tabId: entry.tabId,
+    };
   }
   authPauseByTab.delete(entry.tabId);
   persistSession(SESSION_AUTH_KEY, serializeAuthPauses());

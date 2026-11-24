@@ -148,23 +148,59 @@ def _write_auth_state(recording: Path, payload: dict[str, Any]) -> None:
     tmp.replace(target)
 
 
-def _load_paused_tabs(recording: Path) -> set[int]:
+def _load_paused_tabs_map(recording: Path) -> dict[str, dict[str, Any]]:
     target = recording / COPILOT_AUTH_STATE_FILE
     if not target.is_file():
-        return set()
+        return {}
     try:
         data = json.loads(target.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return set()
+        return {}
+    if not isinstance(data, Mapping):
+        return {}
+    raw_tabs = data.get("paused_tabs")
+    if isinstance(raw_tabs, Mapping):
+        out: dict[str, dict[str, Any]] = {}
+        for key, entry in raw_tabs.items():
+            try:
+                tid = int(key)
+            except (TypeError, ValueError):
+                continue
+            if tid < 0:
+                continue
+            if isinstance(entry, Mapping):
+                out[str(tid)] = dict(entry)
+            else:
+                out[str(tid)] = {"tab_id": tid}
+        return out
+    if isinstance(raw_tabs, list):
+        out = {}
+        for item in raw_tabs:
+            if isinstance(item, int) and not isinstance(item, bool) and item >= 0:
+                out[str(item)] = {"tab_id": int(item)}
+        return out
+    # Backward compatibility with legacy single-tab copilot_auth_state.json files.
     if (
-        isinstance(data, Mapping)
-        and data.get("paused") is True
+        data.get("paused") is True
         and isinstance(data.get("tab_id"), int)
         and not isinstance(data.get("tab_id"), bool)
         and data["tab_id"] >= 0
     ):
-        return {int(data["tab_id"])}
-    return set()
+        tid = int(data["tab_id"])
+        return {
+            str(tid): {
+                "tab_id": tid,
+                "kind": data.get("kind", "mfa"),
+                "signals": data.get("signals", []),
+                "origin": data.get("origin", ""),
+                "updated_at_ms": data.get("updated_at_ms", 0),
+            }
+        }
+    return {}
+
+
+def _load_paused_tabs(recording: Path) -> set[int]:
+    return {int(k) for k in _load_paused_tabs_map(recording)}
 
 
 def _evidence_tab_id(evidence: Mapping[str, Any]) -> int | None:
@@ -215,6 +251,15 @@ def _handle_copilot_auth_paused(
     origin = msg.get("origin", "")
     if not isinstance(origin, str) or len(origin) > 256:
         raise ValueError("origin must be a short string")
+    now_ms = int(time.time() * 1000)
+    paused_map = _load_paused_tabs_map(recording)
+    paused_map[str(tab_id)] = {
+        "tab_id": tab_id,
+        "kind": kind,
+        "signals": signals,
+        "origin": origin,
+        "updated_at_ms": now_ms,
+    }
     payload = {
         "schema": COPILOT_STATE_SCHEMA,
         "paused": True,
@@ -222,7 +267,8 @@ def _handle_copilot_auth_paused(
         "kind": kind,
         "signals": signals,
         "origin": origin,
-        "updated_at_ms": int(time.time() * 1000),
+        "paused_tabs": paused_map,
+        "updated_at_ms": now_ms,
     }
     _write_auth_state(recording, payload)
     return {
@@ -247,12 +293,18 @@ def _handle_copilot_auth_resumed(
     kind = msg.get("kind")
     if kind not in _VALID_AUTH_KINDS:
         raise ValueError("kind must be one of mfa, signin, sso")
+    now_ms = int(time.time() * 1000)
+    paused_map = _load_paused_tabs_map(recording)
+    paused_map.pop(str(tab_id), None)
+    still_paused = bool(paused_map)
+    fallback_tab_id = int(next(iter(paused_map))) if still_paused else tab_id
     payload = {
         "schema": COPILOT_STATE_SCHEMA,
-        "paused": False,
-        "tab_id": tab_id,
+        "paused": still_paused,
+        "tab_id": fallback_tab_id,
         "kind": kind,
-        "updated_at_ms": int(time.time() * 1000),
+        "paused_tabs": paused_map,
+        "updated_at_ms": now_ms,
     }
     _write_auth_state(recording, payload)
     return {

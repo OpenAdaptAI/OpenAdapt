@@ -10,7 +10,7 @@
   const MFA_ATTR_RE =
     /(one[-_ ]?time[-_ ]?code|\botp\b|otp|mfa|2fa|totp|authenticator|passkey|webauthn|duo|verification[-_ ]?code|sms[-_ ]?code)/i;
   const SECRET_NAME =
-    /pass(word|wd|phrase)?\b|passwd|pwd|secret|private[_ -]?key|api[_ -]?key|apikey|token|card[_ -]?(number|num|no)|cc[-_ ]?num(ber)?|cc[-_ ]?csc|cc[-_ ]?exp|(^|[_ -])ssn($|[_ -])|social[-_ ]?security|(^|[_ -])cvv($|[_ -])|(^|[_ -])cvc($|[_ -])|security[-_ ]?code|^pin$|(^|[_ -])pin($|[_ -])|^otp$|(^|[_ -])otp($|[_ -])|^code$|sms[-_ ]?code|one[-_ ]?time[-_ ]?code|mfa|2fa|totp|authenticator|passkey|webauthn|duo|verification[-_ ]?code/i;
+    /pass(word|wd|phrase)?\b|passwd|pwd|secret|private[_ -]?key|api[_ -]?key|apikey|token|card[_ -]?(number|num|no)|cc[-_ ]?num(ber)?|cc[-_ ]?csc|cc[-_ ]?exp|(^|[_ -])ssn($|[_ -])|user[_ -]?ssn|social[-_ ]?security|(^|[_ -])cvv($|[_ -])|(^|[_ -])cvc($|[_ -])|security[-_ ]?code|^pin$|(^|[_ -])pin($|[_ -])|^otp$|(^|[_ -])otp($|[_ -])|^code$|sms[-_ ]?code|one[-_ ]?time[-_ ]?code|mfa|2fa|totp|authenticator|passkey|webauthn|duo|verification[-_ ]?code/i;
   const SECRET_AUTOCOMPLETE = /(^|\s)(current-password|new-password|one-time-code|cc-number|cc-csc|cc-exp|cc-exp-month|cc-exp-year)(\s|$)/;
 
   let recording = false;

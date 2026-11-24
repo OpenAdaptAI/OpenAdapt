@@ -1396,3 +1396,90 @@ console.log(JSON.stringify({{
     assert out["mfaCheck"]["detected"] is True
     assert out["mfaCheck"]["kind"] == "mfa"
     assert "mfa_input" in out["mfaCheck"]["signals"]
+
+
+def test_native_host_multi_tab_paused_tabs_map_and_legacy_compat(
+    tmp_path: Path,
+) -> None:
+    """Multi-tab pauses persist in paused_tabs without overwriting earlier tabs."""
+    import importlib.util
+
+    host_path = EXT_DIR / "native_host" / "openadapt_extension_host.py"
+    spec = importlib.util.spec_from_file_location("openadapt_ext_host_test", host_path)
+    assert spec is not None and spec.loader is not None
+    host = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(host)
+
+    rec = tmp_path / "rec"
+    host._handle_copilot_auth_paused(
+        {"type": "COPILOT_AUTH_PAUSED", "tab_id": 10, "kind": "mfa"}, rec
+    )
+    host._handle_copilot_auth_paused(
+        {"type": "COPILOT_AUTH_PAUSED", "tab_id": 20, "kind": "signin"}, rec
+    )
+    assert host._load_paused_tabs(rec) == {10, 20}
+
+    # Resuming tab 20 must leave tab 10 paused.
+    host._handle_copilot_auth_resumed(
+        {"type": "COPILOT_AUTH_RESUMED", "tab_id": 20, "kind": "signin"}, rec
+    )
+    assert host._load_paused_tabs(rec) == {10}
+    state_after_20 = json.loads((rec / host.COPILOT_AUTH_STATE_FILE).read_text())
+    assert state_after_20["paused"] is True
+    assert state_after_20["tab_id"] == 10
+    assert "10" in state_after_20["paused_tabs"]
+    assert "20" not in state_after_20["paused_tabs"]
+
+    # Resuming tab 10 clears pause state completely.
+    host._handle_copilot_auth_resumed(
+        {"type": "COPILOT_AUTH_RESUMED", "tab_id": 10, "kind": "mfa"}, rec
+    )
+    assert host._load_paused_tabs(rec) == set()
+    state_after_10 = json.loads((rec / host.COPILOT_AUTH_STATE_FILE).read_text())
+    assert state_after_10["paused"] is False
+    assert state_after_10["paused_tabs"] == {}
+
+    # Legacy single-tab state file remains readable.
+    legacy_rec = tmp_path / "legacy"
+    legacy_rec.mkdir()
+    (legacy_rec / host.COPILOT_AUTH_STATE_FILE).write_text(
+        json.dumps({"paused": True, "tab_id": 7, "kind": "mfa"}), encoding="utf-8"
+    )
+    assert host._load_paused_tabs(legacy_rec) == {7}
+
+
+def test_user_ssn_redacted_in_content_js_and_extension_evidence() -> None:
+    """camelCase userSsn is redacted in both extension_evidence.py and content.js."""
+    from openadapt_flow.extension_evidence import SECRET_NAME
+
+    assert SECRET_NAME.search("userSsn") is not None
+    assert SECRET_NAME.search("user_ssn") is not None
+    assert SECRET_NAME.search("user-ssn") is not None
+    assert SECRET_NAME.search("addressname") is None
+
+    content_src = (EXT_DIR / "content.js").read_text(encoding="utf-8")
+    script = f"""
+const src = {json.dumps(content_src)};
+const m = src.match(/const SECRET_NAME =\\s*(\\/.+?\\/i);/);
+if (!m) throw new Error('SECRET_NAME not found');
+const re = eval(m[1]);
+console.log(JSON.stringify({{
+  userSsn: re.test('userSsn'),
+  user_ssn: re.test('user_ssn'),
+  addressname: re.test('addressname'),
+}}));
+"""
+    out = _run_node(script)
+    assert out["userSsn"] is True
+    assert out["user_ssn"] is True
+    assert out["addressname"] is False
+
+
+def test_resume_after_auth_guards_stale_entry_after_await() -> None:
+    """resumeAfterAuth re-verifies authPauseByTab.get(entry.tabId) === entry after await."""
+    bg_src = (EXT_DIR / "background.js").read_text(encoding="utf-8")
+    idx_fn = bg_src.index("async function resumeAfterAuth(tabId)")
+    idx_del = bg_src.index("authPauseByTab.delete(entry.tabId);", idx_fn)
+    fn_body = bg_src[idx_fn:idx_del]
+    # Both before sendCopilotNative and right before delete, stale entries are guarded.
+    assert fn_body.count("authPauseByTab.get(entry.tabId) !== entry") >= 2
