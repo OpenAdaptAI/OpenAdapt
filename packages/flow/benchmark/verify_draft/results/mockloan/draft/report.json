@@ -1,0 +1,19 @@
+{
+ "admitted": true,
+ "rounds": 1,
+ "person_decisions": 0,
+ "seconds": 83.2,
+ "reason": "admitted",
+ "contract": "benchmark/verify_draft/results/mockloan/draft/contract.yaml",
+ "questions": [],
+ "rounds_detail": [
+  {
+   "admitted": true,
+   "cases": 19,
+   "passed": 19,
+   "failed": [],
+   "problems": [],
+   "attribution_problems": []
+  }
+ ]
+}

@@ -1,0 +1,7 @@
+[mealie] store: 62 tables; trace: 1 write request(s)
+[mealie] demonstration: changed recipes, columns ['description', 'description_normalized', 'recipe_yield']
+[mealie] round 1: rejected (0/17 cases, 37s)
+[mealie] round 2: draft refused before testing: the contract does not load: invalid draft: 1 validation error for VerifyConfig
+frame.database.allow_tables.12.not a value the task writes
+  Extra inputs are not permitted [type=extra_forbidden, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.14/v/extra_forbidden

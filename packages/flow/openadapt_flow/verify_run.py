@@ -357,6 +357,8 @@ QUALIFY_ONLY_SECTIONS: tuple[str, ...] = (
     "inputs",
     "campaign",
     "business_rules",
+    # Who drafted the check and how it was admitted (openadapt verify draft).
+    "provenance",
 )
 
 

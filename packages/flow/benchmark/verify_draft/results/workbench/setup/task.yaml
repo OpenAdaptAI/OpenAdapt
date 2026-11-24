@@ -1,0 +1,5 @@
+instruction: Update patient MRN-1002's phone to 555-0177 and email to b.okafor@clinic.example.org.
+params:
+  mrn: MRN-1002
+  phone: 555-0177
+  email: b.okafor@clinic.example.org

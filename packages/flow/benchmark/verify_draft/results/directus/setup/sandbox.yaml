@@ -1,0 +1,40 @@
+schema_version: openadapt.verify-sandbox/v1
+app:
+  base_url: http://127.0.0.1:9664
+actors:
+  agent:
+    id: 13a3e1e0-c049-443d-a2ea-fd7dc313af3e
+    login:
+      method: POST
+      path: /auth/login
+      token_field: data.access_token
+      json:
+        email: admin@example.org
+        password: ${VD_DIRECTUS_ADMIN_PW}
+  other:
+    id: 8b6660df-20b7-4305-8d6d-6af19b198ae1
+    login:
+      method: POST
+      path: /auth/login
+      token_field: data.access_token
+      json:
+        email: editor@example.org
+        password: ${VD_DIRECTUS_EDITOR_PW}
+store:
+  dialect: postgresql
+  read:
+    sql_driver: psycopg2
+    sql_connect_args:
+      host: 127.0.0.1
+      port: 9665
+      dbname: directus
+      user: vd_reader
+    sql_password_env: VD_DIRECTUS_READER_PW
+  admin:
+    sql_driver: psycopg2
+    sql_connect_args:
+      host: 127.0.0.1
+      port: 9665
+      dbname: directus
+      user: directus
+    sql_password_env: VD_DIRECTUS_PG_PW

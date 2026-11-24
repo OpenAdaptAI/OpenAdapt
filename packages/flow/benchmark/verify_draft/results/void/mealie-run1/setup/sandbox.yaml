@@ -1,0 +1,40 @@
+schema_version: openadapt.verify-sandbox/v1
+app:
+  base_url: http://127.0.0.1:9664
+actors:
+  agent:
+    id: d9224e48-25a7-40e2-87db-9537f3b7d832
+    login:
+      method: POST
+      path: /api/auth/token
+      token_field: access_token
+      form:
+        username: changeme@example.com
+        password: ${VD_MEALIE_ADMIN_PW}
+  other:
+    id: c28151a1-557e-43ff-ae74-54c1a68ec718
+    login:
+      method: POST
+      path: /api/auth/token
+      token_field: access_token
+      form:
+        username: cook2
+        password: ${VD_MEALIE_COOK_PW}
+store:
+  dialect: postgresql
+  read:
+    sql_driver: psycopg2
+    sql_connect_args:
+      host: 127.0.0.1
+      port: 9665
+      dbname: mealie
+      user: vd_reader
+    sql_password_env: VD_MEALIE_READER_PW
+  admin:
+    sql_driver: psycopg2
+    sql_connect_args:
+      host: 127.0.0.1
+      port: 9665
+      dbname: mealie
+      user: mealie
+    sql_password_env: VD_MEALIE_PG_PW

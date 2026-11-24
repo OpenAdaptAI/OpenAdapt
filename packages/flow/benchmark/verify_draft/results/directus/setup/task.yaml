@@ -1,0 +1,5 @@
+instruction: Set ticket 2 to status 'in_progress' with priority 3.
+params:
+  ticket_id: '2'
+  status: in_progress
+  priority: '3'

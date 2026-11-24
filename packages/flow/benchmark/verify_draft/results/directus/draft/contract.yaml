@@ -1,0 +1,132 @@
+# Drafted by a model and admitted by OpenAdapt qualification (openadapt verify draft). Runs make no model calls.
+schema_version: openadapt.verify/v1
+verifier:
+  kind: surfaces
+  surfaces:
+    record:
+      kind: sql
+      sql_query: SELECT CAST(t."id" AS TEXT) AS "id", CAST(t."title" AS TEXT) AS "title",
+        CAST(t."status" AS TEXT) AS "status", CAST(t."priority" AS TEXT) AS "priority",
+        CAST(t."note" AS TEXT) AS "note" FROM "tickets" t
+      sql_driver: psycopg2
+      sql_connect_args: &id001
+        host: 127.0.0.1
+        port: 9665
+        dbname: directus
+        user: vd_reader
+      sql_password_env: VD_DIRECTUS_READER_PW
+    revision:
+      kind: sql
+      sql_query: SELECT CAST(r."id" AS TEXT) AS "id", CAST(r."collection" AS TEXT)
+        AS "collection", CAST(r."item" AS TEXT) AS "item", CAST(a."action" AS TEXT)
+        AS "action", CAST(a."user" AS TEXT) AS "user" FROM "directus_revisions" r
+        JOIN "directus_activity" a ON a."id" = r."activity"
+      sql_driver: psycopg2
+      sql_connect_args: *id001
+      sql_password_env: VD_DIRECTUS_READER_PW
+effects:
+- kind: record_written
+  probe: surface=record|ticket has the new status and priority
+  match:
+    id:
+      param: ticket_id
+    status:
+      param: status
+    priority:
+      param: priority
+  expected_count: 1
+- kind: record_written
+  probe: surface=revision|one new update revision of this ticket by the actor
+  match:
+    collection:
+      literal: tickets
+    item:
+      param: ticket_id
+    action:
+      literal: update
+    user:
+      param: actor_id
+  expected_count: 1
+  count_new_only: true
+frame:
+  identity_field: id
+  target_fields_by_surface:
+    record:
+    - status
+    - priority
+  database:
+    dialect: postgresql
+    allow_tables:
+    - table: directus_activity
+      mode: append_only
+      reason: Directus appends an activity row for every sign-in and every save; the
+        save's revision (joined to its activity) is checked as an effect
+    - table: directus_sessions
+      mode: skip
+      reason: auth session tokens created/refreshed on sign-in
+    views:
+      tickets: record
+    judged_by:
+      directus_revisions: revision
+    new_row_fields:
+      directus_revisions:
+      - id
+      - activity
+      - data
+      - delta
+      - parent
+      - version
+    settle_s: 1
+    settle_attempts: 3
+    recheck_after_s: 300
+    read:
+      sql_driver: psycopg2
+      sql_connect_args: *id001
+      sql_password_env: VD_DIRECTUS_READER_PW
+  versions:
+    read:
+      kind: sql
+      sql_query: SELECT CAST(r."item" AS TEXT) AS "id", CAST(r."id" AS TEXT) AS "ver",
+        CAST(a."user" AS TEXT) AS "author" FROM "directus_revisions" r JOIN "directus_activity"
+        a ON a."id" = r."activity" WHERE r."collection" = 'tickets'
+      sql_driver: psycopg2
+      sql_connect_args: *id001
+      sql_password_env: VD_DIRECTUS_READER_PW
+    record_field: id
+    target_field: id
+    target_surface: record
+    version_field: ver
+    author_field: author
+    self:
+    - param: actor_id
+provenance:
+  drafted_by:
+    model: claude-opus-5-5
+    response_model: claude-opus-5-5
+    effort: medium
+    prompt_version: verify-draft-prompt/2
+    prompt_sha256: sha256:c33fbf890663c5314f9afb16035a491c6526217054cfacda14685bd0caf0d796
+  inputs:
+    description:
+      kind: openapi
+      file_sha256: sha256:2be5c04f081d868272e9f198f707dfbf5a1e3fe61de5480b93bf83afea389018
+      text_sha256: sha256:1cea058d8d45da073178f72590172487819d57b654925df4bf676c371897da2c
+    trace_sha256: sha256:07c664c7687d4c34f866219aa5ed8ff485d3aeb068c57eab9bafd0efcba295d1
+    task_sha256: sha256:20e6582c1a1494720e2532a1722a0ca27dcf3d365a653a6eaffe11855be4b4a0
+  admission:
+    suite: openadapt.verify-draft-admission/v1
+    check_sha256: sha256:7edf764a8c51bf3c4b211d2fb47c10923d2eea0c92cdbca2deaa66d27fdaa33e
+    rounds: 2
+    admitted_at: '2026-11-21T08:36:41Z'
+    recheck_window_tested_s: 2.0
+    faults:
+      wrong_value:priority: refuted
+      wrong_value:status: refuted
+      wrong_row: refuted
+      duplicate: refuted
+      sibling_edit: refuted
+      late_revert: refuted
+      lost_update: refuted
+    clean_writes_confirmed: 5
+    attribution_probe_writes: 5
+    bookkeeping_confirmed_by_person: []

@@ -1,0 +1,297 @@
+{
+ "admitted": false,
+ "check_sha256": "sha256:be0c65193ee465669ec12b88935ea88a0b1157ec53cc8386eb2a177fb3b2c81d",
+ "problems": [],
+ "masked": [],
+ "seconds": 37.36,
+ "cases": [
+  {
+   "group": "clean",
+   "name": "clean-1",
+   "detail": "the write with payload 1",
+   "expect": "confirmed",
+   "outcome": "NO_BASELINE",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the database could not be read for the frame (SnapshotError: can't read exactly: api_extras (the read account has no SELECT on its sequence api_extras_id_seq); group_meal_plans (the read account has no SELECT on its sequence group_meal_plans_id_seq); ingredient_food_extras (the read account has no SELECT on its sequence ingredient_food_extras_id_seq); invite_tokens (the read account has no SELECT on its sequence invite_tokens_id_seq); long_live_tokens (the read account has no SELECT on its sequence long_live_tokens_id_seq); notes (the read account has no SELECT on its sequence notes_id_seq); password_reset_tokens (the read account has no SELECT on its sequence password_reset_tokens_id_seq); recipe_assets (the read account has no SELECT on its sequence recipe_assets_id_seq); recipe_ingredient_ref_link (the read account has no SELECT on its sequence recipe_ingredient_ref_link_id_seq); server_tasks (the read account has no SELECT on its sequence server_tasks_id_seq); shopping_list_extras (the read account has no SELECT on its sequence shopping_list_extras_id_seq); shopping_list_item_extras (the read account has no SELECT on its sequence shopping_list_item_extras_id_seq). Skip a table only by allow-listing it with mode skip and a reason)"
+   ],
+   "moved": [],
+   "seconds": 2.26
+  },
+  {
+   "group": "clean",
+   "name": "clean-2",
+   "detail": "the write with payload 2",
+   "expect": "confirmed",
+   "outcome": "NO_BASELINE",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the database could not be read for the frame (SnapshotError: can't read exactly: api_extras (the read account has no SELECT on its sequence api_extras_id_seq); group_meal_plans (the read account has no SELECT on its sequence group_meal_plans_id_seq); ingredient_food_extras (the read account has no SELECT on its sequence ingredient_food_extras_id_seq); invite_tokens (the read account has no SELECT on its sequence invite_tokens_id_seq); long_live_tokens (the read account has no SELECT on its sequence long_live_tokens_id_seq); notes (the read account has no SELECT on its sequence notes_id_seq); password_reset_tokens (the read account has no SELECT on its sequence password_reset_tokens_id_seq); recipe_assets (the read account has no SELECT on its sequence recipe_assets_id_seq); recipe_ingredient_ref_link (the read account has no SELECT on its sequence recipe_ingredient_ref_link_id_seq); server_tasks (the read account has no SELECT on its sequence server_tasks_id_seq); shopping_list_extras (the read account has no SELECT on its sequence shopping_list_extras_id_seq); shopping_list_item_extras (the read account has no SELECT on its sequence shopping_list_item_extras_id_seq). Skip a table only by allow-listing it with mode skip and a reason)"
+   ],
+   "moved": [],
+   "seconds": 1.89
+  },
+  {
+   "group": "clean",
+   "name": "clean-3",
+   "detail": "the write with payload 3",
+   "expect": "confirmed",
+   "outcome": "NO_BASELINE",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the database could not be read for the frame (SnapshotError: can't read exactly: api_extras (the read account has no SELECT on its sequence api_extras_id_seq); group_meal_plans (the read account has no SELECT on its sequence group_meal_plans_id_seq); ingredient_food_extras (the read account has no SELECT on its sequence ingredient_food_extras_id_seq); invite_tokens (the read account has no SELECT on its sequence invite_tokens_id_seq); long_live_tokens (the read account has no SELECT on its sequence long_live_tokens_id_seq); notes (the read account has no SELECT on its sequence notes_id_seq); password_reset_tokens (the read account has no SELECT on its sequence password_reset_tokens_id_seq); recipe_assets (the read account has no SELECT on its sequence recipe_assets_id_seq); recipe_ingredient_ref_link (the read account has no SELECT on its sequence recipe_ingredient_ref_link_id_seq); server_tasks (the read account has no SELECT on its sequence server_tasks_id_seq); shopping_list_extras (the read account has no SELECT on its sequence shopping_list_extras_id_seq); shopping_list_item_extras (the read account has no SELECT on its sequence shopping_list_item_extras_id_seq). Skip a table only by allow-listing it with mode skip and a reason)"
+   ],
+   "moved": [],
+   "seconds": 1.76
+  },
+  {
+   "group": "clean",
+   "name": "clean-4",
+   "detail": "the write with payload 4",
+   "expect": "confirmed",
+   "outcome": "NO_BASELINE",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the database could not be read for the frame (SnapshotError: can't read exactly: api_extras (the read account has no SELECT on its sequence api_extras_id_seq); group_meal_plans (the read account has no SELECT on its sequence group_meal_plans_id_seq); ingredient_food_extras (the read account has no SELECT on its sequence ingredient_food_extras_id_seq); invite_tokens (the read account has no SELECT on its sequence invite_tokens_id_seq); long_live_tokens (the read account has no SELECT on its sequence long_live_tokens_id_seq); notes (the read account has no SELECT on its sequence notes_id_seq); password_reset_tokens (the read account has no SELECT on its sequence password_reset_tokens_id_seq); recipe_assets (the read account has no SELECT on its sequence recipe_assets_id_seq); recipe_ingredient_ref_link (the read account has no SELECT on its sequence recipe_ingredient_ref_link_id_seq); server_tasks (the read account has no SELECT on its sequence server_tasks_id_seq); shopping_list_extras (the read account has no SELECT on its sequence shopping_list_extras_id_seq); shopping_list_item_extras (the read account has no SELECT on its sequence shopping_list_item_extras_id_seq). Skip a table only by allow-listing it with mode skip and a reason)"
+   ],
+   "moved": [],
+   "seconds": 2.33
+  },
+  {
+   "group": "clean",
+   "name": "clean-5",
+   "detail": "the write with payload 5",
+   "expect": "confirmed",
+   "outcome": "NO_BASELINE",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the database could not be read for the frame (SnapshotError: can't read exactly: api_extras (the read account has no SELECT on its sequence api_extras_id_seq); group_meal_plans (the read account has no SELECT on its sequence group_meal_plans_id_seq); ingredient_food_extras (the read account has no SELECT on its sequence ingredient_food_extras_id_seq); invite_tokens (the read account has no SELECT on its sequence invite_tokens_id_seq); long_live_tokens (the read account has no SELECT on its sequence long_live_tokens_id_seq); notes (the read account has no SELECT on its sequence notes_id_seq); password_reset_tokens (the read account has no SELECT on its sequence password_reset_tokens_id_seq); recipe_assets (the read account has no SELECT on its sequence recipe_assets_id_seq); recipe_ingredient_ref_link (the read account has no SELECT on its sequence recipe_ingredient_ref_link_id_seq); server_tasks (the read account has no SELECT on its sequence server_tasks_id_seq); shopping_list_extras (the read account has no SELECT on its sequence shopping_list_extras_id_seq); shopping_list_item_extras (the read account has no SELECT on its sequence shopping_list_item_extras_id_seq). Skip a table only by allow-listing it with mode skip and a reason)"
+   ],
+   "moved": [],
+   "seconds": 1.84
+  },
+  {
+   "group": "fault",
+   "name": "wrong_value:description",
+   "detail": "recipes.description holds another value",
+   "expect": "refuted",
+   "outcome": "NO_BASELINE",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the database could not be read for the frame (SnapshotError: can't read exactly: api_extras (the read account has no SELECT on its sequence api_extras_id_seq); group_meal_plans (the read account has no SELECT on its sequence group_meal_plans_id_seq); ingredient_food_extras (the read account has no SELECT on its sequence ingredient_food_extras_id_seq); invite_tokens (the read account has no SELECT on its sequence invite_tokens_id_seq); long_live_tokens (the read account has no SELECT on its sequence long_live_tokens_id_seq); notes (the read account has no SELECT on its sequence notes_id_seq); password_reset_tokens (the read account has no SELECT on its sequence password_reset_tokens_id_seq); recipe_assets (the read account has no SELECT on its sequence recipe_assets_id_seq); recipe_ingredient_ref_link (the read account has no SELECT on its sequence recipe_ingredient_ref_link_id_seq); server_tasks (the read account has no SELECT on its sequence server_tasks_id_seq); shopping_list_extras (the read account has no SELECT on its sequence shopping_list_extras_id_seq); shopping_list_item_extras (the read account has no SELECT on its sequence shopping_list_item_extras_id_seq). Skip a table only by allow-listing it with mode skip and a reason)"
+   ],
+   "moved": [],
+   "seconds": 2.0
+  },
+  {
+   "group": "fault",
+   "name": "wrong_value:description_normalized",
+   "detail": "recipes.description_normalized holds another value",
+   "expect": "refuted",
+   "outcome": "NO_BASELINE",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the database could not be read for the frame (SnapshotError: can't read exactly: api_extras (the read account has no SELECT on its sequence api_extras_id_seq); group_meal_plans (the read account has no SELECT on its sequence group_meal_plans_id_seq); ingredient_food_extras (the read account has no SELECT on its sequence ingredient_food_extras_id_seq); invite_tokens (the read account has no SELECT on its sequence invite_tokens_id_seq); long_live_tokens (the read account has no SELECT on its sequence long_live_tokens_id_seq); notes (the read account has no SELECT on its sequence notes_id_seq); password_reset_tokens (the read account has no SELECT on its sequence password_reset_tokens_id_seq); recipe_assets (the read account has no SELECT on its sequence recipe_assets_id_seq); recipe_ingredient_ref_link (the read account has no SELECT on its sequence recipe_ingredient_ref_link_id_seq); server_tasks (the read account has no SELECT on its sequence server_tasks_id_seq); shopping_list_extras (the read account has no SELECT on its sequence shopping_list_extras_id_seq); shopping_list_item_extras (the read account has no SELECT on its sequence shopping_list_item_extras_id_seq). Skip a table only by allow-listing it with mode skip and a reason)"
+   ],
+   "moved": [],
+   "seconds": 1.93
+  },
+  {
+   "group": "fault",
+   "name": "wrong_value:recipe_yield",
+   "detail": "recipes.recipe_yield holds another value",
+   "expect": "refuted",
+   "outcome": "NO_BASELINE",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the database could not be read for the frame (SnapshotError: can't read exactly: api_extras (the read account has no SELECT on its sequence api_extras_id_seq); group_meal_plans (the read account has no SELECT on its sequence group_meal_plans_id_seq); ingredient_food_extras (the read account has no SELECT on its sequence ingredient_food_extras_id_seq); invite_tokens (the read account has no SELECT on its sequence invite_tokens_id_seq); long_live_tokens (the read account has no SELECT on its sequence long_live_tokens_id_seq); notes (the read account has no SELECT on its sequence notes_id_seq); password_reset_tokens (the read account has no SELECT on its sequence password_reset_tokens_id_seq); recipe_assets (the read account has no SELECT on its sequence recipe_assets_id_seq); recipe_ingredient_ref_link (the read account has no SELECT on its sequence recipe_ingredient_ref_link_id_seq); server_tasks (the read account has no SELECT on its sequence server_tasks_id_seq); shopping_list_extras (the read account has no SELECT on its sequence shopping_list_extras_id_seq); shopping_list_item_extras (the read account has no SELECT on its sequence shopping_list_item_extras_id_seq). Skip a table only by allow-listing it with mode skip and a reason)"
+   ],
+   "moved": [],
+   "seconds": 2.45
+  },
+  {
+   "group": "fault",
+   "name": "wrong_row",
+   "detail": "",
+   "expect": "refuted",
+   "outcome": "NO_BASELINE",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the database could not be read for the frame (SnapshotError: can't read exactly: api_extras (the read account has no SELECT on its sequence api_extras_id_seq); group_meal_plans (the read account has no SELECT on its sequence group_meal_plans_id_seq); ingredient_food_extras (the read account has no SELECT on its sequence ingredient_food_extras_id_seq); invite_tokens (the read account has no SELECT on its sequence invite_tokens_id_seq); long_live_tokens (the read account has no SELECT on its sequence long_live_tokens_id_seq); notes (the read account has no SELECT on its sequence notes_id_seq); password_reset_tokens (the read account has no SELECT on its sequence password_reset_tokens_id_seq); recipe_assets (the read account has no SELECT on its sequence recipe_assets_id_seq); recipe_ingredient_ref_link (the read account has no SELECT on its sequence recipe_ingredient_ref_link_id_seq); server_tasks (the read account has no SELECT on its sequence server_tasks_id_seq); shopping_list_extras (the read account has no SELECT on its sequence shopping_list_extras_id_seq); shopping_list_item_extras (the read account has no SELECT on its sequence shopping_list_item_extras_id_seq). Skip a table only by allow-listing it with mode skip and a reason)"
+   ],
+   "moved": [],
+   "seconds": 2.1
+  },
+  {
+   "group": "fault",
+   "name": "duplicate",
+   "detail": "a second copy of the recipes record",
+   "expect": "refuted",
+   "outcome": "NO_BASELINE",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the database could not be read for the frame (SnapshotError: can't read exactly: api_extras (the read account has no SELECT on its sequence api_extras_id_seq); group_meal_plans (the read account has no SELECT on its sequence group_meal_plans_id_seq); ingredient_food_extras (the read account has no SELECT on its sequence ingredient_food_extras_id_seq); invite_tokens (the read account has no SELECT on its sequence invite_tokens_id_seq); long_live_tokens (the read account has no SELECT on its sequence long_live_tokens_id_seq); notes (the read account has no SELECT on its sequence notes_id_seq); password_reset_tokens (the read account has no SELECT on its sequence password_reset_tokens_id_seq); recipe_assets (the read account has no SELECT on its sequence recipe_assets_id_seq); recipe_ingredient_ref_link (the read account has no SELECT on its sequence recipe_ingredient_ref_link_id_seq); server_tasks (the read account has no SELECT on its sequence server_tasks_id_seq); shopping_list_extras (the read account has no SELECT on its sequence shopping_list_extras_id_seq); shopping_list_item_extras (the read account has no SELECT on its sequence shopping_list_item_extras_id_seq). Skip a table only by allow-listing it with mode skip and a reason)"
+   ],
+   "moved": [],
+   "seconds": 1.83
+  },
+  {
+   "group": "fault",
+   "name": "sibling_edit",
+   "detail": "",
+   "expect": "refuted",
+   "outcome": "NO_BASELINE",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the database could not be read for the frame (SnapshotError: can't read exactly: api_extras (the read account has no SELECT on its sequence api_extras_id_seq); group_meal_plans (the read account has no SELECT on its sequence group_meal_plans_id_seq); ingredient_food_extras (the read account has no SELECT on its sequence ingredient_food_extras_id_seq); invite_tokens (the read account has no SELECT on its sequence invite_tokens_id_seq); long_live_tokens (the read account has no SELECT on its sequence long_live_tokens_id_seq); notes (the read account has no SELECT on its sequence notes_id_seq); password_reset_tokens (the read account has no SELECT on its sequence password_reset_tokens_id_seq); recipe_assets (the read account has no SELECT on its sequence recipe_assets_id_seq); recipe_ingredient_ref_link (the read account has no SELECT on its sequence recipe_ingredient_ref_link_id_seq); server_tasks (the read account has no SELECT on its sequence server_tasks_id_seq); shopping_list_extras (the read account has no SELECT on its sequence shopping_list_extras_id_seq); shopping_list_item_extras (the read account has no SELECT on its sequence shopping_list_item_extras_id_seq). Skip a table only by allow-listing it with mode skip and a reason)"
+   ],
+   "moved": [],
+   "seconds": 1.86
+  },
+  {
+   "group": "fault",
+   "name": "late_revert",
+   "detail": "the recipes write undone after the check",
+   "expect": "refuted",
+   "outcome": "NO_BASELINE",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the database could not be read for the frame (SnapshotError: can't read exactly: api_extras (the read account has no SELECT on its sequence api_extras_id_seq); group_meal_plans (the read account has no SELECT on its sequence group_meal_plans_id_seq); ingredient_food_extras (the read account has no SELECT on its sequence ingredient_food_extras_id_seq); invite_tokens (the read account has no SELECT on its sequence invite_tokens_id_seq); long_live_tokens (the read account has no SELECT on its sequence long_live_tokens_id_seq); notes (the read account has no SELECT on its sequence notes_id_seq); password_reset_tokens (the read account has no SELECT on its sequence password_reset_tokens_id_seq); recipe_assets (the read account has no SELECT on its sequence recipe_assets_id_seq); recipe_ingredient_ref_link (the read account has no SELECT on its sequence recipe_ingredient_ref_link_id_seq); server_tasks (the read account has no SELECT on its sequence server_tasks_id_seq); shopping_list_extras (the read account has no SELECT on its sequence shopping_list_extras_id_seq); shopping_list_item_extras (the read account has no SELECT on its sequence shopping_list_item_extras_id_seq). Skip a table only by allow-listing it with mode skip and a reason)"
+   ],
+   "moved": [],
+   "seconds": 1.75
+  },
+  {
+   "group": "fault",
+   "name": "lost_update",
+   "detail": "the other user saves the record, then the agent's save overwrites it",
+   "expect": "refuted",
+   "outcome": "NO_BASELINE",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the database could not be read for the frame (SnapshotError: can't read exactly: api_extras (the read account has no SELECT on its sequence api_extras_id_seq); group_meal_plans (the read account has no SELECT on its sequence group_meal_plans_id_seq); ingredient_food_extras (the read account has no SELECT on its sequence ingredient_food_extras_id_seq); invite_tokens (the read account has no SELECT on its sequence invite_tokens_id_seq); long_live_tokens (the read account has no SELECT on its sequence long_live_tokens_id_seq); notes (the read account has no SELECT on its sequence notes_id_seq); password_reset_tokens (the read account has no SELECT on its sequence password_reset_tokens_id_seq); recipe_assets (the read account has no SELECT on its sequence recipe_assets_id_seq); recipe_ingredient_ref_link (the read account has no SELECT on its sequence recipe_ingredient_ref_link_id_seq); server_tasks (the read account has no SELECT on its sequence server_tasks_id_seq); shopping_list_extras (the read account has no SELECT on its sequence shopping_list_extras_id_seq); shopping_list_item_extras (the read account has no SELECT on its sequence shopping_list_item_extras_id_seq). Skip a table only by allow-listing it with mode skip and a reason)"
+   ],
+   "moved": [],
+   "seconds": 1.73
+  },
+  {
+   "group": "probe",
+   "name": "attribution:agent:p1",
+   "detail": "the write by agent with payload 1",
+   "expect": "confirmed",
+   "outcome": "NO_BASELINE",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the database could not be read for the frame (SnapshotError: can't read exactly: api_extras (the read account has no SELECT on its sequence api_extras_id_seq); group_meal_plans (the read account has no SELECT on its sequence group_meal_plans_id_seq); ingredient_food_extras (the read account has no SELECT on its sequence ingredient_food_extras_id_seq); invite_tokens (the read account has no SELECT on its sequence invite_tokens_id_seq); long_live_tokens (the read account has no SELECT on its sequence long_live_tokens_id_seq); notes (the read account has no SELECT on its sequence notes_id_seq); password_reset_tokens (the read account has no SELECT on its sequence password_reset_tokens_id_seq); recipe_assets (the read account has no SELECT on its sequence recipe_assets_id_seq); recipe_ingredient_ref_link (the read account has no SELECT on its sequence recipe_ingredient_ref_link_id_seq); server_tasks (the read account has no SELECT on its sequence server_tasks_id_seq); shopping_list_extras (the read account has no SELECT on its sequence shopping_list_extras_id_seq); shopping_list_item_extras (the read account has no SELECT on its sequence shopping_list_item_extras_id_seq). Skip a table only by allow-listing it with mode skip and a reason)"
+   ],
+   "moved": [],
+   "seconds": 2.17
+  },
+  {
+   "group": "probe",
+   "name": "attribution:agent:p2",
+   "detail": "the write by agent with payload 2",
+   "expect": "confirmed",
+   "outcome": "NO_BASELINE",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the database could not be read for the frame (SnapshotError: can't read exactly: api_extras (the read account has no SELECT on its sequence api_extras_id_seq); group_meal_plans (the read account has no SELECT on its sequence group_meal_plans_id_seq); ingredient_food_extras (the read account has no SELECT on its sequence ingredient_food_extras_id_seq); invite_tokens (the read account has no SELECT on its sequence invite_tokens_id_seq); long_live_tokens (the read account has no SELECT on its sequence long_live_tokens_id_seq); notes (the read account has no SELECT on its sequence notes_id_seq); password_reset_tokens (the read account has no SELECT on its sequence password_reset_tokens_id_seq); recipe_assets (the read account has no SELECT on its sequence recipe_assets_id_seq); recipe_ingredient_ref_link (the read account has no SELECT on its sequence recipe_ingredient_ref_link_id_seq); server_tasks (the read account has no SELECT on its sequence server_tasks_id_seq); shopping_list_extras (the read account has no SELECT on its sequence shopping_list_extras_id_seq); shopping_list_item_extras (the read account has no SELECT on its sequence shopping_list_item_extras_id_seq). Skip a table only by allow-listing it with mode skip and a reason)"
+   ],
+   "moved": [],
+   "seconds": 2.03
+  },
+  {
+   "group": "probe",
+   "name": "attribution:other:p1",
+   "detail": "the write by other with payload 1",
+   "expect": "confirmed",
+   "outcome": "NO_BASELINE",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the database could not be read for the frame (SnapshotError: can't read exactly: api_extras (the read account has no SELECT on its sequence api_extras_id_seq); group_meal_plans (the read account has no SELECT on its sequence group_meal_plans_id_seq); ingredient_food_extras (the read account has no SELECT on its sequence ingredient_food_extras_id_seq); invite_tokens (the read account has no SELECT on its sequence invite_tokens_id_seq); long_live_tokens (the read account has no SELECT on its sequence long_live_tokens_id_seq); notes (the read account has no SELECT on its sequence notes_id_seq); password_reset_tokens (the read account has no SELECT on its sequence password_reset_tokens_id_seq); recipe_assets (the read account has no SELECT on its sequence recipe_assets_id_seq); recipe_ingredient_ref_link (the read account has no SELECT on its sequence recipe_ingredient_ref_link_id_seq); server_tasks (the read account has no SELECT on its sequence server_tasks_id_seq); shopping_list_extras (the read account has no SELECT on its sequence shopping_list_extras_id_seq); shopping_list_item_extras (the read account has no SELECT on its sequence shopping_list_item_extras_id_seq). Skip a table only by allow-listing it with mode skip and a reason)"
+   ],
+   "moved": [],
+   "seconds": 3.0
+  },
+  {
+   "group": "probe",
+   "name": "attribution:other:p2",
+   "detail": "the write by other with payload 2",
+   "expect": "confirmed",
+   "outcome": "NO_BASELINE",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the database could not be read for the frame (SnapshotError: can't read exactly: api_extras (the read account has no SELECT on its sequence api_extras_id_seq); group_meal_plans (the read account has no SELECT on its sequence group_meal_plans_id_seq); ingredient_food_extras (the read account has no SELECT on its sequence ingredient_food_extras_id_seq); invite_tokens (the read account has no SELECT on its sequence invite_tokens_id_seq); long_live_tokens (the read account has no SELECT on its sequence long_live_tokens_id_seq); notes (the read account has no SELECT on its sequence notes_id_seq); password_reset_tokens (the read account has no SELECT on its sequence password_reset_tokens_id_seq); recipe_assets (the read account has no SELECT on its sequence recipe_assets_id_seq); recipe_ingredient_ref_link (the read account has no SELECT on its sequence recipe_ingredient_ref_link_id_seq); server_tasks (the read account has no SELECT on its sequence server_tasks_id_seq); shopping_list_extras (the read account has no SELECT on its sequence shopping_list_extras_id_seq); shopping_list_item_extras (the read account has no SELECT on its sequence shopping_list_item_extras_id_seq). Skip a table only by allow-listing it with mode skip and a reason)"
+   ],
+   "moved": [],
+   "seconds": 2.26
+  }
+ ],
+ "attribution": [
+  {
+   "table": "recipes",
+   "column": "update_at",
+   "cause": "never moved",
+   "excluded": true,
+   "problem": "excluded, but it never moved in any probe write: nothing to excuse"
+  },
+  {
+   "table": "recipes",
+   "column": "date_updated",
+   "cause": "never moved",
+   "excluded": true,
+   "problem": "excluded, but it never moved in any probe write: nothing to excuse"
+  }
+ ]
+}
