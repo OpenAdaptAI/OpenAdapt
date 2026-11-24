@@ -29,7 +29,12 @@ SCHEMA = "openadapt.extension-evidence/1"
 REDACTED_VALUE = "<secret>"
 
 SECRET_NAME = re.compile(
-    r"pass(word|wd|phrase)?\b|passwd|pwd|secret|private[_-]?key|^pin$|^otp$",
+    r"pass(word|wd|phrase)?\b|passwd|pwd|secret|private[_ -]?key|api[_ -]?key|apikey|"
+    r"token|card[_ -]?(number|num|no)|cc[-_ ]?num(ber)?|cc[-_ ]?csc|cc[-_ ]?exp|"
+    r"(^|[_ -])ssn($|[_ -])|user[_ -]?ssn|social[-_ ]?security|(^|[_ -])cvv($|[_ -])|(^|[_ -])cvc($|[_ -])|"
+    r"security[-_ ]?code|^pin$|(^|[_ -])pin($|[_ -])|^otp$|(^|[_ -])otp($|[_ -])|"
+    r"^code$|sms[-_ ]?code|one[-_ ]?time[-_ ]?code|mfa|2fa|totp|authenticator|passkey|"
+    r"webauthn|duo|verification[-_ ]?code",
     re.I,
 )
 

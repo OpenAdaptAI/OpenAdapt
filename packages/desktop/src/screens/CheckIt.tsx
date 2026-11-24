@@ -44,7 +44,6 @@ import { ExecutionTargetForm, TARGETS } from "../ui/ExecutionTargetForm";
 import { Button, Callout, Field } from "../ui/primitives";
 import { Icon, PageHead, Status, TechnicalDetails } from "../ui/simple";
 
-const POLICY = "clinical-write";
 const PRACTICE_CASE = "practice-1";
 
 type Busy =
@@ -341,7 +340,7 @@ function armedIdentityGroups<T extends { identityArmed: boolean; identityText: s
   return [...groups].map(([text, count]) => ({ text, count }));
 }
 
-/** "the note you give it", "patient ID p1", joined in plain words. */
+/** "the note you give it", "record ID p1", joined in plain words. */
 function checkedThings(learned: LearnedRecordCheck): string[] {
   const things = (learned.values_checked ?? []).map(
     (name) => `the ${humanizeInput(name)} you give it`,
@@ -498,7 +497,6 @@ export function CheckIt({
         }),
         engineInvoke<QualificationResponse>(CMD.GET_QUALIFICATION, {
           workflow_id: activeId.current,
-          policy: POLICY,
         }),
         engineTry<CheckSetup | null>(CMD.GET_CHECK_SETUP, { workflow_id: activeId.current }, null),
       ]);
@@ -563,7 +561,7 @@ export function CheckIt({
   async function call(cmd: string, params: Record<string, unknown>): Promise<QualificationResponse & Record<string, unknown>> {
     return engineInvoke<QualificationResponse & Record<string, unknown>>(cmd, {
       workflow_id: activeId.current,
-      policy: POLICY,
+      ...(project?.policy ? { policy: project.policy } : {}),
       ...params,
     });
   }

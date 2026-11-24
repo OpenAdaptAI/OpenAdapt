@@ -62,6 +62,40 @@ def _text(path: Path) -> Optional[str]:
         return None
 
 
+def _artifact_is_file(path: Path) -> bool:
+    """Whether ``path`` exists, inside an encrypted folder too."""
+    from openadapt_flow import sealed_set
+
+    try:
+        return sealed_set.is_file(path)
+    except sealed_set.SealedSetError:
+        return False
+
+
+def _report_bytes(path: Path) -> bytes:
+    """The run report's plaintext bytes: decrypted in memory when the run
+    folder is encrypted. The receipt is over these bytes."""
+    from openadapt_flow import sealed_set
+
+    try:
+        return sealed_set.read_bytes(path)
+    except sealed_set.SealedSetError as exc:
+        raise OSError(str(exc)) from exc
+
+
+def _note_plaintext_page(run_dir: Path, target: Path) -> None:
+    """The page embeds report.json. Beside an encrypted run it is a plaintext
+    copy of the run's inputs: say so and record it (strict mode refuses)."""
+    from openadapt_flow import at_rest, sealed_set
+
+    if not sealed_set.is_sealed_path(run_dir):
+        return
+    try:
+        at_rest.unsealed_write("a receipt page (it embeds the run report)", target)
+    except at_rest.AtRestRefused as exc:
+        raise SealViewError(str(exc)) from exc
+
+
 def _b64(path: Path) -> Optional[str]:
     try:
         return base64.b64encode(path.read_bytes()).decode("ascii")
@@ -121,7 +155,7 @@ def find_program(
     digest = report.get("bundle_content_digest")
     candidates = [Path(bundle_dir)] if bundle_dir else _bundle_candidates(run_dir)
     for candidate in candidates:
-        if not (candidate / "workflow.json").is_file():
+        if not _artifact_is_file(candidate / "workflow.json"):
             continue
         try:
             spec = bundle_graph(candidate)
@@ -194,6 +228,37 @@ def local_keys(home: Optional[Path] = None) -> list[dict[str, str]]:
     return [public_key_entry(home or seal_home())]
 
 
+def receipt_registry(keys: Any, *, own: bool = False) -> Optional[dict[str, Any]]:
+    """The keys as an ``openadapt.receipt-keys/v1`` registry for the receipt check.
+
+    A registry that already names roles is used as it is. An older Seal key
+    registry names no role. Only this computer's own key (``own``) becomes
+    ``this_computer``; for any other older registry there is no role to give,
+    so the receipt isn't checked against it (None), never labelled as this
+    computer's (trust-label class).
+    """
+
+    if isinstance(keys, Mapping) and keys.get("schema") == "openadapt.receipt-keys/v1":
+        return dict(keys)
+    if not own:
+        return None
+    entries = keys.get("keys") if isinstance(keys, Mapping) else keys
+    out = []
+    for entry in entries or []:
+        if not isinstance(entry, Mapping):
+            continue
+        item = {
+            "key_id": entry.get("key_id"),
+            "public_key": entry.get("public_key"),
+            "role": "this_computer",
+            "status": entry.get("status", "active"),
+        }
+        if item["status"] == "revoked":
+            item["revoked_at"] = entry.get("revoked_at")
+        out.append(item)
+    return {"schema": "openadapt.receipt-keys/v1", "keys": out}
+
+
 def page_data(
     run_dir: Path,
     *,
@@ -202,15 +267,19 @@ def page_data(
     about: Optional[Mapping[str, Any]] = None,
     host: Optional[Mapping[str, Any]] = None,
     commands: Optional[str] = None,
+    own_keys: bool = False,
 ) -> dict[str, Any]:
     """What the viewer reads: the run's files exactly as they are on disk."""
 
     run_dir = Path(run_dir)
-    report = (run_dir / "report.json").read_bytes()
+    report = _report_bytes(run_dir / "report.json")
     seal = _text(run_dir / "seal.json")
     if seal is None:
         raise SealViewError(f"{run_dir} has no seal.json")
     present = [name for name in RUN_FILES if (run_dir / name).is_file()]
+    receipt = _text(run_dir / "receipt.json")
+    if receipt is not None and '"payloadType"' not in receipt:
+        receipt = None  # an older run summary under the receipt's name
     return {
         "report_b64": base64.b64encode(report).decode("ascii"),
         "seal_text": seal,
@@ -218,6 +287,10 @@ def page_data(
         "tsa_text": _text(run_dir / "seal.tsa.json"),
         "tsr_b64": _b64(run_dir / "seal.tsr"),
         "keys": keys,
+        # The receipt (record/run/v1), checked first; seal.json is the older format.
+        "receipt_text": receipt,
+        "receipt_anchor_text": _text(run_dir / "receipt.anchor.json"),
+        "receipt_keys": receipt_registry(keys, own=own_keys),
         "program": {"spec": dict(program)},
         "about": dict(about or {}),
         "host": {"files": present, **dict(host or {})},
@@ -262,9 +335,10 @@ def write_seal_page(
     if not (run_dir / "seal.json").is_file():
         raise SealViewError(f"{run_dir} is not a sealed run (no seal.json)")
     try:
-        report = json.loads(report_path.read_bytes())
+        report = json.loads(_report_bytes(report_path))
     except (OSError, ValueError) as exc:
         raise SealViewError(f"{report_path} can't be read") from exc
+    own_keys = keys is None
     if keys is None:
         keys = local_keys()
         # A page forwarded to someone else stays a local check, not third-party proof.
@@ -282,8 +356,10 @@ def write_seal_page(
         about=about,
         host=dict(host or {}),
         commands=commands,
+        own_keys=own_keys,
     )
     target = Path(out) if out else run_dir / PAGE_NAME
+    _note_plaintext_page(run_dir, target)
     target.write_text(render_page(data), encoding="utf-8")
     return target
 

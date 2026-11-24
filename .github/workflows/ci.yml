@@ -69,6 +69,14 @@ jobs:
         # (packages/flow/docs/FAIL_CLOSED.md). Fails only when a kind's total
         # rises above the baseline. Standard library only.
         run: python3 packages/flow/scripts/check_verdict_folds.py
+      - name: No generated page was edited by hand
+        # CAPABILITIES.md and llms-full.txt are generated from sources (row
+        # files under capabilities/, README.md, ...). A change edits the
+        # sources only; refresh-generated.yml regenerates the pages after it
+        # lands. This fails only when the change edits a page so that it no
+        # longer matches its sources, an edit the next refresh would drop. A
+        # page that merely trails its sources passes.
+        run: python3 scripts/build_capabilities.py --check-pr HEAD^1
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
@@ -79,7 +87,7 @@ jobs:
       - run: uv python install 3.12
       - name: Every lock installs on its oldest Python, on each platform
         # The lane runs Python 3.12 on Linux; this catches a lock whose pins
-        # have no file for 3.10 or for macOS or Windows before main does.
+        # have no file for 3.11 or for macOS or Windows before main does.
         run: python3 scripts/ci/check_lock_wheels.py
       - name: Install, import and start each package from its lock
         env:

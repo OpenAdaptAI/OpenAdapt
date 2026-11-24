@@ -17,14 +17,6 @@
 
 ## Unreleased
 
-### Features
-
-- Links, tabs and menu items can be steps (`openadapt_flow.gui.steps`). Each
-  demonstrated click gets its role from what the backend counted: a commit
-  when it wrote, a navigation when the screen changed with no write. A live
-  commit holds only on exactly the demonstrated writes. `openadapt_flow.gui`
-  is a neutral view of a screen (role, name, state, containers) with adapters
-  for a browser page, an accessibility tree and a `form_tx` snapshot.
 - Checkbox attestations (`openadapt_flow.gui.attestations`) are declared in
   pack data with the digest of their statement and ticked only on an
   `AttestationGrant` from the person who attests. A grant is its own type, so
@@ -36,6 +28,70 @@
   filled and saved, and its completion is read from its card on the hub after
   the save, with the demonstrated number of writes.
 
+## v4.0.0 (2026-11-24)
+
+### Breaking Changes
+
+- **Encryption at rest is now enabled by default** (`#2423`): recordings,
+  compiled bundles, and run directories are written as sealed-set v3
+  encrypted containers unless `OPENADAPT_ENCRYPT_AT_REST=0` or `--no-encrypt`
+  is set. Released `openadapt` launcher `1.23.0` (`openadapt-flow<4`) reads
+  run files via plain paths, so this major bump keeps `1.23.0` on Flow 3.4.0
+  while pairing Flow 4.0.0 with `openadapt 1.24.0` (`>=4.0.0,<5.0.0`).
+
+### Encryption at rest by default
+
+- Recordings (web, the quickstart and tutorial, and desktop once converted),
+  compiled bundles and every run directory (report, step screenshots, crops,
+  frames, evidence, `REPORT.md`) are now encrypted at rest by default, with
+  no setup, as sealed-set version 3: a data key per set, wrapped with HPKE
+  (P-256, HKDF-SHA256, AES-256-GCM) to a per-set bucket key, and files as
+  Tink AES-256-GCM-HKDF 1 MiB streams. The bucket key is wrapped to the
+  device runtime key (only while the set is written; bundles keep it), the
+  device viewer key, organization keys and a recovery key.
+- Organization mode, from a machine policy (MDM profile, Group Policy, a
+  root-owned `/etc/openadapt/policy.json`): organization recipients (P-256
+  or RSA-OAEP-3072) and a key archive are required, and recording stops
+  without them. Solo users can make a recovery key
+  (`openadapt-flow at-rest recovery create`).
+- `openadapt-flow at-rest status` shows the keys and policy;
+  `at-rest shred` destroys a set's tracked bucket-key copies.
+- The device key is a software P-256 key in the OS keychain through
+  `keyring` (a 0600 file with a warning where there is none). Secure
+  Enclave, TPM, Touch ID and Windows Hello providers are interfaces with test
+  doubles, not built yet.
+- A configured `OPENADAPT_BUNDLE_KEY` or `OPENADAPT_RECORDING_KEY` still wins
+  outside organization mode (deprecated), and `~/.openadapt/keys/at-rest.key`
+  keeps working. Version 1 and 2 sets and plaintext folders still read.
+- `OPENADAPT_ENCRYPT_AT_REST=0`, or `--no-encrypt` on `record`, `compile`,
+  `run` and `replay`, turns it off with a one-line warning and a ledger line.
+- Receipts (`seal.json`, `receipt.*`, `public-seal.json`) stay plaintext and
+  are now written for encrypted runs too; their digests are over the
+  plaintext `report.json`. `seal verify`, `inspect report-run`, the receipt
+  page and the quickstart read encrypted runs. The receipt page embeds the
+  report, so beside an encrypted run it is logged as a plaintext copy.
+- Core dependency: `cryptography>=50` (HPKE). The keychain store uses `keyring`, which `pip install openadapt` includes; a bare `openadapt-flow` install needs the `keychain` extra, and otherwise keeps the device key in a 0600 file with a warning.
+- Fail-closed key lifecycle: an organization key archive counts as
+  reachable only with its `.openadapt-key-archive` marker, each record and
+  header names the archive it went to, and shredding authenticates the
+  header first and reports complete only once every tracked copy and store
+  file is gone. Organization mode requires `records: archive`. Durable
+  checkpoints in an encrypted run are keyed from the run's own data key.
+  `--no-encrypt` lasts for one command, and the Python recorders follow the
+  at-rest policy by default. A solo set opens silently only with the device
+  key that wrote it; a backup that only the recovery code opens needs
+  `openadapt-flow at-rest restore DIR --yes`. Rollback records in an
+  encrypted run stay inside its sealed set.
+
+
+### Features
+
+- Links, tabs and menu items can be steps (`openadapt_flow.gui.steps`). Each
+  demonstrated click gets its role from what the backend counted: a commit
+  when it wrote, a navigation when the screen changed with no write. A live
+  commit holds only on exactly the demonstrated writes. `openadapt_flow.gui`
+  is a neutral view of a screen (role, name, state, containers) with adapters
+  for a browser page, an accessibility tree and a `form_tx` snapshot.
 - One verdict kernel, `openadapt_flow.verdict`, for every check that turns
   evidence into held, refuted or not checked. It fixes the obligations from
   the plan first, settles results against them, and never passes an empty
@@ -53,7 +109,68 @@
   partial read. See `docs/FAIL_CLOSED.md`.
 - The hard-invariant layer, the frame's version check, `verify-run`'s effect
   folds and the receipt's line judge and tally are built on the kernel.
+- A sign-in that asks for a second factor (a code by text message or email,
+  an authenticator code, or a push approval) no longer has to stop the
+  program. A `second_factor` step (`one_time` is `code` or `approval`) waits
+  for a person through the configured source (`OPENADAPT_SECOND_FACTOR_URL`
+  for a hosted or customer-run runner's control plane, or a local
+  `OPENADAPT_SECOND_FACTOR_COMMAND`). Before anyone is asked, the focused
+  field must be an empty `autocomplete="one-time-code"` input, and the page
+  is made to draw it as dots. After the answer the same field must still have
+  focus and be empty. The code is then filled once into that element, never
+  retried, and kept nowhere: not in a model's page listing, a screenshot, a
+  log, a receipt or the recording. No source, an answer after the deadline, a
+  decline, a multi-line or malformed answer, a field that changed while the
+  person answered, an API binding on the step, or a backend that can't bind
+  the field stops the step before typing, with a closed `second_factor_*`
+  code. The action is new, so an older runtime refuses the bundle instead of
+  skipping an approval. Over the control plane the code is sealed in the
+  person's browser to a one-step P-256 key, and a cached run's child process
+  gets the run token only with the control-plane URL. The wrap recorder turns
+  a field marked `autocomplete="one-time-code"` into such a step. A code-only
+  form's submit counts as a sign-in only once, right after a
+  username-and-password sign-in. A field split into one box per character
+  is refused. See docs/SECOND_FACTOR.md.
+- An interactive run (a terminal on stdin and stderr) asks for a sign-in's
+  second factor at that terminal when no control plane or command is set. A
+  code is read without echo, under the step's deadline, in the calling
+  thread; echo comes back on when the read ends, including on a timeout, and
+  input typed before the prompt is discarded. On Windows the console is read
+  one key at a time with `msvcrt.getwch`, which never echoes, under the same
+  deadline and discard rules. A run without a terminal never
+  prompts and still stops before typing. `OPENADAPT_SECOND_FACTOR_PROMPT=off`
+  turns the prompt off.
+- Effect locations (`openadapt.effect-location/v1`,
+  `openadapt_flow/effect_location/`): the place a careful person would look
+  again to see an intended value, stored as pack data. Each record holds the
+  demonstration path and start condition (`same_screen`, `fresh_navigation`,
+  `new_session`, `other_channel`), a locator (label, row key or region), the
+  expected value, a codec (including a `template` codec that reads one
+  summary row as two values and a `split_date` codec), the expected count
+  and an optional baseline. `evaluate_all` judges every planned value as
+  `held`, `refuted` or `not_checked`. A location that can't be reached,
+  found or read is `not_checked`, never a pass. The check level comes from
+  the start condition; the receipt word comes from
+  `check_level.outcome_word` when it is available. The engine holds no
+  application vocabulary: month names, yes and no words, currency signs and
+  tables come from the pack. See docs/EFFECT_LOCATION.md.
 
+### Changes
+
+- Network captures no longer write raw bodies by default. `record
+  --capture-network` keeps only the `--param` and `--identifier` values of
+  each request and response body, plus a per-capture keyed hash of every
+  other value and of each HTML, text or binary body; undeclared URL query
+  values are hashed too. `dump_har` and `save_har` do the same with the wire
+  policy's id and version fields. `--capture-network-bodies raw` (and
+  `raw_bodies=True`) keeps the redacted bodies, which API step and undo
+  proposals need, and is refused unless the recording is encrypted or
+  `OPENADAPT_FLOW_PLAINTEXT_AT_REST` explicitly allows plaintext. Binary
+  bodies, files and non-text responses are sized and hashed from their
+  bytes as sent; the recording's `app_url` query is minimized too; an
+  explicit `application/octet-stream` body is never parsed as JSON (a
+  missing content type still is); and `load_har` refuses a HAR marked
+  minimized that carries a raw body.
 ### Fixes
 
 - `verify-run`: an effect list that is empty, or tiers that don't pair one to
@@ -68,10 +185,82 @@
   version saved by another user. The frame is refuted instead of not checked.
 - Receipts: a line check nobody listed keeps the run from `VERIFIED` and is
   counted as not checked, so the three line counts add up to the lines.
+- The form transaction layer (`form_tx`, an unreleased prototype until this
+  release) reads back every field it typed, selected or kept. Each one gets
+  a `passed`, `failed` or `not_checked` verdict; a field it cannot read back
+  (no read-back declared, the summary control missing or ambiguous, a failed
+  lookup, a value entered only in a popup) is `not_checked` and never
+  passed. A submit with any `not_checked` field ends `readback_incomplete`,
+  never `verified_done`, and gets no receipt. Before, fields typed in a popup
+  estimator had no verdict at all and such a run could end verified.
+  Popup inputs are also re-read just before the popup's apply button, and a
+  mismatch stops the run before apply. The side panel shows refuted and
+  incomplete runs as needing action. Measured on four held-out synthetic
+  quote portals: `benchmark/form_tx_heldout_run/RESULTS.md`.
+- A wrapped sign-in no longer compiles a pixel check that freezes a withheld
+  credential field. The recorder blacks out a withheld field in every frame
+  that still shows it, so a `REGION_STABLE` crop that overlapped one held a
+  black rectangle that never matched the unredacted screenshot at replay
+  time, failing a step whose region overlapped a credential box during the
+  run, for example the click into the password field. Such a check is now
+  clipped to the part of its region clear of the box and re-cropped from the
+  same frame. When no usable part is left, it is dropped and recorded in
+  `param_hygiene.json`. This applies to mined checks and to the
+  focused-field pass.
+- A FHIR searchset Bundle's `OperationOutcome` entry (`search.mode:
+  outcome`) is no longer read as a marker match. Packs can declare
+  `search_match` on the entry parent (Medplum uses `path: search.mode`,
+  `equals: match`). A non-informational outcome is an error, not a
+  found id, so recovery cannot adopt a write that never landed and an
+  outcome id does not count toward `duplicate_write`.
+- File, document, document-hash and email checks no longer claim
+  `system_of_record` (tier 1) for every file. Their strength now follows who
+  produced the artifact, set by the new `effects.artifact_producer`:
+  `acting_session` and the default, `unknown`, are at most `same_screen`;
+  `separate_session` is at most `separate_session`; `system_of_record` keeps
+  tier 1. A store that overlaps `effects.acting_roots`, the user's Downloads
+  folder or a Playwright download folder is graded as the acting session's.
+  Under a declared `separate_session` or `system_of_record` producer, a scan
+  that lists a file in a Playwright download folder beneath the store, or a
+  file whose real path leaves the store, is refused:
+  the verdict is INDETERMINATE and names why. Each verdict records the
+  producer, and whether it was declared or observed, in
+  `read_evidence.provenance`. Breaking: a deployment that relied on the old
+  tier 1 for these kinds must now declare `artifact_producer:
+  system_of_record` (one line in its `effects:` or `verifier:` section,
+  including a `record --verify` file); until it does, runs that need a
+  separate-session or system-of-record check are not `VERIFIED`. Verifier
+  identities of configs that leave both new fields unset are unchanged.
 
 ## v3.4.0 (2026-11-21)
 
 ### Features
+
+- Agent-to-agent handoffs. `openadapt-flow handoff send` attaches a run's
+  `record/run/v1` receipt to what one agent hands another: inline, detached
+  beside a file (`FILE.handoff.json`), or POSTed to a webhook.
+  `openadapt-flow handoff verify` checks one against the receiver's pinned
+  keys and returns a verdict (`openadapt.handoff-verdict/v1`). The verdict
+  gives the signer role, integrity, the checks passed and not checked, and
+  counterparty confirmation lines. It always says that a valid signature
+  proves who signed, not that the claim is true. `send` binds the payload as
+  the receipt's `payload` subject, re-signed by the run's own key, so a
+  receiver refuses other bytes (`payload_mismatch`) or a receipt that names
+  no payload (`payload_not_bound`). The private openings file never
+  travels (docs/HANDOFFS.md, docs/HANDOFF_RECEIPTS.md).
+- `openadapt-agent serve --handoffs` adds the MCP tools `get_handoff` and
+  `verify_handoff`. `serve --a2a` serves the same workflows over the A2A
+  (Agent2Agent) protocol 1.0 with the official `a2a-sdk` (new `a2a` extra):
+  - an Agent Card at `/.well-known/agent-card.json`;
+  - JSON-RPC and HTTP+JSON bindings;
+  - one skill per workflow plus `verify_handoff`;
+  - the draft extension `https://openadapt.ai/extensions/handoff-receipt/v1`.
+
+  It listens on 127.0.0.1 by default, needs a bearer token on any other
+  address, and refuses browser `Origin` and unknown `Host` headers. Every A2A
+  call goes through the MCP server's gate (`agent/contract_call.py`). Person
+  confirmations are not served, and only `done` is `TASK_STATE_COMPLETED`
+  (docs/A2A.md).
 
 - Dropdowns, searchable selects, type-aheads and native selects are recorded,
   compiled and run as one model, a choice (`OptionChoice` on a

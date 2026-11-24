@@ -230,6 +230,7 @@ class _HarExchange:
     resp_status: int
     resp_json: Any
     etag_header: Optional[str]
+    raw_path: str = ""
 
 
 def _parse_flexible_date(value: str) -> Optional[date]:
@@ -502,6 +503,7 @@ def _parse_har_exchanges(har: Mapping[str, Any]) -> list[_HarExchange]:
                 resp_status=status,
                 resp_json=resp_json,
                 etag_header=_extract_etag_header_name(resp),
+                raw_path=path,
             )
         )
 
@@ -600,6 +602,160 @@ def _record_id(rec: Mapping[str, Any], field_name: str) -> Optional[str]:
         return None
     text = str(val)
     return text or None
+
+
+def _rpc_call(ex: _HarExchange) -> Optional[tuple[str, list[Any], Any]]:
+    """``(method, params, result)`` for a successful JSON-RPC-style call."""
+    req = ex.req_data
+    resp = ex.resp_json
+    if ex.method != "POST" or not isinstance(req, Mapping):
+        return None
+    method = req.get("method")
+    params = req.get("params")
+    if not isinstance(method, str) or not isinstance(params, list):
+        return None
+    if not isinstance(resp, Mapping) or resp.get("error") is not None:
+        return None
+    if "result" not in resp:
+        return None
+    return method, params, resp["result"]
+
+
+def _int_ids(value: Any) -> Optional[list[int]]:
+    if (
+        isinstance(value, list)
+        and value
+        and all(isinstance(v, int) and not isinstance(v, bool) for v in value)
+    ):
+        return list(value)
+    return None
+
+
+def _induce_rpc_lens(
+    scoped: list[_HarExchange],
+    base_url: str,
+    entity_name: Optional[str],
+) -> Optional[EntityLensSpec]:
+    """A lens for an app whose every call is one RPC endpoint.
+
+    Roles come from effects, as for REST. A *read* call names record ids in
+    its first argument and a field list in its second, and returns exactly
+    those records. A *write* call names one id and a dict of values, and a
+    later read of the same model shows those values. The read-back template
+    reads the union of every field the trace read for that model, so the
+    frame is the fields the app itself reads, not the whole table.
+    """
+    calls = [(ex, c) for ex in scoped if (c := _rpc_call(ex)) is not None]
+    if not calls:
+        return None
+    reads: dict[str, list[tuple[_HarExchange, list[Any]]]] = {}
+    seen: dict[tuple[str, int], list[tuple[int, dict[str, Any]]]] = {}
+    for ex, (method, params, result) in calls:
+        if "." not in method or len(params) < 2:
+            continue
+        model, verb = method.rsplit(".", 1)
+        ids = _int_ids(params[0])
+        asked = params[1]
+        if (
+            ids is not None
+            and isinstance(asked, list)
+            and all(isinstance(f, str) for f in asked)
+            and isinstance(result, list)
+            and result
+            and all(isinstance(r, Mapping) and "id" in r for r in result)
+            and sorted(int(r["id"]) for r in result) == sorted(ids)
+        ):
+            reads.setdefault(model, []).append((ex, params))
+            for r in result:
+                seen.setdefault((model, int(r["id"])), []).append((ex.seq, dict(r)))
+
+    writes: dict[str, list[tuple[_HarExchange, list[Any]]]] = {}
+    for ex, (method, params, _result) in calls:
+        if "." not in method or len(params) < 2:
+            continue
+        model, _verb = method.rsplit(".", 1)
+        ids = _int_ids(params[0])
+        values = params[1]
+        if (
+            ids is None
+            or len(ids) != 1
+            or not isinstance(values, Mapping)
+            or not values
+        ):
+            continue
+        later = [rec for seq, rec in seen.get((model, ids[0]), []) if seq > ex.seq]
+        if any(all(rec.get(k) == v for k, v in values.items()) for rec in later):
+            writes.setdefault(model, []).append((ex, params))
+    if not writes:
+        return None
+
+    model = max(writes, key=lambda m: (len(writes[m]), len(reads.get(m, []))))
+    read_ex, read_params = reads[model][-1]
+    write_ex, write_params = writes[model][-1]
+    fields: list[str] = []
+    for _ex, params in reads[model]:
+        for f in params[1]:
+            if f not in fields:
+                fields.append(f)
+    for _ex, params in writes[model]:
+        for f in params[1]:
+            if f not in fields:
+                fields.append(f)
+
+    # Volatile: a field the server changed between two reads of one record
+    # that no write in the trace asked for.
+    requested: set[tuple[str, str]] = set()
+    for _ex, params in writes[model]:
+        for k, v in params[1].items():
+            requested.add((k, _canonical_value(v)))
+    volatile: list[str] = []
+    for (m, _rid), history in seen.items():
+        if m != model:
+            continue
+        for (_s0, r0), (_s1, r1) in zip(history, history[1:]):
+            for f in fields:
+                if (
+                    f in r0
+                    and f in r1
+                    and r0[f] != r1[f]
+                    and (f, _canonical_value(r1[f])) not in requested
+                    and f not in volatile
+                ):
+                    volatile.append(f)
+
+    def _template(ex: _HarExchange, params: list[Any], second: Any) -> dict[str, Any]:
+        body = dict(ex.req_data or {})
+        body["params"] = [["{id:int}"], second, *params[2:]]
+        return body
+
+    get_one = EndpointTemplate(
+        method="POST",
+        path_template=read_ex.raw_path or read_ex.path,
+        id_field="id",
+        etag_header=None,
+        body_template=_template(read_ex, read_params, fields),
+        record_path="result.0",
+        error_path="error",
+    )
+    write_endpoint = EndpointTemplate(
+        method="POST",
+        path_template=write_ex.raw_path or write_ex.path,
+        id_field="id",
+        etag_header=None,
+        body_template=_template(write_ex, write_params, "{payload}"),
+        error_path="error",
+    )
+    name = entity_name or model.rsplit(".", 1)[-1]
+    return EntityLensSpec(
+        entity_name=name,
+        base_url=base_url,
+        id_field="id",
+        write_mode="patch",
+        get_one=get_one,
+        write_endpoint=write_endpoint,
+        identity_fields=tuple(f for f in _CANONICAL_IDENTITY_KEYS if f in fields)[:2],
+        volatile_fields=tuple(volatile),
+    )
 
 
 def _shows_item_route(scoped: list[_HarExchange]) -> bool:
@@ -726,6 +882,43 @@ def _looks_like_metadata_or_volatile(key: str, value: Any) -> bool:
     return False
 
 
+def _null_or_empty(value: Any) -> bool:
+    return value is None or (isinstance(value, str) and value == "")
+
+
+def learn_null_empty_codecs(
+    before: Mapping[str, Any],
+    after: Mapping[str, Any],
+    written_paths: Optional[set[str]] = None,
+) -> dict[str, FieldCodec]:
+    """Fields whose value moved between ``None`` and ``""`` and nothing else.
+
+    Many apps store an untouched optional field as ``NULL`` until a form save
+    sends ``""`` back for it, or the reverse. Without a declaration the judge
+    reads that as a clobber (OpenAdapt #2391). Each field this returns gets a
+    ``null_empty`` codec, so only that field treats the two as one value; any
+    non-empty change on it is still judged exactly. Fields in
+    ``written_paths`` are skipped: a value the write asked for is not a server
+    rewrite.
+    """
+    flat_before = _flatten_record(before)
+    flat_after = _flatten_record(after)
+    skip = written_paths or set()
+    learned: dict[str, FieldCodec] = {}
+    for path, old in flat_before.items():
+        if path in skip or path not in flat_after:
+            continue
+        new = flat_after[path]
+        if (
+            old is not new
+            and old != new
+            and _null_or_empty(old)
+            and _null_or_empty(new)
+        ):
+            learned[path] = FieldCodec(kind="null_empty")
+    return learned
+
+
 def induce_lens_from_har(
     har: Mapping[str, Any],
     *,
@@ -775,6 +968,17 @@ def induce_lens_from_har(
         origin_counts[ex.origin] = origin_counts.get(ex.origin, 0) + 1
     base_url = max(origin_counts.items(), key=lambda kv: kv[1])[0]
     scoped = [ex for ex in exchanges if ex.origin == base_url]
+    rpc_calls = [ex for ex in scoped if _rpc_call(ex) is not None]
+    if rpc_calls and len(rpc_calls) * 2 >= len(
+        [ex for ex in scoped if ex.method == "POST"]
+    ):
+        rpc_lens = _induce_rpc_lens(scoped, base_url, entity_name)
+        if rpc_lens is None:
+            raise InductionRefused(
+                "RPC trace with no write the trace can attribute to a record: no "
+                "call that sets values on one id which a later read shows"
+            )
+        return rpc_lens
     effect = _infer_effect_routes(scoped)
     if effect is None and not allow_unobserved_item_route:
         raise InductionRefused(
@@ -1140,6 +1344,7 @@ def induce_lens_from_har(
             elif path not in create_defaults_list:
                 create_defaults_list.append(path)
 
+    null_empty_paths: list[str] = []
     requested_values: set[tuple[str, str]] = set()
     for ex in scoped:
         if ex.method in {"POST", "PUT", "PATCH"} and ex.req_data:
@@ -1157,6 +1362,24 @@ def induce_lens_from_har(
                     continue
                 old_val = prev_rec[path]
                 if new_val == old_val:
+                    continue
+                # NULL became "" (or the reverse): one empty value, spelled two
+                # ways. Learn it for this field; never a clobber or a replace.
+                if _null_or_empty(old_val) and _null_or_empty(new_val):
+                    # Unproven-equivalence class: learn it only from this
+                    # write's own response, never from two reads around
+                    # someone else's edit.
+                    # The change must show in this write's own response: an
+                    # untouched field the server re-spelled, or an empty value
+                    # sent one way and stored the other.
+                    sent_empty = curr_ex.method in {"POST", "PUT", "PATCH"} and (
+                        path not in flat_req
+                        or (
+                            _null_or_empty(flat_req[path]) and flat_req[path] != new_val
+                        )
+                    )
+                    if sent_empty and path not in null_empty_paths:
+                        null_empty_paths.append(path)
                     continue
                 # Auto-mutated server field: either echoed unchanged in request yet server
                 # changed it, or server metadata key not in user-supplied fields. A
@@ -1240,6 +1463,9 @@ def induce_lens_from_har(
                     if codec is not None:
                         field_codecs[path] = codec
                     break
+
+    for path in null_empty_paths:
+        field_codecs.setdefault(path, FieldCodec(kind="null_empty"))
 
     # Step 7: Induce stable identity_fields.
     volatile_set = set(volatile_list)
@@ -1816,6 +2042,13 @@ def probe_put_semantics(
                             and _looks_like_metadata_or_volatile(path, m_val)
                         ):
                             volatile_list.append(path)
+                    # The merged write sent every untouched field back as read;
+                    # one the server stored as the other empty spelling gets
+                    # a null_empty codec.
+                    for path, codec in learn_null_empty_codecs(
+                        r0, r_merged, set(flat_upd)
+                    ).items():
+                        codecs.setdefault(path, codec)
 
         for path in pending_volatile:
             if path not in volatile_list and path not in create_defaults_list:
@@ -2533,4 +2766,5 @@ __all__ = [
     "induce_lens_from_har",
     "infer_field_codec",
     "probe_put_semantics",
+    "learn_null_empty_codecs",
 ]

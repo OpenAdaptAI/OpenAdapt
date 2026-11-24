@@ -10,7 +10,7 @@ to it, and what happened when you did. Use them when you build an agent, a
 screen recorder, or a benchmark harness and want one validated format for
 observations and actions, plus JSON Schema for code that isn't in Python.
 
-It needs Python 3.10 or later, and its only dependency is Pydantic 2.
+It needs Python 3.11 or later, and its only dependency is Pydantic 2.
 openadapt-flow depends on this package and re-exports it as
 `openadapt_flow.contracts`, so the same classes are reachable under both names.
 
@@ -141,7 +141,7 @@ print(json.dumps(ComputerState.model_json_schema(), indent=2))
 ```
 
 The messages that OpenAdapt components exchange ship under
-`openadapt_types/schemas/`: forty-four files, including `execute-v1-openapi.json`,
+`openadapt_types/schemas/`: forty-eight files, including `execute-v1-openapi.json`,
 the OpenAPI document for OpenAdapt Execute, the API that starts runs and
 reports their results. Two files hold test vectors, and the rest are JSON
 Schema files.

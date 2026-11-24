@@ -1,0 +1,33 @@
+# EspoCRM scenarios. Every company and website (example.invalid) is invented.
+schema: openadapt.agent-test.scenarios/v1
+app: espocrm
+version: 1.0.0
+seed:
+  - {name: Alder Logistics, website: alder.example.invalid, type: Customer, industry: Transportation, description: Freight forwarding.}
+  - {name: Birchwood Clinic, website: birchwood.example.invalid, type: Customer, industry: Healthcare, description: Family practice.}
+  - {name: Cobalt Analytics, website: cobalt.example.invalid, type: Partner, industry: Technology, description: Reporting partner.}
+scenarios:
+  - id: esp-clean-1
+    note: A plain account.
+    task: {name: Juniper Optics, website: juniper.example.invalid, type: Customer, industry: Healthcare, description: Eye care in two towns.}
+    fault: {kind: none}
+  - id: esp-partial
+    note: The save lands with the description blank.
+    task: {name: Kestrel Freight, website: kestrel.example.invalid, type: Customer, industry: Transportation, description: Cold-chain trucking.}
+    fault: {kind: partial, fields: [description]}
+  - id: esp-wrong-value
+    note: The industry changes on the way in.
+    task: {name: Larkspur Foods, website: larkspur.example.invalid, type: Customer, industry: Hospitality, description: Catering for events.}
+    fault: {kind: wrong_value, set: {industry: Agriculture}}
+  - id: esp-duplicate
+    note: The save is delivered twice (the second without the app's duplicate check).
+    task: {name: Marlow Surveying, website: marlow.example.invalid, type: Customer, industry: Construction, description: Land surveys.}
+    fault: {kind: duplicate, replay_headers: {X-Skip-Duplicate-Check: "true"}}
+  - id: esp-collateral-edit
+    note: With the save, Alder Logistics' industry changes.
+    task: {name: Nettle Print, website: nettle.example.invalid, type: Customer, industry: Manufacturing, description: Labels and packaging.}
+    fault: {kind: collateral_edit, target: {name: Alder Logistics}, set: {industry: Retail}}
+  - id: esp-late-revert
+    note: The save lands correctly; 45 s later the account is deleted.
+    task: {name: Orchid Pharmacy, website: orchid.example.invalid, type: Customer, industry: Healthcare, description: Late hours on weekdays.}
+    fault: {kind: late_revert, after_s: 45, delete: true}

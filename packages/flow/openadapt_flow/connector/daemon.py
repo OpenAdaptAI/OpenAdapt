@@ -14,13 +14,30 @@ patient identifier.
 
 from __future__ import annotations
 
+import signal
+import threading
 import time
-from typing import Any, Callable, Optional
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import contextmanager
+from typing import Any, Callable, Iterator, Optional
 
-from openadapt_flow.connector.client import ConnectorClient
+import httpx
+
+from openadapt_flow.connector.client import (
+    ConnectorClient,
+    ConnectorClientError,
+    ConnectorControl,
+    RunsStopped,
+)
 from openadapt_flow.connector.config import ConnectorSettings
-from openadapt_flow.connector.executor import ExecutionResult, Runner, execute_job
-from openadapt_flow.connector.protocol import ByocJob, parse_job
+from openadapt_flow.connector.egress import EgressViolation
+from openadapt_flow.connector.executor import (
+    ExecutionResult,
+    Runner,
+    cancel_job,
+    execute_job,
+)
+from openadapt_flow.connector.protocol import ByocJob, ByocJobParseError, parse_job
 from openadapt_flow.connector.storage import CustomerStorage, build_storage
 from openadapt_flow.failure_signals import (
     automation_failure_signal,
@@ -31,6 +48,11 @@ from openadapt_flow.failure_signals import (
 #: from settings + the job's backend hint.
 StorageFactory = Callable[[ByocJob], CustomerStorage]
 CALLBACK_ATTEMPTS = 3
+HEARTBEAT_S = 15.0
+STOPPED_BACKOFF_S = 15.0
+MAX_BACKOFF_S = 60.0
+#: persist_token(new_token) writes the rotated token durably before use.
+TokenPersister = Callable[[str], None]
 
 
 def phi_free_callback_body(job: ByocJob, result: ExecutionResult) -> dict[str, Any]:
@@ -63,7 +85,10 @@ def phi_free_callback_body(job: ByocJob, result: ExecutionResult) -> dict[str, A
         body["halt"] = {"present": True}
     if result.outcome is not None:
         body["outcome"] = result.outcome
-    if result.status != "success" and failure_signal_sharing_enabled():
+    if result.error_code == "cancelled_after_child_start":
+        # The interrupted report cannot establish a failure kind or final effect.
+        body["error_code"] = "cancelled_after_child_start"
+    elif result.status != "success" and failure_signal_sharing_enabled():
         body["failure_signal"] = result.failure_signal or automation_failure_signal(
             None, result.status, job.target_kind
         )
@@ -79,51 +104,100 @@ def handle_job(
     storage_factory: StorageFactory,
     require_run_token: bool,
 ) -> dict[str, Any]:
-    """Run one leased job end to end: execute -> PHI-free callback -> ack.
+    """Run one leased job end to end: execute -> metadata-only callback -> ack.
 
-    Never raises: an execution failure still reports PHI-free and is ACKed only
-    after Cloud accepts that outcome. A callback/ACK delivery failure leaves the
+    Never raises: an execution failure still reports and is ACKed only after
+    Cloud accepts that outcome. A callback/ACK delivery failure leaves the
     lease to expire as terminal ``lease_expired_uncertain`` without re-offer.
     """
+    # The executor supplies its observed archive digest once the child could
+    # have written to the system of record.
+    child_bundle_sha256: Optional[str] = None
+
+    def child_start(verified_sha256: str) -> None:
+        nonlocal child_bundle_sha256
+        child_bundle_sha256 = verified_sha256
+
     try:
         storage = storage_factory(job)
         result = execute_job(
-            job, settings, storage, runner=runner, require_run_token=require_run_token
+            job,
+            settings,
+            storage,
+            runner=runner,
+            require_run_token=require_run_token,
+            on_secrets=client.add_secret_values,
+            on_child_start=child_start,
         )
-    except Exception as exc:  # fail closed: build a failed result, still report
+    except Exception as exc:  # The outcome may be unknown after child handoff.
         result = ExecutionResult(
-            "failed", {}, None, job.report_ref(), f"{type(exc).__name__}"
+            "halt" if child_bundle_sha256 else "failed",
+            {},
+            {"present": True} if child_bundle_sha256 else None,
+            None,
+            type(exc).__name__,
+            verified_bundle_sha256=child_bundle_sha256,
+            error_code="connector_exception",
         )
 
     # The callback is the authoritative run outcome. Retry briefly for a
     # transient transport failure, but NEVER ACK the lease unless Cloud accepted
     # it. An unacked lease expires to `lease_expired_uncertain` and is not
-    # automatically re-offered, preventing blind duplicate actuation after a
-    # crash or partition.
+    # automatically re-offered, preventing blind duplicate actuation.
     callback_accepted = False
-    callback_body = phi_free_callback_body(job, result)
-    for attempt in range(CALLBACK_ATTEMPTS):
+    local_diagnostics_unavailable = result.local_diagnostics_unavailable
+    try:
+        callback_body = phi_free_callback_body(job, result)
+    except Exception:  # noqa: BLE001 - nothing unchecked is ever sent
+        callback_body = None
+    transport_failures = 0
+    while callback_body is not None and transport_failures < CALLBACK_ATTEMPTS:
         try:
             client.run_callback(callback_body, run_token=job.run_token)
             callback_accepted = True
             break
+        except EgressViolation:
+            if result.error_code == "egress_refused":
+                break  # Even the minimal binding was refused. Leave the lease unacked.
+            # Discard every report-derived field. Cloud requires the observed
+            # archive digest for a halt, and runner_failure for a pre-hash failure.
+            result = ExecutionResult(
+                "halt" if child_bundle_sha256 else "failed",
+                {},
+                {"present": True} if child_bundle_sha256 else None,
+                None,
+                verified_bundle_sha256=child_bundle_sha256,
+                error_code="egress_refused",
+            )
+            callback_body = phi_free_callback_body(job, result)
+            callback_body.pop("failure_signal", None)
+            if child_bundle_sha256:
+                callback_body["error_code"] = "egress_refused"
         except Exception:  # noqa: BLE001 - bounded retry, then leave lease unacked
-            if attempt + 1 < CALLBACK_ATTEMPTS:
-                time.sleep(0.25 * (2**attempt))
+            transport_failures += 1
+            if transport_failures < CALLBACK_ATTEMPTS:
+                time.sleep(0.25 * (2 ** (transport_failures - 1)))
 
     if job.lease_job_id and callback_accepted:
         ack_status = "failed" if result.status == "failed" else "done"
+        code = result.error_code or (
+            "governed_run_failed" if ack_status == "failed" else None
+        )
         try:
-            client.ack(job.lease_job_id, ack_status, result.error)
+            client.ack(job.lease_job_id, ack_status, code)
         except Exception:  # noqa: BLE001 - terminal uncertainty, never re-offered
             pass
 
-    return {
+    summary = {
         "job_id": job.lease_job_id,
         "run_id": job.run_id,
         "status": result.status,
+        "error_code": result.error_code,
         "callback_accepted": callback_accepted,
     }
+    if local_diagnostics_unavailable:
+        summary["local_diagnostics_unavailable"] = True
+    return summary
 
 
 def _default_storage_factory(settings: ConnectorSettings) -> StorageFactory:
@@ -132,6 +206,23 @@ def _default_storage_factory(settings: ConnectorSettings) -> StorageFactory:
         return build_storage(settings, hint)
 
     return factory
+
+
+def _job_from_envelope(
+    client: ConnectorClient, envelope: dict[str, Any]
+) -> Optional[ByocJob]:
+    """Parse a leased envelope; refuse (ack failed) a payload we cannot parse."""
+    payload = dict(envelope.get("payload") or {})
+    lease_id = envelope.get("id")
+    try:
+        return parse_job(payload, lease_job_id=lease_id)
+    except ByocJobParseError:
+        if isinstance(lease_id, str):
+            try:
+                client.ack(lease_id, "failed", "job_parse_failed")
+            except Exception:  # noqa: BLE001
+                pass
+        return None
 
 
 def run_once(
@@ -146,8 +237,13 @@ def run_once(
     envelope = client.poll(settings.poll_wait_s)
     if not envelope:
         return None
-    payload = dict(envelope.get("payload") or {})
-    job = parse_job(payload, lease_job_id=envelope.get("id"))
+    job = _job_from_envelope(client, envelope)
+    if job is None:
+        return {
+            "job_id": envelope.get("id"),
+            "status": "failed",
+            "error_code": "job_parse_failed",
+        }
     factory = storage_factory or _default_storage_factory(settings)
     return handle_job(
         client,
@@ -159,6 +255,128 @@ def run_once(
     )
 
 
+class _ActiveJobs:
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.futures: dict[str, Future[dict[str, Any]]] = {}
+        #: Jobs about to be submitted: listed before ``pool.submit`` so a stop
+        #: signal between the submit and the future's registration still
+        #: reaches the job through shutdown's ``cancel_job``.
+        self.pending: set[str] = set()
+
+    def ids(self) -> list[str]:
+        with self.lock:
+            return list(self.futures) + sorted(self.pending - set(self.futures))
+
+    def reap(self, log: Callable[[str], None]) -> int:
+        done = 0
+        with self.lock:
+            for job_id, fut in list(self.futures.items()):
+                if fut.done():
+                    self.futures.pop(job_id)
+                    done += 1
+                    try:
+                        log(f"[connector] job done: {fut.result()}")
+                    except Exception as exc:  # noqa: BLE001
+                        log(f"[connector] job crashed: {type(exc).__name__}")
+        return done
+
+
+def apply_control(
+    control: ConnectorControl, active: list[str], log: Callable[[str], None]
+) -> None:
+    """Terminate children the control plane cancelled, or all on a kill switch."""
+    targets = (
+        set(active)
+        if control.runs_stopped
+        else set(active) & set(control.cancel_job_ids)
+    )
+    for job_id in sorted(targets):
+        if cancel_job(job_id):
+            log(f"[connector] stopped job {job_id} on control-plane request")
+
+
+def maybe_rotate(
+    client: ConnectorClient,
+    persist_token: Optional[TokenPersister],
+    log: Callable[[str], None],
+    *,
+    persist_pending: Optional[TokenPersister] = None,
+    force: bool = False,
+    attempts: int = 3,
+) -> bool:
+    """Rotate the token when the control plane recommends it and we can persist.
+
+    The new token is minted here and only its hash is sent. It is written to
+    ``pending_token`` first, so a crash or a lost response can be finished on
+    the next start by repeating the same request (the server answers
+    ``already_rotated``) instead of stranding the connector.
+    """
+    if (not force and not client.control.rotate_recommended) or persist_token is None:
+        return False
+    from openadapt_flow.connector.client import mint_token
+
+    new_token = mint_token()
+    if persist_pending is not None:
+        persist_pending(new_token)
+    return finish_rotation(client, new_token, persist_token, log, attempts=attempts)
+
+
+def finish_rotation(
+    client: ConnectorClient,
+    new_token: str,
+    persist_token: TokenPersister,
+    log: Callable[[str], None],
+    *,
+    attempts: int = 3,
+) -> bool:
+    for attempt in range(attempts):
+        try:
+            client.rotate(new_token)
+            persist_token(new_token)  # durable before first use
+            client.token = new_token
+            client.control.rotate_recommended = False
+            log("[connector] token rotated and persisted")
+            return True
+        except Exception as exc:  # noqa: BLE001 - keep the old token; retry
+            log(f"[connector] token rotation attempt failed: {type(exc).__name__}")
+            if attempt + 1 < attempts:
+                time.sleep(0.5 * (2**attempt))
+    return False
+
+
+def _raise_interrupt(signum: int, _frame: Any) -> None:
+    raise KeyboardInterrupt(f"signal {signum}")
+
+
+@contextmanager
+def _stop_signals_interrupt() -> Iterator[None]:
+    """SIGTERM and SIGHUP stop the loop the way Ctrl-C (SIGINT) does.
+
+    Each governed child runs in its own session, so a signal to the daemon
+    never reaches it. Without this, SIGTERM (``kill``, ``docker stop``) or
+    SIGHUP (a closed terminal) would end the daemon without its shutdown and
+    leave the child running unsupervised. Mapped to KeyboardInterrupt, both
+    take the same path: cancel every child, judge each outcome, then exit.
+    Signal handlers can only be set from the main thread; elsewhere the
+    process's existing handling is kept.
+    """
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    names = ("SIGTERM", "SIGHUP")
+    previous = {}
+    for name in names:
+        number = getattr(signal, name, None)
+        if number is not None:
+            previous[number] = signal.signal(number, _raise_interrupt)
+    try:
+        yield
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
+
+
 def run_loop(
     client: ConnectorClient,
     settings: ConnectorSettings,
@@ -168,18 +386,63 @@ def run_loop(
     once: bool = False,
     require_run_token: bool = True,
     log: Callable[[str], None] = print,
+    persist_token: Optional[TokenPersister] = None,
+    persist_pending: Optional[TokenPersister] = None,
+    heartbeat_s: float = HEARTBEAT_S,
+    stop_requested: Optional[threading.Event] = None,
 ) -> int:
-    """Enroll (if needed) then poll->execute->callback->ack until interrupted.
+    """Poll -> execute -> callback -> ack until interrupted.
 
-    ``once`` runs a single poll cycle (cron-style). Returns a process exit code.
+    SIGINT, SIGTERM and SIGHUP all interrupt it the same way (see
+    :func:`_stop_signals_interrupt`). The rest is :func:`_run_loop`.
+    """
+    with _stop_signals_interrupt():
+        return _run_loop(
+            client,
+            settings,
+            runner=runner,
+            storage_factory=storage_factory,
+            once=once,
+            require_run_token=require_run_token,
+            log=log,
+            persist_token=persist_token,
+            persist_pending=persist_pending,
+            heartbeat_s=heartbeat_s,
+            stop_requested=stop_requested,
+        )
+
+
+def _run_loop(
+    client: ConnectorClient,
+    settings: ConnectorSettings,
+    *,
+    runner: Runner,
+    storage_factory: Optional[StorageFactory] = None,
+    once: bool = False,
+    require_run_token: bool = True,
+    log: Callable[[str], None] = print,
+    persist_token: Optional[TokenPersister] = None,
+    persist_pending: Optional[TokenPersister] = None,
+    heartbeat_s: float = HEARTBEAT_S,
+    stop_requested: Optional[threading.Event] = None,
+) -> int:
+    """Poll -> execute -> callback -> ack until interrupted.
+
+    Up to ``min(settings.max_workers, server max_concurrent_leases)`` jobs run
+    at once. While jobs run a heartbeat thread fetches control state, so a
+    kill switch or cancel stops the governed children within ``heartbeat_s``.
+    ``once`` runs a single poll cycle (cron-style). Returns an exit code.
     """
     if not client.token:
         return 1
     factory = storage_factory or _default_storage_factory(settings)
     log(f"[connector] polling {settings.control_plane_url} (org {settings.org_id})")
-    handled = 0
-    try:
-        while True:
+
+    if once:
+        if settings.pending_token and persist_token is not None:
+            if not finish_rotation(client, settings.pending_token, persist_token, log):
+                return 1
+        try:
             result = run_once(
                 client,
                 settings,
@@ -187,12 +450,105 @@ def run_loop(
                 storage_factory=factory,
                 require_run_token=require_run_token,
             )
-            if result is not None:
-                handled += 1
-                log(f"[connector] job done: {result}")
-            if once:
-                break
-    except KeyboardInterrupt:  # pragma: no cover - operator Ctrl-C
+        except RunsStopped:
+            log("[connector] organization runs are stopped; nothing leased")
+            return 0
+        except KeyboardInterrupt:  # pragma: no cover
+            return 0
+        if result is not None:
+            log(f"[connector] job done: {result}")
+        log(
+            "[connector] loop exiting; jobs handled this session: "
+            f"{1 if result is not None else 0}"
+        )
+        return 0
+
+    active = _ActiveJobs()
+    stop = threading.Event()
+    retry_stop = stop_requested if stop_requested is not None else stop
+    pool = ThreadPoolExecutor(
+        max_workers=settings.max_workers, thread_name_prefix="oa-job"
+    )
+
+    def heartbeat() -> None:
+        while not stop.wait(heartbeat_s):
+            ids = active.ids()
+            if not ids:
+                continue
+            try:
+                apply_control(client.heartbeat(ids), ids, log)
+            except Exception as exc:  # noqa: BLE001 - next beat retries
+                log(f"[connector] heartbeat failed: {type(exc).__name__}")
+
+    beat = threading.Thread(target=heartbeat, name="oa-heartbeat", daemon=True)
+    beat.start()
+    handled = 0
+    backoff = 1.0
+    try:
+        while not retry_stop.is_set():
+            # A lost rotate response or failed local commit leaves one durable
+            # candidate. Confirm it before polling or minting another token.
+            if settings.pending_token and persist_token is not None:
+                if not finish_rotation(
+                    client, settings.pending_token, persist_token, log, attempts=1
+                ):
+                    retry_stop.wait(backoff)
+                    backoff = min(MAX_BACKOFF_S, backoff * 2)
+                    continue
+            handled += active.reap(log)
+            cap = min(settings.max_workers, client.control.max_concurrent_leases)
+            if len(active.ids()) >= cap:
+                time.sleep(0.5)
+                continue
+            try:
+                envelope = client.poll(
+                    settings.poll_wait_s, active_job_ids=active.ids()
+                )
+                backoff = 1.0
+            except RunsStopped:
+                apply_control(client.control, active.ids(), log)
+                log("[connector] organization runs are stopped; holding")
+                time.sleep(STOPPED_BACKOFF_S)
+                continue
+            except (ConnectorClientError, httpx.TransportError, ValueError) as exc:
+                log(
+                    f"[connector] poll failed ({type(exc).__name__}); retrying in {backoff:.0f}s"
+                )
+                time.sleep(backoff)
+                backoff = min(MAX_BACKOFF_S, backoff * 2)
+                continue
+            apply_control(client.control, active.ids(), log)
+            maybe_rotate(client, persist_token, log, persist_pending=persist_pending)
+            if not envelope:
+                continue
+            job = _job_from_envelope(client, envelope)
+            if job is None or not job.lease_job_id:
+                continue
+            with active.lock:
+                active.pending.add(job.lease_job_id)
+            fut = pool.submit(
+                handle_job,
+                client,
+                settings,
+                job,
+                runner=runner,
+                storage_factory=factory,
+                require_run_token=require_run_token,
+            )
+            with active.lock:
+                active.futures[job.lease_job_id] = fut
+                active.pending.discard(job.lease_job_id)
+    except KeyboardInterrupt:  # operator Ctrl-C or service stop
         log("[connector] interrupted; exiting")
+    finally:
+        stop.set()
+        # Stop every governed child before draining. Each now runs in its own
+        # session, so a service stop or Ctrl-C reaches only this daemon; a
+        # stopped child is judged by the executor (a write may have landed:
+        # halt, child_outcome_unknown), never acked as a clean failure.
+        for job_id in active.ids():
+            cancel_job(job_id)
+        pool.shutdown(wait=True)
+        handled += active.reap(log)
     log(f"[connector] loop exiting; jobs handled this session: {handled}")
     return 0

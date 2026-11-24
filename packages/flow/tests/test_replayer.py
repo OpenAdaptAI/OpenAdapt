@@ -2342,6 +2342,12 @@ def test_closed_loop_scroll_ocr_ambiguity_continues_but_click_halts(
         "openadapt_flow.runtime.replayer.resolve",
         scripted_resolve,
     )
+    # Interstitial handling moved to runtime/replay/settling.py and reads its
+    # own ``resolve``; patch it too so every resolver call stays scripted.
+    monkeypatch.setattr(
+        "openadapt_flow.runtime.replay.settling.resolve",
+        scripted_resolve,
+    )
     backend = FakeBackend()
     workflow = Workflow(name="wf", steps=[scroll_step(), click_step()])
 
@@ -4753,3 +4759,17 @@ def test_native_selection_missing_capability_refuses_before_input(bundle, run_di
     )
     assert not report.success
     assert backend.actions == []
+
+
+def test_recheck_deferred_readback_type_hints_resolve():
+    import typing
+
+    hints = typing.get_type_hints(Replayer.recheck_deferred_readback)
+    assert set(hints) >= {
+        "workflow",
+        "deferred",
+        "params",
+        "run_id",
+        "read_only",
+        "return",
+    }

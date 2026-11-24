@@ -2129,7 +2129,7 @@ def _window_guard(user32: Any, hwnd: int, point: tuple[int, int]) -> None:
     """Refuse a native action that the target's window could not take.
 
     Checked with Win32 because UI Automation's own hit test passes through
-    windows that are still loading (seen live with Notepad over the app):
+    windows that are still loading (seen live with an auxiliary window over the app):
     the window under the point must belong to the target's top-level
     window, and that window and the target's must be enabled. A window a
     modal dialog has disabled would drop the action without a word.

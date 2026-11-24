@@ -1,0 +1,15 @@
+{
+  "approval_decided_at": null,
+  "approval_opened_at": null,
+  "approver_kind": "none",
+  "diff_path": null,
+  "fields_checked": [],
+  "fields_differing": [],
+  "guard_verdict": null,
+  "hold_ms": 60.4,
+  "readback_tier": null,
+  "schema": "openadapt.guard-ledger-row/v1",
+  "task_id": "task-ledger-0001",
+  "verdict": "ESCALATED",
+  "verdict_reason": "values_unread"
+}

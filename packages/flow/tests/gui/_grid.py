@@ -4,7 +4,8 @@ It exposes its screen as an accessibility tree (sheet tabs, a grid of rows
 and cells, a toolbar, an optional dialog) and reads it through
 :func:`openadapt_flow.gui.adapters.screen_from_tree`, the path a desktop
 backend would use. Writes are counted when the workbook is saved, so the
-grid can show a commit; ``count_writes=False`` makes a backend that cannot.
+grid can show a commit, and each save reports the outcome ``"saved"``;
+``count_writes=False`` makes a backend that cannot.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ class GridApp:
     dialog: Optional[dict[str, Any]] = None
     checks: dict[str, bool] = field(default_factory=dict)
     _writes: int = 0
+    _outcomes: list[str] = field(default_factory=list)
 
     # -- the tree ---------------------------------------------------------------
 
@@ -110,6 +112,7 @@ class GridApp:
         elif handle == "tool:save":
             self.saved.append({s.name: [list(r) for r in s.rows] for s in self.sheets})
             self._writes += 1
+            self._outcomes.append("saved")
         elif handle == "tool:insert":
             sheet = self.sheets[self.active]
             sheet.rows.append([""] * len(sheet.columns))
@@ -141,3 +144,6 @@ class GridApp:
 
     def write_count(self) -> Optional[int]:
         return self._writes if self.count_writes else None
+
+    def write_outcomes(self) -> Optional[tuple[str, ...]]:
+        return tuple(self._outcomes) if self.count_writes else None

@@ -1,0 +1,42 @@
+# OpenEMR scenarios. Every patient, address, phone number (555) and email
+# (example.invalid) is invented.
+schema: openadapt.agent-test.scenarios/v1
+app: openemr
+version: 1.0.0
+seed:
+  - {fname: Marta, lname: Kowal, DOB: "1975-02-11", sex: Female, street: 9 Oak Row, city: Springfield, state: MA, postal_code: "01104", phone_home: 413-555-0121, email: m.kowal@example.invalid}
+  - {fname: Joseph, lname: Adeyemi, DOB: "1958-09-23", sex: Male, street: 120 River Road, city: Springfield, state: MA, postal_code: "01103", phone_home: 413-555-0122, email: j.adeyemi@example.invalid}
+  - {fname: Hana, lname: Sato, DOB: "1999-04-02", sex: Female, street: 5 Hill Court, city: Springfield, state: MA, postal_code: "01105", phone_home: 413-555-0123, email: h.sato@example.invalid}
+scenarios:
+  - id: emr-clean-1
+    note: A plain registration.
+    task: {fname: Tomas, lname: Brennan, DOB: "1987-03-14", sex: Male, street: 22 Walnut Street, city: Springfield, state: MA, state_name: Massachusetts, postal_code: "01104", phone_home: 413-555-0301, email: t.brennan@example.invalid}
+    fault: {kind: none}
+  - id: emr-partial
+    note: The save lands with the home phone blank.
+    task: {fname: Ines, lname: Duarte, DOB: "1992-10-05", sex: Female, street: 8 Birch Lane, city: Springfield, state: MA, state_name: Massachusetts, postal_code: "01105", phone_home: 413-555-0302, email: i.duarte@example.invalid}
+    fault: {kind: partial, fields: [phone_home]}
+  - id: emr-wrong-value
+    note: The birth date's month and day are swapped on the way in.
+    task: {fname: Kofi, lname: Mensah, DOB: "1979-03-08", sex: Male, street: 15 Chestnut Road, city: Springfield, state: MA, state_name: Massachusetts, postal_code: "01103", phone_home: 413-555-0303, email: k.mensah@example.invalid}
+    fault: {kind: wrong_value, set: {DOB: "1979-08-03"}}
+  - id: emr-duplicate
+    note: The save is delivered twice.
+    task: {fname: Aiko, lname: Tanaka, DOB: "1965-12-01", sex: Female, street: 40 Spruce Court, city: Springfield, state: MA, state_name: Massachusetts, postal_code: "01109", phone_home: 413-555-0304, email: a.tanaka@example.invalid}
+    fault: {kind: duplicate}
+  - id: emr-no-persist
+    note: The page shows the new chart, then the chart is removed.
+    task: {fname: Rafael, lname: Ortega, DOB: "2000-06-30", sex: Male, street: 3 Aspen Way, city: Springfield, state: MA, state_name: Massachusetts, postal_code: "01107", phone_home: 413-555-0305, email: r.ortega@example.invalid}
+    fault: {kind: no_persist}
+  - id: emr-collateral-loss
+    note: With the save, Hana Sato's chart is deleted.
+    task: {fname: Leila, lname: Haddadi, DOB: "1983-01-19", sex: Female, street: 61 Poplar Avenue, city: Springfield, state: MA, state_name: Massachusetts, postal_code: "01106", phone_home: 413-555-0306, email: l.haddadi@example.invalid}
+    fault: {kind: collateral_loss, target: {fname: Hana, lname: Sato}}
+  - id: emr-collateral-edit
+    note: With the save, Marta Kowal's home phone changes.
+    task: {fname: Owen, lname: Gallagher, DOB: "1970-07-07", sex: Male, street: 17 Linden Street, city: Springfield, state: MA, state_name: Massachusetts, postal_code: "01108", phone_home: 413-555-0307, email: o.gallagher@example.invalid}
+    fault: {kind: collateral_edit, target: {fname: Marta, lname: Kowal}, set: {phone_home: 413-555-0112}}
+  - id: emr-late-revert
+    note: The save lands correctly; 45 s later the date of birth changes.
+    task: {fname: Nadia, lname: Petrenko, DOB: "1996-02-22", sex: Female, street: 29 Hawthorn Drive, city: Springfield, state: MA, state_name: Massachusetts, postal_code: "01104", phone_home: 413-555-0308, email: n.petrenko@example.invalid}
+    fault: {kind: late_revert, after_s: 45, set: {DOB: "1996-02-12"}}

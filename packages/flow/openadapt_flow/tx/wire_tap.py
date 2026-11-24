@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, NamedTuple, Optional, cast
 from urllib.parse import parse_qsl, unquote, urljoin, urlsplit
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from openadapt_flow.secret_redaction import MASK, credential_header, mask_header
 from openadapt_flow.tx.receipt import write_private_record
@@ -72,6 +72,34 @@ _TEMPLATE_PARAM_RE = re.compile(r"\{[A-Za-z_][A-Za-z0-9_.-]*\}")
 _LOCAL_BROWSER_SCHEMES = ("about:", "blob:", "data:", "javascript:")
 
 
+class ReadRoute(BaseModel):
+    """A ``POST`` route proven to read only, declared as data.
+
+    A request counts as a read only when its method and path match and every
+    ``body_equals`` key holds exactly that top-level value in a JSON or form
+    body. The constant body fields are what distinguish a read from a write on
+    a route that carries both (one RPC endpoint, many methods). An entry is
+    meant to come from ``probe_read_routes`` on a sandbox, never from a guess.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    method: str = "POST"
+    path: str
+    body_equals: tuple[tuple[str, str], ...]
+
+    @field_validator("body_equals")
+    @classmethod
+    def _needs_a_discriminator(
+        cls, value: tuple[tuple[str, str], ...]
+    ) -> tuple[tuple[str, str], ...]:
+        # With no body field to match, a read route would also match a write
+        # sent to the same path (a form that both searches and saves).
+        if not value:
+            raise ValueError("a read route needs at least one body_equals field")
+        return value
+
+
 class WirePolicy(BaseModel):
     """Declarative inline gating and extraction policy for ``SessionWireTap``."""
 
@@ -80,6 +108,7 @@ class WirePolicy(BaseModel):
     allowed_origins: tuple[str, ...] = ()
     max_mutations: Optional[int] = 1
     allowed_write_routes: tuple[tuple[str, str], ...] = ()
+    read_routes: tuple[ReadRoute, ...] = ()
     id_fields: tuple[str, ...] = ("id", "uuid", "pid")
     version_fields: tuple[str, ...] = ("version", "etag", "meta.versionId")
     secrets: tuple[str, ...] = ()
@@ -417,6 +446,48 @@ def _classify_single_graphql_doc(
     return (True, False)
 
 
+def _is_graphql_path(path_or_url: str) -> bool:
+    """True when the last path segment names a GraphQL endpoint.
+
+    Servers spell it ``/graphql`` or, for an operation-style route,
+    ``/$graphql``.
+    """
+    clean_path = (urlsplit(path_or_url).path or "/").rstrip("/").lower()
+    last = clean_path.rsplit("/", 1)[-1]
+    return last.lstrip("$") == "graphql"
+
+
+_READ_BATCH_METHODS = frozenset({"GET", "HEAD"})
+
+
+def _is_read_only_batch(parsed: Any) -> bool:
+    """True for a batch envelope whose every entry is a ``GET`` or ``HEAD``.
+
+    This is the standard ``Bundle`` of type ``batch`` or ``transaction``: the
+    server runs each entry's request, so a bundle of reads changes nothing.
+    One entry with another method, or one without a method, makes it a write.
+    """
+    if not isinstance(parsed, dict) or parsed.get("resourceType") != "Bundle":
+        return False
+    if parsed.get("type") not in ("batch", "transaction"):
+        return False
+    entries = parsed.get("entry")
+    if not isinstance(entries, list) or not entries:
+        return False
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) - {"request", "fullUrl"}:
+            return False
+        request = entry.get("request")
+        if not isinstance(request, dict):
+            return False
+        method = request.get("method")
+        if not isinstance(method, str) or method.upper() not in _READ_BATCH_METHODS:
+            return False
+        if not isinstance(request.get("url"), str):
+            return False
+    return True
+
+
 def classify_graphql_post(
     path_or_url: str,
     request_body: bytes,
@@ -427,8 +498,7 @@ def classify_graphql_post(
     A ``POST`` is treated as a state mutation unless it is provably a GraphQL
     ``query``-only request. GraphQL ``mutation`` operations return ``(True, True)``.
     """
-    clean_path = (urlsplit(path_or_url).path or "/").rstrip("/").lower()
-    is_graphql_endpoint = clean_path.endswith("/graphql")
+    is_graphql_endpoint = _is_graphql_path(path_or_url)
     ctype = _get_header(request_headers, "content-type").lower()
 
     decoded = _decompress_for_inspection(request_body, request_headers)
@@ -448,6 +518,8 @@ def classify_graphql_post(
         return classified if classified is not None else (True, False)
 
     parsed = _parse_json_body(request_body, request_headers)
+    if _is_read_only_batch(parsed):
+        return (False, False)
     if isinstance(parsed, dict) and isinstance(parsed.get("query"), str):
         op_name = parsed.get("operationName")
         classified = _classify_single_graphql_doc(
@@ -499,7 +571,7 @@ def is_mutation_request(
         parts = urlsplit(path_or_url)
         query = parse_qsl(parts.query, keep_blank_values=True)
         documents = [value for name, value in query if name == "query"]
-        if parts.path.rstrip("/").lower().endswith("/graphql") or documents:
+        if _is_graphql_path(path_or_url) or documents:
             if len(documents) != 1:
                 return (True, False)
             operation_names = [
@@ -510,11 +582,11 @@ def is_mutation_request(
             classified = _classify_single_graphql_doc(
                 documents[0],
                 operation_name=operation_names[0] if operation_names else None,
-                is_graphql_endpoint=parts.path.rstrip("/").lower().endswith("/graphql"),
+                is_graphql_endpoint=_is_graphql_path(path_or_url),
             )
             if classified is not None:
                 return classified
-            if parts.path.rstrip("/").lower().endswith("/graphql"):
+            if _is_graphql_path(path_or_url):
                 return (True, False)
         return (False, False)
     if upper == "POST":
@@ -554,6 +626,63 @@ def matches_write_route(
         return re.fullmatch(raw_pattern, clean_path) is not None
     except re.error:
         return raw_pattern == clean_path
+
+
+def _top_level_body_fields(
+    request_body: bytes,
+    request_headers: Optional[Mapping[str, str] | Iterable[tuple[str, str]]],
+) -> Optional[dict[str, str]]:
+    """Top-level scalar fields of a JSON object or form body, as strings."""
+    parsed = _parse_json_body(request_body, request_headers)
+    if isinstance(parsed, dict):
+        fields: dict[str, str] = {}
+        for key, val in parsed.items():
+            if isinstance(val, bool):
+                fields[str(key)] = "true" if val else "false"
+            elif isinstance(val, (str, int, float)):
+                fields[str(key)] = str(val)
+        return fields
+    decoded = _decompress_for_inspection(request_body, request_headers)
+    ctype = _get_header(request_headers, "content-type").lower()
+    if decoded is not None and ctype.startswith("application/x-www-form-urlencoded"):
+        try:
+            text = decoded.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+        pairs = parse_qsl(text, keep_blank_values=True)
+        names = [k for k, _ in pairs]
+        if len(names) != len(set(names)):
+            return None
+        return {k: v for k, v in pairs}
+    if not decoded:
+        return {}
+    return None
+
+
+def matches_read_route(
+    routes: Iterable["ReadRoute"],
+    method: str,
+    path: str,
+    request_body: bytes = b"",
+    request_headers: Optional[Mapping[str, str] | Iterable[tuple[str, str]]] = None,
+) -> bool:
+    """True when a request matches a declared read-only route exactly."""
+    routes = tuple(routes)
+    if not routes:
+        return False
+    fields: Optional[dict[str, str]] = None
+    fields_parsed = False
+    for route in routes:
+        if not matches_write_route(method, path, route.method, route.path):
+            continue
+        if not fields_parsed:
+            fields = _top_level_body_fields(request_body, request_headers)
+            fields_parsed = True
+        if fields is None or not route.body_equals:
+            continue
+        if all(fields.get(k) == v for k, v in route.body_equals):
+            return True
+    return False
 
 
 def extract_entity_id(
@@ -690,9 +819,9 @@ def _build_har_entry(
         }
         for k, v in request_headers
     ]
-    req_mime = (
-        _get_header(request_headers, "content-type") or "application/octet-stream"
-    )
+    # "" for a missing header, so it stays apart from an explicit
+    # octet-stream (whose body capture minimization never parses).
+    req_mime = _get_header(request_headers, "content-type") or ""
     req_obj: dict[str, Any] = {
         "method": method,
         "url": _mask_if_needed(url, secrets),
@@ -723,9 +852,7 @@ def _build_har_entry(
         }
         for k, v in response_headers
     ]
-    resp_mime = (
-        _get_header(response_headers, "content-type") or "application/octet-stream"
-    )
+    resp_mime = _get_header(response_headers, "content-type") or ""
     resp_text, resp_encoding = _encode_har_body(resp_bytes, response_headers, secrets)
     content_obj: dict[str, Any] = {
         "size": len(resp_bytes),
@@ -1102,17 +1229,20 @@ class SessionWireTap:
         }
         return _scrub_har_value(har_doc, self._policy.secrets)
 
-    def save_har(self, path: str | Path) -> Path:
-        """Write ``export_har()`` to ``path`` as UTF-8 JSON."""
+    def save_har(self, path: str | Path, *, raw_bodies: bool = False) -> Path:
+        """Write the session to ``path`` as sealed HAR (bodies minimized)."""
         out_path = Path(path)
-        dump_har(self, out_path, secrets=self._policy.secrets)
+        dump_har(self, out_path, secrets=self._policy.secrets, raw_bodies=raw_bodies)
         return out_path
 
     def import_har(
         self, source: str | Path | bytes | Mapping[str, Any]
     ) -> WireSessionSummary:
         """Replay entries from a HAR 1.2 document into the current wire-tap session."""
+        from openadapt_flow.capture_privacy import is_minimized_har, mutation_floor
+
         har = load_har(source, secrets=self._policy.secrets)
+        minimized = is_minimized_har(har)
         entries = har.get("log", {}).get("entries", [])
         for entry in entries:
             if not isinstance(entry, Mapping):
@@ -1173,6 +1303,7 @@ class SessionWireTap:
                 request_headers=dict(req_headers),
                 response_headers=dict(resp_headers),
                 duration_ms=duration_ms,
+                assume_mutation=minimized and mutation_floor(entry),
             )
         return self.summary()
 
@@ -1309,6 +1440,7 @@ class SessionWireTap:
         raw_target: str,
         request_headers: list[tuple[str, str]],
         request_body: bytes,
+        assume_mutation: bool = False,
     ) -> dict[str, Any]:
         """Atomically classify and gate a request before any upstream network I/O."""
         upper_method = method.strip().upper()
@@ -1320,6 +1452,20 @@ class SessionWireTap:
             request_body,
             request_headers,
         )
+        if (
+            is_mut
+            and not is_gql_mut
+            and target_origin in self._allowed_origins
+            and matches_read_route(
+                self._policy.read_routes,
+                upper_method,
+                path,
+                request_body,
+                request_headers,
+            )
+        ):
+            is_mut = False
+        is_mut = is_mut or assume_mutation
         started_utc = _utc_now_iso()
         req_sha = hashlib.sha256(request_body).hexdigest()
         masked_url = _mask_if_needed(full_url, self._policy.secrets)
@@ -1722,8 +1868,13 @@ class SessionWireTap:
             Mapping[str, str] | Iterable[tuple[str, str]]
         ] = None,
         duration_ms: float = 0.0,
+        assume_mutation: bool = False,
     ) -> Optional[WireMutationRecord]:
-        """Programmatically gate and record an HTTP exchange in-process."""
+        """Programmatically gate and record an HTTP exchange in-process.
+
+        ``assume_mutation`` counts it as a write whatever it looks like (a
+        minimized HAR's recorded write whose body was withheld).
+        """
         req_bytes = _to_bytes(request_body)
         req_hdrs = _header_pairs(request_headers)
         ticket = self._begin_request(
@@ -1731,6 +1882,7 @@ class SessionWireTap:
             raw_target=url,
             request_headers=req_hdrs,
             request_body=req_bytes,
+            assume_mutation=assume_mutation,
         )
         if ticket["blocked"]:
             status, _reason, err_hdrs, err_body = self._blocked_http_payload(
@@ -1897,8 +2049,19 @@ def dump_har(
     path: Optional[str | Path] = None,
     *,
     secrets: Iterable[str] = (),
+    keep_fields: Optional[Iterable[str]] = None,
+    raw_bodies: bool = False,
 ) -> str:
-    """Serialize a ``SessionWireTap`` or HAR dictionary to secret-masked HAR 1.2 JSON."""
+    """Serialize a ``SessionWireTap`` or HAR dictionary to secret-masked HAR 1.2 JSON.
+
+    Bodies are minimized by default (:mod:`openadapt_flow.capture_privacy`):
+    only ``keep_fields`` values survive (default: the policy's id and version
+    fields), the rest become keyed hashes. ``raw_bodies=True`` keeps them for
+    debugging and needs ``path``; a file is always sealed under the at-rest key
+    (``write_private_record``) and nothing is returned (``""``). TODO(#2423): use the key hierarchy's data key.
+    """
+    from openadapt_flow.capture_privacy import BodyMinimizer, minimize_har
+
     raw_har: Mapping[str, Any] = (
         har_or_tap.export_har()
         if isinstance(har_or_tap, SessionWireTap)
@@ -1906,11 +2069,29 @@ def dump_har(
     )
     secret_tuple = tuple(s for s in secrets if s)
     scrubbed = _scrub_har_value(dict(raw_har), secret_tuple)
+    if raw_bodies and path is None:
+        # Raw bodies go only to a sealed file, never back as plain text.
+        raise ValueError("dump_har(raw_bodies=True) needs a path to seal them to")
+    if not raw_bodies:
+        # Every entry, even in a HAR minimized before (a raw entry added to
+        # it is minimized, and earlier kept values are re-checked).
+        policy = (
+            har_or_tap.policy
+            if isinstance(har_or_tap, SessionWireTap)
+            else WirePolicy()
+        )
+        fields = (
+            (*policy.id_fields, *policy.version_fields)
+            if keep_fields is None
+            else tuple(keep_fields)
+        )
+        scrubbed = minimize_har(scrubbed, BodyMinimizer(fields))
     payload = json.dumps(scrubbed, indent=2, sort_keys=False)
     if path is not None:
         out = Path(path)
         write_private_record(out, payload.encode("utf-8"))
-    return payload
+    # Raw bodies are only ever in the sealed file, not handed back.
+    return "" if raw_bodies else payload
 
 
 def load_har(
@@ -1964,8 +2145,49 @@ def load_har(
             "entries": list(entries),
         }
     }
+    from openadapt_flow.capture_privacy import HAR_FIELD, is_minimized_har
+
+    if is_minimized_har(data):
+        # Kept declared fields come back as JSON text; withheld values do not.
+        normalized["log"][HAR_FIELD] = log[HAR_FIELD]
+        normalized["log"]["entries"] = [
+            _restore_minimized_entry(e) if isinstance(e, Mapping) else e
+            for e in entries
+        ]
     secret_tuple = tuple(s for s in secrets if s)
     return _scrub_har_value(normalized, secret_tuple)
+
+
+def _restore_minimized_entry(entry: Mapping[str, Any]) -> dict[str, Any]:
+    """A minimized entry with each body replaced by its kept JSON fields.
+
+    A document marked minimized must be minimized throughout: a body that
+    carries any text other than its own kept fields, or form ``params``, is
+    raw data under the marker and the whole document is refused.
+    """
+    from openadapt_flow.capture_privacy import HAR_FIELD, restore_kept_json
+
+    out = json.loads(json.dumps(entry))
+    for side, key in (("request", "postData"), ("response", "content")):
+        container = (out.get(side) or {}).get(key)
+        if not isinstance(container, dict):
+            continue
+        descriptor = container.get(HAR_FIELD)
+        kept = (
+            restore_kept_json(descriptor).decode("utf-8")
+            if isinstance(descriptor, dict)
+            else ""
+        )
+        text = container.get("text")
+        if (text not in (None, "", kept)) or container.get("params"):
+            raise ValueError(
+                "Invalid HAR payload: marked minimized, but an entry's body "
+                "is not minimized"
+            )
+        container.pop("encoding", None)
+        if isinstance(descriptor, dict):
+            container["text"] = kept
+    return out
 
 
 def har_to_summary(

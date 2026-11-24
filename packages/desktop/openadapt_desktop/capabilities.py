@@ -42,6 +42,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
+from .macos_permissions import control_permission_guidance
+
 CAPABILITY_SCHEMA = "openadapt-desktop.capability-report/v1"
 
 CapabilityState = Literal[
@@ -56,16 +58,12 @@ SURFACES: tuple[str, ...] = ("web", "windows", "macos", "linux", "rdp", "citrix"
 _SURFACE_LABELS = {
     "web": "web (browser)",
     "windows": "windows (WAA agent)",
-    "macos": "macOS (Accessibility)",
+    "macos": "macOS (AX)",
     "linux": "linux (AT-SPI)",
     "rdp": "RDP",
     "citrix": "Citrix",
 }
 
-_MAC_ACCESSIBILITY_REMEDIATION = (
-    "Open System Settings > Privacy & Security > Accessibility, enable "
-    "OpenAdapt Desktop, then restart the app."
-)
 _MAC_SCREEN_RECORDING_REMEDIATION = (
     "Open System Settings > Privacy & Security > Screen & System Audio "
     "Recording, enable OpenAdapt Desktop, then restart the app."
@@ -351,20 +349,21 @@ def _check_macos() -> SurfaceCapability:
             driver_version=None,
         )
     driver_version = _dist_version("pyobjc-framework-applicationservices")
-    if _mac_accessibility_trusted() is False:
+    guidance = control_permission_guidance()
+    if _mac_accessibility_trusted() is not True:
         return SurfaceCapability(
             surface="macos",
             state="permission_required",
             detail=(
-                "macOS has not granted this app the Accessibility permission "
-                "(AXIsProcessTrusted is false), so the AX tree cannot be read."
+                "macOS process AX trust could not be confirmed. "
+                "Target-app access has not been verified."
             ),
-            remediation=_MAC_ACCESSIBILITY_REMEDIATION,
-            requirement="the macOS Accessibility permission",
+            remediation=guidance["instructions"],
+            requirement="the macOS " + guidance["label"] + " permission",
             driver_name="pyobjc-framework-applicationservices",
             driver_version=driver_version,
         )
-    if _mac_screen_recording_granted() is False:
+    if _mac_screen_recording_granted() is not True:
         return SurfaceCapability(
             surface="macos",
             state="permission_required",
@@ -381,8 +380,8 @@ def _check_macos() -> SurfaceCapability:
         surface="macos",
         state="available",
         detail=(
-            "Accessibility and Screen Recording are granted; the native AX "
-            "surface is ready."
+            "Process AX trust and Screen Recording preflights passed. "
+            "Access to the selected target still needs to be checked."
         ),
         driver_name="pyobjc-framework-applicationservices",
         driver_version=driver_version,
@@ -481,7 +480,7 @@ def _check_rdp() -> SurfaceCapability:
                 driver_name="pyobjc-framework-quartz",
                 driver_version=None,
             )
-        if _mac_screen_recording_granted() is False:
+        if _mac_screen_recording_granted() is not True:
             return SurfaceCapability(
                 surface="rdp",
                 state="permission_required",
@@ -584,7 +583,7 @@ def _check_citrix() -> SurfaceCapability:
             driver_name="Citrix Workspace",
             driver_version=None,
         )
-    if sys.platform == "darwin" and _mac_screen_recording_granted() is False:
+    if sys.platform == "darwin" and _mac_screen_recording_granted() is not True:
         return SurfaceCapability(
             surface="citrix",
             state="permission_required",

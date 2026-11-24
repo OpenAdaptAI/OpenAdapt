@@ -1,0 +1,143 @@
+SCRATCH/tck-src/a2a-tck/.venv314/lib/python3.14/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to "function" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session". Set it to "fixture-scope" to keep the current behavior.
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+......s...ssFFsFFsFFsFFsFF............sss.ssssss.........sssssssssssssss [ 27%]
+ssssssssssssssssssssssssss..s..s..s..s..s..s..s..s..s..s..s..s..s..s..s. [ 54%]
+.s..s..s..ssss..s..s..ssssssssssssssssssssssssssssssssssssssssss........ [ 82%]
+....sssssssssssssss..s....F........ss.........s                          [100%]
+═══════════════════════════════════════════════════════
+             A2A TCK Compatibility Report              
+═══════════════════════════════════════════════════════
+SUT: http://localhost:9999
+Timestamp: 2026-11-21T06:51:05.927798+00:00
+
+OVERALL COMPATIBILITY: 75.0% (automated checks)
+
+┌────────┬────────┬────────┬─────────┬────────┬────────────┬───────┐
+│ Level  │ Passed │ Failed │ Skipped │ Manual │ Not tested │ Total │
+├────────┼────────┼────────┼─────────┼────────┼────────────┼───────┤
+│ MUST   │ 57     │ 2      │ 33      │ 7      │ 16         │ 115   │
+│ SHOULD │ 4      │ 1      │ 5       │ 2      │ 2          │ 14    │
+│ MAY    │ 2      │ 0      │ 2       │ 0      │ 0          │ 4     │
+└────────┴────────┴────────┴─────────┴────────┴────────────┴───────┘
+
+BY TRANSPORT:
+  agent_card:    9/11 (2 skipped) ✓
+  grpc:          0/72 (72 skipped) ✓
+  jsonrpc:       61/81 (15 skipped) ⚠
+  http_json:     58/78 (14 skipped) ⚠
+
+FAILED REQUIREMENTS:
+  ✗ DM-ART-001 (jsonrpc, http_json): Response contains no artifacts
+  ✗ DM-MSG-001 (jsonrpc, http_json): Expected a Message response, but got a Task or no payload
+  ✗ HTTP_JSON-SVC-001 (http_json): Error Content-Type should be application/a2a+json for 1.0.1
+
+PENDING MANUAL VERIFICATION (excluded from automated scores):
+  CARD-CLIENT-001 [MUST]: Clients MUST set the tenant field in every request to exactly the selected AgentInterface tenant, omitting it when unset. This client behavior requires observing the client's outbound requests; it cannot be established by this server-only conformance probe.
+  CARD-SIGN-001 [MUST]: Before signing, the Agent Card content MUST be canonicalized using the JSON Canonicalization Scheme (JCS) as defined in RFC 8785.
+  CARD-SIGN-002 [MUST]: The signatures field itself MUST be excluded from the content being signed to avoid circular dependencies.
+  CARD-SIGN-003 [MUST]: The JWS protected header MUST include alg (algorithm) and kid (key ID) parameters.
+  CARD-SIGN-004 [MUST]: Expired or revoked keys MUST NOT be used for signature verification.
+  AUTH-TLS-001 [MUST]: Production deployments MUST use encrypted communication (HTTPS for HTTP-based bindings, TLS for gRPC).
+  AUTH-TLS-002 [SHOULD]: Implementations SHOULD use modern TLS configurations (TLS 1.3+ recommended) with strong cipher suites.
+  AUTH-SERVER-001 [SHOULD]: A2A Clients SHOULD verify the A2A Server's identity by validating its TLS certificate against trusted CAs.
+  BIND-CUSTOM-002 [MUST]: A breaking change to a custom binding MUST use a new URI. Verifying this requires comparing binding versions and their semantics, which cannot be observed from a single server snapshot.
+═══════════════════════════════════════════════════════
+
+
+=================================== FAILURES ===================================
+____________ TestTextArtifact.test_task_has_text_artifact[jsonrpc] _____________
+tests/compatibility/core_operations/test_artifacts.py:107: in test_task_has_text_artifact
+    assert_and_record(compatibility_collector, req, transport, errors)
+tests/compatibility/_test_helpers.py:71: in assert_and_record
+    assert passed, fail_msg(req, transport, "; ".join(errors))
+           ^^^^^^
+E   AssertionError: DM-ART-001 [Artifact contains required fields] failed on jsonrpc: Response contains no artifacts (see specification/specification.md#417-artifact)
+___________ TestTextArtifact.test_task_has_text_artifact[http_json] ____________
+tests/compatibility/core_operations/test_artifacts.py:107: in test_task_has_text_artifact
+    assert_and_record(compatibility_collector, req, transport, errors)
+tests/compatibility/_test_helpers.py:71: in assert_and_record
+    assert passed, fail_msg(req, transport, "; ".join(errors))
+           ^^^^^^
+E   AssertionError: DM-ART-001 [Artifact contains required fields] failed on http_json: Response contains no artifacts (see specification/specification.md#417-artifact)
+____________ TestFileArtifact.test_task_has_file_artifact[jsonrpc] _____________
+tests/compatibility/core_operations/test_artifacts.py:162: in test_task_has_file_artifact
+    assert_and_record(compatibility_collector, req, transport, errors)
+tests/compatibility/_test_helpers.py:71: in assert_and_record
+    assert passed, fail_msg(req, transport, "; ".join(errors))
+           ^^^^^^
+E   AssertionError: DM-ART-001 [Artifact contains required fields] failed on jsonrpc: Response contains no artifacts (see specification/specification.md#417-artifact)
+___________ TestFileArtifact.test_task_has_file_artifact[http_json] ____________
+tests/compatibility/core_operations/test_artifacts.py:162: in test_task_has_file_artifact
+    assert_and_record(compatibility_collector, req, transport, errors)
+tests/compatibility/_test_helpers.py:71: in assert_and_record
+    assert passed, fail_msg(req, transport, "; ".join(errors))
+           ^^^^^^
+E   AssertionError: DM-ART-001 [Artifact contains required fields] failed on http_json: Response contains no artifacts (see specification/specification.md#417-artifact)
+_________ TestFileUrlArtifact.test_task_has_file_url_artifact[jsonrpc] _________
+tests/compatibility/core_operations/test_artifacts.py:216: in test_task_has_file_url_artifact
+    assert_and_record(compatibility_collector, req, transport, errors)
+tests/compatibility/_test_helpers.py:71: in assert_and_record
+    assert passed, fail_msg(req, transport, "; ".join(errors))
+           ^^^^^^
+E   AssertionError: DM-ART-001 [Artifact contains required fields] failed on jsonrpc: Response contains no artifacts (see specification/specification.md#417-artifact)
+________ TestFileUrlArtifact.test_task_has_file_url_artifact[http_json] ________
+tests/compatibility/core_operations/test_artifacts.py:216: in test_task_has_file_url_artifact
+    assert_and_record(compatibility_collector, req, transport, errors)
+tests/compatibility/_test_helpers.py:71: in assert_and_record
+    assert passed, fail_msg(req, transport, "; ".join(errors))
+           ^^^^^^
+E   AssertionError: DM-ART-001 [Artifact contains required fields] failed on http_json: Response contains no artifacts (see specification/specification.md#417-artifact)
+____________ TestDataArtifact.test_task_has_data_artifact[jsonrpc] _____________
+tests/compatibility/core_operations/test_artifacts.py:248: in test_task_has_data_artifact
+    assert_and_record(compatibility_collector, req, transport, errors)
+tests/compatibility/_test_helpers.py:71: in assert_and_record
+    assert passed, fail_msg(req, transport, "; ".join(errors))
+           ^^^^^^
+E   AssertionError: DM-ART-001 [Artifact contains required fields] failed on jsonrpc: Response contains no artifacts (see specification/specification.md#417-artifact)
+___________ TestDataArtifact.test_task_has_data_artifact[http_json] ____________
+tests/compatibility/core_operations/test_artifacts.py:248: in test_task_has_data_artifact
+    assert_and_record(compatibility_collector, req, transport, errors)
+tests/compatibility/_test_helpers.py:71: in assert_and_record
+    assert passed, fail_msg(req, transport, "; ".join(errors))
+           ^^^^^^
+E   AssertionError: DM-ART-001 [Artifact contains required fields] failed on http_json: Response contains no artifacts (see specification/specification.md#417-artifact)
+_______ TestMessageResponse.test_returns_message_with_text_part[jsonrpc] _______
+tests/compatibility/core_operations/test_artifacts.py:295: in test_returns_message_with_text_part
+    assert_and_record(compatibility_collector, req, transport, errors)
+tests/compatibility/_test_helpers.py:71: in assert_and_record
+    assert passed, fail_msg(req, transport, "; ".join(errors))
+           ^^^^^^
+E   AssertionError: DM-MSG-001 [Message contains required fields] failed on jsonrpc: Expected a Message response, but got a Task or no payload (see specification/specification.md#414-message)
+______ TestMessageResponse.test_returns_message_with_text_part[http_json] ______
+tests/compatibility/core_operations/test_artifacts.py:295: in test_returns_message_with_text_part
+    assert_and_record(compatibility_collector, req, transport, errors)
+tests/compatibility/_test_helpers.py:71: in assert_and_record
+    assert passed, fail_msg(req, transport, "; ".join(errors))
+           ^^^^^^
+E   AssertionError: DM-MSG-001 [Message contains required fields] failed on http_json: Expected a Message response, but got a Task or no payload (see specification/specification.md#414-message)
+______________ TestHttpJsonErrorMediaType.test_error_content_type ______________
+tests/compatibility/http_json/test_problem_details.py:94: in test_error_content_type
+    assert_and_record(compatibility_collector, req, TRANSPORT, errors)
+tests/compatibility/_test_helpers.py:71: in assert_and_record
+    assert passed, fail_msg(req, transport, "; ".join(errors))
+           ^^^^^^
+E   AssertionError: HTTP_JSON-SVC-001 [Content-Type is an accepted JSON media type] failed on http_json: Error Content-Type should be application/a2a+json for 1.0.1 (see specification/specification.md#111-protocol-requirements)
+- Generated html report: file://SCRATCH/tck-src/a2a-tck/reports/tck_report.html -
+=========================== short test summary info ============================
+FAILED tests/compatibility/core_operations/test_artifacts.py::TestTextArtifact::test_task_has_text_artifact[jsonrpc]
+FAILED tests/compatibility/core_operations/test_artifacts.py::TestTextArtifact::test_task_has_text_artifact[http_json]
+FAILED tests/compatibility/core_operations/test_artifacts.py::TestFileArtifact::test_task_has_file_artifact[jsonrpc]
+FAILED tests/compatibility/core_operations/test_artifacts.py::TestFileArtifact::test_task_has_file_artifact[http_json]
+FAILED tests/compatibility/core_operations/test_artifacts.py::TestFileUrlArtifact::test_task_has_file_url_artifact[jsonrpc]
+FAILED tests/compatibility/core_operations/test_artifacts.py::TestFileUrlArtifact::test_task_has_file_url_artifact[http_json]
+FAILED tests/compatibility/core_operations/test_artifacts.py::TestDataArtifact::test_task_has_data_artifact[jsonrpc]
+FAILED tests/compatibility/core_operations/test_artifacts.py::TestDataArtifact::test_task_has_data_artifact[http_json]
+FAILED tests/compatibility/core_operations/test_artifacts.py::TestMessageResponse::test_returns_message_with_text_part[jsonrpc]
+FAILED tests/compatibility/core_operations/test_artifacts.py::TestMessageResponse::test_returns_message_with_text_part[http_json]
+FAILED tests/compatibility/http_json/test_problem_details.py::TestHttpJsonErrorMediaType::test_error_content_type
+11 failed, 110 passed, 142 skipped in 1.48s
+Command: SCRATCH/tck-src/a2a-tck/.venv314/bin/python -m pytest tests/compatibility/ --sut-host=http://localhost:9999 --tb=short --media-type-spec-version=1.0.1 -q --compatibility-report=reports/compatibility --html=reports/tck_report.html --self-contained-html --junitxml=reports/junitreport.xml
+
+tck exit 1

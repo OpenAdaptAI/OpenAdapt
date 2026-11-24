@@ -120,6 +120,8 @@ def _normalize_with_codec(val: Any, codec: FieldCodec) -> Any:
     kind = codec.kind
     if kind == "exact":
         return val
+    if kind == "null_empty":
+        return "" if val is None else val
     if kind == "bijection":
         s = str(val)
         return codec.mapping.get(s, s)
@@ -275,6 +277,8 @@ class _FallbackExactAndFrameJudge:
         volatile_fields: tuple[str, ...] = (),
         field_codecs: Optional[Mapping[str, FieldCodec]] = None,
     ) -> JudgeVerdict:
+        from openadapt_flow.tx.judge import null_empty_equivalent
+
         codecs = dict(field_codecs or {})
         flat_r1 = _flatten_leaves(r1)
         flat_delta = _flatten_leaves(intended_delta)
@@ -378,7 +382,20 @@ class _FallbackExactAndFrameJudge:
 
             in_r0 = path in flat_r0
             in_r1 = path in flat_r1
-            if in_r0 and in_r1 and flat_r0[path] == flat_r1[path]:
+            if (
+                in_r0
+                and in_r1
+                and null_empty_equivalent(path, flat_r0[path], flat_r1[path], codecs)
+            ):
+                verdicts.append(
+                    FieldVerdict(
+                        field_path=path,
+                        category="frame",
+                        passed=True,
+                        tier_used="codec",
+                    )
+                )
+            elif in_r0 and in_r1 and flat_r0[path] == flat_r1[path]:
                 verdicts.append(
                     FieldVerdict(
                         field_path=path,
@@ -455,10 +472,16 @@ class LensHttpResponse:
     etag: Optional[str] = None
     extracted_entity_id: Optional[str] = None
     network_error: Optional[str] = None
+    #: The response's ``error_path`` value when the call failed inside a 2xx.
+    call_error: Optional[str] = None
 
     @property
     def ok(self) -> bool:
-        return self.status_code is not None and 200 <= self.status_code < 300
+        return (
+            self.status_code is not None
+            and 200 <= self.status_code < 300
+            and self.call_error is None
+        )
 
 
 def _render_template(
@@ -476,6 +499,67 @@ def _render_template(
         return urllib.parse.quote(text, safe="") if url_quote else text
 
     return _PLACEHOLDER_RE.sub(_replace, template)
+
+
+_INT_PLACEHOLDER_RE = re.compile(r"^\{([A-Za-z0-9_.-]+):int\}$")
+_WHOLE_PLACEHOLDER_RE = re.compile(r"^\{([A-Za-z0-9_.-]+)\}$")
+
+
+def render_body_template(
+    template: Any,
+    context: Mapping[str, Any],
+    payload: Optional[Mapping[str, Any]] = None,
+) -> Any:
+    """Fill an ``EndpointTemplate.body_template`` for one request.
+
+    Containers are copied; ``"{payload}"`` becomes the write payload object,
+    ``"{name:int}"`` an integer (or an error), a whole ``"{name}"`` keeps the
+    value's type, and other strings substitute text.
+    """
+    if isinstance(template, Mapping):
+        return {
+            str(k): render_body_template(v, context, payload)
+            for k, v in template.items()
+        }
+    if isinstance(template, list):
+        return [render_body_template(v, context, payload) for v in template]
+    if not isinstance(template, str):
+        return template
+    if template == "{payload}":
+        if payload is None:
+            raise ValueError("body template needs a payload")
+        return dict(payload)
+    as_int = _INT_PLACEHOLDER_RE.match(template)
+    if as_int:
+        found, val = _get_path(context, as_int.group(1))
+        if not found or isinstance(val, bool):
+            raise ValueError(f"missing integer template parameter '{as_int.group(1)}'")
+        try:
+            return int(str(val))
+        except ValueError as exc:
+            raise ValueError(
+                f"template parameter '{as_int.group(1)}' is not an integer"
+            ) from exc
+    whole = _WHOLE_PLACEHOLDER_RE.match(template)
+    if whole:
+        found, val = _get_path(context, whole.group(1))
+        if not found or val is None:
+            raise ValueError(f"missing template parameter '{whole.group(1)}'")
+        return val
+    return _render_template(template, context)
+
+
+def get_record_path(body: Any, path: str) -> tuple[bool, Any]:
+    """Follow a dotted path with list indexes (``result.0``) into JSON."""
+    cur = body
+    for part in path.split("."):
+        if isinstance(cur, Mapping) and part in cur:
+            cur = cur[part]
+        elif isinstance(cur, list) and part.isdigit() and int(part) < len(cur):
+            cur = cur[int(part)]
+        else:
+            return False, None
+    return True, cur
 
 
 class EntityLensClient:
@@ -537,7 +621,16 @@ class EntityLensClient:
             req_headers.update(extra_headers)
 
         body_bytes: Optional[bytes] = None
-        if json_payload is not None:
+        if endpoint.body_template is not None:
+            try:
+                rendered = render_body_template(
+                    endpoint.body_template, context, json_payload
+                )
+            except ValueError as exc:
+                return LensHttpResponse(status_code=None, network_error=str(exc))
+            body_bytes = json.dumps(rendered).encode("utf-8")
+            req_headers.setdefault("Content-Type", "application/json")
+        elif json_payload is not None:
             body_bytes = json.dumps(dict(json_payload)).encode("utf-8")
             req_headers.setdefault("Content-Type", "application/json")
 
@@ -576,12 +669,18 @@ class EntityLensClient:
 
         etag = self._extract_header(resp_headers, endpoint.etag_header or "ETag")
         extracted_id = self._extract_entity_id(endpoint, parsed_json, resp_headers)
+        call_error: Optional[str] = None
+        if endpoint.error_path:
+            found_err, err_val = get_record_path(parsed_json, endpoint.error_path)
+            if found_err and err_val is not None:
+                call_error = json.dumps(err_val, default=str)[:500]
         return LensHttpResponse(
             status_code=status_code,
             json_body=parsed_json,
             headers=resp_headers,
             etag=etag,
             extracted_entity_id=extracted_id,
+            call_error=call_error,
         )
 
     @staticmethod
@@ -601,6 +700,14 @@ class EntityLensClient:
         parsed_json: Any,
         headers: Mapping[str, str],
     ) -> Optional[str]:
+        if endpoint.record_path:
+            found_rec, rec = get_record_path(parsed_json, endpoint.record_path)
+            if found_rec and isinstance(rec, Mapping):
+                for id_key in (endpoint.id_field, self.lens.id_field):
+                    found, val = _get_path(rec, id_key)
+                    if found and val is not None and str(val).strip():
+                        return str(val)
+            return None
         if isinstance(parsed_json, Mapping):
             target_obj: Mapping[str, Any] = parsed_json
             if endpoint.records_key and isinstance(
@@ -626,6 +733,9 @@ class EntityLensClient:
         endpoint: EndpointTemplate,
         body: Any,
     ) -> Optional[dict[str, Any]]:
+        if endpoint.record_path:
+            found, rec = get_record_path(body, endpoint.record_path)
+            return dict(rec) if found and isinstance(rec, Mapping) else None
         if not isinstance(body, Mapping):
             return None
         if endpoint.records_key:

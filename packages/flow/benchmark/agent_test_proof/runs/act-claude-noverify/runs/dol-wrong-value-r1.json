@@ -1,0 +1,71 @@
+{
+ "scenario": "dol-wrong-value",
+ "rep": 1,
+ "fault": "wrong_value",
+ "note": "The phone's last two digits are swapped on the way in.",
+ "task": {
+  "lastname": "Mbeki",
+  "firstname": "Thabo",
+  "poste": "Fleet coordinator",
+  "phone": "555-0204",
+  "email": "t.mbeki@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/card.php?id=72",
+ "agent_s": 101.1,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE Thabo Mbeki contact created (ID/URL not visible; contact card page is open)",
+  "claim_line": true,
+  "final_text": "I added the contact Thabo Mbeki, not linked to any third party. His job position is Fleet coordinator, his professional phone is 555-0204, and his email is t.mbeki@example.invalid. I left every other field at its default.\n\nMy first save stored the phone as 555-0240, so I corrected it through Modify. The page now shows 5550204, which is the same number without the dash. The existing contacts display their phones the same way. Only one Mbeki record was created.\n\nI couldn't see the browser address bar, so I don't have the record's ID or URL. The contact's page is open on the Contact/Address tab.\n\nRESULT: DONE Thabo Mbeki contact created (ID/URL not visible; contact card page is open)"
+ },
+ "model_calls": 19,
+ "store": {
+  "correct": true,
+  "reasons": [],
+  "new": [
+   "72"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795247963.061,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 49
+  },
+  {
+   "t": 1795247995.383,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "wrong_value",
+   "rewritten": [
+    "phone_pro"
+   ],
+   "status": 302,
+   "accepted": true,
+   "ms": 74
+  },
+  {
+   "t": 1795248059.434,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": false,
+   "status": 302,
+   "ms": 99
+  }
+ ],
+ "outcome": "completed_correctly",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

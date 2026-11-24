@@ -1,0 +1,8 @@
+{
+  "calls": 0,
+  "cost_usd": 0.0,
+  "input_tokens": 0,
+  "model": null,
+  "output_tokens": 0,
+  "schema": "openadapt.agent-usage/v1"
+}

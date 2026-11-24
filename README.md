@@ -6,19 +6,22 @@
 
 The open-source, verified execution layer for computer-use agents.
 
-[![CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml) [![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml) [![PyPI](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/) [![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE) [![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
+[![CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml) [![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml) [![PyPI](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/) [![Python 3.11–3.12](https://img.shields.io/badge/python-3.11%E2%80%933.12-blue)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE) [![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
 [What it can do](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) · [Documentation](https://docs.openadapt.ai) · [Quickstart](https://docs.openadapt.ai/tutorials/quickstart/) · [Live demo](https://app.openadapt.ai/demo) · [Website](https://openadapt.ai) · [Get updates](https://openadapt.ai/#updates) · [Discord](https://discord.gg/yF527cQbDG)
 
 </div>
 
 A computer-use agent looks at the screen and chooses every click again, on
-every run. OpenAdapt lets your agent, or a person, do a task once in a web,
-Windows, macOS, Linux or remote-desktop app. It compiles that run into a program,
+every run. OpenAdapt lets a person record a task (once for a simple path, or a
+few times with `openadapt compile --induce` to cover variations), or lets an AI
+agent perform it once while OpenAdapt records it, ideally on test data, in a
+web, Windows, macOS, Linux or remote-desktop app. It compiles the demonstration
+into a program,
 and your agent calls the program as one tool. The program runs with no model
 calls and sends no screenshots anywhere. It confirms the right record before
-each save, reads the save back from the system of record after it, and returns
-a plain outcome. When anything doesn't match, it stops and tells your agent
+each save, checks the save after it, and returns a plain outcome that says
+how the save was checked. When anything doesn't match, it stops and tells your agent
 instead of guessing.
 
 ## Measured on OpenEMR and openIMIS
@@ -45,32 +48,46 @@ has every run.
 On a test copy of openIMIS, the open-source insurance and claims system that
 runs Nepal's national health insurance scheme, the compiled program entered
 149 synthetic claims with no model calls: 148 read back correct and none were
-saved wrong
+saved wrong. Each saved claim was checked through a read-only database role on
+the test copy; the 149th stopped before saving
 ([SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#openimis)).
-
-A screen can't show a save that went wrong behind it. On a test copy of
-OpenEMR, with faults injected in its database (a field blanked, a value changed, a
-duplicate chart, a chart removed, another chart deleted or edited), the agent
-claimed success on all 30 bad saves. Reading the record back caught 25 of the
-30 and confirmed all 5 clean saves, with no false alarms. On MockMed, a test app
-that shows a save as done before its server answers, the agent also claimed
-all 30 bad saves, and the read-back caught all 30
-([details below](#why-the-read-back-matters)).
 
 ## One harness, three modes
 
 | Mode | What happens | Model calls |
 |---|---|---|
-| **Explore** | Your agent, or a person, does the task once while OpenAdapt records every action. The save is read back before anything compiles. | Your agent's, on your own key |
-| **Run** | The compiled program repeats the task with new inputs. It checks the record before each save and reads it back after. | None |
+| **Explore** | A person records the task (once, or several times with `openadapt compile --induce` for variations), or an AI agent runs it once while OpenAdapt records every action, ideally on test data. The save is checked before anything compiles. | Your agent's, on your own key |
+| **Run** | The compiled program repeats the task with new inputs. It checks the record before each save and reads the result back after. | None |
 | **Repair** | When the app changes, the run stops before saving. An agent shows the fix, the program tries it up to the save without saving, and a person approves it. | Only when something changed, on your own key |
 
-## Why the read-back matters
+## The 3-level verification ladder
 
-A success screen is not proof of a save. We injected 8 kinds of bad save into
-a test app (a save that never landed, landed partly, landed twice, went to the
-wrong record, or changed another record), 9 runs each, alongside clean runs.
-Each check below was asked whether those 72 bad saves had succeeded:
+Most enterprise deployments do not give an automation tool direct SQL access,
+and OpenAdapt does not require it. OpenAdapt picks the strongest layer the app
+supports:
+
+- **Promote to API or MCP when an endpoint exists:** Record the task in the
+  GUI, compile it into direct form/RPC calls and MCP tools (`openadapt-agent serve`)
+  whenever the app exposes an endpoint, and avoid replaying pixels where a
+  compiled API step is ~7x faster (3.3 s vs. 22.5 s on OpenEMR above).
+- **Level 1 (Before-click local guard: 100% of apps, 0 DB needed):** Checks
+  the active record and entity identity across tabs, enforces policy and
+  consent gates before consequential writes, and checks screenshots locally for
+  UI drift or prompt injection. If anything looks wrong, it stops and asks a
+  person instead of guessing.
+- **Level 2 (Post-action UI and confirmation read-back: ~90% of portals, 0 DB needed):**
+  Reads back submitted fields, server confirmation IDs, or generated PDFs in a
+  separate session to confirm what the portal actually recorded.
+- **Level 3 (Direct API or DB read-back: optional upgrade):** When you own the
+  system or have read-only FHIR, REST, or SQL access, reads the system of
+  record directly and mints a signed `VERIFIED` receipt.
+
+### Why independent checks beat a "Saved" screen
+
+In controlled fault tests, a success banner on screen is not enough to prove a
+write landed. We injected 8 kinds of bad save into a test app (a save that
+never landed, landed partly, landed twice, went to the wrong record, or changed
+another record), 9 runs each, alongside clean runs:
 
 | How the save was checked | Bad saves reported as saved |
 |---|---|
@@ -78,18 +95,19 @@ Each check below was asked whether those 72 bad saves had succeeded:
 | A read of the record over the app's REST API | 9 of 72 (all writes to a table it didn't read) |
 | A read of every table in the database | 0 of 72 |
 
+The test app's database is SQLite with two record tables, so "every table"
+there is two tables; a real system has many more. Separately, 9 of the 18
+correct saves stopped in every arm because the server committed the save after
+its response timed out, so the write step halted before any read-back ran.
 [EFFECT_E2E.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/effect_e2e/EFFECT_E2E.md)
 has the fault set, the method and the raw results.
 
-An agent working alone can't see these faults either. Claude Sonnet 5.5, using
-computer use, did a task on a test app whose server broke the save in 6 ways,
-5 times each. The agent reported all 30 bad saves as done. Given the agent's
-run, `openadapt-flow verify-run` read each record back: it flagged all 30 and
-confirmed all 10 clean saves, with no false alarms. The test app shows "saved"
-before the server answers, so the screen gave the agent nothing to notice. That
-gap is what the read-back closes.
-[SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back)
-has the method, the raw runs and the cost.
+An agent working alone misses the same faults. In controlled runs on OpenEMR
+and MockMed with 30 injected bad saves each, Claude Sonnet 5.5 computer use
+reported all 30 bad saves as done. Running `openadapt-flow verify-run` caught
+25 of 30 on OpenEMR and 30 of 30 on MockMed, while confirming all clean saves
+with zero false alarms
+([SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back)).
 
 ## Try it in one command
 
@@ -99,7 +117,7 @@ uvx --python 3.12 openadapt@latest quickstart --break-it
 
 No account or API key. [uv](https://docs.astral.sh/uv/getting-started/installation/)
 fetches Python 3.12 if you need it, and `@latest` runs the newest release. With
-Python 3.10 to 3.12 already installed, `python -m pip install --upgrade openadapt`
+Python 3.11 or 3.12 already installed, `python -m pip install --upgrade openadapt`
 then `openadapt quickstart --break-it` does the same. The browser runs hidden
 and progress shows in the terminal; add `--watch` to see the browser window.
 
@@ -137,7 +155,7 @@ The [quickstart tutorial](https://docs.openadapt.ai/tutorials/quickstart/) walks
 ### Compile your agent's run
 
 Your agent (Claude or OpenAI computer use, or your own loop, on your own model
-key) does the task once while OpenAdapt records it. A person reviews and admits
+key) does the task once while OpenAdapt records it, ideally on test data. A person reviews and admits
 the draft program, or a registered agent admits it under a policy a person
 signed. After that, the program runs instead of the agent.
 
@@ -176,6 +194,25 @@ receipt. The hooks are advisory; see
 [HOOKS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/HOOKS.md).
 [Connect an agent](https://docs.openadapt.ai/how-to/connect-an-agent/)
 covers other clients.
+
+### Hand results from agent to agent
+
+When one agent hands a result to another, the run's signed receipt goes with
+it, and the receiving agent verifies it against keys it pins:
+
+```bash
+openadapt handoff send result.json --run RUN_DIR --out result.handoff.json
+openadapt handoff verify result.handoff.json --keys trusted-keys.json
+```
+
+The verdict says who signed, which checks passed and which were not checked,
+and any change confirmed in the other party's own system. A valid signature
+proves who signed, not that the claim is true. Handoffs travel over MCP
+(`serve --handoffs`), HTTP and webhooks (`--post URL`), files and email
+(`--detached`), and the A2A (Agent2Agent) protocol (`openadapt agent serve
+--a2a`, with an Agent Card, after `pip install 'openadapt[a2a]'`).
+[HANDOFFS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/HANDOFFS.md)
+has the details.
 
 ### Record a task by hand
 
@@ -288,7 +325,7 @@ have the details.
 
 ```mermaid
 flowchart LR
-    S["Record, or let an agent do it once"] --> C["Compile"] --> Q["Certify and qualify"] --> A["Admit"] --> R["Run with checks"]
+    S["Demonstrate (human or AI agent)"] --> C["Compile"] --> Q["Certify and qualify"] --> A["Admit"] --> R["Run with checks"]
     R -.->|"stopped: approve a fix"| C
 ```
 
@@ -309,7 +346,7 @@ the right record is on screen, makes the entry, and reads the record back.
 | Model calls per run | At least one per step | None on a hit; the agent's calls on a miss | None | None with default settings |
 | When the screen changes | The model tries to adapt | The agent improvises live | A selector stops matching, or matches the wrong control | The run stops before saving; a fix is proposed and a person approves it |
 | Right record? | The model judges from the screen | Usually only that the screen looks as recorded | Whatever the developer scripted | Checked before every save |
-| Did the save land? | The model judges from the screen | The screen | Whatever the developer scripted | Read back from the system of record |
+| Did the save land? | The model judges from the screen | The screen | Whatever the developer scripted | Reported verified only when a read outside the acting session confirms it; weaker checks are named as such |
 | Strongest for | New or changing tasks | Repeated tasks where a wrong save is cheap | Stable processes with a team to maintain the scripts | The same entry many times, where a wrong save is costly |
 
 ## What it can do
@@ -318,11 +355,12 @@ the right record is on screen, makes the entry, and reads the record back.
 - **Uses the most reliable layer the app allows**: page structure (DOM, UI Automation, Accessibility), direct API calls where one is bound, and pixels only for remote desktops.
 - **Builds branching programs** from several demonstrations, repeated halts and background runs, and routes each item to the right verified variant.
 - **Works across surfaces**: web, Windows, macOS, Linux and RDP backends, chained in one workflow.
-- **Confirms the right record before every write and reads the saved record back** from the system of record, never just the screen.
+- **Confirms the right record before every write and checks the saved record after it**. A run is reported verified only when a read outside the acting session confirms the save: the system of record where one can be read, or a separate session. Weaker checks are reported at their own level.
 - **Stops instead of guessing**, never retries an uncertain save, and says what changed before a stop.
 - **Binds each approval to exactly what will be saved**, with one-tap answers on a paired phone.
 - **Repairs itself when the app changes**, probing a fix up to the save and asking a person to approve it (qualified on browser runs and end to end on native macOS).
 - **Works as a safety layer under any agent**: MCP tools, a guarded save, Agent Skills and a CLI.
+- **Hands results from agent to agent with their receipts**, over MCP, HTTP, files and the A2A protocol, and verifies a handoff on arrival.
 - **Runs locally**: no calls to a hosted AI model on healthy runs, personal and health data redacted, signed receipts.
 
 [CAPABILITIES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) has the evidence and code for each.
@@ -344,13 +382,19 @@ it. [Run outcomes](https://docs.openadapt.ai/reference/outcomes/) lists every va
 
 ## When to use something else
 
-- **The app has an API for the task.** Call the API.
-- **Every task is new.** Use a computer-use agent. OpenAdapt pays off when the
-  same entry repeats.
-- **There's no way to read the record back.** The record check needs read
-  access to the system of record: an API, the database, FHIR, or a separate
-  signed-in session. Without one, a run can only end as finished but not
-  checked.
+- **You already have a clean, documented API client for the task.** Call the
+  API directly. (If the app only exposes an internal form or RPC endpoint,
+  OpenAdapt can record it in the GUI and compile it into a direct API/MCP
+  step instead of replaying pixels.)
+- **Every task is one-off.** Use a computer-use agent. OpenAdapt pays off when
+  the same entry repeats or needs repeatable verification.
+- **You need a `VERIFIED` receipt with zero read-back path at all.** Level 1
+  before-click guards work on 100% of apps with no database access, and Level 2
+  UI confirmation read-back covers ~90% of portals with no database access.
+  Level 3 direct API/FHIR/SQL read-back is an optional upgrade when you own the
+  system. If a target exposes neither a UI read-back nor an API/DB read-back, a
+  run finishes as checked-before-click (`COMPLETED_UNVERIFIED`) rather than
+  `VERIFIED`.
 
 
 ## Packages

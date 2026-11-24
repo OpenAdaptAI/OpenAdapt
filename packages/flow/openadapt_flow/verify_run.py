@@ -662,7 +662,72 @@ def _judge_versions(
     spec = cfg.frame.versions if cfg.frame is not None else None
     if spec is None:
         return frame
-    field_name = spec.target_field or cfg.frame.identity_field or "id"  # type: ignore[union-attr]
+    targets = _version_targets(
+        cfg, before, effects, verdicts, spec.target_field, spec.target_surface
+    )
+    stored = (before.detail or {}).get(FRAME_VERSIONS_DETAIL)
+    if spec.target_surface is not None and not _surface_has_target(
+        effects, spec.target_surface
+    ):
+        # A surface no write target is read from (a typo in a hand-written
+        # contract, or a surface only a guard reads) would leave no target,
+        # and no target holds.
+        result = VersionVerdict(
+            "not_checked",
+            "unknown_surface",
+            reason="frame.versions.target_surface names a surface no write "
+            "target is read from, so no target's versions can be judged",
+        )
+    else:
+        result = judge_versions(
+            spec,
+            stored if isinstance(stored, Mapping) else {},
+            _read_versions(cfg, params),
+            targets,
+            _mac_key(salt),
+            params,
+        )
+    frame.versions = result
+    return _apply_version_result(frame, result)
+
+
+def _apply_version_result(frame: FrameVerdict, result: Any) -> FrameVerdict:
+    if result.status == "refuted":
+        frame.status = "refuted"
+        frame.reason = result.reason
+    elif result.status == "not_checked" and frame.status == "held":
+        frame.status = "not_checked"
+        frame.reason = result.reason
+    return frame
+
+
+def _writes_a_target(effect: Effect) -> bool:
+    """A write effect whose records can be targets. A guard ("nothing
+    here", ``record_written`` with ``expected_count`` 0) never is."""
+
+    if effect.kind not in (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS):
+        return False
+    return not (effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count == 0)
+
+
+def _surface_has_target(effects: Sequence[Effect], surface: str) -> bool:
+    from openadapt_flow.runtime.effects.surfaces import surface_of
+
+    return any(_writes_a_target(e) and surface_of(e) == surface for e in effects)
+
+
+def _version_targets(
+    cfg: VerifyConfig,
+    before: EffectState,
+    effects: Sequence[Effect],
+    verdicts: Sequence[EffectVerdict],
+    target_field: Optional[str],
+    target_surface: Optional[str],
+) -> list[tuple[Optional[str], bool, bool]]:
+    """Per record a confirmed write effect matched: its ``target_field``
+    value, whether it existed before the write, and whether it changed."""
+
+    field_name = target_field or cfg.frame.identity_field or "id"  # type: ignore[union-attr]
     # Whether a target existed is told by its identity, which a save doesn't
     # change, never by the target field's value after the write: a target
     # field the write changed would make an old record look created.
@@ -690,27 +755,14 @@ def _judge_versions(
             return index(rows) if isinstance(rows, list) else None
         return index(before.records) if before.reachable else None
 
-    def writes_a_target(effect: Effect) -> bool:
-        """A write effect whose records can be targets. A guard ("nothing
-        here", ``record_written`` with ``expected_count`` 0) never is."""
-
-        if effect.kind not in (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS):
-            return False
-        return not (
-            effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count == 0
-        )
-
     ignored = set(cfg.frame.ignore_fields)  # type: ignore[union-attr]
     targets: list[tuple[Optional[str], bool, bool]] = []
     for effect, verdict in zip(effects, verdicts):
-        if not writes_a_target(effect):
+        if not _writes_a_target(effect):
             continue
         if not verdict.confirmed:
             continue
-        if (
-            spec.target_surface is not None
-            and surface_of(effect) != spec.target_surface
-        ):
+        if target_surface is not None and surface_of(effect) != target_surface:
             continue  # a row beside the target, not the target
         old = before_rows(effect)
         for record in verdict.matched_records:
@@ -728,36 +780,77 @@ def _judge_versions(
                 or any(record.get(k) != v for k, v in was.items() if k not in ignored)
             )
             targets.append((text, existed, changed))
-    stored = (before.detail or {}).get(FRAME_VERSIONS_DETAIL)
-    if spec.target_surface is not None and not any(
-        writes_a_target(e) and surface_of(e) == spec.target_surface for e in effects
+    return targets
+
+
+def _hold_row_versions(cfg: VerifyConfig, execution_id: str) -> dict[str, Any]:
+    """Open ``frame.row_versions``' held read before the baseline records."""
+
+    from openadapt_flow.runtime.effects import row_versions as rv
+
+    spec = cfg.frame.row_versions  # type: ignore[union-attr]
+    try:
+        read = cfg.frame.database.read  # type: ignore[union-attr]
+        held = rv.open_held(spec, _db_connect(read))  # type: ignore[arg-type]
+    except Exception as exc:  # noqa: BLE001 - not held -> the judge stops
+        return rv.baseline_detail(None, type(exc).__name__)
+    rv.hold(execution_id, held)
+    return rv.baseline_detail(held, None)
+
+
+def _judge_row_versions(
+    cfg: VerifyConfig,
+    frame: FrameVerdict,
+    before: EffectState,
+    effects: Sequence[Effect],
+    verdicts: Sequence[EffectVerdict],
+    execution_id: str,
+) -> FrameVerdict:
+    """Add ``frame.row_versions``: two writers of a target in the window
+    refute the frame; a read that can't count them leaves it not checked."""
+
+    from openadapt_flow.runtime.effects import row_versions as rv
+    from openadapt_flow.runtime.effects.versions import VersionVerdict
+
+    spec = cfg.frame.row_versions if cfg.frame is not None else None
+    if spec is None:
+        return frame
+    held = rv.take(execution_id)
+    if not rv.stored_held((before.detail or {}).get(rv.DETAIL)):
+        if held is not None:
+            held.close()
+        held = None
+    if spec.target_surface is not None and not _surface_has_target(
+        effects, spec.target_surface
     ):
-        # A surface no write target is read from (a typo in a hand-written
-        # contract, or a surface only a guard reads) would leave no target,
-        # and no target holds.
+        if held is not None:
+            held.close()
         result = VersionVerdict(
             "not_checked",
             "unknown_surface",
-            reason="frame.versions.target_surface names a surface no write "
-            "target is read from, so no target's versions can be judged",
+            reason="frame.row_versions.target_surface names a surface no "
+            "write target is read from",
         )
-    else:
-        result = judge_versions(
+    elif (
+        unbound := rv.binding_problem(
             spec,
-            stored if isinstance(stored, Mapping) else {},
-            _read_versions(cfg, params),
-            targets,
-            _mac_key(salt),
-            params,
+            cfg.verifier.surfaces,
+            cfg.frame.database.read,  # type: ignore[union-attr]
+            cfg.frame.identity_field,  # type: ignore[union-attr]
         )
-    frame.versions = result
-    if result.status == "refuted":
-        frame.status = "refuted"
-        frame.reason = result.reason
-    elif result.status == "not_checked" and frame.status == "held":
-        frame.status = "not_checked"
-        frame.reason = result.reason
-    return frame
+    ) is not None:
+        if held is not None:
+            held.close()
+        result = VersionVerdict("not_checked", "unbound_source", reason=unbound)
+    else:
+        targets = _version_targets(
+            cfg, before, effects, verdicts, spec.target_field, spec.target_surface
+        )
+        read = cfg.frame.database.read  # type: ignore[union-attr]
+        result = rv.judge_row_versions(spec, held, _db_connect(read), targets)
+    if frame.versions is None or result.status != "held":
+        frame.versions = result
+    return _apply_version_result(frame, result)
 
 
 def _db_connect(read: Mapping[str, Any]) -> Any:
@@ -2485,6 +2578,11 @@ def capture_baseline(
             history_before, _history_rows = _read_history(cfg, params, _now(), salt)
         except Exception as exc:
             history_error = type(exc).__name__
+    row_versions_detail = (
+        _hold_row_versions(cfg, execution_id)
+        if cfg.frame is not None and cfg.frame.row_versions is not None
+        else None
+    )
     # The versions first: a save between this read and the record read is
     # then in the record baseline too, never hidden in the versions one.
     versions_rows = (
@@ -2540,6 +2638,10 @@ def capture_baseline(
             "reachable": entries is not None,
             "ids": _audit_ids(entries or [], salt),
         }
+    if row_versions_detail is not None:
+        from openadapt_flow.runtime.effects.row_versions import DETAIL as RV_DETAIL
+
+        detail[RV_DETAIL] = row_versions_detail
     if cfg.frame is not None and cfg.frame.versions is not None:
         from openadapt_flow.runtime.effects.versions import seal_versions
 
@@ -3350,6 +3452,9 @@ def verify_run(
         )
         frame = _judge_versions(
             cfg, frame, before, bound_effects, verdicts, params, salt
+        )
+        frame = _judge_row_versions(
+            cfg, frame, before, bound_effects, verdicts, execution_id
         )
     else:
         frame = FrameVerdict(

@@ -11,11 +11,16 @@ under `packages/flow`, next to `packages/agent`, `packages/types` and
 `packages/capture`. The standalone openadapt-flow, openadapt-agent and
 openadapt-types repositories are frozen; changes go here.
 [CAPABILITIES.md](CAPABILITIES.md) is the map of what exists and how proven
-it is; update it in the same pull request as any capability change. For a
-new `openadapt-flow` command, add `packages/flow/docs/commands/<group>/<verb>.md`
-and run `python scripts/build_command_map.py` (a test enforces it). Refresh the review brief with `python scripts/build_llms_full.py` when you
-change README.md, CAPABILITIES.md, SURFACES.md, LIMITS.md or the flow
-CHANGELOG, and always before a release.
+it is. It is generated from `capabilities/`, one file per table row: in the
+same pull request as any capability change, add or update your row file
+(`capabilities/<NN>-<section>/<NNNN>-<slug>.md`, one table line) or the
+section's `section.md`. For a new `openadapt-flow` command, add
+`packages/flow/docs/commands/<group>/<verb>.md` (a test enforces it). Do not
+regenerate or hand-edit CAPABILITIES.md or llms-full.txt in a pull request:
+`.github/workflows/refresh-generated.yml` opens a draft pull request that
+refreshes both after the change lands, and CI fails a hand edit. Before a
+release, merge the open refresh pull request (or run the workflow) so the
+review brief names the new version.
 
 The current product compiles demonstrated GUI workflows into deterministic,
 locally executable programs. Healthy runs make no model calls. Training,
