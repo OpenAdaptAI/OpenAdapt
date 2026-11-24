@@ -98,7 +98,9 @@ except ImportError:  # pragma: no cover - pre-0.24.3 published openadapt-types s
 
     def from_effect_strength(name: object) -> CheckLevel:
         value = getattr(name, "value", name)
-        return _STRENGTH_TO_LEVEL.get(value, CheckLevel.UNCHECKED)  # type: ignore[arg-type]
+        if not isinstance(value, str):
+            return CheckLevel.UNCHECKED
+        return _STRENGTH_TO_LEVEL.get(value, CheckLevel.UNCHECKED)
 
     def to_effect_strength(level: CheckLevel) -> Optional[str]:
         for name, mapped in _STRENGTH_TO_LEVEL.items():

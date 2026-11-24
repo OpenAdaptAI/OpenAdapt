@@ -82,7 +82,7 @@ try:
         evidence_scope_problem,
     )
 except ImportError:  # pragma: no cover - pre-0.24.3 published openadapt-types shim
-    EVIDENCE_SCOPE_FIELD = "evidence_scope"
+    EVIDENCE_SCOPE_FIELD = "evidence_scope"  # type: ignore[misc]
     build_evidence_scope = None  # type: ignore[assignment]
     evidence_scope_problem = None  # type: ignore[assignment]
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
@@ -3805,7 +3805,11 @@ def verify_run(
         confirmed=delta_verdict == CONFIRMED_WORD,
         minimum=minimum_level,
         read_back_at=read_at if not unread else None,
-        recheck_window_s=recheck_after_s if recheck_due_at is not None else None,
+        recheck_window_s=(
+            int(recheck_after_s)
+            if recheck_due_at is not None and recheck_after_s is not None
+            else None
+        ),
         not_covered=("changes_after_read_back",),
     )
     if request_context is not None:
