@@ -2478,6 +2478,7 @@
     "openadapt_flow/policies/permissive.yaml",
     "openadapt_flow/policies/record-write.yaml",
     "openadapt_flow/registry_trusted_root.json",
+    "openadapt_flow/secret_field_vocabulary.json",
     "openadapt_flow/taskgen/profiles/mockmed.yaml",
     "openadapt_flow/visualize/static/program_graph.css",
     "openadapt_flow/visualize/static/program_graph.js",

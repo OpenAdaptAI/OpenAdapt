@@ -295,6 +295,8 @@ Done:
   the demonstrated writes; an unlisted step role is not checked.
 - [x] `gui.attestations.judge_attestations` (C1 C2 C5): new. The plan's boxes
   are the obligations; a box the plan never saw is unexpected.
+- [x] `gui.hub.judge_hub` (C1 C2): new. The planned sections are the
+  obligations; completion is read from the hub, never from the save click.
 - [x] `verify_draft.judge_case` (C3 C5): admission cases settle on the verdict
   kernel via allow-listed outcome maps; untestable, error, or unknown codes
   never hold.

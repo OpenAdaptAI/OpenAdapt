@@ -41,6 +41,8 @@ import re
 from typing import Any, Iterable, Mapping, Optional
 from urllib.parse import parse_qsl, quote, unquote, unquote_plus, urlsplit
 
+from openadapt_flow.secret_field_names import names_secret_field
+
 NETWORK_SAVE_KIND = "network_save"
 PLACEHOLDER = "<secret>"
 SAVE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
@@ -197,7 +199,8 @@ def is_secret_value(value: object) -> bool:
 def is_secret_key(key: object) -> bool:
     """True when a query, form or JSON key names a secret."""
 
-    return bool(SECRET_KEY.search(str(key or "")))
+    text = str(key or "")
+    return bool(SECRET_KEY.search(text)) or names_secret_field(text)
 
 
 def is_secret_header(name: object) -> bool:
