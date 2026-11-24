@@ -1,0 +1,25 @@
+{
+  "case_id": "cr-s05",
+  "facts": {
+    "applicant.date_of_birth": "1991-12-03",
+    "applicant.email": "yusuf.brennan@example.test",
+    "applicant.first_name": "Yusuf",
+    "applicant.last_name": "Brennan",
+    "applicant.license_state": "NV",
+    "applicant.marital_status": "Single",
+    "coverage.bi_limits": "100/300",
+    "coverage.collision_deductible": 1000,
+    "coverage.comprehensive_deductible": 500,
+    "garaging.city": "Juniper Flats",
+    "garaging.state": "NV",
+    "garaging.zip": "89701",
+    "household.driver_count": 1,
+    "vehicle.annual_miles": 15000,
+    "vehicle.commute_miles_one_way": 22,
+    "vehicle.make": "Marlowe",
+    "vehicle.model": "Avenue LX",
+    "vehicle.ownership": "own",
+    "vehicle.primary_use": "commute",
+    "vehicle.year": 2018
+  }
+}

@@ -1532,6 +1532,7 @@ def _cmd_record_capture(args: argparse.Namespace) -> int:
         BrowserAttachError,
         record_interactive,
     )
+    from openadapt_flow.network_capture import cli_mode
 
     try:
         out = record_interactive(
@@ -1545,7 +1546,7 @@ def _cmd_record_capture(args: argparse.Namespace) -> int:
             browser_page_url=getattr(args, "browser_page_url", None),
             stop_when=_record_until_stop(args),
             surface="web",
-            capture_network=bool(getattr(args, "capture_network", False)),
+            capture_network=cli_mode(args, recording_key),
             encryption_key=recording_key,
         )
     except BrowserAttachError as exc:
@@ -9583,16 +9584,9 @@ def build_parser() -> argparse.ArgumentParser:
             "refused under OPENADAPT_FLOW_AT_REST=strict"
         ),
     )
-    p.add_argument(
-        "--capture-network",
-        action="store_true",
-        help=(
-            "Web only: also keep the page's requests (network.jsonl; cookies, "
-            "passwords and session tokens withheld). compile then proposes an "
-            "API step for a save it can repeat as one request; a person admits "
-            "it with 'api admit'"
-        ),
-    )
+    from openadapt_flow.network_capture import add_cli_arguments as _network_args
+
+    _network_args(p)
     p.add_argument(
         "--with-check",
         action="store_true",

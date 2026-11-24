@@ -257,6 +257,13 @@ class ProbeFaithfulVLM:
     same-value pairs -> "same". Under the VETO-ONLY contract a "same" answer no
     longer grants a pass (verify_vlm_identity folds it to abstain)."""
 
+    # In process, like the MLXIdentityVLM it stands in for: it sends nothing
+    # off the box. Unmarked, the Replayer refuses it without the egress opt-in
+    # (#2497), and the opt-in would not help here: outside ``run`` no egress
+    # ledger is bound, so every call would be refused as "different" and the
+    # stub's answers would never reach the identity ladder.
+    MAY_EGRESS = False
+
     def __init__(self, is_same: bool) -> None:
         self._is_same = is_same
 

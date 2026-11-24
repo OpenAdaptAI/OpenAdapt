@@ -25,7 +25,9 @@ def _triggers(workflow: dict) -> dict:
 
 
 def _run_classifier(
-    changed_files: list[str], event_name: str = "pull_request", tmp_path: Path | None = None
+    changed_files: list[str],
+    event_name: str = "pull_request",
+    tmp_path: Path | None = None,
 ) -> dict[str, str]:
     """Run the actual `Classify the change` bash step with `git diff` stubbed."""
     classify_step = next(
@@ -82,7 +84,9 @@ def test_packages_workflow_pins_every_action_to_40_char_sha() -> None:
         for ref in uses:
             if ref.startswith("./"):
                 continue
-            assert re.search(r"@[0-9a-f]{40}$", ref), f"unpinned action in {name}: {ref}"
+            assert re.search(r"@[0-9a-f]{40}$", ref), (
+                f"unpinned action in {name}: {ref}"
+            )
 
 
 def test_packages_workflow_enables_loadscope_and_caches() -> None:
@@ -95,7 +99,8 @@ def test_packages_workflow_enables_loadscope_and_caches() -> None:
     unit_enc = next(
         s
         for s in jobs["flow-unit"]["steps"]
-        if s.get("name") == "Rollback, checkpoint and key tests under the default (encrypted) mode"
+        if s.get("name")
+        == "Rollback, checkpoint and key tests under the default (encrypted) mode"
     )
     assert "pytest -n logical --dist loadscope" in unit_enc["run"]
 
@@ -107,7 +112,9 @@ def test_packages_workflow_enables_loadscope_and_caches() -> None:
     assert "pytest -n logical --dist loadscope" in at_rest_test["run"]
 
     onprem_uv = next(
-        s for s in jobs["flow-onprem-offline"]["steps"] if "setup-uv@" in s.get("uses", "")
+        s
+        for s in jobs["flow-onprem-offline"]["steps"]
+        if "setup-uv@" in s.get("uses", "")
     )
     assert onprem_uv["with"]["enable-cache"] is True
 
@@ -118,44 +125,138 @@ def test_packages_workflow_enables_loadscope_and_caches() -> None:
 
 
 @pytest.mark.parametrize(
-    ("changed_files", "expect_flow", "expect_code"),
+    ("changed_files", "expect_flow", "expect_at_rest", "expect_code"),
     [
-        # #2423-style encryption/storage/runtime/compiler/test/lock paths MUST select
-        (["packages/flow/openadapt_flow/crypto.py"], "true", "true"),
-        (["packages/flow/openadapt_flow/stream_aead.py"], "true", "true"),
-        (["packages/flow/openadapt_flow/key_rotation.py"], "true", "true"),
-        (["packages/flow/openadapt_flow/retention.py"], "true", "true"),
-        (["packages/flow/openadapt_flow/compiler/distill.py"], "true", "true"),
-        (["packages/flow/tests/conftest.py"], "true", "true"),
-        (["packages/flow/uv.lock"], "true", "true"),
-        (["packages/types/openadapt_types/models.py"], "true", "true"),
-        (["packages/capture/openadapt_capture/recorder.py"], "true", "true"),
-        ([".github/workflows/packages.yml"], "true", "true"),
-        # Prose-only Flow PRs skip the heavy encrypted/on-prem/framework jobs
-        (["packages/flow/docs/LIMITS.md"], "true", "false"),
-        (["packages/flow/README.md", "packages/flow/CHANGELOG.md"], "true", "false"),
-        (["packages/flow/docs/commands/run.md"], "true", "false"),
+        # Fail-closed deny-list: all Flow/Capture/Types code selects flow_at_rest=true
+        (["packages/flow/openadapt_flow/crypto.py"], "true", "true", "true"),
+        (["packages/flow/openadapt_flow/stream_aead.py"], "true", "true", "true"),
+        (["packages/flow/openadapt_flow/key_rotation.py"], "true", "true", "true"),
+        (["packages/flow/openadapt_flow/sealed_set.py"], "true", "true", "true"),
+        (["packages/flow/openadapt_flow/retention.py"], "true", "true", "true"),
+        (
+            ["packages/flow/openadapt_flow/runtime/durable/resume.py"],
+            "true",
+            "true",
+            "true",
+        ),
+        (["packages/flow/openadapt_flow/api.py"], "true", "true", "true"),
+        (["packages/flow/openadapt_flow/cli_tasks.py"], "true", "true", "true"),
+        (["packages/flow/openadapt_flow/compiler/distill.py"], "true", "true", "true"),
+        (
+            ["packages/flow/chrome_extension/native_host/openadapt_extension_host.py"],
+            "true",
+            "true",
+            "true",
+        ),
+        (
+            ["packages/flow/tests/test_chrome_extension_cws.py"],
+            "true",
+            "true",
+            "true",
+        ),
+        (["packages/capture/openadapt_capture/recorder.py"], "true", "true", "true"),
+        (["packages/flow/tests/conftest.py"], "true", "true", "true"),
+        (["packages/flow/uv.lock"], "true", "true", "true"),
+        (["packages/types/openadapt_types/models.py"], "true", "true", "true"),
+        ([".github/workflows/packages.yml"], "true", "true", "true"),
+        # Provably non-Python docs/assets/data skip the duplicate 4-shard flow-default-at-rest run
+        (["packages/flow/chrome_extension/content.js"], "true", "false", "true"),
+        (
+            ["packages/flow/benchmark/canvas_ladder/results.json"],
+            "true",
+            "false",
+            "true",
+        ),
+        (["packages/flow/paper/main.tex"], "true", "false", "true"),
+        # Prose-only Flow PRs skip all heavy sub-package jobs
+        (["packages/flow/docs/LIMITS.md"], "true", "false", "false"),
+        (
+            ["packages/flow/README.md", "packages/flow/CHANGELOG.md"],
+            "true",
+            "false",
+            "false",
+        ),
+        (["packages/flow/docs/commands/run.md"], "true", "false", "false"),
         # Mixed prose + code MUST select
         (
             ["packages/flow/docs/LIMITS.md", "packages/flow/openadapt_flow/api.py"],
             "true",
             "true",
+            "true",
         ),
-        # Unrelated package PR selects neither
-        (["packages/tray/README.md"], "false", "false"),
+        # Unrelated package PR selects none
+        (["packages/tray/README.md"], "false", "false", "false"),
     ],
 )
 def test_classifier_selects_all_flow_code_and_skips_prose_only_prs(
     tmp_path: Path,
     changed_files: list[str],
     expect_flow: str,
+    expect_at_rest: str,
     expect_code: str,
 ) -> None:
     out = _run_classifier(changed_files, event_name="pull_request", tmp_path=tmp_path)
     assert out["flow"] == expect_flow
-    assert out["flow_at_rest"] == expect_code
+    assert out["flow_at_rest"] == expect_at_rest
     assert out["flow_onprem"] == expect_code
     assert out["flow_agent_frameworks"] == expect_code
+
+
+def test_every_at_rest_importer_selects_flow_at_rest(tmp_path: Path) -> None:
+    """AST proof: zero .py files under packages/{flow,capture} are excluded and 100% of at-rest importers select flow_at_rest=true."""
+    import ast
+
+    classify_step = next(
+        s
+        for s in _load("packages.yml")["jobs"]["scope"]["steps"]
+        if s.get("name") == "Classify the change"
+    )
+    m = re.search(r"at_rest_excluded='([^']+)'", classify_step["run"])
+    assert m is not None
+    excluded_re = re.compile(m.group(1))
+
+    sensitive = {"at_rest", "sealed_set", "crypto", "stream_aead", "key_hierarchy"}
+    importers: list[str] = []
+    excluded_py: list[str] = []
+    for base in (ROOT / "packages/flow", ROOT / "packages/capture"):
+        for py_file in sorted(base.rglob("*.py")):
+            rel = py_file.relative_to(ROOT).as_posix()
+            if "/.venv/" in rel or "/build/" in rel or "/dist/" in rel:
+                continue
+            if excluded_re.search(rel):
+                excluded_py.append(rel)
+            try:
+                tree = ast.parse(py_file.read_text(encoding="utf-8"))
+            except SyntaxError:
+                continue
+            hits = False
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom):
+                    mod_parts = set((node.module or "").split("."))
+                    alias_names = {a.name for a in node.names}
+                    if mod_parts & sensitive or alias_names & sensitive:
+                        hits = True
+                        break
+                elif isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if set(alias.name.split(".")) & sensitive:
+                            hits = True
+                            break
+                    if hits:
+                        break
+            if hits:
+                importers.append(rel)
+
+    assert excluded_py == [], (
+        f"Python files must not be excluded by flow_at_rest deny-list: {excluded_py}"
+    )
+    assert importers, "expected at least one at-rest/sealing importer"
+    missed = [p for p in importers if excluded_re.search(p)]
+    assert missed == [], f"at-rest importers excluded by deny-list: {missed}"
+    # Spot-check through the full bash classifier on the first, middle, and last importer
+    for sample in {importers[0], importers[len(importers) // 2], importers[-1]}:
+        out = _run_classifier([sample], event_name="pull_request", tmp_path=tmp_path)
+        assert out["flow_at_rest"] == "true", f"{sample} did not select flow_at_rest"
 
 
 @pytest.mark.parametrize(
@@ -251,9 +352,45 @@ def test_classifier_selects_all_flow_code_and_skips_prose_only_prs(
             },
             0,
         ),
-        # Push to main skips flow-default-at-rest cleanly (pr_only, as on main)
+        # Push to main requires flow-default-at-rest when flow_at_rest=true
         (
             "push",
+            {
+                "flow": "true",
+                "flow_at_rest": "true",
+                "flow_onprem": "true",
+                "flow_agent_frameworks": "true",
+            },
+            {
+                "flow-unit": "success",
+                "flow-critical": "success",
+                "flow-default-at-rest": "success",
+                "flow-onprem-offline": "success",
+                "flow-agent-frameworks": "success",
+            },
+            0,
+        ),
+        # Push to main fails gate if flow-default-at-rest was skipped when selected
+        (
+            "push",
+            {
+                "flow": "true",
+                "flow_at_rest": "true",
+                "flow_onprem": "true",
+                "flow_agent_frameworks": "true",
+            },
+            {
+                "flow-unit": "success",
+                "flow-critical": "success",
+                "flow-default-at-rest": "skipped",
+                "flow-onprem-offline": "success",
+                "flow-agent-frameworks": "success",
+            },
+            1,
+        ),
+        # Scheduled nightly run skips flow-default-at-rest cleanly (not_in_nightly)
+        (
+            "schedule",
             {
                 "flow": "true",
                 "flow_at_rest": "true",
@@ -295,3 +432,89 @@ def test_packages_gate_enforces_sub_package_flow_selection(
         check=False,
     )
     assert result.returncode == expected, result.stdout + result.stderr
+
+
+def test_desktop_replay_link_check_and_protected_safety_phase2_invariants() -> None:
+    desktop_replay = _load("desktop-replay.yml")
+    dr_paths = _triggers(desktop_replay)["pull_request"]["paths"]
+    assert "packages/flow/openadapt_flow/**" not in dr_paths
+    assert "packages/flow/openadapt_flow/backends/**" in dr_paths
+    assert "packages/flow/openadapt_flow/runtime/**" in dr_paths
+
+    link_check = _load("link-check.yml")
+    for event in ("pull_request", "push"):
+        lc_paths = _triggers(link_check)[event]["paths"]
+        assert "!**/CHANGELOG.md" in lc_paths
+        assert "!.github/**/*.md" in lc_paths
+        assert "!legacy/**/*.md" in lc_paths
+
+    psr = _load("protected-safety-review.yml")
+    conc = psr["concurrency"]
+    assert "github.event.pull_request.number" in conc["group"]
+    assert "github.event.issue.number" in conc["group"]
+    assert conc["cancel-in-progress"] is False
+
+    pkg_jobs = _load("packages.yml")["jobs"]
+    assert "fast-checks" in pkg_jobs
+    for removed in (
+        "capture-contract",
+        "privacy-contract",
+        "tray-contract",
+        "desktop-release-intent",
+    ):
+        assert removed not in pkg_jobs
+    assert "fast-checks" in pkg_jobs["packages-gate"]["needs"]
+
+    pm_jobs = _load("platform-manifest.yml")["jobs"]
+    assert "check-source-boundary" not in pm_jobs
+    step_names = [s.get("name") for s in pm_jobs["validate-platform-manifest"]["steps"]]
+    assert "Check open-core source boundary" in step_names
+    assert step_names.index("Check open-core source boundary") < step_names.index(
+        "Validate platform manifest against published artifacts"
+    )
+
+    # Safety-core modules stay covered by desktop-replay.yml
+    for safety_mod in (
+        "packages/flow/openadapt_flow/identity_signals.py",
+        "packages/flow/openadapt_flow/verify.py",
+        "packages/flow/openadapt_flow/verify_run.py",
+        "packages/flow/openadapt_flow/record_check_identity.py",
+    ):
+        assert safety_mod in dr_paths
+
+
+def test_fast_checks_classifier_selection(tmp_path: Path) -> None:
+    assert (
+        _run_classifier(["packages/capture/README.md"], "pull_request", tmp_path)[
+            "fast_checks"
+        ]
+        == "true"
+    )
+    assert (
+        _run_classifier(["packages/privacy/README.md"], "pull_request", tmp_path)[
+            "fast_checks"
+        ]
+        == "true"
+    )
+    assert (
+        _run_classifier(["packages/tray/README.md"], "pull_request", tmp_path)[
+            "fast_checks"
+        ]
+        == "true"
+    )
+    assert (
+        _run_classifier(["packages/desktop/README.md"], "pull_request", tmp_path)[
+            "fast_checks"
+        ]
+        == "true"
+    )
+    assert (
+        _run_classifier(
+            ["packages/flow/openadapt_flow/api.py"], "pull_request", tmp_path
+        )["fast_checks"]
+        == "false"
+    )
+    assert (
+        _run_classifier(["README.md"], "pull_request", tmp_path)["fast_checks"]
+        == "false"
+    )

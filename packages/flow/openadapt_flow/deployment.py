@@ -823,8 +823,8 @@ class GroundingModelConfig(BaseModel):
     #: Root URL of an ``openai_compatible`` endpoint (``/chat/completions`` is
     #: appended). Required for ``openai_compatible``; ignored for ``anthropic``.
     base_url: str = ""
-    #: The vision-capable model id to request. For ``anthropic`` an empty value
-    #: uses the shipped default; for ``openai_compatible`` it is required.
+    #: The vision-capable model id to request. Required for both providers: an
+    #: enabled section with no model is refused, never given a default.
     model: str = ""
     #: NAME of the environment variable holding the API key (never the key
     #: itself). Empty => no auth header sent (a loopback vLLM/Ollama needs none);
@@ -1707,15 +1707,23 @@ def build_model_grounder(cfg: GroundingModelConfig) -> Optional[Any]:
     api_key = os.environ.get(cfg.api_key_env, "") if cfg.api_key_env else ""
 
     if provider == "anthropic":
-        from openadapt_flow.runtime.grounder import _DEFAULT_MODEL, AnthropicGrounder
+        from openadapt_flow.runtime.grounder import AnthropicGrounder
 
-        model = (cfg.model or "").strip() or _DEFAULT_MODEL
+        model = (cfg.model or "").strip()
+        if not model:
+            # A pinned grounding model must name its model: an empty value
+            # never silently becomes the shipped default.
+            print(
+                "grounding_model.provider 'anthropic' requires a model; "
+                "replaying FULLY LOCAL."
+            )
+            return None
         try:
             client = None
             if api_key:
                 import anthropic
 
-                client = anthropic.Anthropic(api_key=api_key)
+                client = anthropic.Anthropic(api_key=api_key, max_retries=0)
             return AnthropicGrounder(model=model, client=client)
         except ImportError:
             print(
@@ -1843,6 +1851,20 @@ def build_replayer(
         if not ok:
             print(f"PHI mode: {reason}; replaying FULLY LOCAL.")
             appliance = None
+    # Regulated if either the authorization or the deployment names it.
+    regulated = "regulated" in {
+        getattr(governed_authorization, "execution_profile", None),
+        getattr(runtime_config, "profile", None),
+    }
+    if appliance is not None and regulated:
+        from openadapt_flow.model_transport import regulated_transport_refusal
+
+        # The URL the appliance client actually sends to.
+        sent_to = getattr(getattr(appliance, "client", None), "_base_url", "")
+        refusal = regulated_transport_refusal(sent_to or "")
+        if refusal is not None:
+            print(f"Regulated profile: {refusal}; the appliance is NOT wired.")
+            appliance = None
     if appliance is not None:
         print(
             "Using on-prem VLM appliance at "
@@ -1875,18 +1897,38 @@ def build_replayer(
                     wire = False
             if wire:
                 model_grounder = build_model_grounder(grounding_cfg)
-                if model_grounder is not None:
-                    print(
-                        "Model grounder wired: "
-                        f"{type(model_grounder).__name__} "
-                        f"(provider={grounding_cfg.provider}). WARNING: "
-                        "screenshots WILL leave the box for this run."
+            if model_grounder is not None and (regulated or phi_on):
+                from openadapt_flow.model_transport import (
+                    built_endpoint,
+                    regulated_transport_refusal,
+                )
+
+                # Check the URL the built client sends to, not the config.
+                sent_to = built_endpoint(model_grounder)
+                refusal = regulated_transport_refusal(sent_to) if regulated else None
+                if refusal is None and phi_on:
+                    ok, reason = phi_grounding_endpoint_allowed(
+                        _host_of(sent_to), allowlist=allowlist, attested=attested
                     )
+                    refusal = None if ok else reason
+                if refusal is not None:
+                    print(f"Model grounder refused: {refusal}; replaying FULLY LOCAL.")
+                    model_grounder = None
+            if model_grounder is not None:
+                print(
+                    "Model grounder wired: "
+                    f"{type(model_grounder).__name__} "
+                    f"(provider={grounding_cfg.provider}). WARNING: "
+                    "screenshots WILL leave the box for this run."
+                )
 
     # The configured model grounder takes precedence as the VLM fallback; the
-    # on-prem appliance grounder is used only when no model grounder is wired.
+    # on-prem appliance grounder is used only when no model is pinned. A pinned
+    # model that can't be wired (unavailable, refused) never falls back to
+    # another placement or model: the grounding rung stays off and a target
+    # the deterministic rungs can't resolve halts for a person.
     fallback = model_grounder
-    if fallback is None and appliance is not None:
+    if fallback is None and appliance is not None and not grounding_cfg.enabled:
         fallback = appliance.grounder
     local_model: Optional[Any] = None
     if runtime_config is not None and runtime_config.local_grounding:

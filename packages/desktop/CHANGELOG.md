@@ -1,6 +1,27 @@
 # CHANGELOG
 
 
+## v0.32.3 (2026-11-23)
+
+### Bug Fixes
+
+- **desktop**: keep permission guidance within the size budget
+- **macos**: guide 27.3 app-control permissions conservatively
+
+
+
+## Unreleased
+
+
+
+## v0.32.2 (2026-11-24)
+
+### Bug Fixes
+
+- **desktop**: launch authoring Chromium keychain-safe and close what it owns
+
+
+
 ## v0.32.1 (2026-11-23)
 
 ### Bug Fixes
@@ -18,7 +39,6 @@
 ### Bug Fixes
 
 - **desktop**: preserve pinned theme bytes on checkout
-
 
 
 ## v0.31.3 (2026-11-22)

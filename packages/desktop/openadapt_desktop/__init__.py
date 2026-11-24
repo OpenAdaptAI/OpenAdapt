@@ -21,4 +21,4 @@ Architecture:
         +-- backends/          Storage backend plugins
 """
 
-__version__ = "0.32.1"
+__version__ = "0.32.3"
