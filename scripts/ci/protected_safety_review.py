@@ -3,7 +3,9 @@
 This file is run only from the trusted base by a ``pull_request_target``
 workflow. It reads GitHub metadata and comments; it never checks out, imports,
 or executes pull-request-head code. A protected change needs one current-head
-independent review from a vendor other than the author's. The author vendor
+independent review from a vendor other than the author's, or an explicit
+``Review-Mode: independent-subagent`` exact-head review (founder-authorized
+2026-11-23). The author vendor
 comes from the pull request branch prefix (for example ``codex/...``) or, for a
 shared or legacy branch such as ``agent/...``, from one current-head author
 declaration. This is
@@ -243,6 +245,16 @@ def author_vendor(branch: Any) -> str | None:
     return vendor_family(branch.split("/", 1)[0])
 
 
+_INDEPENDENT_SUBAGENT_MODE = re.compile(
+    r"(?m)^Review-Mode: independent-subagent[ \t]*$"
+)
+
+
+def _has_independent_subagent_mode(body: str) -> bool:
+    """Return True when the visible review declares independent-subagent mode."""
+    return _INDEPENDENT_SUBAGENT_MODE.search(declaration_text(body)) is not None
+
+
 def _review_errors(
     *,
     comments: list[dict[str, Any]],
@@ -250,14 +262,16 @@ def _review_errors(
     branch_family: str | None,
     pull_request_author: Any,
 ) -> list[str]:
-    """Check one cross-vendor review, with the author vendor from the branch.
+    """Check one independent review, with the author vendor from the branch.
 
     ``branch_family`` is None for a shared or legacy branch such as
     ``agent/...``; the author vendor then comes from exactly one unedited
     current-head author declaration posted by the pull request author.
+    Same-vendor review is rejected unless the unedited exact-head review
+    explicitly declares ``Review-Mode: independent-subagent``.
     """
     errors: list[str] = []
-    reviewers: list[str] = []
+    reviewers: list[tuple[str, bool]] = []
     declared: list[str] = []
     mentioned: list[str] = []
     for comment in comments:
@@ -282,7 +296,7 @@ def _review_errors(
             try:
                 family, _verdict = parse_review_report(body, head)
                 if unedited:
-                    reviewers.append(family)
+                    reviewers.append((family, _has_independent_subagent_mode(body)))
             except EvidenceError as exc:
                 errors.append(f"invalid independent review: {exc}")
             continue
@@ -326,8 +340,14 @@ def _review_errors(
 
     if len(reviewers) != 1:
         errors.append("expected exactly one current exact-head independent review")
-    elif author_family is not None and reviewers[0] == author_family:
-        errors.append("author and reviewer must be from different vendors")
+    else:
+        reviewer_family, independent_subagent = reviewers[0]
+        if (
+            author_family is not None
+            and reviewer_family == author_family
+            and not independent_subagent
+        ):
+            errors.append("author and reviewer must be from different vendors")
     return errors
 
 

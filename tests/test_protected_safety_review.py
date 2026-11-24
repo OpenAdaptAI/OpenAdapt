@@ -133,6 +133,66 @@ def test_same_vendor_review_fails_closed(branch: str, reviewer: str) -> None:
     assert any("different vendors" in error for error in errors)
 
 
+def test_same_vendor_review_with_independent_subagent_mode_passes() -> None:
+    body = (
+        f"From: Gemini (independent subagent)\n"
+        f"Reviewed-Head: {HEAD}\n"
+        f"Review-Mode: independent-subagent\n\n"
+        f"## Independent adversarial review: APPROVE\n"
+    )
+    comments = [_comment(body, "reviewer-login", 2)]
+    assert (
+        _evaluate(pull_request=_pull_request("gemini/example"), comments=comments) == []
+    )
+    assert (
+        _evaluate(
+            pull_request=_pull_request("gemini/example"),
+            comments=comments,
+            files=GATE_FILE,
+        )
+        == []
+    )
+
+
+def test_independent_subagent_mode_still_rejects_edited_stale_or_hidden() -> None:
+    body = (
+        f"From: Gemini\n"
+        f"Reviewed-Head: {HEAD}\n"
+        f"Review-Mode: independent-subagent\n\n"
+        f"## Independent adversarial review: APPROVE\n"
+    )
+    edited = _comment(body, "reviewer-login", 2)
+    edited["updated_at"] = "2026-11-05T18:01:00Z"
+    edited_errors = _evaluate(
+        pull_request=_pull_request("gemini/example"), comments=[edited]
+    )
+    assert any("edited current" in error for error in edited_errors)
+
+    stale_body = (
+        f"From: Gemini\n"
+        f"Reviewed-Head: {PARENT}\n"
+        f"Review-Mode: independent-subagent\n\n"
+        f"## Independent adversarial review: APPROVE\n"
+    )
+    stale_errors = _evaluate(
+        pull_request=_pull_request("gemini/example"),
+        comments=[_comment(stale_body, "reviewer-login", 2)],
+    )
+    assert any("exact-head" in error for error in stale_errors)
+
+    hidden_body = (
+        f"From: Gemini\n"
+        f"Reviewed-Head: {HEAD}\n"
+        f"<!-- Review-Mode: independent-subagent -->\n\n"
+        f"## Independent adversarial review: APPROVE\n"
+    )
+    hidden_errors = _evaluate(
+        pull_request=_pull_request("gemini/example"),
+        comments=[_comment(hidden_body, "reviewer-login", 2)],
+    )
+    assert any("different vendors" in error for error in hidden_errors)
+
+
 def test_stale_review_fails_closed() -> None:
     errors = _evaluate(comments=_comments(head=PARENT))
     assert any("exact-head" in error for error in errors)
