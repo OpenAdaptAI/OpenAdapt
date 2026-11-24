@@ -228,7 +228,12 @@ def wait_http(url: str, timeout_s: float = 900) -> None:
             with urllib.request.urlopen(url, timeout=10) as r:  # noqa: S310 - the local stack
                 if r.status < 500:
                     return
-        except (urllib.error.URLError, http.client.HTTPException, OSError, TimeoutError) as exc:
+        except (
+            urllib.error.URLError,
+            http.client.HTTPException,
+            OSError,
+            TimeoutError,
+        ) as exc:
             last = str(exc)
         time.sleep(5)
     raise RuntimeError(f"{url} did not answer within {timeout_s:.0f} s ({last})")
