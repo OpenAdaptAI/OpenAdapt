@@ -9,7 +9,9 @@ benchmark portal. Every record is synthetic.
 from __future__ import annotations
 
 import contextlib
+import http.server
 import json
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterator, Optional
 from urllib.parse import parse_qs, urlsplit
@@ -26,26 +28,28 @@ class App:
     routes: dict[tuple[str, str], Handler]
     state: dict[str, Any] = field(default_factory=dict)
     log: list[tuple[str, str]] = field(default_factory=list)
+    _origin: str = ""
 
     @property
     def origin(self) -> str:
-        return f"http://{self.host}"
+        return self._origin or f"http://{self.host}"
 
-    def handle(self, route: Any) -> None:
-        req = route.request
-        parts = urlsplit(req.url)
-        method = req.method.upper()
-        body = req.post_data or ""
+    def dispatch(self, method: str, target: str, body: str = "") -> tuple[int, str]:
+        parts = urlsplit(target)
+        verb = method.upper()
         form = parse_qs(body) if body and not body.startswith("{") else {}
         if body.startswith("{"):
             form = {k: [str(v)] for k, v in json.loads(body).items()}
         form.update(parse_qs(parts.query))
-        self.log.append((method, parts.path))
-        fn = self.routes.get((method, parts.path)) or self.routes.get((method, "*"))
+        self.log.append((verb, parts.path))
+        fn = self.routes.get((verb, parts.path)) or self.routes.get((verb, "*"))
         if fn is None:
-            route.fulfill(status=404, body="not found")
-            return
-        status, html = fn(self, parts.path, method, form)
+            return 404, "not found"
+        return fn(self, parts.path, verb, form)
+
+    def handle(self, route: Any) -> None:
+        req = route.request
+        status, html = self.dispatch(req.method, req.url, req.post_data or "")
         if status in (302, 303):
             route.fulfill(status=status, headers={"Location": html}, body="")
             return
@@ -54,11 +58,43 @@ class App:
 
 @contextlib.contextmanager
 def serve(page: Any, app: App) -> Iterator[App]:
-    page.context.route(f"{app.origin}/**", app.handle)
+    class _Handler(http.server.BaseHTTPRequestHandler):
+        def _run(self) -> None:
+            length = int(self.headers.get("Content-Length") or 0)
+            body = self.rfile.read(length).decode("utf-8") if length else ""
+            status, payload = app.dispatch(self.command, self.path, body)
+            if status in (302, 303):
+                self.send_response(status)
+                self.send_header("Location", payload)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            encoded = payload.encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
+        do_GET = _run
+        do_POST = _run
+
+        def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
+            return
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    prev_origin = app._origin
+    app._origin = f"http://127.0.0.1:{port}"
     try:
         yield app
     finally:
-        page.context.unroute(f"{app.origin}/**")
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2.0)
+        app._origin = prev_origin
 
 
 def page(title: str, body: str) -> str:
