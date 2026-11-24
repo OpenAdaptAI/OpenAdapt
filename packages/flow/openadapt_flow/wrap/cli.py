@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import math
+import signal
 import sys
-from collections.abc import Sequence
+import threading
+from collections.abc import Iterator, Sequence
 from typing import Any
 
 from openadapt_flow.wrap import TaskArgumentsError, WrappedTask
@@ -16,6 +19,18 @@ from openadapt_flow.wrap import TaskArgumentsError, WrappedTask
 WRAP_EXAMPLE_COMMAND = "uvx --python 3.12 'openadapt[wrap]@latest' wrap --example"
 
 
+class NoAdmittedProgram(RuntimeError):
+    """``wrap run``: the task has no admitted program, so nothing ran.
+
+    ``draft`` is the task folder when run 1 left a draft that was not
+    admitted, else None.
+    """
+
+    def __init__(self, draft: Any = None) -> None:
+        super().__init__("no admitted program")
+        self.draft = draft
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="openadapt wrap",
@@ -23,6 +38,12 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "openadapt wrap --example runs the whole loop on a bundled synthetic "
             "task (see its --help). "
+            "openadapt wrap --task TASK [--param ...] -- COMMAND runs your own "
+            "agent command for the first run: it gets OPENADAPT_MCP_URL, "
+            "OPENADAPT_MCP_TOKEN and OPENADAPT_TASK, and drives OpenAdapt's "
+            "browser through that endpoint (see docs/WRAP.md). "
+            "openadapt wrap run --task TASK [--param ...] runs the admitted "
+            "program only, with no model calls. "
             "openadapt wrap export --bundle BUNDLE --out NEW_DIR prepares an "
             "untrusted local candidate (see docs/WRAP_CANDIDATE.md). "
             "openadapt wrap publish --task TASK publishes the task's admitted "
@@ -87,6 +108,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Expose this task as a local stdio MCP tool",
     )
+    parser.add_argument(
+        "--command-timeout",
+        type=float,
+        default=600.0,
+        help="With -- COMMAND: seconds before the command is stopped (default 600)",
+    )
     return parser
 
 
@@ -145,7 +172,13 @@ def _prices(rows: Sequence[str]) -> dict[str, float] | None:
     return prices
 
 
-def _task(args: argparse.Namespace, parser: argparse.ArgumentParser) -> WrappedTask:
+def _task(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+    *,
+    command_agent: Any = None,
+    replay_only: bool = False,
+) -> WrappedTask:
     from openadapt_flow.integrations.agents.recording import load_task
 
     options: dict[str, Any] = {}
@@ -195,7 +228,19 @@ def _task(args: argparse.Namespace, parser: argparse.ArgumentParser) -> WrappedT
         cached = setup.cache.server(setup.instruction, names)
         halted = False
     agent = None
-    if cached is None and not halted:
+    if cached is None and not halted and replay_only:
+        compiler, _key = setup.cache._compiler(setup.instruction, names)
+        draft = compiler._jit().candidate() is not None
+        raise NoAdmittedProgram(compiler.dir if draft else None)
+    if command_agent is not None:
+        from openadapt_flow.wrap.process import verify_env_names
+
+        # The system of record's credentials never reach the wrapped command.
+        command_agent.withheld_env = verify_env_names(setup.cache.common["verify"])
+    if cached is None and not halted and command_agent is not None:
+        # The wrapped command brings its own model; OpenAdapt sends none.
+        agent = command_agent
+    elif cached is None and not halted:
         cap = args.max_cost_usd
         if cap is None or not math.isfinite(cap) or cap <= 0:
             parser.error("a cache miss requires a positive --max-cost-usd")
@@ -378,6 +423,40 @@ def example_main(rows: Sequence[str], *, client: Any = None) -> int:
         return 2
 
 
+@contextlib.contextmanager
+def _commands_stopped_on_signal(active: bool) -> Iterator[None]:
+    """End the wrapped command's process group on Ctrl-C, SIGTERM or any exit.
+
+    The command runs in its own session, so a terminal's Ctrl-C and a SIGTERM
+    sent to OpenAdapt never reach it. The handlers stop the group themselves
+    before raising: the main thread may be inside a browser tool call whose
+    error handling keeps the interrupt from reaching this block, and the
+    command must still end. Every exit from this block stops what is left.
+    """
+
+    if not active:
+        yield
+        return
+    from openadapt_flow.wrap.process import stop_running_commands
+
+    main_thread = threading.current_thread() is threading.main_thread()
+    previous: dict[signal.Signals, Any] = {}
+
+    def on_signal(signum: int, frame: Any) -> None:
+        stop_running_commands()
+        raise KeyboardInterrupt
+
+    if main_thread:
+        for caught in (signal.SIGINT, signal.SIGTERM):
+            previous[caught] = signal.signal(caught, on_signal)
+    try:
+        yield
+    finally:
+        stop_running_commands()
+        for caught, handler in previous.items():
+            signal.signal(caught, handler)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     rows = list(sys.argv[1:] if argv is None else argv)
     head = rows[: rows.index("--")] if "--" in rows else rows
@@ -391,25 +470,84 @@ def main(argv: Sequence[str] | None = None) -> int:
         from openadapt_flow.wrap.publish import main as publish_main
 
         return publish_main(rows[1:])
+    command = rows[rows.index("--") + 1 :] if "--" in rows else None
+    replay_only = head[:1] == ["run"]
+    if replay_only:
+        head = head[1:]
     parser = build_parser()
-    args = parser.parse_args(rows)
+    if replay_only:
+        parser.prog = "openadapt wrap run"
+    args = parser.parse_args(head)
+    if command is not None and (replay_only or args.serve):
+        parser.error(
+            "-- COMMAND runs the first run; it can't be used with run or --serve"
+        )
+    if command == []:
+        parser.error("-- needs a command to run")
     if args.serve and (args.param or args.request_id):
         parser.error("--serve takes request IDs and parameters from MCP calls")
     if not args.serve and not args.request_id:
-        parser.error("a run requires --request-id")
+        if command is None and not replay_only:
+            parser.error("a run requires --request-id")
     from openadapt_flow.jit.keys import PROVIDER_ENV, MissingModelKey
 
+    agent = None
+    derived_id = False
     try:
         values = _params(args.param)
-        task = _task(args, parser)
+        derived_id = not args.serve and not args.request_id
+        if derived_id:
+            from openadapt_flow.wrap.process import request_id_for
+
+            # Never random: asking for the same run again must dedupe.
+            args.request_id = request_id_for(args.task, command or [], values)
+        if command is not None:
+            from openadapt_flow.wrap.process import ProcessAgent
+
+            agent = ProcessAgent(command, timeout_s=args.command_timeout)
+        if agent is None and not replay_only:
+            task = _task(args, parser)
+        else:
+            task = _task(args, parser, command_agent=agent, replay_only=replay_only)
+        if agent is not None and task.agent is not agent:
+            print(
+                "openadapt wrap: this task has an admitted program; it runs "
+                "instead of the command, with no model calls",
+                file=sys.stderr,
+            )
         if args.serve:
             from openadapt_flow.wrap.mcp import serve
 
             serve(task)
             return 0
-        result = task.call(args.request_id, _with_secret_env(values, task.parameters))
+        with _commands_stopped_on_signal(agent is not None):
+            result = task.call(
+                args.request_id, _with_secret_env(values, task.parameters)
+            )
+    except KeyboardInterrupt:
+        print(
+            "openadapt wrap: interrupted; the wrapped command was stopped",
+            file=sys.stderr,
+        )
+        return 130
     except TaskArgumentsError as exc:
         parser.error(str(exc))
+    except NoAdmittedProgram as exc:
+        if exc.draft is not None:
+            print(
+                "openadapt wrap run: run 1 left a draft that was not admitted, "
+                f"in {exc.draft}; nothing ran. A draft is admitted when a person "
+                "confirms it during run 1 (--person) [DRAFT_NOT_ADMITTED]",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                "openadapt wrap run: this task has no admitted program; nothing "
+                "ran. Do the first run with openadapt wrap --task TASK -- COMMAND "
+                "[NO_ADMITTED_PROGRAM]",
+                file=sys.stderr,
+            )
+        return 2
     except MissingModelKey:
         # Raised before the agent runs, so no run record exists yet. Name the
         # variable only; the message never carries a key value.
@@ -428,7 +566,28 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    if derived_id and result.get("status") == "RECONCILIATION_REQUIRED":
+        # An earlier attempt was interrupted after it may have saved: a new
+        # request ID now could save twice, so the record comes first.
+        print(
+            f"openadapt wrap: request {args.request_id} has an unfinished "
+            "earlier attempt; the earlier attempt may have saved; check the "
+            "record in the app before rerunning with a new --request-id",
+            file=sys.stderr,
+        )
+    elif derived_id and result.get("replayed") is True:
+        # The default dedupes; say so instead of replaying silently.
+        print(
+            f"openadapt wrap: request {args.request_id} already ran with this "
+            "task, command and inputs; this is its earlier result and nothing "
+            "ran again. To run it again, pass a new --request-id",
+            file=sys.stderr,
+        )
     print(json.dumps(result, sort_keys=True))
+    exit_code = getattr(agent, "exit_code", None)
+    if isinstance(exit_code, int) and exit_code != 0:
+        # The wrapped command's own failure is its exit status.
+        return exit_code if 0 < exit_code < 256 else 1
     return 0 if result.get("verified") is True else 1
 
 
