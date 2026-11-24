@@ -10,11 +10,23 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
+from openadapt_flow.wrap.checkpoint_spec import (
+    CheckpointSpec as CheckpointSpec,
+)
+from openadapt_flow.wrap.checkpoint_spec import (
+    compile_checkpoint_spec as compile_checkpoint_spec,
+)
 from openadapt_flow.wrap.dirty_and_provenance import (
     DirtyBufferMonitor as DirtyBufferMonitor,
 )
 from openadapt_flow.wrap.dirty_and_provenance import (
     SsaIdentifierGuard as SsaIdentifierGuard,
+)
+from openadapt_flow.wrap.entity_ledger import (
+    CheckpointEnforcer as CheckpointEnforcer,
+)
+from openadapt_flow.wrap.entity_ledger import (
+    EntityLedger as EntityLedger,
 )
 
 if TYPE_CHECKING:

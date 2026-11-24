@@ -20,8 +20,15 @@ const MAC =
 // Deep links to the exact System Settings panes (macOS).
 const SCREEN_PANE =
   "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture";
-const AX_PANE =
-  "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
+const UNKNOWN_CONTROL = {
+  setup_mode: "unknown",
+  label: "macOS app control",
+  settings_url: "x-apple.systempreferences:com.apple.preference.security",
+  instructions:
+    "On macOS 27.3 or later, open System & App Protection Override, add the " +
+    "launching app with +, then choose the apps it may control. On earlier " +
+    "macOS, use Accessibility.",
+};
 const INPUT_PANE =
   "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent";
 
@@ -31,8 +38,8 @@ const UNKNOWN: PermissionStatus = {
   input_monitoring: false,
 };
 
-function permissionPill(granted: boolean, known: boolean) {
-  if (!known) return <Pill tone="neutral">unknown</Pill>;
+function permissionPill(granted: boolean | null, known: boolean) {
+  if (!known || granted === null) return <Pill tone="neutral">unknown</Pill>;
   return (
     <Pill tone={granted ? "ok" : "warn"}>{granted ? "granted" : "needed"}</Pill>
   );
@@ -87,12 +94,13 @@ export function Onboarding({ onStart }: { onStart?: () => void }) {
     }
   }
 
+  const control = perms.control_permission ?? UNKNOWN_CONTROL;
   const permissionsReady =
     !MAC ||
     (known &&
-      perms.screen_recording &&
-      perms.accessibility &&
-      perms.input_monitoring);
+      perms.screen_recording === true &&
+      perms.accessibility === true &&
+      perms.input_monitoring === true);
   const videoReady = videoRuntime.phase === "ready";
   const ready = permissionsReady && videoReady;
   const videoBusy = ["checking", "downloading", "verifying"].includes(
@@ -141,7 +149,7 @@ export function Onboarding({ onStart }: { onStart?: () => void }) {
           <Card>
             <CardHead
               title="Screen and input permissions"
-              sub="macOS blocks desktop-app recording until these are granted."
+              sub="Check these preflights, then verify access to the selected app."
             />
             <div className="stack">
               <div className="row">
@@ -153,13 +161,20 @@ export function Onboarding({ onStart }: { onStart?: () => void }) {
                 </Button>
               </div>
               <div className="row">
-                {permissionPill(perms.accessibility, known)}
+                {control.setup_mode === "legacy" ? (
+                  permissionPill(perms.accessibility, known)
+                ) : (
+                  <Pill tone="neutral">
+                    {!known ? "unknown" : perms.accessibility ? "check target" : "not confirmed"}
+                  </Pill>
+                )}
                 <span className="spacer" />
-                <span>Accessibility</span>
-                <Button size="sm" onClick={() => openExternal(AX_PANE)}>
-                  Open pane
+                <span>{control.label}</span>
+                <Button size="sm" onClick={() => openExternal(control.settings_url)}>
+                  Open settings
                 </Button>
               </div>
+              <p className="hint">{control.instructions}</p>
               <div className="row">
                 {permissionPill(perms.input_monitoring, known)}
                 <span className="spacer" />
