@@ -33,7 +33,7 @@
   container it was written into. It never deletes an instance and stops on a
   prefilled one.
 
-## v4.0.0 (held: needs openadapt-types>=0.24.2, see #2637)
+## v4.0.0 (2026-11-24)
 
 ### Breaking Changes
 
