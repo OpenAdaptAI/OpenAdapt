@@ -575,6 +575,6 @@ Tests cover:
   `oab_`, polls `wait_seconds: 0`, prompts Allow-per-`sub`, and Continue
   uses `record_observed` (never `type_text`).
 
-CI runs on Python 3.10, 3.11, and 3.12. It also builds the wheel and
+CI runs on Python 3.11 and 3.12. It also builds the wheel and
 sdist, verifies MIT metadata and license inclusion, and refuses package
 artifacts containing repository-only copyleft benchmark material.

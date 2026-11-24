@@ -29,7 +29,7 @@ compiler and runtime are in
 
 To see it work without building the app, run the same sample as the app's
 **See it work on a sample app** button. It takes about two minutes and needs
-Python 3.10, 3.11, or 3.12.
+Python 3.11 or 3.12.
 
 ```bash
 pip install openadapt

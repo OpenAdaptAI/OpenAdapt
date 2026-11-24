@@ -1,0 +1,25 @@
+{
+  "_about": "Values that look like the expected one but are not. Used by M10 next to the generated perturbations.",
+  "near_misses": [
+    {
+      "expected": "$1,250.00",
+      "observed": "250"
+    },
+    {
+      "expected": "1",
+      "observed": 1
+    },
+    {
+      "expected": "2210 Juniper Loop Apt 4, Brackenfield, OR",
+      "observed": "2210 Juniper Loop"
+    },
+    {
+      "expected": "",
+      "observed": null
+    },
+    {
+      "expected": null,
+      "observed": ""
+    }
+  ]
+}

@@ -29,6 +29,16 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Sequence
 
+from openadapt_flow.verdict import (
+    Obligations,
+    Result,
+    Settlement,
+    Status,
+    Subject,
+    settle,
+)
+from openadapt_flow.verdict_sites import verdict_site
+
 if TYPE_CHECKING:
     from openadapt_types.receipt import ReceiptVerification, RoleKey
 
@@ -54,13 +64,27 @@ def mode_enabled(env: Optional[Mapping[str, str]] = None) -> bool:
     return env.get(ENV_MODE, "on").strip().lower() not in ("0", "off", "false", "no")
 
 
+def _occurrences(hashes: Sequence[Any]) -> list[Subject]:
+    """One subject per contract hash, numbered per hash, so two effects with
+    the same contract are two obligations."""
+
+    seen: Counter[Any] = Counter()
+    out = []
+    for h in hashes:
+        seen[h] += 1
+        out.append(Subject(surface="effect", key=f"{h}#{seen[h]}"))
+    return out
+
+
+@verdict_site("receipt_record.line", classes="C1 C3")
 def _line(
     index: int, result: Mapping[str, Any], ledger: Mapping[str, Any] | None
 ) -> dict[str, Any]:
     from openadapt_flow.check_level import CheckLevel, from_verification_tier
 
     evidence = result.get("effect_evidence") or []
-    declared = Counter(result.get("effect_contract_hashes") or [])
+    planned = list(result.get("effect_contract_hashes") or [])
+    declared = Counter(planned)
     ledger_effects = ledger["effects"] if ledger is not None else []
     # A declared effect can lack a bound hash when the run stopped before the
     # reader ran. Keep the attempted write and withhold its verification.
@@ -74,29 +98,49 @@ def _line(
     # A negative aggregate flag covers both a contradiction and an unavailable
     # reader. Only complete, contract-bound read evidence distinguishes them.
     if declared and ledger_matches and declared == observed:
-        verdicts = {item["final_verdict"] for item in evidence}
         levels = [
             from_verification_tier(item["verification_tier"])
             if type(item.get("verification_tier")) is int
             else CheckLevel.UNCHECKED
             for item in evidence
         ]
-        if verdicts <= {"confirmed", "refuted"} and min(levels) > CheckLevel.UNCHECKED:
-            if "refuted" in verdicts:
-                check = "refuted"
-            elif (
-                verdicts == {"confirmed"}
-                and result.get("effect_verified") is True
-                and all(item.get("observed_effect") == "present" for item in evidence)
-                and (ledger is None or ledger.get("status") == "confirmed")
-            ):
-                check = "confirmed"
-            if check != "not_checked":
-                strength = (
-                    "read_back"
-                    if min(levels) >= CheckLevel.SYSTEM_OF_RECORD
-                    else "same_screen"
-                )
+        # The declared effects are the obligations; each read settles the
+        # one its contract hash names. A read below UNCHECKED, or a verdict
+        # nobody listed, is not checked.
+        subjects = _occurrences([item["effect_contract_hash"] for item in evidence])
+        results = [
+            Result.from_code(
+                subject,
+                item["final_verdict"],
+                held=frozenset({"confirmed"}),
+                refuted=frozenset({"refuted"}),
+            )
+            if level > CheckLevel.UNCHECKED
+            else Result.not_checked(subject, "unchecked read")
+            for subject, item, level in zip(subjects, evidence, levels)
+        ]
+        settled = settle(
+            Obligations.fix(_occurrences(planned), source="effect_contract_hashes"),
+            results,
+        )
+        # Anything unread outranks a refutation: a line is refuted only when
+        # every declared effect was read.
+        label = settled.label(precedence=(Status.NOT_CHECKED, Status.REFUTED))
+        if label is Status.REFUTED:
+            check = "refuted"
+        elif (
+            label is Status.HELD
+            and result.get("effect_verified") is True
+            and all(item.get("observed_effect") == "present" for item in evidence)
+            and (ledger is None or ledger.get("status") == "confirmed")
+        ):
+            check = "confirmed"
+        if check != "not_checked":
+            strength = (
+                "read_back"
+                if min(levels) >= CheckLevel.SYSTEM_OF_RECORD
+                else "same_screen"
+            )
     not_checked: list[str] = []
     if result.get("effect_approved_unverified") is True:
         not_checked.append("approved_unverified")
@@ -207,6 +251,36 @@ def _write_lines(report: Mapping[str, Any], results: list[Any]) -> list[dict[str
             "too_many_writes", "the complete write list exceeds the receipt limit"
         )
     return lines
+
+
+@verdict_site("receipt_record.lines", classes="C2 C3")
+def _tally_lines(
+    lines: Sequence[Mapping[str, Any]],
+) -> tuple[dict[str, int], Settlement]:
+    """The receipt's line counts and their settlement: every line is one
+    obligation. A check nobody listed counts as not checked, so the three
+    counts always add up to the number of lines."""
+
+    subjects = [Subject(surface="line", key=str(n)) for n in range(len(lines))]
+    settled = settle(
+        Obligations.fix(subjects, source="lines"),
+        [
+            Result.from_code(
+                subject,
+                line.get("check"),
+                held=frozenset({"confirmed"}),
+                refuted=frozenset({"refuted"}),
+            )
+            for subject, line in zip(subjects, lines)
+        ],
+    )
+    confirmed, refuted = len(settled.held), len(settled.refuted)
+    tally = {
+        "confirmed": confirmed,
+        "refuted": refuted,
+        "not_checked": settled.total - confirmed - refuted,
+    }
+    return tally, settled
 
 
 #: Signed per-write receipts a run folder may hold, each one line.
@@ -338,14 +412,13 @@ def build_statement(
         raise ReceiptRecordError(
             "too_many_writes", "the complete write list exceeds the receipt limit"
         )
-    tally = {
-        k: sum(1 for line in lines if line["check"] == k)
-        for k in ("confirmed", "refuted", "not_checked")
-    }
+    tally, settled = _tally_lines(lines)
     outcome, reason = r.receipt_outcome(report.get("execution_outcome"))
     if outcome == "VERIFIED" and results and "change_ledger" not in report:
         outcome, reason = "UNKNOWN", "incomplete_write_coverage"
-    if outcome == "VERIFIED" and (tally["refuted"] or tally["not_checked"]):
+    # A run that wrote nothing has no line to check; any line that isn't
+    # confirmed keeps the run from VERIFIED.
+    if outcome == "VERIFIED" and settled.total and not settled.passes:
         outcome, reason = "UNKNOWN", "unverified_write"
     bundle = report.get("bundle_content_digest")
     bundle = bundle if isinstance(bundle, str) and _SHA256.fullmatch(bundle) else None
