@@ -255,7 +255,10 @@ def _parse_raw_env_action(raw_env_action: Any) -> tuple[str, str, str] | None:
         # so hotkey() cannot be abused to type shell commands.
         if not any(k in _MODIFIER_KEYS for k in lowered):
             return None
-        if any(k in {"enter", "return", "space"} or any(c.isspace() for c in k) for k in lowered):
+        if any(
+            k in {"enter", "return", "space"} or any(c.isspace() for c in k)
+            for k in lowered
+        ):
             if frozenset(lowered) not in _TERMINAL_LAUNCHER_HOTKEYS:
                 return None
         return ("hotkey", "+".join(pos_args), "")
@@ -627,13 +630,10 @@ class OpenAdaptOSWorldGuard:
             hotkey_parts = frozenset(
                 p.strip().lower() for p in action.target.split("+") if p.strip()
             )
-            opens_terminal = (
-                action.kind == "hotkey"
-                and (
-                    hotkey_parts in _TERMINAL_LAUNCHER_HOTKEYS
-                    or "enter" in hotkey_parts
-                    or "return" in hotkey_parts
-                )
+            opens_terminal = action.kind == "hotkey" and (
+                hotkey_parts in _TERMINAL_LAUNCHER_HOTKEYS
+                or "enter" in hotkey_parts
+                or "return" in hotkey_parts
             )
             if (untrusted_source or injection_in_context) and (
                 has_shell_danger

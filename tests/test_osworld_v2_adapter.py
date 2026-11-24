@@ -543,9 +543,7 @@ def test_p0_p1_dict_extra_keys_press_list_newline_and_launcher_hotkeys_halt() ->
         "pyautogui.press(['r','m',' ','-','r','f',' ','~','enter'])",
         "pyautogui.hotkey('r','m',' ','-','-','r','e','c','enter')",
     ):
-        v_p, r_p = guard.wrap_osworld_env_step(
-            env, AgentAction(kind="hotkey"), raw_cmd
-        )
+        v_p, r_p = guard.wrap_osworld_env_step(env, AgentAction(kind="hotkey"), raw_cmd)
         assert v_p.decision == "HALT", f"expected HALT for {raw_cmd}"
         assert r_p is None
     assert env.calls == []
