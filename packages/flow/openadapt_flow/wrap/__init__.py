@@ -10,6 +10,19 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
+from openadapt_flow.wrap.hit_test_oracle import (
+    evaluate_hit_test as evaluate_hit_test,
+)
+from openadapt_flow.wrap.hit_test_oracle import (
+    evaluate_post_click_delta as evaluate_post_click_delta,
+)
+from openadapt_flow.wrap.hit_test_oracle import (
+    safe_click_preflight as safe_click_preflight,
+)
+from openadapt_flow.wrap.origin_firewall import (
+    OriginCapabilityFirewall as OriginCapabilityFirewall,
+)
+
 if TYPE_CHECKING:
     # Imported lazily: the agent integrations pull in POSIX-only modules,
     # and building the openadapt-flow parser imports this package.
