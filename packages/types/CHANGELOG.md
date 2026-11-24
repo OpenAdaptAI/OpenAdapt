@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## Unreleased
+
+- Test vectors only, no code change: six `record/run/v1` vectors
+  (`evidence-scope-null`, `evidence-scope-null-basis`,
+  `evidence-scope-null-read-back-at`, `evidence-scope-null-recheck-window`,
+  `evidence-scope-protocols-null`, `evidence-scope-protocols-missing`) sign
+  an `evidence_scope` with a `null` or missing field. Each payload is not
+  canonical, so every verifier must refuse it as `malformed`.
+
 ## v0.24.2 (2026-11-23)
 
 0.24.1 was stamped on main but never published. 0.24.2 is the first
