@@ -1,0 +1,142 @@
+"""Each rule of the kernel is load-bearing: break it and a check fails.
+
+A hand-rolled mutant runner (no new dependency): each mutant rewrites one
+rule of ``openadapt_flow/verdict.py`` in its source, loads the result as a
+fresh module, and runs :func:`battery` on it. Every mutant must be killed;
+the unmutated module must survive. A mutant whose source text is no longer
+found fails the test, so the runner can't silently stop mutating.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import sys
+from pathlib import Path
+from types import ModuleType
+
+import pytest
+
+SOURCE = Path(__file__).resolve().parents[2] / "openadapt_flow" / "verdict.py"
+
+MUTANTS: dict[str, tuple[str, str]] = {
+    "drop total>0": ("            self.total > 0\n", "            True\n"),
+    # ``passes`` checks both ``len(held) == total`` and ``not missing``, so
+    # deleting either one alone is an equivalent mutant. The rule is that an
+    # obligation with no result is never counted as held.
+    "missing counts as held": (
+        '            buckets["missing"].append(item)\n',
+        '            buckets["held"].append(item)\n',
+    ),
+    "ignore unexpected": ("            and not self.unexpected\n", "\n"),
+    "ignore mismatched": (
+        "        matches[n] = [r for r in same_key if not binding_mismatches(item, r.subject)]\n",
+        "        matches[n] = list(same_key)\n",
+    ),
+    "one writer wins": (
+        "        elif len({r.status for r in got}) > 1 or shared:\n",
+        "        elif shared:\n",
+    ),
+    "a shared result counts twice": (
+        "        elif len({r.status for r in got}) > 1 or shared:\n",
+        "        elif len({r.status for r in got}) > 1:\n",
+    ),
+    "truncate at limit": (
+        "    used: set[int] = set()\n",
+        "    used: set[int] = set()\n    obligations = Obligations(obligations.items[:limit],"
+        " obligations.source) if limit is not None else obligations\n",
+    ),
+    "observe returns a default": (
+        "        return Errored(type(exc).__name__, str(exc)[:200])\n",
+        "        return Observed(None)\n",
+    ),
+    "a repeat counts as a second claim": (
+        "            takers.setdefault(id(r), set()).add(n)\n",
+        "            takers.setdefault(id(r), set()).add(len(takers.get(id(r), ())))\n",
+    ),
+    "a partial read holds nothing else": (
+        "        if obs.complete is not True:\n"
+        "            return cls.not_checked(subject, partial)\n"
+        "        return cls.held(subject, obs, held)\n",
+        "        return _mint_held(subject, held)\n",
+    ),
+    "a partial read hides a change": (
+        "        if count > 0:\n            return cls.refuted(subject, obs, refuted)\n",
+        "        if count > 0 and obs.complete:\n            return cls.refuted(subject, obs, refuted)\n",
+    ),
+    "from_code deny-list": (
+        "    if code in refuted:\n        return Status.REFUTED\n    return Status.NOT_CHECKED\n",
+        "    if code in refuted:\n        return Status.REFUTED\n    return Status.HELD\n",
+    ),
+}
+
+
+def _load(source: str, name: str) -> ModuleType:
+    spec = importlib.util.spec_from_loader(name, loader=None)
+    assert spec is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module  # dataclasses resolve annotations through it
+    try:
+        exec(compile(source, f"<{name}>", "exec"), module.__dict__)
+    finally:
+        sys.modules.pop(name, None)
+    return module
+
+
+def battery(v: ModuleType) -> None:
+    """The kernel's rules as plain asserts, run on a (mutated) module."""
+
+    S, O, R = v.Subject, v.Obligations, v.Result
+    a, b = S(key="a"), S(key="b")
+
+    def held(s: object) -> object:
+        return R.held(s, v.Observed(1))
+
+    def fix(*items: object) -> object:
+        return O.fix(list(items), source="plan")
+
+    assert not v.settle(fix(), []).passes, "empty passes"
+    assert not v.settle(fix(a, b), [held(a)]).passes, "missing ignored"
+    assert not v.settle(fix(a), [held(a), held(b)]).passes, "unexpected ignored"
+    bound = S(key="a", run_id="run-1")
+    assert not v.settle(fix(bound), [held(S(key="a", run_id="run-2"))]).passes, (
+        "run ignored"
+    )
+    refuted_a = R.refuted(a, v.Observed(0), "x")
+    for pair in ([refuted_a, held(a)], [held(a), refuted_a]):
+        assert not v.settle(fix(a), pair).passes, "one writer wins"
+    shared = S(key="a", run_id="r")
+    assert not v.settle(fix(a, shared), [held(shared)]).passes, "one result, two claims"
+    many = [S(key=str(i)) for i in range(5)]
+    results = [held(s) for s in many[:-1]] + [R.refuted(many[-1], v.Observed(0), "x")]
+    settled = v.settle(fix(*many), results, limit=3)
+    assert len(settled.refuted) == 1 and settled.total == 5, "truncated"
+
+    once = held(a)
+    assert v.settle(fix(a), [once, once]).passes, "a repeat is a second claim"
+    partial = v.Observed(0, complete=False)
+    assert R.nothing_else(a, partial).status is v.Status.NOT_CHECKED, "partial holds"
+    changed = R.nothing_else(a, v.Observed(2, complete=False)).status
+    assert changed is v.Status.REFUTED, "a partial read hides a change"
+
+    def boom() -> object:
+        raise TimeoutError
+
+    assert not isinstance(v.observe(boom), v.Observed), "observe defaulted"
+    assert (
+        v.from_code("new_code", held=frozenset({"ok"}), refuted=frozenset({"bad"}))
+        is v.Status.NOT_CHECKED
+    ), "deny-list"
+
+
+def test_the_kernel_survives_its_battery() -> None:
+    battery(_load(SOURCE.read_text(encoding="utf-8"), "_verdict_original"))
+
+
+@pytest.mark.parametrize("name", sorted(MUTANTS))
+def test_every_mutant_is_killed(name: str) -> None:
+    text = SOURCE.read_text(encoding="utf-8")
+    old, new = MUTANTS[name]
+    assert text.count(old) == 1, f"mutant {name!r}: its source text is gone"
+    mutant = _load(text.replace(old, new), f"_verdict_mutant_{abs(hash(name))}")
+    with pytest.raises(AssertionError):
+        battery(mutant)

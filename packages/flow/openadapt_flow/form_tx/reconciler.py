@@ -41,6 +41,7 @@ from openadapt_flow.form_tx.types import (
     FieldAnchorSpec,
     FieldBindingSpec,
     FieldCodecSpec,
+    FieldWriteRecord,
     FormCodecKind,
     FormHaltItem,
     FormHaltKind,
@@ -61,6 +62,7 @@ from openadapt_flow.form_tx.types import (
     ProvenanceKind,
     WizardScreenSpec,
     canonical_sha256,
+    read_subjects,
 )
 
 __all__ = [
@@ -165,6 +167,12 @@ class ReconcilerSession:
 
         # Internal session bookkeeping across halt/resume cycles:
         self._filled_selectors: set[str] = set()
+        # Successful-save count when the commit control was clicked.
+        self._pre_commit_confirmed: Optional[int] = None
+        # Surface mutation count when this run first started.
+        self._mutations_at_start: Optional[int] = None
+        # True only while apply_human_resolution resumes the run.
+        self._resuming: bool = False
         self._human_accepted_control_signatures: set[str] = set()
         self._human_accepted_values: dict[str, Any] = {}
         self._accepted_entity_rows: list[tuple[str, dict[str, str]]] = []
@@ -178,6 +186,63 @@ class ReconcilerSession:
         self._pre_commit_mutations: int = 0
         self._last_result: Optional[FormTxResult] = None
         self._bound_surface: Optional[FormSurfaceBackend] = None
+        # Every field typed, selected or kept, keyed by field identity. The
+        # read-back judge must give each one a verdict.
+        # Keyed by field, selector and popup, so a popup input never hides a
+        # main-form write of the same dossier key.
+        self._writes: dict[tuple[str, str, str, str], FieldWriteRecord] = {}
+        # Every control this run actuated: its popup, screen and selector, and
+        # the selectors that may stand for it in the write ledger (a radio
+        # option or its group's peers). Checked against the ledger before
+        # signing, independently of it.
+        self._actuations: list[tuple[str, str, str, frozenset[str]]] = []
+
+    def record_write(
+        self,
+        *,
+        source: str,
+        dossier_key: Optional[str] = None,
+        label: Optional[str] = None,
+        selector: Optional[str] = None,
+        in_popup_subroutine: Optional[str] = None,
+        keep_existing: bool = False,
+    ) -> None:
+        """Note that a field was written so the read-back must cover it.
+
+        Keyed by field, screen, selector and popup: the same selector on two
+        wizard screens is two controls.
+        """
+        if dossier_key and dossier_key != "human-current-field":
+            field_key = dossier_key
+        else:
+            dossier_key = None
+            field_key = f"control:{label or selector or 'unlabelled'}"
+        screen_id = (
+            self._last_observation.screen_id
+            if self._last_observation is not None
+            else None
+        )
+        ledger_key = (
+            field_key,
+            screen_id or "",
+            selector or "",
+            in_popup_subroutine or "",
+        )
+        if keep_existing and ledger_key in self._writes:
+            return
+        self._writes[ledger_key] = FieldWriteRecord(
+            field_key=field_key,
+            dossier_key=dossier_key,
+            label=label,
+            selector=selector,
+            source=source,  # type: ignore[arg-type]
+            in_popup_subroutine=in_popup_subroutine,
+            screen_id=screen_id,
+        )
+
+    @property
+    def writes(self) -> tuple[FieldWriteRecord, ...]:
+        return tuple(self._writes.values())
 
 
 def _is_action_button(ctrl: ObservedControl) -> bool:
@@ -201,6 +266,10 @@ def _is_text_placeholder(value: str, placeholders: Sequence[str]) -> bool:
     return norm in placeholder_set
 
 
+def _is_radio_control(ctrl: ObservedControl) -> bool:
+    return ctrl.input_type.casefold() == "radio" or ctrl.role.casefold() == "radio"
+
+
 def _is_control_empty(
     ctrl: ObservedControl,
     placeholders: Sequence[str] = _DEFAULT_PLACEHOLDERS,
@@ -208,6 +277,9 @@ def _is_control_empty(
     """Return True if ``ctrl`` has no entered/selected value on screen."""
     itype = ctrl.input_type.casefold()
     role = ctrl.role.casefold()
+    if _is_radio_control(ctrl) and ctrl.checked is False:
+        # An unselected radio option holds no answer.
+        return True
     if itype == "checkbox" or role == "checkbox":
         if ctrl.checked is True:
             return False
@@ -240,6 +312,10 @@ def _control_matches_fact(
         except CodecValueError:
             return False
         return (yn == "yes") == bool(ctrl.checked)
+
+    # partial-match-as-match: a radio option matches only when it is selected.
+    if _is_radio_control(ctrl) and ctrl.checked is not True:
+        return False
 
     if values_equivalent(intended_value, ctrl.current_value, binding.codec):
         return True
@@ -412,6 +488,43 @@ def _is_valid_non_zero_return_value(
     if isinstance(norm, str):
         return bool(norm.strip())
     return norm is not None
+
+
+def _ledger_aliases(ctrl: ObservedControl, snapshot: FormSnapshot) -> frozenset[str]:
+    """Selectors that can stand for ``ctrl`` in the write ledger.
+
+    A native radio option is one field with its group: the ledger may name the
+    group by any of its options.
+    """
+    aliases = {ctrl.dom_selector}
+    if ctrl.input_type.casefold() == "radio" and ctrl.name_attr:
+        aliases.update(
+            c.dom_selector
+            for c in snapshot.controls
+            if c.input_type.casefold() == "radio" and c.name_attr == ctrl.name_attr
+        )
+    return frozenset(aliases)
+
+
+def _unrecorded_actuations(session: "ReconcilerSession") -> list[str]:
+    """Actuated controls that no write-ledger entry accounts for.
+
+    A ledger entry accounts for an actuation only in the same popup and on the
+    same screen, as the ledger keys its subjects: the same selector in a popup
+    or on another screen is another control.
+    """
+    recorded = {
+        (w.in_popup_subroutine or "", w.screen_id or "", w.selector)
+        for w in session.writes
+        if w.selector
+    }
+    return sorted(
+        {
+            f"{popup or 'main'}|{screen}|{sel}"
+            for popup, screen, sel, aliases in session._actuations
+            if not any((popup, screen, a) in recorded for a in aliases)
+        }
+    )
 
 
 class FormReconciler:
@@ -606,6 +719,49 @@ class FormReconciler:
         return None
 
     def _actuate_control(
+        self,
+        surface: FormSurfaceBackend,
+        snapshot: FormSnapshot,
+        ctrl: ObservedControl,
+        intended_value: Any,
+        *,
+        session: "ReconcilerSession",
+        in_popup_subroutine: Optional[str],
+        control_kind: ControlKind,
+        codec: FieldCodecSpec,
+        placeholder_values: Sequence[str] = _DEFAULT_PLACEHOLDERS,
+        dossier_key: Optional[str] = None,
+        run_id: str = "",
+    ) -> Optional[FormHaltItem]:
+        """Actuate ``ctrl`` and note the actuation on ``session``.
+
+        The note is kept apart from the write ledger, so signing can check that
+        every control the run changed is in the ledger it signs.
+        """
+        halt = self._actuate_control_once(
+            surface,
+            snapshot,
+            ctrl,
+            intended_value,
+            control_kind=control_kind,
+            codec=codec,
+            placeholder_values=placeholder_values,
+            dossier_key=dossier_key,
+            run_id=run_id,
+        )
+        if halt is None:
+            obs = session._last_observation
+            session._actuations.append(
+                (
+                    in_popup_subroutine or "",
+                    (obs.screen_id if obs is not None else None) or "",
+                    ctrl.dom_selector,
+                    _ledger_aliases(ctrl, snapshot),
+                )
+            )
+        return halt
+
+    def _actuate_control_once(
         self,
         surface: FormSurfaceBackend,
         snapshot: FormSnapshot,
@@ -877,6 +1033,8 @@ class FormReconciler:
                         snapshot,
                         ctrl,
                         fact.value,
+                        session=session,
+                        in_popup_subroutine=in_popup_subroutine,
                         control_kind=binding.control_kind,
                         codec=binding.codec,
                         placeholder_values=binding.placeholder_values,
@@ -894,9 +1052,28 @@ class FormReconciler:
 
                     session.fields_filled_auto += 1
                     session._filled_selectors.add(filled_key)
+                    session.record_write(
+                        source="auto_fill",
+                        dossier_key=binding.dossier_key,
+                        label=ctrl.label_text,
+                        selector=ctrl.dom_selector,
+                        in_popup_subroutine=in_popup_subroutine,
+                    )
                     edited_any = True
                     if binding.triggers_re_render:
                         return True, True, None
+            if fact is not None and _control_matches_fact(ctrl, fact.value, binding):
+                # A control that already held the intended value (whatever the
+                # prefill policy, an unchecked box meant as "no" included) is
+                # still a control this run relied on: it needs its own verdict.
+                session.record_write(
+                    source="kept_matching",
+                    dossier_key=binding.dossier_key,
+                    label=ctrl.label_text,
+                    selector=ctrl.dom_selector,
+                    in_popup_subroutine=in_popup_subroutine,
+                    keep_existing=True,
+                )
 
         return edited_any, False, None
 
@@ -1135,12 +1312,20 @@ class FormReconciler:
                         popup_snap,
                         matching[0],
                         val,
+                        session=session,
+                        in_popup_subroutine=sub_id,
                         control_kind=inferred,
                         codec=FieldCodecSpec(),
                         run_id=session.run_id,
                     )
                     if act_halt is not None:
                         return [act_halt]
+                    session.record_write(
+                        source="operator_value",
+                        label=matching[0].label_text,
+                        selector=sel,
+                        in_popup_subroutine=sub_id,
+                    )
                     popup_snap = popup_surface.snapshot()
 
             for _ in range(self.max_passes_per_screen):
@@ -1165,6 +1350,13 @@ class FormReconciler:
             )
             if popup_ungrounded:
                 return popup_ungrounded
+
+            entry_halt = self._check_popup_entries_before_apply(
+                session, popup_surface, parent_snapshot, subroutine
+            )
+            if entry_halt is not None:
+                return [entry_halt]
+            popup_snap = popup_surface.snapshot()
 
             try:
                 popup_commit = match_anchor_in_snapshot(
@@ -1260,6 +1452,12 @@ class FormReconciler:
 
         session.subroutines_completed.append(subroutine.subroutine_id)
         session._filled_selectors.add(return_after.dom_selector)
+        session.record_write(
+            source="popup_return",
+            dossier_key=subroutine.return_output_key,
+            label=return_after.label_text,
+            selector=return_after.dom_selector,
+        )
         session._human_accepted_control_signatures.add(
             compute_field_signature(return_after)
         )
@@ -1272,6 +1470,106 @@ class FormReconciler:
                 confidence=1.0,
             )
         return None
+
+    def _check_popup_entries_before_apply(
+        self,
+        session: ReconcilerSession,
+        popup_surface: FormSurfaceBackend,
+        parent_snapshot: FormSnapshot,
+        subroutine: PopupSubroutineSpec,
+    ) -> Optional[FormHaltItem]:
+        """Re-read every field typed in the popup before its apply button.
+
+        A popup's inputs are often not stored with the record, so the summary
+        cannot show them. Reading them back here, before they are used, is the
+        only check they can get before use. A mismatch or a missing control
+        stops the run before apply. A match is noted on the write, but the
+        field is still reported as not_checked: a re-read of the popup is not a
+        read-back of what the application recorded.
+        """
+        snap = popup_surface.snapshot()
+        problems: list[str] = []
+        for ledger_key, write in list(session._writes.items()):
+            if write.in_popup_subroutine != subroutine.subroutine_id:
+                continue
+            # The binding that wrote this control: matched by its selector,
+            # never just by key (two inputs may hold the same key).
+            binding = None
+            for b in subroutine.bindings:
+                if not write.dossier_key or b.dossier_key != write.dossier_key:
+                    continue
+                try:
+                    m = match_anchor_in_snapshot(b.anchor, snap, include_readonly=False)
+                except AmbiguousAnchorError:
+                    m = None
+                if m is not None and m.dom_selector == write.selector:
+                    binding = b
+                    break
+            if binding is not None:
+                fact = session.effective_facts.get(binding.dossier_key)
+                try:
+                    ctrl = match_anchor_in_snapshot(
+                        binding.anchor, snap, include_readonly=False
+                    )
+                except AmbiguousAnchorError:
+                    ctrl = None
+                ok = (
+                    fact is not None
+                    and ctrl is not None
+                    and _control_matches_fact(ctrl, fact.value, binding)
+                )
+            else:
+                intended = session._popup_manual_fills.get(
+                    (subroutine.subroutine_id, write.selector or "")
+                )
+                ctrl = next(
+                    (
+                        c
+                        for c in snap.controls
+                        if c.visible and c.dom_selector == write.selector
+                    ),
+                    None,
+                )
+                ok = (
+                    intended is not None
+                    and ctrl is not None
+                    and values_equivalent(
+                        intended, ctrl.current_value, FieldCodecSpec()
+                    )
+                )
+            if ok:
+                session._writes[ledger_key] = write.model_copy(
+                    update={"checked_before_apply": True}
+                )
+            else:
+                problems.append(write.label or write.field_key)
+        if not problems:
+            return None
+        sig = f"popup_entry|{subroutine.subroutine_id}|{'|'.join(sorted(problems))}"
+        halt_id = _deterministic_halt_id(
+            session.run_id,
+            FormHaltKind.POPUP_CONTRACT_FAILED,
+            parent_snapshot.screen_id,
+            subroutine.subroutine_id,
+            sig,
+        )
+        halt = FormHaltItem(
+            halt_id=halt_id,
+            kind=FormHaltKind.POPUP_CONTRACT_FAILED,
+            screen_id=parent_snapshot.screen_id,
+            dossier_key=subroutine.return_output_key,
+            message=(
+                f"Popup {subroutine.subroutine_id!r} does not hold the intended "
+                f"value in {problems} before apply"
+            ),
+            allowed_actions=(
+                HumanDecisionAction.FIXED_ON_SCREEN,
+                HumanDecisionAction.ESCALATE_TO_OWNER,
+                HumanDecisionAction.ABORT_RUN,
+            ),
+        )
+        session._halt_metadata[halt_id] = {"field_signature": sig}
+        return halt
 
     def _emit_validation_blocked(
         self,
@@ -1357,6 +1655,71 @@ class FormReconciler:
     ) -> FormTxResult:
         pack = session.pack
         delta_mutations = max(0, surface.mutation_count - pre_commit_mutations)
+        has_commit_endpoint = bool(pack.commit_url_patterns)
+        has_record_lookup = bool(
+            pack.summary_check
+            and pack.summary_check.search_by_output_key
+            and pack.summary_check.search_input_anchor is not None
+            and pack.summary_check.search_submit_anchor is not None
+        )
+        has_confirmed_fn = getattr(surface, "has_confirmed_mutation_since", None)
+        if not callable(has_confirmed_fn):
+            save_confirmed = False
+        elif has_commit_endpoint:
+            save_confirmed = bool(
+                has_confirmed_fn(
+                    pre_commit_mutations, url_patterns=pack.commit_url_patterns
+                )
+            )
+        elif has_record_lookup:
+            save_confirmed = bool(has_confirmed_fn(pre_commit_mutations))
+        else:
+            # Without either a declared commit endpoint pattern or a record-specific
+            # summary lookup, a same-page draft autosave cannot be distinguished
+            # from the intended commit.
+            save_confirmed = False
+        no_confirmed_save = not save_confirmed
+        still_on_commit_screen = self._is_still_on_uncommitted_commit_screen(
+            post_commit_snapshot, pack
+        )
+        if delta_mutations == 0 or no_confirmed_save or still_on_commit_screen:
+            # absent-evidence-as-success: a commit click that sent no save
+            # request is no evidence the record exists; reading the form back
+            # would only read the run's own edits.
+            sig = f"commit_no_save|{pack.pack_id}"
+            halt_id = _deterministic_halt_id(
+                session.run_id,
+                FormHaltKind.MUTATION_BUDGET_EXCEEDED,
+                post_commit_snapshot.screen_id,
+                pack.pack_id,
+                sig,
+            )
+            msg = (
+                "The commit control was clicked but no save request was seen"
+                if delta_mutations == 0
+                else "No save request was answered with success"
+                if no_confirmed_save
+                else "The page is still on the commit screen after the commit click"
+            ) + "; there is no evidence the record was saved"
+            halt = FormHaltItem(
+                halt_id=halt_id,
+                kind=FormHaltKind.MUTATION_BUDGET_EXCEEDED,
+                screen_id=post_commit_snapshot.screen_id,
+                portal_value=0,
+                message=msg,
+                allowed_actions=(
+                    HumanDecisionAction.ESCALATE_TO_OWNER,
+                    HumanDecisionAction.ABORT_RUN,
+                ),
+            )
+            session._halt_metadata[halt_id] = {"field_signature": sig}
+            return self._build_result(
+                session,
+                outcome=FormTxOutcome.DELIVERY_UNCERTAIN,
+                safe_to_retry=False,
+                halts=(halt,),
+                what_happened=msg,
+            )
         if delta_mutations > pack.max_commit_mutations:
             sig = f"commit_budget|{pack.pack_id}"
             halt_id = _deterministic_halt_id(
@@ -1397,34 +1760,90 @@ class FormReconciler:
             dossier=session.dossier,
             human_resolutions=session.human_resolutions,
             supplemental_facts=session.effective_facts,
+            writes=session.writes,
         )
         extracted_outputs = dict(verdict.extracted_outputs)
         if not verdict.passed or verdict.missing_required_outputs:
-            reasons = list(verdict.failed_keys) + [
-                f"missing_output:{k}" for k in verdict.missing_required_outputs
-            ]
+            refuted = bool(
+                verdict.failed_keys
+                or verdict.missing_required_outputs
+                or not verdict.not_checked_keys
+            )
+            if refuted:
+                reasons = list(verdict.failed_keys) + [
+                    f"missing_output:{k}" for k in verdict.missing_required_outputs
+                ]
+                if not reasons:
+                    reasons = ["summary screen not in a readable state"]
+                return self._build_result(
+                    session,
+                    outcome=FormTxOutcome.READBACK_REFUTED,
+                    safe_to_retry=False,
+                    outputs=extracted_outputs,
+                    summary_verdict=verdict,
+                    receipt=None,
+                    what_happened=(
+                        f"Read-back by the acting session did not verify commit: {reasons}"
+                    ),
+                )
             return self._build_result(
                 session,
-                outcome=FormTxOutcome.READBACK_REFUTED,
+                outcome=FormTxOutcome.READBACK_INCOMPLETE,
                 safe_to_retry=False,
                 outputs=extracted_outputs,
                 summary_verdict=verdict,
                 receipt=None,
-                what_happened=f"Independent read-back did not verify commit: {reasons}",
+                what_happened=(
+                    "Submitted, but these fields could not be read back and "
+                    f"need a person to check them: {list(verdict.not_checked_keys)}"
+                ),
             )
 
-        receipt = issue_form_tx_receipt(
-            run_id=session.run_id,
-            pack=pack,
-            dossier=session.dossier,
-            signing_key=session.signing_key,
-            outcome=FormTxOutcome.VERIFIED_DONE,
-            fields_filled_auto=session.fields_filled_auto,
-            human_resolutions=session.human_resolutions,
-            commit_mutations_observed=delta_mutations,
-            summary_verdict=verdict,
-            outputs=extracted_outputs,
-        )
+        def _not_signed(reason: str) -> FormTxResult:
+            # Submitted and read back, but the run cannot be signed as
+            # verified. A person checks it; it is never retried blindly.
+            return self._build_result(
+                session,
+                outcome=FormTxOutcome.READBACK_INCOMPLETE,
+                safe_to_retry=False,
+                outputs=extracted_outputs,
+                summary_verdict=verdict,
+                receipt=None,
+                what_happened=(
+                    "Submitted, but the run could not be signed as verified: " + reason
+                ),
+            )
+
+        unrecorded = _unrecorded_actuations(session)
+        if unrecorded:
+            return _not_signed(
+                "controls were changed that the write ledger does not record: "
+                f"{unrecorded}"
+            )
+        try:
+            receipt = issue_form_tx_receipt(
+                run_id=session.run_id,
+                pack=pack,
+                dossier=session.dossier,
+                signing_key=session.signing_key,
+                outcome=FormTxOutcome.VERIFIED_DONE,
+                # Each auto-filled control once, as the signer counts them from
+                # the ledger: a control filled again (after a sign-in or a
+                # re-render) is still one field.
+                fields_filled_auto=len(
+                    read_subjects(
+                        [w for w in session.writes if w.source == "auto_fill"], ()
+                    )
+                ),
+                human_resolutions=session.human_resolutions,
+                commit_mutations_observed=delta_mutations,
+                summary_verdict=verdict,
+                outputs=extracted_outputs,
+                writes=session.writes,
+            )
+        except ValueError as exc:
+            # The signer refused: report it as a stop, never raise past here.
+            return _not_signed(str(exc))
         return self._build_result(
             session,
             outcome=FormTxOutcome.VERIFIED_DONE,
@@ -1432,7 +1851,7 @@ class FormReconciler:
             outputs=extracted_outputs,
             summary_verdict=verdict,
             receipt=receipt,
-            what_happened="Committed and verified via independent read-back",
+            what_happened="Committed and verified by the acting session's read-back",
         )
 
     def _is_still_on_uncommitted_commit_screen(
@@ -1461,10 +1880,41 @@ class FormReconciler:
         *,
         surface: Optional[FormSurfaceBackend] = None,
     ) -> FormTxResult:
-        """Advance ``session`` deterministically until verified completion or a governed halt."""
+        """Advance ``session`` deterministically until verified completion or a governed halt.
+
+        A session with an open stop does not move: a stop is cleared only by
+        ``apply_human_resolution`` (absent-evidence-as-success: a retry is not
+        a decision).
+        """
+        if session.active_halts and not session._resuming:
+            return self._build_result(
+                session,
+                outcome=(
+                    session._last_result.outcome
+                    if session._last_result is not None
+                    else FormTxOutcome.HALTED_NEEDS_HUMAN
+                ),
+                # Never more retryable than the stop it repeats.
+                safe_to_retry=(
+                    session._last_result.safe_to_retry
+                    if session._last_result is not None
+                    else False
+                ),
+                halts=tuple(session.active_halts),
+                what_happened=(
+                    "Refused to continue: a stop is still open and needs a "
+                    "decision through apply_human_resolution"
+                ),
+            )
+        session._resuming = False
         active_surface = self._resolve_surface(surface, session)
         pack = session.pack
         session.active_halts.clear()
+        if session._mutations_at_start is None:
+            try:
+                session._mutations_at_start = active_surface.mutation_count
+            except Exception:  # noqa: BLE001
+                session._mutations_at_start = 0
 
         for _ in range(self.max_screen_transitions):
             snapshot = active_surface.snapshot(
@@ -1813,6 +2263,9 @@ class FormReconciler:
 
                 pre_commit_mutations = active_surface.mutation_count
                 session._pre_commit_mutations = pre_commit_mutations
+                session._pre_commit_confirmed = getattr(
+                    active_surface, "confirmed_mutation_count", None
+                )
                 session._commit_in_progress = True
                 active_surface.click(commit_ctrl.dom_selector)
 
@@ -1926,9 +2379,41 @@ class FormReconciler:
                     )
                 continue
 
-            # Single-screen pack with no WizardScreenSpec transition buttons
-            return self._finalize_commit(
-                active_surface, session, snapshot, active_surface.mutation_count
+            # Single-screen pack with no WizardScreenSpec transition buttons.
+            # With no commit control there is no evidence that this record
+            # was saved (a request counted since the start may be unrelated
+            # or may have failed), and reading back our own unsaved edits is
+            # not evidence of a commit (absent-evidence-as-success): stop.
+            sig = f"no_commit|{snapshot.screen_id or snapshot.url_origin_and_path}"
+            halt_id = _deterministic_halt_id(
+                session.run_id,
+                FormHaltKind.AMBIGUOUS_OPTION_OR_TARGET,
+                snapshot.screen_id,
+                pack.pack_id,
+                sig,
+            )
+            msg = (
+                "No commit control on this screen, so there is no evidence the "
+                "record was saved; the run will not treat its own edits as a commit"
+            )
+            halt = FormHaltItem(
+                halt_id=halt_id,
+                kind=FormHaltKind.AMBIGUOUS_OPTION_OR_TARGET,
+                screen_id=snapshot.screen_id,
+                message=msg,
+                allowed_actions=(
+                    HumanDecisionAction.ESCALATE_TO_OWNER,
+                    HumanDecisionAction.ABORT_RUN,
+                ),
+            )
+            session._halt_metadata[halt_id] = {"field_signature": sig}
+            return self._build_result(
+                session,
+                outcome=FormTxOutcome.HALTED_NEEDS_HUMAN,
+                # The page may have saved on its own; never resubmit blindly.
+                safe_to_retry=False,
+                halts=(halt,),
+                what_happened=msg,
             )
 
         sig = f"transition_budget|{pack.pack_id}"
@@ -2034,6 +2519,15 @@ class FormReconciler:
             and snapshot.active_modals.count(previous_modal) != 1
         ):
             raise ValueError("Human decision modal changed; observe and review again")
+
+    def _resume_after_resolution(
+        self, session: ReconcilerSession, surface: FormSurfaceBackend
+    ) -> FormTxResult:
+        session._resuming = True
+        try:
+            return self.run_until_halt_or_done(session, surface=surface)
+        finally:
+            session._resuming = False
 
     def apply_human_resolution(
         self,
@@ -2201,6 +2695,8 @@ class FormReconciler:
                         snap,
                         live_ctrl,
                         val,
+                        session=session,
+                        in_popup_subroutine=None,
                         control_kind=ctrl_kind,
                         codec=codec,
                         placeholder_values=placeholders,
@@ -2229,8 +2725,15 @@ class FormReconciler:
 
             session._human_accepted_control_signatures.add(field_sig)
             session._human_accepted_values[field_sig] = val
+            session.record_write(
+                source="operator_value",
+                dossier_key=effective_dossier_key,
+                label=active_halt.field_label,
+                selector=active_halt.dom_selector,
+                in_popup_subroutine=in_popup_sub,
+            )
             _append_record(val)
-            res = self.run_until_halt_or_done(session, surface=active_surface)
+            res = self._resume_after_resolution(session, active_surface)
             return _cache_and_return(res)
 
         if action == HumanDecisionAction.ACCEPT_PORTAL_PREFILL:
@@ -2256,9 +2759,16 @@ class FormReconciler:
                     session._filled_selectors.add(active_halt.dom_selector)
                 session._human_accepted_control_signatures.add(field_sig)
                 session._human_accepted_values[field_sig] = portal_val
+                session.record_write(
+                    source="operator_kept_prefill",
+                    dossier_key=effective_dossier_key,
+                    label=active_halt.field_label,
+                    selector=active_halt.dom_selector,
+                    in_popup_subroutine=meta.get("in_popup_subroutine"),
+                )
 
             _append_record(portal_val)
-            res = self.run_until_halt_or_done(session, surface=active_surface)
+            res = self._resume_after_resolution(session, active_surface)
             return _cache_and_return(res)
 
         if action == HumanDecisionAction.DISMISS_PORTAL_ENTITY:
@@ -2312,7 +2822,7 @@ class FormReconciler:
             )
             session.dismissed_entities.add(entity_key)
             _append_record(dict(row.values))
-            res = self.run_until_halt_or_done(session, surface=active_surface)
+            res = self._resume_after_resolution(session, active_surface)
             return _cache_and_return(res)
 
         if action == HumanDecisionAction.CONFIRM_MODAL_ACTION:
@@ -2347,7 +2857,7 @@ class FormReconciler:
 
             session.confirmed_modals.add(modal_id)
             _append_record("confirmed")
-            res = self.run_until_halt_or_done(session, surface=active_surface)
+            res = self._resume_after_resolution(session, active_surface)
             return _cache_and_return(res)
 
         if action == HumanDecisionAction.FIXED_ON_SCREEN:
@@ -2373,7 +2883,7 @@ class FormReconciler:
                     )
                     return _cache_and_return(res)
                 _append_record("authenticated")
-                res = self.run_until_halt_or_done(session, surface=active_surface)
+                res = self._resume_after_resolution(session, active_surface)
                 return _cache_and_return(res)
 
             binding = meta.get("binding")
@@ -2422,7 +2932,7 @@ class FormReconciler:
                     )
                     return _cache_and_return(res)
                 _append_record("validation_cleared")
-                res = self.run_until_halt_or_done(session, surface=active_surface)
+                res = self._resume_after_resolution(session, active_surface)
                 return _cache_and_return(res)
 
             placeholders = (
@@ -2469,8 +2979,15 @@ class FormReconciler:
             )
             session._human_accepted_control_signatures.add(field_sig)
             session._human_accepted_values[field_sig] = live_val
+            session.record_write(
+                source="operator_fixed_on_screen",
+                dossier_key=effective_dossier_key,
+                label=active_halt.field_label or live_ctrl.label_text,
+                selector=live_ctrl.dom_selector,
+                in_popup_subroutine=meta.get("in_popup_subroutine"),
+            )
             _append_record(live_val)
-            res = self.run_until_halt_or_done(session, surface=active_surface)
+            res = self._resume_after_resolution(session, active_surface)
             return _cache_and_return(res)
 
         raise ValueError(f"Unsupported human resolution action: {action!r}")

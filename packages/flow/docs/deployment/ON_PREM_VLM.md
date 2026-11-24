@@ -62,9 +62,10 @@ unqualified**: the appliance validation measured it non-functional at native
 frames are downscaled below ~1024px first) and ~12.5% false-rescue on
 genuinely-ambiguous in-progress screens (a `"Saving…"` read as saved). See
 [docs/LIMITS.md](../LIMITS.md) for the measured trap-set numbers before
-relying on it. Because of that false-rescue rate, the replayer never asks the
-oracle about a step that can change a record (see the drift-oracle entry
-below).
+relying on it. Because of that false-rescue rate, a "yes" never clears a
+failed postcondition: it is a hint shown to the person who reviews the halt,
+and the replayer doesn't ask at all about a step that can change a record (see
+the drift-oracle entry below).
 
 ## Fail-safe behaviour (mandatory)
 
@@ -199,9 +200,11 @@ handles into the `Replayer`.
   tier can only veto; a down appliance means more halts, never a wrong click.
 - **Drift-oracle postcondition** (`RemoteStateVerifier`): after deterministic
   checks and one settle retry fail, the replayer asks the verifier only about
-  render-drift-sensitive `text_present` and `region_stable` conditions. Only a
-  confident `yes` rescues the condition. A `no`, `uncertain`, error, or appliance
-  outage keeps the failure. Every call and rescue is recorded in the run result.
+  render-drift-sensitive `text_present` and `region_stable` conditions. The
+  answer never clears the failure: the step halts and goes to a person, and a
+  confident `yes` is recorded on the step (`postcondition_drift_rescues`) and
+  printed as a hint that the failure may be render drift. Every call is
+  recorded in the run result and counted as a model call.
   The replayer does not ask at all on an irreversible or effect-bearing step
   (the same steps the run gate treats as consequential, plus steps waiting for
   risk review). There a failed check stays failed. Unless the workflow has its
@@ -243,7 +246,25 @@ through. Scrubbing here would **defeat the safety check**, not add safety.
 3. **In-flight PHI, treated as such.** The crop is PHI moving inside the trust
    boundary. Run the appliance HTTPS-only on the LAN, gate it with the bearer
    token (`VLM_SERVICE_TOKEN`), and keep it inside the same network zone as the
-   runners.
+   runners. Under the `regulated` execution profile the runner enforces the
+   transport: it wires an appliance or a grounding model only over `https`, or
+   over `http` to loopback, and prints why it refused any other URL. It checks
+   the URL the built client sends to, including one the client library reads
+   from its own environment.
+4. **Every frame sent off the box is on a local ledger.** Before each off-box
+   call the runner appends one line to `egress-ledger.jsonl` beside the run
+   directory (or the file `OPENADAPT_FLOW_EGRESS_LEDGER` names). The line holds
+   the frame's SHA-256 and size, the component, the destination host, the run,
+   the step and the time, and never pixels or text. The file is append-only,
+   mode `0600` and fsynced per line. If the line can't be written, or no
+   ledger is set (a replayer driven outside a run), the frame is not sent and the component gives its fail-safe answer, so the step halts.
+   Halted runs are on the ledger too, because each line is written when its
+   frame is sent.
+5. **No fallback to another model.** When `grounding_model` is pinned and
+   can't be wired, the appliance grounder does not stand in for it. A pinned
+   section must name its `model`; an empty one is refused, never given a
+   default. The grounding rung stays off, and a target the deterministic rungs
+   can't resolve halts for a person.
 
 An operator auditing the appliance should confirm no reverse proxy, WSGI, or
 model-server logs the request body — that is the only way a crop could persist.

@@ -1,0 +1,60 @@
+name: agent-test-action
+
+# Self-test of the `openadapt test` GitHub Action on a hosted runner, at no
+# model cost: the model-free reference agent that reads its save back sets a
+# baseline on Dolibarr, then the one that believes the page must fail the
+# gate. Not a required check. Runs when the action or openadapt_flow.agent_test
+# changes, and by hand.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/actions/openadapt-test/**
+      - .github/workflows/agent-test-action.yml
+      - packages/flow/openadapt_flow/agent_test/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-test-action-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate-catches-a-regression:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Baseline (scripted-readback)
+        id: base
+        uses: ./.github/actions/openadapt-test
+        with:
+          app: dolibarr
+          agent: scripted-readback
+          out: run-baseline
+          artifact-name: agent-test-baseline
+      - name: Store the baseline
+        run: python -m openadapt_flow.agent_test baseline --results run-baseline/results.json --out baseline.json
+      - name: Candidate (scripted, which never checks)
+        id: cand
+        continue-on-error: true
+        uses: ./.github/actions/openadapt-test
+        with:
+          app: dolibarr
+          agent: scripted
+          baseline: baseline.json
+          out: run-candidate
+          artifact-name: agent-test-candidate
+      - name: The gate must have failed the candidate
+        env:
+          VERDICT: ${{ steps.cand.outputs.verdict }}
+          OUTCOME: ${{ steps.cand.outcome }}
+        run: |
+          echo "candidate verdict: $VERDICT, step outcome: $OUTCOME"
+          test "$VERDICT" = fail
+          test "$OUTCOME" = failure

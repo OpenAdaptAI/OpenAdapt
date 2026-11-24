@@ -28,7 +28,7 @@ your agent's own model calls.
 ## Run it
 
 You need Docker (with about 3 GB free for Medplum's images), git, and
-Python 3.10, 3.11 or 3.12. Podman or Colima work too: the runner calls
+Python 3.11 or 3.12. Podman or Colima work too: the runner calls
 `docker compose`, so point `DOCKER_HOST` at their socket.
 
 ```bash

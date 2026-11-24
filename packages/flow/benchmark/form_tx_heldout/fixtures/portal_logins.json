@@ -1,0 +1,6 @@
+{
+  "harborline": {"username": "agent.test.0417", "password": "harbor-test-pass-1"},
+  "cobalt": {"username": "quote.tester@example.test", "password": "cobalt-test-pass-2"},
+  "pinecrest": {"username": "pc_agent_test", "password": "pinecrest-test-pass-3"},
+  "tidewater": {"username": "tg.agent.test", "password": "tidewater-test-pass-4"}
+}

@@ -253,6 +253,12 @@ from openadapt_flow.runtime.effects.pipeline_safety import (
 from openadapt_flow.runtime.known_ids import (
     lookalike_class as known_ids_lookalike_class,
 )
+from openadapt_flow.runtime.model_egress import (
+    EgressRecorder,  # noqa: F401
+    ModelComponentMixin,
+    model_calls_in_process,
+    model_calls_off_box,
+)
 from openadapt_flow.runtime.program_predicates import (  # noqa: F401
     evaluate_program_predicate,
     exact_png_size,
@@ -375,6 +381,7 @@ class Replayer(
     Confirming,
     ConsequentialDelivery,
     ApiTier,
+    ModelComponentMixin,
 ):
     """Replays a Workflow against a Backend using injected vision.
 
@@ -633,6 +640,8 @@ class Replayer(
         # is always populated by the time replay runs; typed Any (a namespace-like
         # facade exposing find_template/ocr/wait_settled/...).
         self.vision: Any = vision
+        # Frames sent off the box are ledgered and counted by placement.
+        self.__dict__["_egress_recorder"] = EgressRecorder()
         self.grounder = grounder
         # Whether the deterministic structural ACTION rung (top of the ladder)
         # may run. True (default) = product behavior: on a structure-bearing
@@ -838,11 +847,9 @@ class Replayer(
         self._identity_input_looks = False
         self._identity_look_bindings: dict[str, looks_mod.LookBinding] = {}
         # Optional VLM drift-oracle (state-verifier), OFF by default. When set,
-        # it may CONFIRM a render-drift-sensitive postcondition that
-        # deterministically false-failed (the same heal-under-drift the
-        # resolution ladder does for click targets). VETO-SAFE: it only ever
-        # rescues on a confident "yes"; "no"/"uncertain"/outage keep the halt,
-        # and it never touches structural or text_absent postconditions.
+        # it is asked about a render-drift-sensitive postcondition that failed
+        # deterministically. Its "yes" is a hint for the person who reviews
+        # the halt; the postcondition stays failed.
         self.state_verifier = state_verifier
         self.poll_interval_s = poll_interval_s
         if not math.isfinite(settle_readiness_timeout_s) or (
@@ -1238,6 +1245,7 @@ class Replayer(
         before they are written, and durable checkpoints use the same key.
         No plaintext of the bundle or of the live screen reaches the disk.
         """
+        self._egress.bind_run(run_dir, run_id)
         return run_with_output(
             self,
             workflow,
@@ -3086,28 +3094,11 @@ class Replayer(
 
     @staticmethod
     def _result_model_calls(result: StepResult) -> int:
-        return int(
-            result.drift_oracle_calls
-            + (
-                1
-                if (
-                    result.ok
-                    and result.resolution is not None
-                    and result.resolution.rung == "grounder"
-                    and result.resolution.grounder_model != "local"
-                )
-                else 0
-            )
-        )
+        return model_calls_off_box(result)
 
     @staticmethod
     def _result_local_model_calls(result: StepResult) -> int:
-        return int(
-            result.ok
-            and result.resolution is not None
-            and result.resolution.rung == "grounder"
-            and result.resolution.grounder_model == "local"
-        )
+        return model_calls_in_process(result)
 
     def _initial_external_network_calls(
         self, prior: Literal["none", "observed", "unknown"]
@@ -6386,11 +6377,13 @@ class Replayer(
 
         timer, previous = step_timing.start_step()
         result: Optional[StepResult] = None
+        self._egress.step_id = step.id
         try:
             result = self._run_step_timed(step, **kwargs)
             return result
         finally:
             step_timing.end_step(previous)
+            self._egress.drain(result)
             if result is not None:
                 result.timings = timer.result_ms(result.elapsed_ms or None)
 
@@ -7747,10 +7740,10 @@ class Replayer(
                             for r in result.postcondition_drift_rescues
                         )
                         print(
-                            "  drift-oracle: "
+                            "  drift-oracle hint: the VLM says "
                             f"{len(result.postcondition_drift_rescues)}"
-                            " postcondition(s) confirmed by VLM under render "
-                            "drift — " + rescued
+                            " failed postcondition(s) hold (render drift?); "
+                            "they stay failed for a person to review — " + rescued
                         )
                     if not postconditions_ok:
                         if selection_error is not None:
@@ -8645,6 +8638,7 @@ class Replayer(
                 step, resolution, frame_png, params, workflow, bundle_dir
             )
         )
+        self._egress.drain(result)
         if (
             check.status in {"verified", "mismatch"}
             and check.mode == "pixel"
@@ -14331,9 +14325,9 @@ class Replayer(
         :func:`transaction.classify_transaction_outcome` reports
         ``RECONCILIATION_REQUIRED`` for the halted run.
 
-        Read-only and navigation steps keep the drift-oracle rescue. A wrong
-        "yes" there lets the run reach the next step, which still runs its own
-        identity, risk, and postcondition checks before it acts.
+        On read-only and navigation steps the drift oracle is asked, but its
+        "yes" is only a hint for the person who reviews the halt (see
+        :meth:`_drift_oracle_rescue`): the postcondition stays failed.
         """
         if step.risk_review_required:
             return True

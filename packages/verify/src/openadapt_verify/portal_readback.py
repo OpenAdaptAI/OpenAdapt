@@ -1,0 +1,1014 @@
+"""Third-party portal independent read-back oracles (no DB/API access required).
+
+Provides two fail-closed verification oracles for third-party web portals (such as
+insurance carrier quoting portals or payer portals) where direct SQL or backend
+API read-back is unavailable:
+
+1. ``FreshReloadSummaryOracle``:
+   Requires an independent producer (``separate_session`` or ``system_of_record``),
+   valid same-origin ``submit_url`` / ``summary_url``, ISO-8601 ``reloaded_at_utc``,
+   a 64-hex ``summary_dom_sha256`` digest, and distinct non-empty DOM tokens
+   proving a fresh navigation/reload distinct from the submit DOM, then diffs
+   extracted summary fields against the expected intake record.
+
+2. ``ConfirmationPdfOracle``:
+   Enforces artifact provenance via
+   :mod:`openadapt_flow.runtime.effects.artifact_provenance` (refusing ``unknown``,
+   ``acting_session``, ``Downloads``, ``playwright-artifacts-*``, and symlinks
+   escaping the store), checks PDF integrity (``%%EOF``, no incremental-update
+   shadowing, no silent ``FlateDecode`` decompression errors, optional
+   ``expected_fetch_sha256``), ignores invisible text (``3 Tr``), detects
+   ambiguous duplicate labels with conflicting values, preserves currency codes,
+   and diffs every field with per-field provenance and SHA-256 artifact digest.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+import hashlib
+import hmac
+import re
+import zlib
+from collections.abc import Mapping, Sequence
+from dataclasses import asdict, dataclass, field
+from decimal import Decimal, InvalidOperation
+from html.parser import HTMLParser
+from pathlib import Path
+from typing import Any, Literal
+from urllib.parse import urlsplit
+
+from openadapt_flow.runtime.effects.artifact_provenance import (
+    ArtifactProducer,
+    grade_artifact,
+    parse_producer,
+)
+
+FieldStatus = Literal["CONFIRMED", "REFUTED", "ABSTAIN"]
+Verdict = Literal["VERIFIED", "HALT"]
+ReceiptVerdict = Literal["CONFIRMED", "REFUTED", "UNCERTAIN"]
+NavigationType = Literal["reload", "fresh_navigation", "new_session", "same_dom"]
+
+_VALID_RELOAD_NAV_TYPES = frozenset({"reload", "fresh_navigation", "new_session"})
+_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+
+_CURRENCY_SYMBOL_TO_CODE = {
+    "$": "$",
+    "€": "€",
+    "£": "£",
+}
+_CURRENCY_RE = re.compile(
+    r"^\s*([$€£])?\s*([+-]?\d{1,3}(?:,\d{3})*(?:\.\d+)?|[+-]?\d+(?:\.\d+)?)\s*$"
+)
+_DATE_FORMATS = (
+    "%Y-%m-%d",
+    "%m/%d/%Y",
+    "%m-%d-%Y",
+    "%b %d, %Y",
+    "%B %d, %Y",
+    "%d %b %Y",
+    "%d %B %Y",
+)
+_BOOL_TRUE = frozenset({"true", "yes", "y", "checked", "on"})
+_BOOL_FALSE = frozenset({"false", "no", "n", "unchecked", "off"})
+
+
+def _valid_http_origin(url: str) -> str | None:
+    if not isinstance(url, str) or not url.strip():
+        return None
+    parsed = urlsplit(url.strip())
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return None
+    return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+
+
+def _valid_iso_utc(ts: str) -> bool:
+    if not isinstance(ts, str) or not ts.strip():
+        return False
+    norm = ts.strip()
+    if norm.endswith("Z"):
+        norm = norm[:-1] + "+00:00"
+    try:
+        parsed = dt.datetime.fromisoformat(norm)
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None
+
+
+def _format_decimal_plain(dec: Decimal) -> str:
+    """Format a Decimal without scientific notation (e.g. 2000 -> '2000', not '2E+3')."""
+    text = format(dec, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return "0" if text in ("", "-0") else text
+
+
+@dataclass(frozen=True)
+class ReloadProof:
+    """Evidence proving the summary page was freshly loaded in an independent session."""
+
+    navigation_type: str
+    submit_url: str
+    summary_url: str
+    submit_dom_token: str
+    summary_dom_token: str
+    reloaded_at_utc: str = ""
+    summary_dom_sha256: str = ""
+    producer: str | ArtifactProducer = ArtifactProducer.UNKNOWN
+
+    def validate(self) -> tuple[bool, str]:
+        try:
+            parsed_producer = parse_producer(self.producer)
+        except ValueError as exc:
+            return False, f"unverified_producer_provenance: {exc}"
+        if parsed_producer not in (
+            ArtifactProducer.SEPARATE_SESSION,
+            ArtifactProducer.SYSTEM_OF_RECORD,
+        ):
+            return (
+                False,
+                f"unverified_producer_provenance: producer={parsed_producer.value!r} cannot issue VERIFIED",
+            )
+        if self.navigation_type not in _VALID_RELOAD_NAV_TYPES:
+            return (
+                False,
+                f"stale_in_memory_dom_without_reload_proof: navigation_type={self.navigation_type!r}",
+            )
+        submit_origin = _valid_http_origin(self.submit_url)
+        summary_origin = _valid_http_origin(self.summary_url)
+        if not submit_origin or not summary_origin:
+            return (
+                False,
+                "stale_in_memory_dom_without_reload_proof: submit_url and summary_url must be valid http(s) URLs",
+            )
+        if submit_origin != summary_origin:
+            return (
+                False,
+                "stale_in_memory_dom_without_reload_proof: summary_url origin does not match submit_url origin",
+            )
+        if not _valid_iso_utc(self.reloaded_at_utc):
+            return (
+                False,
+                "stale_in_memory_dom_without_reload_proof: reloaded_at_utc must be a timezone-aware ISO-8601 timestamp",
+            )
+        if not _SHA256_RE.match(self.summary_dom_sha256.strip()):
+            return (
+                False,
+                "stale_in_memory_dom_without_reload_proof: summary_dom_sha256 must be a 64-hex SHA-256 digest",
+            )
+        if not self.submit_dom_token.strip() or not self.summary_dom_token.strip():
+            return (
+                False,
+                "stale_in_memory_dom_without_reload_proof: missing submit/summary DOM tokens",
+            )
+        if self.submit_dom_token.strip() == self.summary_dom_token.strip():
+            return (
+                False,
+                "stale_in_memory_dom_without_reload_proof: summary_dom_token matches submit_dom_token",
+            )
+        return True, "fresh_reload_confirmed"
+
+
+@dataclass(frozen=True)
+class FieldCheck:
+    field: str
+    expected: Any
+    observed: Any
+    normalized_expected: str
+    normalized_observed: str | None
+    status: FieldStatus
+    provenance: str
+
+
+@dataclass(frozen=True)
+class PortalReadbackResult:
+    verdict: Verdict
+    channel: str
+    reason: str
+    checks: tuple[FieldCheck, ...]
+    confirmed_count: int
+    refuted_count: int
+    abstained_count: int
+    artifact_sha256: str | None = None
+    receipt_verdict: ReceiptVerdict = "UNCERTAIN"
+    provenance_evidence: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            **asdict(self),
+            "checks": [asdict(c) for c in self.checks],
+        }
+
+
+def normalize_field_value(value: Any, *, field_type: str | None = None) -> str:
+    """Normalize currency, dates, booleans, and numbers without blurring look-alikes or currencies."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
+        dec = Decimal(str(value))
+        return (
+            f"{dec.quantize(Decimal('0.01'))}"
+            if field_type == "currency"
+            else _format_decimal_plain(dec)
+        )
+
+    text = " ".join(str(value).strip().split())
+    low = text.lower()
+
+    if field_type == "boolean" or low in _BOOL_TRUE or low in _BOOL_FALSE:
+        if low in _BOOL_TRUE:
+            return "true"
+        if low in _BOOL_FALSE:
+            return "false"
+
+    if field_type == "date" or re.search(
+        r"^\d{4}-\d{2}-\d{2}$|^\d{1,2}[/-]\d{1,2}[/-]\d{4}$|^[A-Za-z]{3,9}\s+\d{1,2},\s+\d{4}$",
+        text,
+    ):
+        for fmt in _DATE_FORMATS:
+            try:
+                parsed = dt.datetime.strptime(text, fmt).date()
+                return parsed.isoformat()
+            except ValueError:
+                continue
+
+    m_cur = _CURRENCY_RE.match(text)
+    if m_cur and (
+        field_type == "currency" or m_cur.group(1) is not None or "," in m_cur.group(2)
+    ):
+        raw_num = m_cur.group(2).replace(",", "")
+        try:
+            dec = Decimal(raw_num).quantize(Decimal("0.01"))
+            sym = m_cur.group(1)
+            if sym is not None:
+                code = _CURRENCY_SYMBOL_TO_CODE.get(sym, sym)
+                return f"{code}:{dec}"
+            return f"{dec}"
+        except InvalidOperation:
+            pass
+
+    if field_type == "number":
+        try:
+            return _format_decimal_plain(Decimal(text.replace(",", "")))
+        except InvalidOperation:
+            pass
+
+    return text
+
+
+def _strip_currency_code(norm: str) -> tuple[str | None, str]:
+    m = re.match(r"^([$€£]|[A-Z]{3}):([+-]?\d+\.\d{2})$", norm)
+    if m:
+        return m.group(1), m.group(2)
+    return None, norm
+
+
+def _compare_normalized_values(norm_exp: str, norm_obs: str) -> FieldStatus:
+    """Compare normalized values, returning CONFIRMED, REFUTED, or ABSTAIN.
+
+    - Two explicit currencies MUST match currency symbol/code (``$:500.00`` != ``€:500.00``).
+    - When the expected value explicitly names a currency (e.g. ``€:500.00``) and the
+      observed value is bare (``500.00``), return ``ABSTAIN`` rather than blurring currency.
+    - When only the observed value carries a currency symbol (e.g. expected bare ``1000``
+      vs observed ``$:1000.00``), compare quantized numeric amounts.
+    """
+    if norm_exp == norm_obs:
+        return "CONFIRMED"
+    exp_code, exp_num = _strip_currency_code(norm_exp)
+    obs_code, obs_num = _strip_currency_code(norm_obs)
+    if exp_code is not None and obs_code is not None:
+        return (
+            "CONFIRMED" if (exp_code == obs_code and exp_num == obs_num) else "REFUTED"
+        )
+    if exp_code is not None and obs_code is None:
+        try:
+            if Decimal(exp_num).quantize(Decimal("0.01")) == Decimal(obs_num).quantize(
+                Decimal("0.01")
+            ):
+                return "ABSTAIN"
+        except InvalidOperation:
+            pass
+        return "REFUTED"
+    if exp_code is None and obs_code is not None:
+        try:
+            if Decimal(exp_num).quantize(Decimal("0.01")) == Decimal(obs_num).quantize(
+                Decimal("0.01")
+            ):
+                return "CONFIRMED"
+        except InvalidOperation:
+            pass
+        return "REFUTED"
+    return "REFUTED"
+
+
+def _compare_fields(
+    expected_fields: Mapping[str, Any],
+    observed_fields: Mapping[str, Any],
+    *,
+    field_types: Mapping[str, str] | None = None,
+    provenance_map: Mapping[str, str] | None = None,
+    default_provenance: str = "",
+) -> tuple[tuple[FieldCheck, ...], int, int, int]:
+    ftypes = field_types or {}
+    pmap = provenance_map or {}
+    checks: list[FieldCheck] = []
+    confirmed = 0
+    refuted = 0
+    abstained = 0
+
+    for fname, exp_val in expected_fields.items():
+        ftype = ftypes.get(fname)
+        norm_exp = normalize_field_value(exp_val, field_type=ftype)
+        obs_val = observed_fields.get(fname)
+        prov = pmap.get(fname, default_provenance)
+
+        if obs_val is None or (isinstance(obs_val, str) and not obs_val.strip()):
+            abstained += 1
+            checks.append(
+                FieldCheck(
+                    field=fname,
+                    expected=exp_val,
+                    observed=obs_val,
+                    normalized_expected=norm_exp,
+                    normalized_observed=None,
+                    status="ABSTAIN",
+                    provenance=prov or "missing_in_readback",
+                )
+            )
+            continue
+
+        effective_type = ftype
+        if effective_type is None and (
+            (isinstance(exp_val, str) and any(c in exp_val for c in "$€£"))
+            or (isinstance(obs_val, str) and any(c in obs_val for c in "$€£"))
+        ):
+            effective_type = "currency"
+            norm_exp = normalize_field_value(exp_val, field_type="currency")
+
+        norm_obs = normalize_field_value(obs_val, field_type=effective_type)
+        status = _compare_normalized_values(norm_exp, norm_obs)
+        if status == "CONFIRMED":
+            confirmed += 1
+        elif status == "REFUTED":
+            refuted += 1
+        else:
+            abstained += 1
+        checks.append(
+            FieldCheck(
+                field=fname,
+                expected=exp_val,
+                observed=obs_val,
+                normalized_expected=norm_exp,
+                normalized_observed=norm_obs,
+                status=status,
+                provenance=prov,
+            )
+        )
+
+    return tuple(checks), confirmed, refuted, abstained
+
+
+class _VisibleTextExtractor(HTMLParser):
+    """Extract ordered visible text nodes from HTML, ignoring attributes and non-rendered elements."""
+
+    _SKIP_TAGS = frozenset({"script", "style", "noscript", "template", "head", "title"})
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._skip_depth = 0
+        self.nodes: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        del attrs
+        if tag.lower() in self._SKIP_TAGS:
+            self._skip_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in self._SKIP_TAGS and self._skip_depth > 0:
+            self._skip_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth > 0:
+            return
+        compact = " ".join(data.split())
+        if compact:
+            self.nodes.append(compact)
+
+
+def _normalize_dom_label(text: str) -> str:
+    cleaned = re.sub(r"[^a-z0-9]+", " ", text.strip().lower()).strip()
+    return cleaned
+
+
+def _dom_bound_values_for_label(nodes: Sequence[str], field_name: str) -> list[str]:
+    """Collect every visible DOM text value bound to ``field_name``."""
+    target_label = _normalize_dom_label(field_name)
+    if not target_label:
+        return []
+    label_words = target_label.split()
+    prefix_re = re.compile(
+        r"^\s*" + r"[\s_-]+".join(re.escape(w) for w in label_words) + r"\s+(.+)$",
+        re.IGNORECASE,
+    )
+    bound_values: list[str] = []
+    for idx, node in enumerate(nodes):
+        # Case 1: Node is the exact label (with optional trailing colon), value is the next node.
+        if _normalize_dom_label(node.rstrip(":")) == target_label:
+            if idx + 1 < len(nodes):
+                bound_values.append(nodes[idx + 1].strip())
+            continue
+        # Case 2: Same text node "Label: value" or "Label value".
+        if ":" in node:
+            left, right = node.split(":", 1)
+            if _normalize_dom_label(left) == target_label:
+                bound_values.append(right.strip())
+        else:
+            m = prefix_re.match(node)
+            if m:
+                bound_values.append(m.group(1).strip())
+    return bound_values
+
+
+def _dom_label_binding_status(
+    nodes: Sequence[str], field_name: str, expected_val: str
+) -> str:
+    """Classify visible DOM bindings for ``field_name`` against ``expected_val``.
+
+    Returns:
+      - ``"matched"`` iff at least one visible binding matches ``expected_val`` on
+        token boundaries and no duplicate binding for the same label conflicts.
+      - ``"conflict"`` iff the same label appears multiple times with conflicting values.
+      - ``"missing"`` otherwise.
+    """
+    if not expected_val:
+        return "missing"
+    bound_values = _dom_bound_values_for_label(nodes, field_name)
+    if not bound_values:
+        return "missing"
+    val_re = re.compile(
+        r"(?<![A-Za-z0-9_.])" + re.escape(expected_val) + r"(?![A-Za-z0-9_.])"
+    )
+    matches = [bool(val_re.search(val)) for val in bound_values]
+    if any(matches):
+        if all(matches):
+            return "matched"
+        return "conflict"
+    return "missing"
+
+
+def _dom_value_matches_bound_label(
+    nodes: Sequence[str], field_name: str, expected_val: str
+) -> bool:
+    """Return True iff ``expected_val`` appears in visible DOM text bound to ``field_name``
+    on token boundaries with no conflicting duplicate label values."""
+    return _dom_label_binding_status(nodes, field_name, expected_val) == "matched"
+
+
+class FreshReloadSummaryOracle:
+    """Verify persisted portal summary fields against freshly reloaded DOM bytes."""
+
+    def verify(
+        self,
+        expected_fields: Mapping[str, Any],
+        observed_summary_fields: Mapping[str, Any],
+        reload_proof: ReloadProof,
+        *,
+        summary_dom_bytes: bytes | None = None,
+        field_types: Mapping[str, str] | None = None,
+    ) -> PortalReadbackResult:
+        if not expected_fields:
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="UNCERTAIN",
+                channel="fresh_reload_summary",
+                reason="empty_expected_fields",
+                checks=(),
+                confirmed_count=0,
+                refuted_count=0,
+                abstained_count=0,
+            )
+
+        ok_reload, reload_reason = reload_proof.validate()
+        if not ok_reload:
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="UNCERTAIN",
+                channel="fresh_reload_summary",
+                reason=reload_reason,
+                checks=(),
+                confirmed_count=0,
+                refuted_count=0,
+                abstained_count=len(expected_fields),
+            )
+
+        if (
+            not isinstance(summary_dom_bytes, (bytes, bytearray))
+            or not summary_dom_bytes
+        ):
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="UNCERTAIN",
+                channel="fresh_reload_summary",
+                reason="missing_summary_dom_bytes: oracle must compute digest over reloaded DOM bytes",
+                checks=(),
+                confirmed_count=0,
+                refuted_count=0,
+                abstained_count=len(expected_fields),
+            )
+
+        computed_dom_sha = hashlib.sha256(bytes(summary_dom_bytes)).hexdigest()
+        claimed_dom_sha = reload_proof.summary_dom_sha256.strip().lower()
+        if not hmac.compare_digest(computed_dom_sha, claimed_dom_sha):
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="REFUTED",
+                channel="fresh_reload_summary",
+                reason="summary_dom_digest_mismatch",
+                checks=(),
+                confirmed_count=0,
+                refuted_count=0,
+                abstained_count=len(expected_fields),
+                artifact_sha256=computed_dom_sha,
+            )
+
+        dom_text = bytes(summary_dom_bytes).decode("utf-8", errors="replace")
+        extractor = _VisibleTextExtractor()
+        extractor.feed(dom_text)
+        extractor.close()
+        dom_nodes = extractor.nodes
+        verified_observed: dict[str, Any] = {}
+        missing_in_dom: dict[str, str] = {}
+        for fname in expected_fields:
+            val = observed_summary_fields.get(fname)
+            if val is None or (isinstance(val, str) and not val.strip()):
+                continue
+            compact_val = " ".join(str(val).strip().split())
+            binding_status = _dom_label_binding_status(dom_nodes, fname, compact_val)
+            if binding_status == "matched":
+                verified_observed[fname] = val
+            elif binding_status == "conflict":
+                missing_in_dom[fname] = (
+                    "conflicting_duplicate_label_values_in_summary_dom_bytes"
+                )
+            else:
+                missing_in_dom[fname] = (
+                    "observed_value_not_bound_to_label_in_summary_dom_bytes"
+                )
+
+        parsed_producer = parse_producer(reload_proof.producer)
+        prov = f"fresh_reload:{parsed_producer.value}:{reload_proof.navigation_type}:{reload_proof.summary_url}"
+        checks, confirmed, refuted, abstained = _compare_fields(
+            expected_fields,
+            verified_observed,
+            field_types=field_types,
+            provenance_map=missing_in_dom,
+            default_provenance=prov,
+        )
+        prov_evidence = {
+            "producer": parsed_producer.value,
+            "navigation_type": reload_proof.navigation_type,
+            "reloaded_at_utc": reload_proof.reloaded_at_utc,
+            "summary_dom_sha256": computed_dom_sha,
+        }
+
+        if refuted > 0:
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="REFUTED",
+                channel="fresh_reload_summary",
+                reason="field_mismatch",
+                checks=checks,
+                confirmed_count=confirmed,
+                refuted_count=refuted,
+                abstained_count=abstained,
+                artifact_sha256=computed_dom_sha,
+                provenance_evidence=prov_evidence,
+            )
+        if abstained > 0:
+            if any(
+                v == "conflicting_duplicate_label_values_in_summary_dom_bytes"
+                for v in missing_in_dom.values()
+            ):
+                reason = "conflicting_duplicate_label_values_in_dom_bytes"
+            elif missing_in_dom:
+                reason = "observed_value_not_in_dom_bytes"
+            else:
+                reason = "missing_required_fields"
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="UNCERTAIN",
+                channel="fresh_reload_summary",
+                reason=reason,
+                checks=checks,
+                confirmed_count=confirmed,
+                refuted_count=refuted,
+                abstained_count=abstained,
+                artifact_sha256=computed_dom_sha,
+                provenance_evidence=prov_evidence,
+            )
+        return PortalReadbackResult(
+            verdict="VERIFIED",
+            receipt_verdict="CONFIRMED",
+            channel="fresh_reload_summary",
+            reason="ok",
+            checks=checks,
+            confirmed_count=confirmed,
+            refuted_count=0,
+            abstained_count=0,
+            artifact_sha256=computed_dom_sha,
+            provenance_evidence=prov_evidence,
+        )
+
+
+def _unescape_pdf_literal(raw: str) -> str:
+    """Decode PDF literal string escapes (\\(, \\), \\\\, \\n, \\r, \\t, octal)."""
+    out: list[str] = []
+    i = 0
+    n = len(raw)
+    while i < n:
+        ch = raw[i]
+        if ch == "\\" and i + 1 < n:
+            nxt = raw[i + 1]
+            if nxt in ("(", ")", "\\"):
+                out.append(nxt)
+                i += 2
+            elif nxt == "n":
+                out.append("\n")
+                i += 2
+            elif nxt == "r":
+                out.append("\r")
+                i += 2
+            elif nxt == "t":
+                out.append("\t")
+                i += 2
+            elif nxt in "01234567":
+                oct_digits = raw[i + 1 : i + 4]
+                m = re.match(r"^[0-7]{1,3}", oct_digits)
+                if m:
+                    out.append(chr(int(m.group(0), 8)))
+                    i += 1 + len(m.group(0))
+                else:
+                    out.append(nxt)
+                    i += 2
+            else:
+                out.append(nxt)
+                i += 2
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
+
+
+def _extract_text_from_content_stream(stream_bytes: bytes) -> list[str]:
+    """Extract visible text runs from PDF Tj / TJ operators.
+
+    Tracks ``q``/``Q`` graphics-state save/restore for text rendering mode
+    (``Tr``) and skips invisible text modes ``3 Tr`` (neither fill nor stroke)
+    and ``7 Tr`` (clip-only).
+
+    Known limitation: the stdlib parser does not evaluate fill colour (e.g.
+    white-on-white), size-0 fonts, or off-page coordinates; ``ConfirmationPdfOracle``
+    relies on the independent producer provenance gate to prevent untrusted
+    caller-authored PDFs from reaching ``VERIFIED``.
+    """
+    text = stream_bytes.decode("latin-1", errors="ignore")
+    lines: list[str] = []
+    render_mode = 0
+    state_stack: list[int] = []
+
+    # Match `q`/`Q`, `<d> Tr`, `(text) Tj`, and `[(a) -20 (b)] TJ`.
+    # Alternatives inside the TJ array are strictly disjoint (no backtracking).
+    token_re = re.compile(
+        r"(?<![A-Za-z0-9_/])([qQ])(?![A-Za-z0-9_])"
+        r"|(?<![.\d])\b([0-7](?:\.0+)?)\s+Tr\b"
+        r"|\(((?:\\.|[^\\()])*)\)\s*Tj"
+        r"|\[((?:[^\[\]()]|\((?:\\.|[^\\()])*\))*)\]\s*TJ",
+        re.DOTALL,
+    )
+    literal_re = re.compile(r"\(((?:\\.|[^\\()])*)\)")
+
+    for m in token_re.finditer(text):
+        if m.group(1) is not None:
+            if m.group(1) == "q":
+                state_stack.append(render_mode)
+            else:
+                render_mode = state_stack.pop() if state_stack else 0
+            continue
+        if m.group(2) is not None:
+            render_mode = int(float(m.group(2)))
+            continue
+        if render_mode in (3, 7):
+            # PDF render mode 3 (invisible) and 7 (clip-only) draw no visible glyphs.
+            continue
+        if m.group(3) is not None:
+            val = _unescape_pdf_literal(m.group(3)).strip()
+            if val:
+                lines.append(val)
+        elif m.group(4) is not None:
+            parts = [
+                _unescape_pdf_literal(lm.group(1))
+                for lm in literal_re.finditer(m.group(4))
+            ]
+            joined = "".join(parts).strip()
+            if joined:
+                lines.append(joined)
+    return lines
+
+
+def extract_pdf_text_stdlib(pdf_bytes: bytes) -> str:
+    """Extract readable text from uncompressed or FlateDecode PDF streams using stdlib only.
+
+    Fails closed on missing ``%PDF-`` header, missing or multiple ``%%EOF``
+    markers (incremental-update shadowing), or corrupt ``/FlateDecode`` streams.
+    """
+    if not pdf_bytes.startswith(b"%PDF-"):
+        raise ValueError("missing %PDF- header")
+    eof_count = pdf_bytes.count(b"%%EOF")
+    if eof_count == 0:
+        raise ValueError("missing %%EOF trailer")
+    if eof_count > 1:
+        raise ValueError("incremental PDF updates (multiple %%EOF) are not allowed")
+
+    extracted_lines: list[str] = []
+    stream_re = re.compile(rb"stream\r?\n(.*?)\r?\nendstream", re.DOTALL)
+    for m in stream_re.finditer(pdf_bytes):
+        raw_stream = m.group(1)
+        prefix = pdf_bytes[max(0, m.start() - 256) : m.start()]
+        if b"/FlateDecode" in prefix:
+            try:
+                decoded = zlib.decompress(raw_stream)
+            except zlib.error as exc:
+                raise ValueError(f"corrupt FlateDecode stream: {exc}") from exc
+            extracted_lines.extend(_extract_text_from_content_stream(decoded))
+        else:
+            extracted_lines.extend(_extract_text_from_content_stream(raw_stream))
+
+    return "\n".join(extracted_lines)
+
+
+def _default_labels_for_field(field_name: str) -> tuple[str, ...]:
+    human = field_name.replace("_", " ").strip()
+    return (human, field_name)
+
+
+class ConfirmationPdfOracle:
+    """Extract and verify persisted fields from an independently obtained confirmation PDF."""
+
+    def verify(
+        self,
+        pdf_path: str | Path,
+        expected_fields: Mapping[str, Any],
+        *,
+        producer: str | ArtifactProducer = ArtifactProducer.UNKNOWN,
+        acting_roots: Sequence[str | Path] | None = None,
+        expected_fetch_sha256: str | None = None,
+        field_labels: Mapping[str, Sequence[str]] | None = None,
+        field_patterns: Mapping[str, str] | None = None,
+        field_types: Mapping[str, str] | None = None,
+    ) -> PortalReadbackResult:
+        if not expected_fields:
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="UNCERTAIN",
+                channel="confirmation_pdf",
+                reason="empty_expected_fields",
+                checks=(),
+                confirmed_count=0,
+                refuted_count=0,
+                abstained_count=0,
+            )
+
+        p = Path(pdf_path)
+        if not p.is_file():
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="UNCERTAIN",
+                channel="confirmation_pdf",
+                reason=f"missing_pdf: {p}",
+                checks=(),
+                confirmed_count=0,
+                refuted_count=0,
+                abstained_count=len(expected_fields),
+            )
+
+        try:
+            grade = grade_artifact(
+                producer,
+                root=p.parent,
+                acting_roots=acting_roots,
+                observe_local=True,
+            )
+        except ValueError as exc:
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="UNCERTAIN",
+                channel="confirmation_pdf",
+                reason=f"unverified_producer_provenance: {exc}",
+                checks=(),
+                confirmed_count=0,
+                refuted_count=0,
+                abstained_count=len(expected_fields),
+            )
+
+        prov_evidence = grade.evidence()
+        if not grade.independent:
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="UNCERTAIN",
+                channel="confirmation_pdf",
+                reason=(
+                    f"unverified_producer_provenance: producer={grade.producer.value!r} "
+                    f"(check_level={grade.check_level.label}) cannot issue VERIFIED"
+                ),
+                checks=(),
+                confirmed_count=0,
+                refuted_count=0,
+                abstained_count=len(expected_fields),
+                provenance_evidence=prov_evidence,
+            )
+
+        acting_reason = grade.acting_artifact([p])
+        if acting_reason:
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="UNCERTAIN",
+                channel="confirmation_pdf",
+                reason=f"unverified_producer_provenance: {acting_reason}",
+                checks=(),
+                confirmed_count=0,
+                refuted_count=0,
+                abstained_count=len(expected_fields),
+                provenance_evidence=prov_evidence,
+            )
+
+        try:
+            raw_bytes = p.read_bytes()
+            pdf_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+            if expected_fetch_sha256 is not None:
+                exp_hex = expected_fetch_sha256.strip().lower()
+                if not _SHA256_RE.match(exp_hex) or not hmac.compare_digest(
+                    pdf_sha256, exp_hex
+                ):
+                    return PortalReadbackResult(
+                        verdict="HALT",
+                        receipt_verdict="REFUTED",
+                        channel="confirmation_pdf",
+                        reason="fetch_digest_mismatch",
+                        checks=(),
+                        confirmed_count=0,
+                        refuted_count=0,
+                        abstained_count=len(expected_fields),
+                        artifact_sha256=pdf_sha256,
+                        provenance_evidence=prov_evidence,
+                    )
+            pdf_text = extract_pdf_text_stdlib(raw_bytes)
+        except (OSError, ValueError) as exc:
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="UNCERTAIN",
+                channel="confirmation_pdf",
+                reason=f"corrupt_or_unreadable_pdf: {exc}",
+                checks=(),
+                confirmed_count=0,
+                refuted_count=0,
+                abstained_count=len(expected_fields),
+                provenance_evidence=prov_evidence,
+            )
+
+        if not pdf_text.strip():
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="UNCERTAIN",
+                channel="confirmation_pdf",
+                reason="corrupt_or_unreadable_pdf: no extractable text streams",
+                checks=(),
+                confirmed_count=0,
+                refuted_count=0,
+                abstained_count=len(expected_fields),
+                artifact_sha256=pdf_sha256,
+                provenance_evidence=prov_evidence,
+            )
+
+        labels_cfg = field_labels or {}
+        patterns_cfg = field_patterns or {}
+        ftypes = field_types or {}
+        observed: dict[str, Any] = {}
+        provenance: dict[str, str] = {}
+        ambiguous_fields: list[str] = []
+
+        for fname in expected_fields:
+            if fname in patterns_cfg:
+                matches = list(
+                    re.finditer(
+                        patterns_cfg[fname], pdf_text, re.IGNORECASE | re.MULTILINE
+                    )
+                )
+                if matches:
+                    vals = [
+                        (m.group(1).strip() if m.lastindex else m.group(0).strip())
+                        for m in matches
+                    ]
+                    norms = {
+                        normalize_field_value(v, field_type=ftypes.get(fname))
+                        for v in vals
+                    }
+                    if len(norms) > 1:
+                        ambiguous_fields.append(fname)
+                        provenance[fname] = (
+                            f"pdf:{pdf_sha256[:12]}:ambiguous_regex:{fname}"
+                        )
+                    else:
+                        observed[fname] = vals[0]
+                        provenance[fname] = f"pdf:{pdf_sha256[:12]}:regex:{fname}"
+                continue
+
+            candidate_labels = labels_cfg.get(fname) or _default_labels_for_field(fname)
+            found_vals: list[str] = []
+            matched_label: str | None = None
+            for lbl in candidate_labels:
+                pat = re.compile(
+                    rf"(?:^|\n)\s*{re.escape(lbl)}\s*[:\-]\s*([^\n]+)",
+                    re.IGNORECASE,
+                )
+                hits = [m.group(1).strip() for m in pat.finditer(pdf_text)]
+                if hits:
+                    found_vals.extend(hits)
+                    if matched_label is None:
+                        matched_label = lbl
+            if found_vals:
+                norms = {
+                    normalize_field_value(v, field_type=ftypes.get(fname))
+                    for v in found_vals
+                }
+                if len(norms) > 1:
+                    ambiguous_fields.append(fname)
+                    provenance[fname] = (
+                        f"pdf:{pdf_sha256[:12]}:ambiguous_label={matched_label!r}"
+                    )
+                else:
+                    observed[fname] = found_vals[0]
+                    provenance[fname] = f"pdf:{pdf_sha256[:12]}:label={matched_label!r}"
+
+        checks, confirmed, refuted, abstained = _compare_fields(
+            expected_fields,
+            observed,
+            field_types=field_types,
+            provenance_map=provenance,
+            default_provenance=f"pdf:{pdf_sha256[:12]}:missing",
+        )
+
+        if refuted > 0:
+            reason = (
+                f"field_mismatch; ambiguous_duplicate_label: {', '.join(ambiguous_fields)}"
+                if ambiguous_fields
+                else "field_mismatch"
+            )
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="REFUTED",
+                channel="confirmation_pdf",
+                reason=reason,
+                checks=checks,
+                confirmed_count=confirmed,
+                refuted_count=refuted,
+                abstained_count=abstained,
+                artifact_sha256=pdf_sha256,
+                provenance_evidence=prov_evidence,
+            )
+        if ambiguous_fields:
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="UNCERTAIN",
+                channel="confirmation_pdf",
+                reason=f"ambiguous_duplicate_label: {', '.join(ambiguous_fields)}",
+                checks=checks,
+                confirmed_count=confirmed,
+                refuted_count=refuted,
+                abstained_count=abstained,
+                artifact_sha256=pdf_sha256,
+                provenance_evidence=prov_evidence,
+            )
+        if abstained > 0:
+            return PortalReadbackResult(
+                verdict="HALT",
+                receipt_verdict="UNCERTAIN",
+                channel="confirmation_pdf",
+                reason="missing_required_fields",
+                checks=checks,
+                confirmed_count=confirmed,
+                refuted_count=refuted,
+                abstained_count=abstained,
+                artifact_sha256=pdf_sha256,
+                provenance_evidence=prov_evidence,
+            )
+        return PortalReadbackResult(
+            verdict="VERIFIED",
+            receipt_verdict="CONFIRMED",
+            channel="confirmation_pdf",
+            reason="ok",
+            checks=checks,
+            confirmed_count=confirmed,
+            refuted_count=0,
+            abstained_count=0,
+            artifact_sha256=pdf_sha256,
+            provenance_evidence=prov_evidence,
+        )

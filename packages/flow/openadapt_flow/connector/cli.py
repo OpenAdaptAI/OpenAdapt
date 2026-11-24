@@ -245,6 +245,11 @@ def _cmd_connector(args: argparse.Namespace) -> int:
             "BYOC_CONNECTOR_TOKEN."
         )
         return 2
+    try:
+        settings.validate_run_config()
+    except ConnectorConfigError as exc:
+        print(f"connector run: {exc}")
+        return 2
     client = ConnectorClient(
         settings.control_plane_url,
         token=settings.token,

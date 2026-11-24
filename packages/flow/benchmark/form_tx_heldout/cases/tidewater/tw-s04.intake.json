@@ -1,0 +1,22 @@
+{
+  "case_id": "tw-s04",
+  "facts": {
+    "applicant.date_of_birth": "1981-06-01",
+    "applicant.email": "oren.castellane@example.test",
+    "applicant.first_name": "Oren",
+    "applicant.last_name": "Castellane",
+    "history.prior_claims_3yr": 1,
+    "household.driver_count": 1,
+    "property.address_line1": "301 Tern Hollow Rd",
+    "property.city": "Kittery",
+    "property.occupancy": "Owner occupied",
+    "property.roof_year": 2017,
+    "property.square_feet": 1840,
+    "property.state": "ME",
+    "property.year_built": 1996,
+    "property.zip": "03904",
+    "vehicle.make": "Marlowe",
+    "vehicle.model": "Brook",
+    "vehicle.year": 2019
+  }
+}

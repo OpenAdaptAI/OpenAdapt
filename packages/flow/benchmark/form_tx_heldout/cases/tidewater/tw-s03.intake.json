@@ -1,0 +1,22 @@
+{
+  "case_id": "tw-s03",
+  "facts": {
+    "applicant.date_of_birth": "1964-10-12",
+    "applicant.email": "rosalind.k@example.test",
+    "applicant.first_name": "Rosalind",
+    "applicant.last_name": "Kettering",
+    "history.prior_claims_3yr": 0,
+    "household.driver_count": 2,
+    "property.address_line1": "14 Gristmill Ln",
+    "property.city": "Brattleboro",
+    "property.occupancy": "Owner occupied",
+    "property.roof_year": 2020,
+    "property.square_feet": 2480,
+    "property.state": "VT",
+    "property.year_built": 1938,
+    "property.zip": "05301",
+    "vehicle.make": "Norvik",
+    "vehicle.model": "Aster",
+    "vehicle.year": 2021
+  }
+}

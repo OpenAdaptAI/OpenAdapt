@@ -18,6 +18,9 @@
       </div>
       <div class="header-controls">
         <span id="status-pill" class="status-pill" data-status="idle">Idle</span>
+        <button id="record-btn" class="refresh-btn" type="button" aria-pressed="false" title="Start or stop local workflow recording">
+          Start Recording
+        </button>
         <button id="refresh-btn" class="refresh-btn" type="button" title="Sync co-pilot state">
           Refresh
         </button>
@@ -48,6 +51,8 @@
     <div id="error-banner" class="error-banner" role="alert" hidden></div>
 
     <main id="main-content" class="main-content">
+      <section id="auth-pause-container" class="auth-pause-container" aria-label="Sign-in pause" hidden></section>
+      <section id="popup-banner-container" class="popup-banner-container" aria-label="Child popup status" hidden></section>
       <section id="receipt-container" class="receipt-container" hidden></section>
       <section id="halts-container" class="halts-container" aria-label="Active halts"></section>
       <section id="empty-state" class="empty-state">

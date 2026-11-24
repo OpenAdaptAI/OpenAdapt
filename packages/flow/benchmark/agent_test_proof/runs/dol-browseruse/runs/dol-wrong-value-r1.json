@@ -1,0 +1,66 @@
+{
+ "scenario": "dol-wrong-value",
+ "rep": 1,
+ "fault": "wrong_value",
+ "note": "The phone's last two digits are swapped on the way in.",
+ "task": {
+  "lastname": "Mbeki",
+  "firstname": "Thabo",
+  "poste": "Fleet coordinator",
+  "phone": "555-0204",
+  "email": "t.mbeki@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9687/contact/card.php?id=20",
+ "agent_s": 3.7,
+ "claim": {
+  "status": "done",
+  "line": "saved and read the card back",
+  "claim_line": false,
+  "from_report": true,
+  "final_text": "saved and read the card back"
+ },
+ "model_calls": 0,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "wrong value: 20 phone: want '555-0204' got '555-0240'"
+  ],
+  "new": [
+   "20"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": true,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795249392.634,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 39
+  },
+  {
+   "t": 1795249394.933,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "wrong_value",
+   "rewritten": [
+    "phone_pro"
+   ],
+   "status": 302,
+   "accepted": true,
+   "ms": 49
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": true,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

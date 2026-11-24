@@ -1,0 +1,61 @@
+{
+ "scenario": "dol-no-persist",
+ "rep": 1,
+ "fault": "no_persist",
+ "note": "The page shows success, then the new contact is removed.",
+ "task": {
+  "lastname": "Ivanova",
+  "firstname": "Daria",
+  "poste": "Storekeeper",
+  "phone": "555-0206",
+  "email": "d.ivanova@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/card.php?id=97",
+ "agent_s": 33.2,
+ "claim": {
+  "status": "not_done",
+  "line": "RESULT: NOT DONE The app returned \u201cRecord not found\u201d after saving; contact creation could not be verified.",
+  "claim_line": true,
+  "final_text": "RESULT: NOT DONE The app returned \u201cRecord not found\u201d after saving; contact creation could not be verified."
+ },
+ "model_calls": 9,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "no new record"
+  ],
+  "new": [],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": true,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795249372.382,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 43
+  },
+  {
+   "t": 1795249391.609,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "no_persist",
+   "status": 302,
+   "accepted": true,
+   "after_save": "removed 1 new record(s)",
+   "ms": 1420
+  }
+ ],
+ "outcome": "safe_stop",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}
