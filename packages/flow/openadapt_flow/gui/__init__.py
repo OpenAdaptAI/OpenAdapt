@@ -10,6 +10,8 @@ mechanism depends on a browser or names an application:
   and the step that commits is the one the demonstration showed writing.
 - :mod:`openadapt_flow.gui.attestations`: a checkbox that states something
   is ticked only on a person's grant, never through a fact.
+- :mod:`openadapt_flow.gui.hub`: a hub page whose sections open in dialogs,
+  each section's completion read back from the hub.
 
 Per-app facts (which control, which words, how many writes) are pack data,
 learned from a demonstration or declared by the pack author. The engine holds
