@@ -211,6 +211,21 @@ jobs:
       - name: Install locked dependencies
         run: uv sync --locked --python 3.12 --extra dev --extra build
 
+      - name: Prepare unlocked CI keychain for Chrome
+        if: runner.os == 'macOS'
+        run: |
+          # GitHub-hosted macOS runners have no interactive login keychain, so
+          # Chrome's OSCrypt cannot persist cookies across close/reopen unless
+          # an unlocked keychain with a "Chrome Safe Storage" entry is active.
+          KEYCHAIN_PASS="$(uuidgen)"
+          STORAGE_KEY="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASS" chrome-ci.keychain
+          security list-keychains -d user -s chrome-ci.keychain
+          security default-keychain -s chrome-ci.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASS" chrome-ci.keychain
+          security set-keychain-settings -lut 21600 chrome-ci.keychain
+          security add-generic-password -a "Chrome" -s "Chrome Safe Storage" -w "$STORAGE_KEY" -A chrome-ci.keychain
+
       - name: Run the real Chrome profile test
         env:
           OPENADAPT_REAL_CHROME: "1"
