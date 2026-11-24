@@ -1,0 +1,127 @@
+{
+ "scenario": "emr-collateral-edit",
+ "rep": 1,
+ "fault": "collateral_edit",
+ "note": "With the save, Marta Kowal's home phone changes.",
+ "task": {
+  "fname": "Owen",
+  "lname": "Gallagher",
+  "DOB": "1970-07-07",
+  "sex": "Male",
+  "street": "17 Linden Street",
+  "city": "Springfield",
+  "state": "MA",
+  "state_name": "Massachusetts",
+  "postal_code": "01108",
+  "phone_home": "413-555-0307",
+  "email": "o.gallagher@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php",
+ "agent_s": 15.7,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE read back http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php",
+  "claim_line": true,
+  "final_text": "RESULT: DONE read back http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php"
+ },
+ "model_calls": 0,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "other records changed: ['1']"
+  ],
+  "new": [
+   "4"
+  ],
+  "deleted": [],
+  "changed": [
+   "1"
+  ],
+  "target_corrupt": false,
+  "missing": false,
+  "collateral": true
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795249094.633,
+   "method": "POST",
+   "path": "/interface/main/main_screen.php",
+   "save": false,
+   "status": 302,
+   "ms": 333
+  },
+  {
+   "t": 1795249096.022,
+   "method": "POST",
+   "path": "/library/ajax/dated_reminders_counter.php",
+   "save": false,
+   "status": 200,
+   "ms": 87
+  },
+  {
+   "t": 1795249096.724,
+   "method": "POST",
+   "path": "/interface/main/dated_reminders/dated_reminders.php",
+   "save": false,
+   "status": 200,
+   "ms": 85
+  },
+  {
+   "t": 1795249099.848,
+   "method": "POST",
+   "path": "/interface/new/new_comprehensive_save.php",
+   "save": true,
+   "fault": "collateral_edit",
+   "status": 200,
+   "accepted": true,
+   "after_save": "changed 1 other record(s)",
+   "ms": 1098
+  },
+  {
+   "t": 1795249102.679,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/labdata_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 95
+  },
+  {
+   "t": 1795249102.671,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/disc_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 119
+  },
+  {
+   "t": 1795249102.684,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/vitals_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 108
+  },
+  {
+   "t": 1795249102.668,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/pnotes_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 192
+  },
+  {
+   "t": 1795249102.654,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/stats.php",
+   "save": false,
+   "status": 200,
+   "ms": 267
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": false,
+ "collateral_edit": true,
+ "agent_collateral": false
+}

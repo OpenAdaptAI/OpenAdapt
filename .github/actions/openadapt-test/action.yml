@@ -1,0 +1,179 @@
+name: OpenAdapt agent test
+description: >-
+  Run an agent against stateful scenarios on a real app (OpenEMR, Dolibarr,
+  EspoCRM) with planted faults, grade the app's database, and fail the build
+  when silent corruption or false claims of success rise above a stored
+  baseline. Writes report.html, results.json and receipt.json.
+inputs:
+  app:
+    description: A built-in app (openemr, dolibarr, espocrm) or the path to an app pack .yaml.
+    required: true
+  agent:
+    description: >-
+      scripted, scripted-readback, claude-cu, openai-cu, claude-code-mcp,
+      mcp:<command> or browser-use:<script.py>. Leave empty with agent-cmd.
+    default: ""
+  agent-cmd:
+    description: Any command, run once per scenario (see packages/flow/docs/agent-test.md).
+    default: ""
+  model:
+    description: The model, for claude-cu, openai-cu or claude-code-mcp.
+    default: ""
+  instructions:
+    description: A text file added to the agent's instruction (your agent's own prompt).
+    default: ""
+  scenarios:
+    description: A scenario pack .yaml (default the app's built-in pack).
+    default: ""
+  only:
+    description: Comma-separated scenario ids (default all).
+    default: ""
+  repetitions:
+    description: Runs per scenario.
+    default: "1"
+  baseline:
+    description: A baseline .json to gate against. Empty runs without a gate.
+    default: ""
+  tolerance:
+    description: How far (0-1) a gated rate may rise above the baseline before the build fails.
+    default: "0.05"
+  min-scored:
+    description: >-
+      Refuse the gate (fail) when fewer runs than this were scored. The gate
+      also fails when the run scores a smaller share of its runs than the
+      baseline did, so an agent that stops saving fails even at the default.
+    default: "1"
+  spend-cap-usd:
+    description: Model spend cap for the run.
+    default: "5"
+  port:
+    description: The app's port; the front door listens on the next one.
+    default: "9870"
+  start-app:
+    description: Start the app's containers here (true), or use a stack already running (false).
+    default: "true"
+  app-host:
+    description: Where the app's port is reachable, when start-app is false.
+    default: "127.0.0.1"
+  docker:
+    description: The docker command (for a stack on another host).
+    default: docker
+  out:
+    description: Output directory.
+    default: openadapt-test-out
+  install:
+    description: >-
+      "source" installs openadapt-flow from this action's own checkout (the
+      ref you pinned); "pypi" installs openadapt-flow[agent-test] from PyPI;
+      "none" uses the runner's python, with openadapt-flow[agent-test] and
+      Playwright's chromium-headless-shell already installed (a self-hosted
+      runner).
+    default: source
+  python-version:
+    default: "3.12"
+  upload-artifact:
+    description: Upload the report as a workflow artifact ("false" on a runner that cannot).
+    default: "true"
+  artifact-name:
+    description: Name of the uploaded report artifact (must be unique within the workflow run).
+    default: ""
+  sign-key:
+    description: Path to an Ed25519 private key (PEM) to sign the receipt.
+    default: ""
+outputs:
+  verdict:
+    description: pass, fail, not_comparable, or none (no baseline).
+    value: ${{ steps.run.outputs.verdict }}
+  report:
+    description: Path to report.html.
+    value: ${{ steps.run.outputs.report }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      if: inputs.install != 'none'
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Install openadapt-flow with the agent-test extra
+      if: inputs.install != 'none'
+      shell: bash
+      env:
+        INSTALL: ${{ inputs.install }}
+        ROOT: ${{ github.action_path }}/../../..
+      run: |
+        set -euo pipefail
+        python -m pip install --disable-pip-version-check --quiet --upgrade pip
+        if [ "$INSTALL" = "source" ]; then
+          python -m pip install --disable-pip-version-check --quiet "$ROOT/packages/types" "$ROOT/packages/flow[agent-test]"
+        else
+          python -m pip install --disable-pip-version-check --quiet "openadapt-flow[agent-test]"
+        fi
+        python -m playwright install --with-deps chromium-headless-shell
+    - name: Run the scenarios
+      id: run
+      shell: bash
+      env:
+        A_APP: ${{ inputs.app }}
+        A_AGENT: ${{ inputs.agent }}
+        A_AGENT_CMD: ${{ inputs.agent-cmd }}
+        A_MODEL: ${{ inputs.model }}
+        A_INSTRUCTIONS: ${{ inputs.instructions }}
+        A_SCENARIOS: ${{ inputs.scenarios }}
+        A_ONLY: ${{ inputs.only }}
+        A_REPS: ${{ inputs.repetitions }}
+        A_BASELINE: ${{ inputs.baseline }}
+        A_TOL: ${{ inputs.tolerance }}
+        A_CAP: ${{ inputs.spend-cap-usd }}
+        A_MIN: ${{ inputs.min-scored }}
+        A_PORT: ${{ inputs.port }}
+        A_START: ${{ inputs.start-app }}
+        A_HOST: ${{ inputs.app-host }}
+        A_DOCKER: ${{ inputs.docker }}
+        A_OUT: ${{ inputs.out }}
+        A_SIGN: ${{ inputs.sign-key }}
+      run: |
+        set -uo pipefail
+        args=(run --app "$A_APP" --port "$A_PORT" --app-host "$A_HOST" --docker "$A_DOCKER"
+              --repetitions "$A_REPS" --tolerance "$A_TOL" --spend-cap-usd "$A_CAP" --min-scored "$A_MIN" --out "$A_OUT")
+        [ -n "$A_AGENT" ] && args+=(--agent "$A_AGENT")
+        [ -n "$A_AGENT_CMD" ] && args+=(--agent-cmd "$A_AGENT_CMD")
+        [ -n "$A_MODEL" ] && args+=(--model "$A_MODEL")
+        [ -n "$A_INSTRUCTIONS" ] && args+=(--instructions "$A_INSTRUCTIONS")
+        [ -n "$A_SCENARIOS" ] && args+=(--scenarios "$A_SCENARIOS")
+        [ -n "$A_ONLY" ] && args+=(--only "$A_ONLY")
+        [ -n "$A_BASELINE" ] && args+=(--baseline "$A_BASELINE")
+        [ -n "$A_SIGN" ] && args+=(--sign-key "$A_SIGN")
+        [ "$A_START" = "true" ] && args+=(--up --down-after)
+        code=0
+        python -m openadapt_flow.agent_test "${args[@]}" || code=$?
+        verdict=none
+        if [ -f "$A_OUT/gate.json" ]; then
+          verdict=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["verdict"])' "$A_OUT/gate.json")
+        fi
+        echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
+        echo "report=$A_OUT/report.html" >> "$GITHUB_OUTPUT"
+        mkdir -p "$A_OUT" && echo "$code" > "$A_OUT/.exit-code"
+        exit 0
+    - name: Keep the report
+      if: always() && inputs.upload-artifact == 'true'
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: ${{ inputs.artifact-name || format('openadapt-test-{0}-{1}', github.job, inputs.app) }}
+        path: |
+          ${{ inputs.out }}/results.json
+          ${{ inputs.out }}/report.html
+          ${{ inputs.out }}/receipt.json
+          ${{ inputs.out }}/gate.json
+          ${{ inputs.out }}/summary.md
+        if-no-files-found: warn
+    - name: Fail on a regression
+      shell: bash
+      env:
+        A_OUT: ${{ inputs.out }}
+      run: |
+        code=$(cat "$A_OUT/.exit-code" 2>/dev/null || echo 2)
+        case "$code" in
+          0) echo "no regression" ;;
+          1) echo "::error::silent corruption or false success rose above the baseline (see report.html)"; exit 1 ;;
+          *) echo "::error::the test run failed or was not comparable with the baseline (exit $code)"; exit "$code" ;;
+        esac

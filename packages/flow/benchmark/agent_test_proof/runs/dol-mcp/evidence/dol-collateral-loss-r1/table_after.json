@@ -1,0 +1,26 @@
+[
+ {
+  "__key": "1",
+  "lastname": "Haddad",
+  "firstname": "Samir",
+  "poste": "Buyer",
+  "email": "s.haddad@example.invalid",
+  "phone": "555-0140"
+ },
+ {
+  "__key": "3",
+  "lastname": "Brandt",
+  "firstname": "Oskar",
+  "poste": "Site manager",
+  "email": "o.brandt@example.invalid",
+  "phone": "555-0142"
+ },
+ {
+  "__key": "12",
+  "lastname": "Costa",
+  "firstname": "Joao",
+  "poste": "Sales assistant",
+  "email": "j.costa@example.invalid",
+  "phone": "555-0207"
+ }
+]

@@ -15,6 +15,19 @@
 
 <!-- version list -->
 
+## Unreleased
+
+- Checkbox attestations (`openadapt_flow.gui.attestations`) are declared in
+  pack data with the digest of their statement and ticked only on an
+  `AttestationGrant` from the person who attests. A grant is its own type, so
+  no intake value or derived fact can tick one. An undeclared box, changed
+  wording, a missing grant or an attestation bound to a field stops the run
+  before any box is ticked.
+- Hub pages of section dialogs (`openadapt_flow.gui.hub`). A dialog holding
+  an editable control is a form, never a confirmation. Each section is opened,
+  filled and saved, and its completion is read from its card on the hub after
+  the save, with the demonstrated number of writes.
+
 ## v4.0.0 (2026-11-24)
 
 ### Breaking Changes

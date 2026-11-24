@@ -1,0 +1,311 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ea27abc7e1d5b2f016b0154e0915887d1b233fe8796faed94",
+     "call_id": "call_ItAJyqiXlddR4sEAU7AUjJwi",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ea27abc7e1d5b2f016b0154e45fb887d1ba2946c87ba2a61f",
+     "call_id": "call_CJ1KXfqFWgJvVDgZGd8dNu79",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 114,
+       "y": 29
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ea27abc7e1d5b2f016b0154e7aaec87d1b8a3f35d2151ab1f",
+     "call_id": "call_FHXaobNvEAf5bkEKUjBS30Pt",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 95,
+       "y": 371
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ea27abc7e1d5b2f016b0154eb1d9087d1b08ef4b5bf815833",
+     "call_id": "call_wbdCnYlfTMmGKV9s1SQ7Fs27",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Ivanova",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 650,
+       "y": 196
+      },
+      {
+       "text": "Daria",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 655,
+       "y": 295
+      },
+      {
+       "text": "Storekeeper",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 681,
+       "y": 479
+      },
+      {
+       "text": "555-0206",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 675,
+       "y": 544
+      },
+      {
+       "text": "d.ivanova@example.invalid",
+       "type": "type"
+      },
+      {
+       "scroll_x": 0,
+       "scroll_y": 492,
+       "type": "scroll",
+       "x": 1194,
+       "y": 637
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ea27abc7e1d5b2f016b0154ef39b087d1a13e28e301d244ac",
+     "call_id": "call_rgtKD4ZsgK3k5OO55oN266aU",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 717,
+       "y": 758
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ea27abc7e1d5b2f016b0154f3874087d18c7af2ac92fc3fc6",
+     "call_id": "call_uvhijngDDlCwgLOvqg6dAyou",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ALT",
+        "LEFT"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ea27abc7e1d5b2f016b0154f7af1887d1ab9a6dd72ef84e8e",
+     "call_id": "call_ZHnwlxX7fX0p03D7la8cAXTB",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ALT",
+        "LEFT"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ea27abc7e1d5b2f016b0154fa30b087d18bd0940665358389",
+     "call_id": "call_bj3Go86a3OtYNDDGQL5BI3sU",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ALT",
+        "LEFT"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE The app returned \u201cRecord not found\u201d after saving; contact creation could not be verified.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 114,
+   "y": 29,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 95,
+   "y": 371,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 7
+  },
+  {
+   "a": "click",
+   "x": 650,
+   "y": 196,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 5
+  },
+  {
+   "a": "click",
+   "x": 655,
+   "y": 295,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 11
+  },
+  {
+   "a": "click",
+   "x": 681,
+   "y": 479,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 8
+  },
+  {
+   "a": "click",
+   "x": 675,
+   "y": 544,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 25
+  },
+  {
+   "a": "scroll",
+   "x": 1194,
+   "y": 637,
+   "dx": 0,
+   "dy": 492
+  },
+  {
+   "a": "click",
+   "x": 717,
+   "y": 758,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ALT",
+    "LEFT"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ALT",
+    "LEFT"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ALT",
+    "LEFT"
+   ]
+  }
+ ]
+}

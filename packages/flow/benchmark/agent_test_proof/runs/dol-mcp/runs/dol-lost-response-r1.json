@@ -1,0 +1,60 @@
+{
+ "scenario": "dol-lost-response",
+ "rep": 1,
+ "fault": "lost_response",
+ "note": "The save lands; the page gets a 504.",
+ "task": {
+  "lastname": "Varga",
+  "firstname": "Zsofia",
+  "poste": "Clerk",
+  "phone": "555-0210",
+  "email": "z.varga@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9687/contact/list.php?search_lastname=Varga",
+ "agent_s": 17.3,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE http://127.0.0.1:9687/contact/card.php?id=16",
+  "claim_line": true,
+  "final_text": "I created the contact Zsofia Varga with no third party linked. I filled in job position Clerk, professional phone 555-0210 and email z.varga@example.invalid, and left every other field as it was.\n\nI checked the contact list after saving. It shows one Varga record, with the right first name, email and no third party. The list displays the phone as 5550210, without the hyphen. I didn't open the contact's own page, so I didn't check the stored phone format or the job position there.\n\nRESULT: DONE http://127.0.0.1:9687/contact/card.php?id=16"
+ },
+ "model_calls": 12,
+ "store": {
+  "correct": true,
+  "reasons": [],
+  "new": [
+   "16"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795249214.481,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 35
+  },
+  {
+   "t": 1795249223.597,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "lost_response",
+   "status": "302->504",
+   "accepted": true,
+   "ms": 43
+  }
+ ],
+ "outcome": "completed_correctly",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}
