@@ -21,13 +21,19 @@ VECTORS = ROOT / "packages" / "types" / "tests" / "vectors" / "record-run-v1"
 
 def _ensure_in_tree_types() -> None:
     types_dir = str(ROOT / "packages" / "types")
+    in_tree_pkg = str(ROOT / "packages" / "types" / "openadapt_types")
     if types_dir not in sys.path:
         sys.path.insert(0, types_dir)
     pkg = sys.modules.get("openadapt_types")
     if pkg is not None and hasattr(pkg, "__path__"):
-        in_tree_pkg = str(ROOT / "packages" / "types" / "openadapt_types")
         if in_tree_pkg not in pkg.__path__:
             pkg.__path__.insert(0, in_tree_pkg)
+    for mod_name in list(sys.modules):
+        if mod_name == "openadapt_types" or mod_name.startswith("openadapt_types."):
+            mod = sys.modules.get(mod_name)
+            mod_file = getattr(mod, "__file__", None) or ""
+            if mod_name != "openadapt_types" and not mod_file.startswith(in_tree_pkg):
+                sys.modules.pop(mod_name, None)
 
 
 def _load_module() -> Any:

@@ -1,0 +1,90 @@
+{
+ "app": "mealie",
+ "untuned": true,
+ "describe": "openapi",
+ "operator_setup_seconds": 3.4,
+ "operator_inputs": [
+  "app base URL",
+  "two users' sign-in (user, password env)",
+  "read-only DB connection",
+  "admin DB connection"
+ ],
+ "setup_minutes": 4.01,
+ "person_decisions": 0,
+ "questions": [],
+ "drafts": 3,
+ "drafts_admitted": 0,
+ "drafts_rejected": 3,
+ "admitted": false,
+ "reason": "refused after 3 round(s): [FAILED] clean clean-1: the write with payload 1. Expected confirmed, got REFUTED. Reasons: lost update: the target moved more than one version in the window, and only one save is the agent's\n[FAILED] stopped after the first clean write was not confirmed: fix that first (no fault was planted this round)",
+ "model": "claude-opus-5-5",
+ "prompt_sha256": "sha256:738a1230c4d9449f3f23487d338fce9fc8f35779f3511bf2093fc4f7c6252840",
+ "model_calls": [
+  {
+   "at": 1795247848.794942,
+   "label": "mealie",
+   "request_model": "claude-opus-5-5",
+   "response_model": "claude-opus-5-5",
+   "input_tokens": 19909,
+   "output_tokens": 2429,
+   "cache_read_tokens": 2155,
+   "cache_write_tokens": 0,
+   "seconds": 22.47,
+   "request_id": "",
+   "stop_reason": "end_turn"
+  },
+  {
+   "at": 1795247862.9125051,
+   "label": "mealie",
+   "request_model": "claude-opus-5-5",
+   "response_model": "claude-opus-5-5",
+   "input_tokens": 21727,
+   "output_tokens": 1766,
+   "cache_read_tokens": 2155,
+   "cache_write_tokens": 0,
+   "seconds": 13.98,
+   "request_id": "",
+   "stop_reason": "end_turn"
+  },
+  {
+   "at": 1795248054.955477,
+   "label": "mealie",
+   "request_model": "claude-opus-5-5",
+   "response_model": "claude-opus-5-5",
+   "input_tokens": 23470,
+   "output_tokens": 4549,
+   "cache_read_tokens": 2155,
+   "cache_write_tokens": 0,
+   "seconds": 45.48,
+   "request_id": "",
+   "stop_reason": "end_turn"
+  }
+ ],
+ "rounds": [
+  {
+   "admitted": false,
+   "faults_applicable": 7,
+   "faults_caught": 6,
+   "clean": 5,
+   "false_stops": [],
+   "probe_writes_confirmed": 5,
+   "attribution_problems": [],
+   "not_applicable": {},
+   "seconds": 146.55
+  },
+  {
+   "admitted": false,
+   "faults_applicable": 0,
+   "faults_caught": 0,
+   "clean": 1,
+   "false_stops": [
+    "clean-1"
+   ],
+   "probe_writes_confirmed": 0,
+   "attribution_problems": [],
+   "not_applicable": {},
+   "seconds": 6.7
+  }
+ ],
+ "notes": []
+}

@@ -163,14 +163,38 @@ def test_receipt_is_the_seal_and_verified_requires_sor_oracle() -> None:
     with pytest.raises(ValidationError, match="oracle_tier must match"):
         _receipt(oracle_tier=1)
 
-    with pytest.raises(ValidationError, match="oracle tier 2 or 3"):
-        _receipt(
-            contracts=_contract(
-                minimum_effect_strength=EffectStrengthV1.INDEPENDENT_SESSION,
-                observed_effect_strength=EffectStrengthV1.INDEPENDENT_SESSION,
-            ),
-            oracle_tier=1,
-        )
+    # A separate-session read (check level 3) is verified when the contract
+    # opted in with an independent_session minimum.
+    separate = _receipt(
+        contracts=_contract(
+            minimum_effect_strength=EffectStrengthV1.INDEPENDENT_SESSION,
+            observed_effect_strength=EffectStrengthV1.INDEPENDENT_SESSION,
+        ),
+        oracle_tier=1,
+    )
+    assert separate.outcome.value == "verified"
+    # A lower minimum does not let a separate-session read through, and a
+    # reopened read never verifies.
+    for minimum, observed, tier in (
+        (
+            EffectStrengthV1.IMMEDIATE_SCREEN_CONFIRMATION,
+            EffectStrengthV1.INDEPENDENT_SESSION,
+            1,
+        ),
+        (
+            EffectStrengthV1.PERSISTED_STATE_REACQUISITION,
+            EffectStrengthV1.PERSISTED_STATE_REACQUISITION,
+            0,
+        ),
+    ):
+        with pytest.raises(ValidationError, match="oracle tier 2 or 3"):
+            _receipt(
+                contracts=_contract(
+                    minimum_effect_strength=minimum,
+                    observed_effect_strength=observed,
+                ),
+                oracle_tier=tier,
+            )
 
 
 def test_webhook_signature_binds_the_closed_state_payload() -> None:

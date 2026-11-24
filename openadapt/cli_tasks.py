@@ -143,6 +143,7 @@ NATIVE_ROUTES = {
     ("verify", "seal"): ("seal",),
     ("verify", "shadow"): ("shadow",),
     ("verify", "ledger"): ("verify", "ledger"),
+    ("verify", "draft"): ("verify", "draft"),
     ("research", "bench"): ("bench",),
     ("research", "eval"): ("eval",),
     ("research", "train"): ("train",),

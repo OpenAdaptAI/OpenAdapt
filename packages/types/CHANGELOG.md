@@ -1,6 +1,28 @@
 # CHANGELOG
 
 
+## Unreleased
+
+### Features
+
+- `check_level`: the basis (`separate_session` is level 3; `system_api`,
+  `activity_log`, `db_frame` and `owned_connection` are level 4), the receipt
+  words (`VERIFIED`, `SHOWN`, `CONFIRMED`, `ATTESTED`, `RECORDED`) and
+  `outcome_word`, plus the inverse tier maps and the Execute effect-strength
+  map.
+- `evidence_scope`: the `openadapt.evidence-scope/v1` block and the additive
+  `evidence_scope` field on `receipt.RunPredicateV1` (`record/run/v1`). A
+  receipt without it keeps its exact canonical bytes and still verifies; with
+  it, a `VERIFIED` outcome needs the word `VERIFIED` or `CONFIRMED`, and no
+  other outcome may carry either (`inconsistent`). Two new shared vectors,
+  `valid-evidence-scope` and `evidence-scope-disagrees`; the existing ones
+  are unchanged. A producer with no read-back time lists `read_back_time` in
+  `not_covered`.
+- `ExecuteEvidenceReceiptV1` accepts `verified` at oracle tier 1 (a
+  separate-session read) when the contract's minimum is exactly
+  `independent_session`. Every other contract keeps the tier-2 floor, and
+  every receipt that validated before still validates.
+
 ## v0.24.2 (2026-11-23)
 
 0.24.1 was stamped on main but never published. 0.24.2 is the first

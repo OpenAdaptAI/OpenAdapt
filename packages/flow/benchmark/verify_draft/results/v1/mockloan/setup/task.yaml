@@ -1,0 +1,7 @@
+instruction: Authorize a disbursement of 3150.00 on loan LN-2040 (Personal) with the
+  memo 'Kitchen repair advance'.
+params:
+  loan_id: LN-2040
+  product: Personal
+  amount: '3150.00'
+  memo: Kitchen repair advance

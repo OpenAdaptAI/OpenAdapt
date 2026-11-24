@@ -1,0 +1,41 @@
+schema_version: openadapt.verify/v1
+verifier:
+  kind: surfaces
+  surfaces:
+    record:
+      kind: sql
+      sql_query: SELECT CAST(p."id" AS TEXT) AS "id", CAST(p."mrn" AS TEXT) AS "mrn", CAST(p."phone" AS TEXT) AS "phone", CAST(p."email" AS TEXT) AS "email", CAST(p."version" AS TEXT) AS "version", CAST(p."updated_by" AS TEXT) AS "updated_by" FROM "patients" p
+    audit:
+      kind: sql
+      sql_query: SELECT CAST(a."id" AS TEXT) AS "id", CAST(a."actor" AS TEXT) AS "actor", CAST(a."table_name" AS TEXT) AS "table_name", CAST(a."event" AS TEXT) AS "event", CAST(a."record_id" AS TEXT) AS "record_id", CAST(p."mrn" AS TEXT) AS "mrn" FROM "audit_log" a JOIN "patients" p ON a."table_name" = 'patients' AND a."record_id" = p."id"
+effects:
+- kind: record_written
+  probe: surface=record|patient with this MRN has the new phone and email
+  match:
+    mrn: {param: mrn}
+    phone: {param: phone}
+    email: {param: email}
+  expected_count: 1
+- kind: record_written
+  probe: surface=audit|exactly one new update audit row for this patient
+  match:
+    mrn: {param: mrn}
+    table_name: {literal: patients}
+    event: {literal: update}
+  expected_count: 1
+  count_new_only: true
+frame:
+  identity_field: id
+  target_fields_by_surface:
+    record: [phone, email, version, updated_by]
+  database:
+    dialect: postgresql
+    views:
+      patients: record
+    judged_by:
+      audit_log: audit
+    new_row_fields:
+      audit_log: [id, actor, record_id]
+    settle_s: 1
+    settle_attempts: 3
+    recheck_after_s: 300

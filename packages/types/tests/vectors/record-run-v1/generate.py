@@ -224,6 +224,36 @@ def build() -> dict[str, dict]:
     add("embedded-image-in-record", "A signed record whose payload carries base64 image bytes: refused.",
         raw_env, {"ok": False, "reason": "embedded_content",
                   "signer_lines": [r.refusal_line("embedded_content")]})
+    scoped = statement("VERIFIED")
+    scoped["predicate"]["evidence_scope"] = {
+        "schema": "openadapt.evidence-scope/v1",
+        "check_level": "separate_session",
+        "word": "VERIFIED",
+        "basis": "separate_session",
+        "wire": {"channel": "none", "protocols_parsed": []},
+        "not_covered": [
+            "server_side_async_effects",
+            "outbound_effects",
+            "changes_after_read_back",
+            "read_back_time",
+        ],
+    }
+    add("valid-evidence-scope",
+        "A run that states what its evidence covered: a separate-session read, VERIFIED with its basis.",
+        r.sign_statement(scoped, [signer("this_computer")]),
+        {**ok_local, "outcome": "VERIFIED", "disclosed": {}})
+    shown = copy.deepcopy(scoped)
+    shown["predicate"]["evidence_scope"].update(
+        {"check_level": "same_screen", "word": "SHOWN"})
+    del shown["predicate"]["evidence_scope"]["basis"]
+    payload = r.canonical_json(shown).encode()
+    shown_env = {"payloadType": r.PAYLOAD_TYPE, "payload": base64.b64encode(payload).decode(),
+                 "signatures": [{"keyid": IDS["this_computer"],
+                                 "sig": base64.b64encode(KEYS["this_computer"].sign(r.pae(r.PAYLOAD_TYPE, payload))).decode()}]}
+    add("evidence-scope-disagrees",
+        "A VERIFIED record whose evidence scope says only SHOWN (the acting screen): refused.",
+        shown_env, {"ok": False, "reason": "inconsistent",
+                    "signer_lines": [r.refusal_line("inconsistent")]})
     other = statement("VERIFIED")
     other["predicateType"] = "https://openadapt.ai/record/run/v9"
     payload = r.canonical_json(other).encode()

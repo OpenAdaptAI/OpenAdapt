@@ -30,6 +30,7 @@ from pydantic import (
 )
 
 from openadapt_types.business_decision import BusinessDecisionTaskV1
+from openadapt_types.check_level import CheckLevel, from_effect_strength
 from openadapt_types.human_decision import HumanDecisionTaskV1
 from openadapt_types.oracle import (
     oracle_tier_from_effect_strength,
@@ -78,7 +79,9 @@ _EFFECT_STRENGTH_RANK = {
 }
 
 # Seal oracle ladder. 0 visual, 1 second-session UI, 2 SoR, 3 counterparty.
-# Production Seals require 2 or 3. Tier 3 has no EffectStrengthV1 member yet.
+# Production Seals require 2 or 3. A verified receipt also accepts tier 1 when
+# its contract's minimum is independent_session (_verified_read_allowed).
+# Tier 3 has no EffectStrengthV1 member yet.
 # Mapping and production_seal_allowed live in oracle.py; this alias is the
 # receipt field so OpenAPI stays an integer enum.
 OracleTierV1: TypeAlias = Literal[0, 1, 2, 3]
@@ -229,12 +232,11 @@ class ExecuteEvidenceReceiptV1(_StrictContract):
                 raise ValueError(
                     "observed effect strength is below the required strength"
                 )
-            if not production_seal_allowed(
-                oracle_tier_from_effect_strength(
-                    self.contracts.observed_effect_strength
+            if not _verified_read_allowed(self.contracts):
+                raise ValueError(
+                    "a verified outcome requires oracle tier 2 or 3, or a "
+                    "separate-session read under an independent_session minimum"
                 )
-            ):
-                raise ValueError("a verified outcome requires oracle tier 2 or 3")
         if self.outcome is ExecuteTerminalOutcomeV1.ROLLED_BACK_VERIFIED:
             if not self.compensation_effect_verified:
                 raise ValueError(
@@ -254,9 +256,30 @@ class ExecuteEvidenceReceiptV1(_StrictContract):
         )
         if self.oracle_tier != derived:
             raise ValueError("oracle_tier must match observed_effect_strength")
-        if verified and self.oracle_tier < 2:
+        if verified and not _verified_read_allowed(self.contracts):
             raise ValueError("a verified outcome requires oracle tier 2 or 3")
         return self
+
+
+def _verified_read_allowed(contracts: "ExecuteEvidenceContractV1") -> bool:
+    """Whether the observed read may carry a ``verified`` outcome.
+
+    The check-level ladder (:mod:`openadapt_types.check_level`) is the rule: a
+    system-of-record read (oracle tier 2 or 3) always may. A separate-session
+    read (level 3, oracle tier 1) may only when the contract's minimum is
+    exactly ``independent_session``, so a contract that did not opt in to
+    separate-session reads keeps the tier-2 floor. Same-screen and reopened
+    reads never may.
+    """
+
+    observed = contracts.observed_effect_strength
+    if production_seal_allowed(oracle_tier_from_effect_strength(observed)):
+        return True
+    level = from_effect_strength(observed)
+    return (
+        level is CheckLevel.SEPARATE_SESSION
+        and from_effect_strength(contracts.minimum_effect_strength) is level
+    )
 
 
 class _SignedExecuteWebhookV1(_StrictContract):

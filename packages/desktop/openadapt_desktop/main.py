@@ -289,6 +289,12 @@ def main() -> None:
             handler.dispatcher.close_shadow()
         except Exception as exc:
             logger.warning("Shadow mode didn't close cleanly: {}", type(exc).__name__)
+        try:
+            from openadapt_desktop.chrome_profile import close_all_owned
+
+            close_all_owned()
+        except Exception as exc:
+            logger.warning("Chrome profiles didn't close cleanly: {}", type(exc).__name__)
         db.close()
         logger.info("Engine stopped")
 
