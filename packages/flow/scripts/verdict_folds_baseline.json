@@ -1388,6 +1388,9 @@
   "packages/flow/openadapt_flow/runtime/remote_vlm.py": {
     "swallow": 4
   },
+  "packages/flow/openadapt_flow/runtime/replay/effects.py": {
+    "bool_fold": 1
+  },
   "packages/flow/openadapt_flow/runtime/replay/settling.py": {
     "swallow": 5,
     "swallow_wide": 1
@@ -1523,7 +1526,8 @@
   "packages/flow/openadapt_flow/tx/induce.py": {
     "swallow": 1,
     "slice_count": 3,
-    "empty_change_set": 1
+    "empty_change_set": 1,
+    "bool_fold": 1
   },
   "packages/flow/openadapt_flow/tx/lens.py": {
     "says_success": 1,
