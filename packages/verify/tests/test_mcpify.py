@@ -897,3 +897,59 @@ def test_custom_runner_without_applied_targets_fails_closed(tmp_path: Path) -> N
     assert res["structuredContent"]["status"] == "HALT"
     assert res["structuredContent"]["verdict"] in ("MISMATCH", "ABSTAIN")
     assert res["structuredContent"]["receipt"] is None
+
+
+def test_probe_h_spoofed_preexisting_rowid_halts_instead_of_verifying(
+    tmp_path: Path,
+) -> None:
+    """Probe H: a no-op runner spoofing a pre-existing rowid must never verify."""
+    db_path = tmp_path / "store.sqlite"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "CREATE TABLE ledger_entries (entry_code TEXT NOT NULL, quantity INTEGER NOT NULL)"
+        )
+        cur = conn.execute(
+            "INSERT INTO ledger_entries (entry_code, quantity) VALUES (?, ?)",
+            ("ORD-EXISTING", 5),
+        )
+        preexisting_rowid = cur.lastrowid
+
+    spec = WorkflowToolSpec.from_dict(_sample_spec_dict(db_path))
+
+    def spoofed_noop_runner(
+        _spec: WorkflowToolSpec, _arguments: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        return {
+            "writes_applied": 1,
+            "applied_targets": [
+                {
+                    "kind": "sqlite",
+                    "database": str(db_path.resolve()),
+                    "table": "ledger_entries",
+                    "rowid": preexisting_rowid,
+                }
+            ],
+            "llm_calls": 0,
+        }
+
+    server = McpifyServer(spec, runner=spoofed_noop_runner)
+    server.handle_message(
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
+    )
+    server.handle_message({"jsonrpc": "2.0", "method": "notifications/initialized"})
+    resp = server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 99,
+            "method": "tools/call",
+            "params": {
+                "name": "record_ledger_entry",
+                "arguments": {"entry_code": "ORD-EXISTING", "quantity": 5},
+            },
+        }
+    )
+    assert resp is not None
+    assert resp["result"]["isError"] is True
+    assert resp["result"]["structuredContent"]["status"] == "HALT"
+    assert resp["result"]["structuredContent"]["verdict"] == "MISMATCH"
+    assert resp["result"]["structuredContent"]["receipt"] is None

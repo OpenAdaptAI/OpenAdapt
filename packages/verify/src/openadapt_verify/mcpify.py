@@ -769,16 +769,26 @@ def default_readback_oracle(
             conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
             conn.row_factory = sqlite3.Row
             try:
-                where_clause = " AND ".join(f"{col} = ?" for col in columns)
-                params: list[Any] = [expected[col] for col in columns]
+                base_where = " AND ".join(f"{col} = ?" for col in columns)
+                base_params: list[Any] = [expected[col] for col in columns]
+                where_clause = base_where
+                params = list(base_params)
                 if written_rowids:
                     rowid_placeholders = ", ".join("?" for _ in written_rowids)
-                    where_clause = f"rowid IN ({rowid_placeholders}) AND {where_clause}"
-                    params = [*written_rowids, *params]
+                    where_clause = f"rowid IN ({rowid_placeholders}) AND {base_where}"
+                    params = [*written_rowids, *base_params]
                 rows = conn.execute(
                     f"SELECT * FROM {table} WHERE {where_clause}",
                     params,
                 ).fetchall()
+                total_after: int | None = None
+                if has_before_count and before_count is not None:
+                    total_after = int(
+                        conn.execute(
+                            f"SELECT COUNT(*) FROM {table} WHERE {base_where}",
+                            base_params,
+                        ).fetchone()[0]
+                    )
             finally:
                 conn.close()
         except sqlite3.Error as exc:
@@ -789,16 +799,14 @@ def default_readback_oracle(
             )
 
         expected_count = int(contract.get("expected_count", 1))
-        effective_count = (
-            len(rows)
-            if written_rowids
-            else (
-                len(rows) - int(before_count)
-                if has_before_count and before_count is not None
-                else len(rows)
-            )
-        )
-        if effective_count == expected_count:
+        if has_before_count and before_count is not None and total_after is not None:
+            new_total = total_after - int(before_count)
+            effective_count = min(len(rows), new_total) if written_rowids else new_total
+        else:
+            effective_count = len(rows)
+        if effective_count == expected_count and (
+            not written_rowids or len(rows) == expected_count
+        ):
             observed = dict(rows[-1]) if rows else {}
             return ReadbackResult(
                 verdict="VERIFIED",
