@@ -644,14 +644,24 @@
     "says_success": 1,
     "swallow": 2
   },
+  "packages/flow/openadapt_flow/form_tx/judge.py": {
+    "bool_fold": 1
+  },
   "packages/flow/openadapt_flow/form_tx/playwright_surface.py": {
-    "swallow": 14
+    "swallow": 16
+  },
+  "packages/flow/openadapt_flow/form_tx/receipt.py": {
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/form_tx/reconciler.py": {
+    "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/form_tx/session_lease.py": {
     "cmp_literal": 1,
     "swallow": 1
   },
   "packages/flow/openadapt_flow/form_tx/types.py": {
+    "bool_fold": 1,
     "says_success": 1
   },
   "packages/flow/openadapt_flow/generate/compositional.py": {

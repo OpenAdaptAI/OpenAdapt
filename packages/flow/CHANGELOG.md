@@ -141,6 +141,18 @@
   version saved by another user. The frame is refuted instead of not checked.
 - Receipts: a line check nobody listed keeps the run from `VERIFIED` and is
   counted as not checked, so the three line counts add up to the lines.
+- The form transaction layer (`form_tx`, an unreleased prototype until this
+  release) reads back every field it typed, selected or kept. Each one gets
+  a `passed`, `failed` or `not_checked` verdict; a field it cannot read back
+  (no read-back declared, the summary control missing or ambiguous, a failed
+  lookup, a value entered only in a popup) is `not_checked` and never
+  passed. A submit with any `not_checked` field ends `readback_incomplete`,
+  never `verified_done`, and gets no receipt. Before, fields typed in a popup
+  estimator had no verdict at all and such a run could end verified.
+  Popup inputs are also re-read just before the popup's apply button, and a
+  mismatch stops the run before apply. The side panel shows refuted and
+  incomplete runs as needing action. Measured on four held-out synthetic
+  quote portals: `benchmark/form_tx_heldout_run/RESULTS.md`.
 - A wrapped sign-in no longer compiles a pixel check that freezes a withheld
   credential field. The recorder blacks out a withheld field in every frame
   that still shows it, so a `REGION_STABLE` crop that overlapped one held a
