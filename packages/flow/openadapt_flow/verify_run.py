@@ -56,7 +56,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, Mapping, Optional, Sequence, cast
+from typing import Any, Callable, Literal, Mapping, Optional, Sequence, cast
 from uuid import uuid4
 
 from openadapt_types.approval import (
@@ -91,6 +91,8 @@ from openadapt_flow.runtime.effects.effect import (
     Verdict,
 )
 from openadapt_flow.runtime.effects.frame import FrameSpec, FrameVerdict, judge_frame
+from openadapt_flow.verdict import Obligations, Result, Status, Subject, settle
+from openadapt_flow.verdict_sites import verdict_site
 from openadapt_flow.verification import (
     EffectContractMutationError,
     VerificationTier,
@@ -662,7 +664,72 @@ def _judge_versions(
     spec = cfg.frame.versions if cfg.frame is not None else None
     if spec is None:
         return frame
-    field_name = spec.target_field or cfg.frame.identity_field or "id"  # type: ignore[union-attr]
+    targets = _version_targets(
+        cfg, before, effects, verdicts, spec.target_field, spec.target_surface
+    )
+    stored = (before.detail or {}).get(FRAME_VERSIONS_DETAIL)
+    if spec.target_surface is not None and not _surface_has_target(
+        effects, spec.target_surface
+    ):
+        # A surface no write target is read from (a typo in a hand-written
+        # contract, or a surface only a guard reads) would leave no target,
+        # and no target holds.
+        result = VersionVerdict(
+            "not_checked",
+            "unknown_surface",
+            reason="frame.versions.target_surface names a surface no write "
+            "target is read from, so no target's versions can be judged",
+        )
+    else:
+        result = judge_versions(
+            spec,
+            stored if isinstance(stored, Mapping) else {},
+            _read_versions(cfg, params),
+            targets,
+            _mac_key(salt),
+            params,
+        )
+    frame.versions = result
+    return _apply_version_result(frame, result)
+
+
+def _apply_version_result(frame: FrameVerdict, result: Any) -> FrameVerdict:
+    if result.status == "refuted":
+        frame.status = "refuted"
+        frame.reason = result.reason
+    elif result.status == "not_checked" and frame.status == "held":
+        frame.status = "not_checked"
+        frame.reason = result.reason
+    return frame
+
+
+def _writes_a_target(effect: Effect) -> bool:
+    """A write effect whose records can be targets. A guard ("nothing
+    here", ``record_written`` with ``expected_count`` 0) never is."""
+
+    if effect.kind not in (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS):
+        return False
+    return not (effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count == 0)
+
+
+def _surface_has_target(effects: Sequence[Effect], surface: str) -> bool:
+    from openadapt_flow.runtime.effects.surfaces import surface_of
+
+    return any(_writes_a_target(e) and surface_of(e) == surface for e in effects)
+
+
+def _version_targets(
+    cfg: VerifyConfig,
+    before: EffectState,
+    effects: Sequence[Effect],
+    verdicts: Sequence[EffectVerdict],
+    target_field: Optional[str],
+    target_surface: Optional[str],
+) -> list[tuple[Optional[str], bool, bool]]:
+    """Per record a confirmed write effect matched: its ``target_field``
+    value, whether it existed before the write, and whether it changed."""
+
+    field_name = target_field or cfg.frame.identity_field or "id"  # type: ignore[union-attr]
     # Whether a target existed is told by its identity, which a save doesn't
     # change, never by the target field's value after the write: a target
     # field the write changed would make an old record look created.
@@ -690,27 +757,14 @@ def _judge_versions(
             return index(rows) if isinstance(rows, list) else None
         return index(before.records) if before.reachable else None
 
-    def writes_a_target(effect: Effect) -> bool:
-        """A write effect whose records can be targets. A guard ("nothing
-        here", ``record_written`` with ``expected_count`` 0) never is."""
-
-        if effect.kind not in (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS):
-            return False
-        return not (
-            effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count == 0
-        )
-
     ignored = set(cfg.frame.ignore_fields)  # type: ignore[union-attr]
     targets: list[tuple[Optional[str], bool, bool]] = []
     for effect, verdict in zip(effects, verdicts):
-        if not writes_a_target(effect):
+        if not _writes_a_target(effect):
             continue
         if not verdict.confirmed:
             continue
-        if (
-            spec.target_surface is not None
-            and surface_of(effect) != spec.target_surface
-        ):
+        if target_surface is not None and surface_of(effect) != target_surface:
             continue  # a row beside the target, not the target
         old = before_rows(effect)
         for record in verdict.matched_records:
@@ -728,36 +782,77 @@ def _judge_versions(
                 or any(record.get(k) != v for k, v in was.items() if k not in ignored)
             )
             targets.append((text, existed, changed))
-    stored = (before.detail or {}).get(FRAME_VERSIONS_DETAIL)
-    if spec.target_surface is not None and not any(
-        writes_a_target(e) and surface_of(e) == spec.target_surface for e in effects
+    return targets
+
+
+def _hold_row_versions(cfg: VerifyConfig, execution_id: str) -> dict[str, Any]:
+    """Open ``frame.row_versions``' held read before the baseline records."""
+
+    from openadapt_flow.runtime.effects import row_versions as rv
+
+    spec = cfg.frame.row_versions  # type: ignore[union-attr]
+    try:
+        read = cfg.frame.database.read  # type: ignore[union-attr]
+        held = rv.open_held(spec, _db_connect(read))  # type: ignore[arg-type]
+    except Exception as exc:  # noqa: BLE001 - not held -> the judge stops
+        return rv.baseline_detail(None, type(exc).__name__)
+    rv.hold(execution_id, held)
+    return rv.baseline_detail(held, None)
+
+
+def _judge_row_versions(
+    cfg: VerifyConfig,
+    frame: FrameVerdict,
+    before: EffectState,
+    effects: Sequence[Effect],
+    verdicts: Sequence[EffectVerdict],
+    execution_id: str,
+) -> FrameVerdict:
+    """Add ``frame.row_versions``: two writers of a target in the window
+    refute the frame; a read that can't count them leaves it not checked."""
+
+    from openadapt_flow.runtime.effects import row_versions as rv
+    from openadapt_flow.runtime.effects.versions import VersionVerdict
+
+    spec = cfg.frame.row_versions if cfg.frame is not None else None
+    if spec is None:
+        return frame
+    held = rv.take(execution_id)
+    if not rv.stored_held((before.detail or {}).get(rv.DETAIL)):
+        if held is not None:
+            held.close()
+        held = None
+    if spec.target_surface is not None and not _surface_has_target(
+        effects, spec.target_surface
     ):
-        # A surface no write target is read from (a typo in a hand-written
-        # contract, or a surface only a guard reads) would leave no target,
-        # and no target holds.
+        if held is not None:
+            held.close()
         result = VersionVerdict(
             "not_checked",
             "unknown_surface",
-            reason="frame.versions.target_surface names a surface no write "
-            "target is read from, so no target's versions can be judged",
+            reason="frame.row_versions.target_surface names a surface no "
+            "write target is read from",
         )
-    else:
-        result = judge_versions(
+    elif (
+        unbound := rv.binding_problem(
             spec,
-            stored if isinstance(stored, Mapping) else {},
-            _read_versions(cfg, params),
-            targets,
-            _mac_key(salt),
-            params,
+            cfg.verifier.surfaces,
+            cfg.frame.database.read,  # type: ignore[union-attr]
+            cfg.frame.identity_field,  # type: ignore[union-attr]
         )
-    frame.versions = result
-    if result.status == "refuted":
-        frame.status = "refuted"
-        frame.reason = result.reason
-    elif result.status == "not_checked" and frame.status == "held":
-        frame.status = "not_checked"
-        frame.reason = result.reason
-    return frame
+    ) is not None:
+        if held is not None:
+            held.close()
+        result = VersionVerdict("not_checked", "unbound_source", reason=unbound)
+    else:
+        targets = _version_targets(
+            cfg, before, effects, verdicts, spec.target_field, spec.target_surface
+        )
+        read = cfg.frame.database.read  # type: ignore[union-attr]
+        result = rv.judge_row_versions(spec, held, _db_connect(read), targets)
+    if frame.versions is None or result.status != "held":
+        frame.versions = result
+    return _apply_version_result(frame, result)
 
 
 def _db_connect(read: Mapping[str, Any]) -> Any:
@@ -2485,6 +2580,11 @@ def capture_baseline(
             history_before, _history_rows = _read_history(cfg, params, _now(), salt)
         except Exception as exc:
             history_error = type(exc).__name__
+    row_versions_detail = (
+        _hold_row_versions(cfg, execution_id)
+        if cfg.frame is not None and cfg.frame.row_versions is not None
+        else None
+    )
     # The versions first: a save between this read and the record read is
     # then in the record baseline too, never hidden in the versions one.
     versions_rows = (
@@ -2540,6 +2640,10 @@ def capture_baseline(
             "reachable": entries is not None,
             "ids": _audit_ids(entries or [], salt),
         }
+    if row_versions_detail is not None:
+        from openadapt_flow.runtime.effects.row_versions import DETAIL as RV_DETAIL
+
+        detail[RV_DETAIL] = row_versions_detail
     if cfg.frame is not None and cfg.frame.versions is not None:
         from openadapt_flow.runtime.effects.versions import seal_versions
 
@@ -2957,37 +3061,106 @@ def _label(verdict: Verdict) -> EffectVerdictLabel:
     return labels[verdict]
 
 
-def _aggregate(verdicts: Sequence[EffectVerdict]) -> EffectVerdictLabel:
-    if any(v.verdict is Verdict.INDETERMINATE for v in verdicts):
-        return "INDETERMINATE"
-    if any(v.verdict is Verdict.REFUTED for v in verdicts):
-        return "REFUTED"
-    return "CONFIRMED"
+_AGGREGATE_LABELS: dict[Status, EffectVerdictLabel] = {
+    Status.HELD: "CONFIRMED",
+    Status.REFUTED: "REFUTED",
+    Status.NOT_CHECKED: "INDETERMINATE",
+}
 
 
-def _observed(verdicts: Sequence[EffectVerdict]) -> str:
+def _effect_results(
+    planned: Sequence[str],
+    verdicts: Sequence[EffectVerdict],
+    code: Callable[[EffectVerdict], object],
+    *,
+    held: frozenset[str],
+    refuted: frozenset[str],
+) -> tuple[Obligations, list[Result]]:
+    """One obligation per planned effect, fixed from the contract before any
+    read; the ``i``-th verdict answers the ``i``-th. A verdict past the plan
+    answers nothing (it is unexpected), and a planned effect with no verdict
+    is missing, so neither can pass."""
+
+    subjects = [Subject(key=key) for key in planned]
+    results = [
+        Result.from_code(
+            subjects[i] if i < len(subjects) else Subject(key=f"unplanned:{i}"),
+            code(v),
+            held=held,
+            refuted=refuted,
+        )
+        for i, v in enumerate(verdicts)
+    ]
+    return Obligations.fix(subjects, source="cfg.effects"), results
+
+
+@verdict_site("verify_run.aggregate", classes="C1 C2")
+def _aggregate(
+    planned: Sequence[str], verdicts: Sequence[EffectVerdict]
+) -> EffectVerdictLabel:
+    """CONFIRMED only when every planned effect is; any INDETERMINATE outranks
+    a REFUTED; no effects at all, a planned effect with no verdict or a
+    verdict nobody planned is INDETERMINATE (docs/FAIL_CLOSED.md)."""
+
+    obligations, results = _effect_results(
+        planned,
+        verdicts,
+        lambda v: v.verdict,
+        held=frozenset({Verdict.CONFIRMED.value}),
+        refuted=frozenset({Verdict.REFUTED.value}),
+    )
+    settled = settle(obligations, results)
+    return _AGGREGATE_LABELS[
+        settled.label(precedence=(Status.NOT_CHECKED, Status.REFUTED))
+    ]
+
+
+@verdict_site("verify_run.observed", classes="C1 C2")
+def _observed(planned: Sequence[str], verdicts: Sequence[EffectVerdict]) -> str:
+    """``present`` only when every planned effect was read as present.
+    ``unknown`` when one was not read, has no verdict, or was not planned;
+    ``conflicting`` for a wrong record or a mix of landed and not landed."""
+
+    obligations, results = _effect_results(
+        planned,
+        verdicts,
+        lambda v: v.observed_effect,
+        held=frozenset({"present"}),
+        refuted=frozenset({"absent", "conflicting"}),
+    )
+    settled = settle(obligations, results)
+    if settled.passes:
+        return "present"
+    if (
+        not settled.refuted
+        or settled.unexpected
+        or settled.total != len(settled.held) + len(settled.refuted)
+    ):
+        return "unknown"  # something planned was not read, or not planned
     seen = {v.observed_effect for v in verdicts}
-    if "unknown" in seen:
-        return "unknown"
     if "conflicting" in seen or seen == {"absent", "present"}:
         # A wrong record, or some effects landed and others did not.
         return "conflicting"
-    return "absent" if "absent" in seen else "present"
+    return "absent"
 
 
+@verdict_site("verify_run.readback_class", classes="C1 C2")
 def readback_class(
     verdicts: Sequence[EffectVerdict], tiers: Sequence[Optional[VerificationTier]]
 ) -> ReadbackClass:
     """RFC-0002 tier rule, weakest effect wins.
 
     ``unchecked`` when any effect was not read (no tier, store unreachable,
-    stale). ``independent_readback`` only when every effect was read from the
+    stale), when there are no effects, or when the tiers don't pair one to
+    one with the effects. ``independent_readback`` only when every effect was read from the
     system of record without the UI (Flow tier 1). Anything else, including a
     separate signed-in UI session (tier 2), is ``screen_readback``.
     """
 
     if (
-        any(t is None for t in tiers)
+        not verdicts
+        or len(tiers) != len(verdicts)
+        or any(t is None for t in tiers)
         or any(v.unavailable for v in verdicts)
         or any(v.stale for v in verdicts)
     ):
@@ -3200,6 +3373,10 @@ def verify_run(
     judged_effects: list[Effect] = []
     weakest: Optional[VerificationTier] = None
     tiers: list[Optional[VerificationTier]] = []
+    # The effects the contract plans, fixed before any read: each fold below
+    # settles the verdicts against these, so a verdict that goes missing
+    # can't leave a pass.
+    planned = [f"{i}:{e.kind.value}" for i, e in enumerate(cfg.effects)]
     for effect in cfg.effects:
         try:
             bound = effect.resolve(params)
@@ -3258,8 +3435,8 @@ def verify_run(
             }
         )
 
-    delta_verdict = _aggregate(verdicts)
-    observed_effect = _observed(verdicts)
+    delta_verdict = _aggregate(planned, verdicts)
+    observed_effect = _observed(planned, verdicts)
     # The frame: nothing outside the declared delta moved. Without a baseline
     # it can't be known, so it is not checked and the run is not verified.
     frame_spec = cfg.frame or FrameSpec()
@@ -3278,6 +3455,9 @@ def verify_run(
         frame = _judge_versions(
             cfg, frame, before, bound_effects, verdicts, params, salt
         )
+        frame = _judge_row_versions(
+            cfg, frame, before, bound_effects, verdicts, execution_id
+        )
     else:
         frame = FrameVerdict(
             status="not_checked",
@@ -3287,8 +3467,8 @@ def verify_run(
         _excuse_attributed_additions(
             cfg, verifier, before, judged_effects, verdicts, rows, frame
         )
-        delta_verdict = _aggregate(verdicts)
-        observed_effect = _observed(verdicts)
+        delta_verdict = _aggregate(planned, verdicts)
+        observed_effect = _observed(planned, verdicts)
     if history_spec is not None:
         if history_problem is not None and frame.status != "refuted":
             frame.status = "not_checked"

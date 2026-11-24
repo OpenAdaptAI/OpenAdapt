@@ -40,6 +40,8 @@ def _versions(monkeypatch, versions: dict[str, str]) -> None:
 
 def _platform(monkeypatch, value: str) -> None:
     monkeypatch.setattr("openadapt_desktop.capabilities.sys.platform", value)
+    monkeypatch.setattr(capabilities, "_mac_accessibility_trusted", lambda: True)
+    monkeypatch.setattr(capabilities, "_mac_screen_recording_granted", lambda: True)
 
 
 class TestWebSurface:
@@ -527,3 +529,21 @@ class TestCliCapabilities:
         out = capsys.readouterr().out
         for surface in SURFACES:
             assert surface in out
+
+
+@pytest.mark.parametrize("probe", ["_mac_accessibility_trusted", "_mac_screen_recording_granted"])
+@pytest.mark.parametrize("value", [False, None])
+def test_unknown_or_denied_mac_api_never_becomes_available(monkeypatch, probe, value):
+    _platform(monkeypatch, "darwin")
+    _specs(monkeypatch, {"ApplicationServices"})
+    monkeypatch.setattr(capabilities, probe, lambda: value)
+    assert capabilities._check_macos().state == "permission_required"
+
+
+@pytest.mark.parametrize("surface", ["rdp", "citrix"])
+def test_unknown_mac_screen_capture_refuses_client_window_surface(monkeypatch, surface):
+    _platform(monkeypatch, "darwin")
+    _specs(monkeypatch, {"Quartz"})
+    monkeypatch.setattr(capabilities, "_mac_screen_recording_granted", lambda: None)
+    monkeypatch.setattr(capabilities, "_citrix_workspace_installed", lambda: (True, "1.0"))
+    assert getattr(capabilities, "_check_" + surface)().state == "permission_required"

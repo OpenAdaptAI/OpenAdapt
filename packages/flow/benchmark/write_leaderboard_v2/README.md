@@ -18,7 +18,7 @@ fixed before any scored run: [PROTOCOL.md](PROTOCOL.md). Results:
 
 ## Run it
 
-You need Podman or Docker, Python 3.10 to 3.12 and Playwright's
+You need Podman or Docker, Python 3.11 or 3.12 and Playwright's
 `chrome-headless-shell`.
 
 ```bash

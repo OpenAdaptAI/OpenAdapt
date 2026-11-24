@@ -315,9 +315,9 @@ def build(
     _uncertify_patch(patched)
     if out_dir.exists():
         shutil.rmtree(out_dir)
-    shutil.copytree(
-        bundle_dir, out_dir, ignore=shutil.ignore_patterns("repair", "manifest.json")
-    )
+    from openadapt_flow.bundle_persistence import copy_bundle_files
+
+    copy_bundle_files(bundle_dir, out_dir, ignore=("repair", "manifest.json"))
     patched.save(out_dir, encrypt=bool(workflow.encrypted), key=key)
     return out_dir
 

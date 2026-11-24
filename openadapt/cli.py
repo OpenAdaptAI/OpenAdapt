@@ -218,7 +218,7 @@ def main():
     \b
     Quick Start (uv fetches Python 3.12 if needed):
         uvx --python 3.12 openadapt@latest quickstart
-    Or, on Python 3.10-3.12:
+    Or, on Python 3.11-3.12:
         python -m pip install --upgrade openadapt
         openadapt quickstart
 
@@ -455,11 +455,11 @@ _DEFAULT_QUICKSTART_DIR = "openadapt-quickstart"
 # Oldest and newest interpreter the engine supports. openadapt-flow,
 # openadapt-agent, and Flow's OCR dependency publish Requires-Python <3.13, so
 # pyproject.toml installs them only below 3.13 while the launcher itself
-# installs on any Python >=3.10. Without that split, pip on 3.13 and 3.14
+# installs on any Python >=3.11. Without that split, pip on 3.13 and 3.14
 # silently backtracked to openadapt 1.3.0, an unrelated pre-compiler CLI.
 # tests/test_python_support.py keeps this range, the dependency markers, the
 # classifiers, and the CI guard matrix in step.
-_SUPPORTED_PYTHON = ((3, 10), (3, 12))
+_SUPPORTED_PYTHON = ((3, 11), (3, 12))
 
 #: The documented first command: the newest launcher, on a Python the engine
 #: supports, with nothing installed first. tests/test_quickstart_command.py
@@ -535,13 +535,13 @@ def _python_remedy() -> str:
     if _python_supported():
         # A supported interpreter can still refuse installs (PEP 668).
         reason = (
-            "OpenAdapt needs Python 3.10\u20133.12 in its own environment. "
+            "OpenAdapt needs Python 3.11\u20133.12 in its own environment. "
             f"This Python {current} is managed by your operating system, so "
             "pip can't add packages to it."
         )
     else:
         reason = (
-            "OpenAdapt needs Python 3.10\u20133.12. This is Python "
+            "OpenAdapt needs Python 3.11\u20133.12. This is Python "
             f"{current}, which the OpenAdapt engine doesn't support yet, so "
             "only the launcher is installed."
         )
@@ -591,7 +591,7 @@ def _rerun_with_supported_python() -> None:
     """Rerun this command with Python 3.12 under ``uvx``; return if it can't.
 
     ``uvx openadapt@latest quickstart`` on Python 3.13 or newer installs only
-    the launcher (the engine needs 3.10 to 3.12). uv can fetch 3.12 itself,
+    the launcher (the engine needs 3.11 or 3.12). uv can fetch 3.12 itself,
     so the same command runs again with ``--python 3.12`` and its exit code
     becomes this one's. Elsewhere this returns and the caller prints the fix.
     """
@@ -603,7 +603,7 @@ def _rerun_with_supported_python() -> None:
     argv, shown = rerun
     current = "{}.{}".format(*_python_minor())
     click.echo(
-        f"Python {current} can't run the OpenAdapt engine (it needs 3.10 to "
+        f"Python {current} can't run the OpenAdapt engine (it needs 3.11 or "
         f"3.12), so this runs it with Python 3.12:\n  {shown}",
         err=True,
     )
@@ -1482,14 +1482,14 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
     if not _python_supported():
         click.echo(
             f"  [UNSUPPORTED] Python {platform.python_version()}; the OpenAdapt "
-            "engine supports Python 3.10\u20133.12"
+            "engine supports Python 3.11\u20133.12"
         )
         for line in _python_fix().splitlines():
             click.echo(f"     {line}")
         # The engine and Playwright can't install on this interpreter, so the
         # later checks would only suggest a reinstall that can't help here.
         raise click.ClickException(
-            "Preflight failed. Reinstall OpenAdapt with Python 3.10\u20133.12 "
+            "Preflight failed. Reinstall OpenAdapt with Python 3.11\u20133.12 "
             "as shown above, and then run this command again."
         )
     flow_importable = find_spec("openadapt_flow") is not None
@@ -2315,7 +2315,26 @@ def wrap(command_ctx: click.Context) -> None:
             "Error: this openadapt-flow installation has no wrap command.", err=True
         )
         sys.exit(2)
-    sys.exit(int(wrap_main(list(command_ctx.args)) or 0))
+    sys.exit(int(wrap_main(_wrap_arguments(list(command_ctx.args))) or 0))
+
+
+def _wrap_arguments(parsed: list[str]) -> list[str]:
+    """``wrap``'s arguments with the ``--`` before a wrapped command kept.
+
+    Click consumes ``--``, but ``openadapt wrap --task T -- CMD`` needs it to
+    tell wrap's options from the command's. The process's own argv is used
+    only when it holds exactly the same arguments apart from separators.
+    """
+
+    argv = list(sys.argv[1:])
+    if "wrap" not in argv:
+        return parsed
+    raw = argv[argv.index("wrap") + 1 :]
+    if "--" in raw and [a for a in raw if a != "--"] == [
+        a for a in parsed if a != "--"
+    ]:
+        return raw
+    return parsed
 
 
 @main.command(
@@ -3523,7 +3542,7 @@ def _doctor_uv_tool_command(arguments: str) -> Optional[str]:
     ):
         return None
     major, minor = sys.version_info[:2]
-    py = f"{major}.{minor}" if (major, minor) in ((3, 10), (3, 11), (3, 12)) else "3.12"
+    py = f"{major}.{minor}" if (major, minor) in ((3, 11), (3, 12)) else "3.12"
     flag = " --upgrade" if upgrade else ""
     return f"uv tool install --python {py}{flag} {spec}"
 
@@ -3553,9 +3572,12 @@ def _doctor_macos_permissions() -> list[str]:
         click.echo("  [ERROR] macOS permissions could not be checked.")
         return ["macos-permissions"]
 
+    from openadapt.macos_permissions import control_permission_guidance
+
+    guidance = control_permission_guidance()
     failures = []
     for name, check, pane in (
-        ("Accessibility", client.input_trusted, "Accessibility"),
+        (guidance["label"], client.input_trusted, guidance["label"]),
         (
             "Screen Recording",
             client.capture_trusted,
@@ -3568,7 +3590,17 @@ def _doctor_macos_permissions() -> list[str]:
             failures.append(name)
             click.echo(f"  [ERROR] {name}: permission could not be checked.")
             continue
-        if granted:
+        if name == guidance["label"] and guidance["setup_mode"] != "legacy":
+            if not granted:
+                failures.append(name)
+            state = "WARN" if granted else "UNCONFIRMED"
+            detail = "passed" if granted else "did not confirm access"
+            click.echo(
+                f"  [{state}] {name}: AX process trust preflight {detail}; "
+                "this does not verify access to the selected app. "
+                + guidance["instructions"]
+            )
+        elif granted:
             click.echo(f"  [OK] {name}: permission is granted.")
         else:
             failures.append(name)
@@ -3681,11 +3713,11 @@ def doctor(backend: str | None, install_browser: bool, recording: bool):
         # Every later check would report the engine as missing and suggest a
         # reinstall that can't help on this interpreter. Say what will.
         click.echo(
-            "  [UNSUPPORTED] The OpenAdapt engine supports Python 3.10\u20133.12."
+            "  [UNSUPPORTED] The OpenAdapt engine supports Python 3.11\u20133.12."
         )
         click.echo(_python_remedy())
         raise click.ClickException(
-            "System check failed. Reinstall OpenAdapt with Python 3.10\u20133.12 "
+            "System check failed. Reinstall OpenAdapt with Python 3.11\u20133.12 "
             "as shown above, and then run this command again."
         )
 

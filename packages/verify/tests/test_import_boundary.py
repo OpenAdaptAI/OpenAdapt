@@ -82,6 +82,7 @@ def test_every_verify_module_imports_without_the_vision_stack(tmp_path):
         import openadapt_verify.audit, openadapt_verify.audit_demo
         import openadapt_verify.quickstart, openadapt_verify.shadow
         import openadapt_verify.mcp
+        import openadapt_verify.surgical_heal
         import openadapt_verify.tx
         from openadapt_verify import WriteGuard  # the adapters' shared guard
         # Flow's verifier core, as named in the slim-install contract.

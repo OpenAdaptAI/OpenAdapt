@@ -1,7 +1,7 @@
 # openadapt-tray
 
 [![PyPI version](https://img.shields.io/pypi/v/openadapt-tray.svg)](https://pypi.org/project/openadapt-tray/)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/tray/LICENSE)
 
 openadapt-tray puts OpenAdapt in the macOS menu bar or the Windows and Linux

@@ -1,6 +1,10 @@
 # CHANGELOG
 
-## v0.2.1 (2026-11-22)
+## v0.2.1 (2026-11-23)
+
+Published after [#2589](https://github.com/OpenAdaptAI/OpenAdapt/pull/2589)
+and [#2600](https://github.com/OpenAdaptAI/OpenAdapt/pull/2600): its first
+main push runs failed on unrelated Flow jobs.
 
 - Accept openadapt-flow 4: the openadapt-flow requirement and the `openai`,
   `claude` and `mcp` extras now allow `<5` (was `<4`), so openadapt-verify
