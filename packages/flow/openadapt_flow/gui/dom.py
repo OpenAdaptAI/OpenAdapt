@@ -137,6 +137,9 @@ OBSERVE_JS = r"""(textCap) => {
       if (el.tagName === 'INPUT') return clean(el.value);
       return clean(el.textContent) || clean(el.getAttribute('title'));
     }
+    // ARIA widgets other than native inputs take their name from content.
+    if (!['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName)
+        && ['checkbox', 'switch', 'radio'].includes(role)) return clean(el.textContent);
     return clean(el.getAttribute('title')) || clean(el.getAttribute('placeholder'))
       || clean(el.getAttribute('name'));
   };
@@ -164,7 +167,7 @@ OBSERVE_JS = r"""(textCap) => {
       for (const [sel, kind] of KINDS) {
         if (n.matches(sel)) {
           out.unshift({handle: path(n), kind, name: containerName(n, kind),
-                       text: clean(n.innerText).slice(0, 300)});
+                       text: clean(n.innerText).slice(0, 2000)});
           break;
         }
       }

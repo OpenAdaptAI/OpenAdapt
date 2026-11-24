@@ -1,0 +1,61 @@
+{
+ "scenario": "dol-no-persist",
+ "rep": 1,
+ "fault": "no_persist",
+ "note": "The page shows success, then the new contact is removed.",
+ "task": {
+  "lastname": "Ivanova",
+  "firstname": "Daria",
+  "poste": "Storekeeper",
+  "phone": "555-0206",
+  "email": "d.ivanova@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/card.php?id=75",
+ "agent_s": 75.6,
+ "claim": {
+  "status": "not_done",
+  "line": "RESULT: NOT DONE Clicked ADD but the page then showed \"Record not found\" with no navigation, so I couldn't confirm the contact was saved or find its id.",
+  "claim_line": true,
+  "final_text": "I can't confirm that the contact was saved. After I clicked ADD on the new contact form, Dolibarr showed a blank page reading \"Record not found.\" That page has no menu or address bar. Going back, reloading, and typing a URL all failed, so I couldn't open the contacts list to check. I didn't submit the form a second time, to avoid creating a duplicate.\n\nThe form was filled with Last name Ivanova, First name Daria, Job position Storekeeper, Bus. phone 555-0206 and Email d.ivanova@example.invalid. The Third-party field was left empty and everything else was left as it was.\n\nRESULT: NOT DONE Clicked ADD but the page then showed \"Record not found\" with no navigation, so I couldn't confirm the contact was saved or find its id."
+ },
+ "model_calls": 15,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "no new record"
+  ],
+  "new": [],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": true,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795248117.362,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 39
+  },
+  {
+   "t": 1795248142.581,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "no_persist",
+   "status": 302,
+   "accepted": true,
+   "after_save": "removed 1 new record(s)",
+   "ms": 1507
+  }
+ ],
+ "outcome": "safe_stop",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

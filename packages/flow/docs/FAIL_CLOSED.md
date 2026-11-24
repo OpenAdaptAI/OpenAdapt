@@ -293,6 +293,8 @@ Done:
 - [x] `tx/wire_tap.relay_redirect_location` (C6): registered after #2470.
 - [x] `gui.steps.judge_step` (C3 C5): new. A commit holds only on exactly
   the demonstrated writes; an unlisted step role is not checked.
+- [x] `gui.attestations.judge_attestations` (C1 C2 C5): new. The plan's boxes
+  are the obligations; a box the plan never saw is unexpected.
 - [x] `verify_draft.judge_case` (C3 C5): admission cases settle on the verdict
   kernel via allow-listed outcome maps; untestable, error, or unknown codes
   never hold.

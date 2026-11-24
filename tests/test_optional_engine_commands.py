@@ -9,6 +9,7 @@ from openadapt import cli
 
 _COMMANDS = (
     ("wrap", ("openadapt_flow.wrap.cli",), []),
+    ("test", ("openadapt_flow.agent_test.cli",), []),
     ("agent", ("openadapt_agent.cli",), []),
     ("seal", ("openadapt_agent.seal_cli", "openadapt_agent.cli"), ["seal"]),
     ("verify draft", ("openadapt_flow.verify_draft.draft",), []),
