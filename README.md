@@ -13,8 +13,11 @@ The open-source, verified execution layer for computer-use agents.
 </div>
 
 A computer-use agent looks at the screen and chooses every click again, on
-every run. OpenAdapt lets your agent, or a person, do a task once in a web,
-Windows, macOS, Linux or remote-desktop app. It compiles that run into a program,
+every run. OpenAdapt lets a person record a task (once for a simple path, or a
+few times with `openadapt compile --induce` to cover variations), or lets an AI
+agent perform it once while OpenAdapt records it, ideally on test data, in a
+web, Windows, macOS, Linux or remote-desktop app. It compiles the demonstration
+into a program,
 and your agent calls the program as one tool. The program runs with no model
 calls and sends no screenshots anywhere. It confirms the right record before
 each save, checks the save after it, and returns a plain outcome that says
@@ -62,7 +65,7 @@ all 30 bad saves, and the read-back caught all 30
 
 | Mode | What happens | Model calls |
 |---|---|---|
-| **Explore** | Your agent, or a person, does the task once while OpenAdapt records every action. The save is read back before anything compiles. | Your agent's, on your own key |
+| **Explore** | A person records the task (once, or several times with `openadapt compile --induce` for variations), or an AI agent runs it once while OpenAdapt records every action, ideally on test data. The save is read back before anything compiles. | Your agent's, on your own key |
 | **Run** | The compiled program repeats the task with new inputs. It checks the record before each save and reads it back after. | None |
 | **Repair** | When the app changes, the run stops before saving. An agent shows the fix, the program tries it up to the save without saving, and a person approves it. | Only when something changed, on your own key |
 
@@ -148,7 +151,7 @@ The [quickstart tutorial](https://docs.openadapt.ai/tutorials/quickstart/) walks
 ### Compile your agent's run
 
 Your agent (Claude or OpenAI computer use, or your own loop, on your own model
-key) does the task once while OpenAdapt records it. A person reviews and admits
+key) does the task once while OpenAdapt records it, ideally on test data. A person reviews and admits
 the draft program, or a registered agent admits it under a policy a person
 signed. After that, the program runs instead of the agent.
 
@@ -318,7 +321,7 @@ have the details.
 
 ```mermaid
 flowchart LR
-    S["Record, or let an agent do it once"] --> C["Compile"] --> Q["Certify and qualify"] --> A["Admit"] --> R["Run with checks"]
+    S["Demonstrate (human or AI agent)"] --> C["Compile"] --> Q["Certify and qualify"] --> A["Admit"] --> R["Run with checks"]
     R -.->|"stopped: approve a fix"| C
 ```
 
