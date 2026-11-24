@@ -1,14 +1,16 @@
-"""Drift-oracle: the optional VLM state-verifier that may CONFIRM a
-render-drift-sensitive postcondition which deterministically false-failed.
+"""Drift-oracle: the optional VLM state-verifier asked about a
+render-drift-sensitive postcondition which failed deterministically.
 
-Veto-safe by construction — these tests pin that:
-* only a confident "yes" rescues; "no"/"uncertain"/outage keep the halt,
-* structural / text_absent postconditions are NEVER rescued,
-* every call and rescue is recorded on the StepResult for the report,
+Its answer is a hint for the person who reviews the halt, never a pass. These
+tests pin that:
+* a confident "yes" is recorded as a hint, and the postcondition stays failed;
+  "no"/"uncertain"/outage record nothing,
+* structural / text_absent postconditions are never asked about,
+* every call and hint is recorded on the StepResult for the report,
 * with no verifier configured (the default) behaviour is unchanged,
-* an irreversible or effect-bearing step is never rescued: its failed
-  postcondition stays failed (a run with no handler halts with transaction
-  outcome RECONCILIATION_REQUIRED), while a navigation step keeps the rescue.
+* an irreversible or effect-bearing step never asks the oracle; a run with no
+  handler halts at a write with transaction outcome RECONCILIATION_REQUIRED,
+  and a navigation step halts too, with the hint on its result.
 """
 
 from __future__ import annotations
@@ -77,6 +79,8 @@ class _Verifier:
     """Scripted state-verifier. ``answer`` is 'yes'/'no'/'uncertain' or 'boom'
     to raise (simulate an outage the client failed to swallow)."""
 
+    MAY_EGRESS = True  # an appliance verifier: the frame leaves the box
+
     def __init__(self, answer: str):
         self.answer = answer
         self.calls = 0
@@ -119,8 +123,13 @@ def _text_present_pc(text: str = "Patient list") -> Postcondition:
 
 def _check(vision, verifier, pc, tmp_path, step=None):
     rp = Replayer(
-        _Backend(), vision=vision, state_verifier=verifier, poll_interval_s=0.0
+        _Backend(),
+        vision=vision,
+        state_verifier=verifier,
+        allow_model_grounding=True,
+        poll_interval_s=0.0,
     )
+    rp._egress.bind_run(tmp_path / "run")  # off-box frames need a ledger
     step = step if step is not None else _step(pc)
     result = StepResult(step_id=step.id, intent=step.intent, ok=False)
     ok, _frame, failed = rp._check_postconditions(step, _png(), tmp_path, {}, result)
@@ -130,11 +139,11 @@ def _check(vision, verifier, pc, tmp_path, step=None):
 # --------------------------------------------------------------------------
 
 
-def test_confident_yes_rescues_a_drifted_text_postcondition(tmp_path):
+def test_confident_yes_is_a_hint_not_a_pass(tmp_path):
     vision = _Vision(present=set())  # "Patient list" not readable (drift)
     verifier = _Verifier("yes")
     ok, failed, result = _check(vision, verifier, _text_present_pc(), tmp_path)
-    assert ok is True and failed == []
+    assert ok is False and failed == ["text_present 'Patient list'"]
     assert result.postcondition_drift_rescues == ["text_present 'Patient list'"]
     assert result.drift_oracle_calls == 1
     assert verifier.calls == 1
@@ -179,7 +188,7 @@ def test_text_absent_is_never_rescued(tmp_path):
     assert result.drift_oracle_calls == 0
 
 
-def test_region_stable_is_rescuable(tmp_path):
+def test_region_stable_yes_is_only_a_hint(tmp_path):
     pc = Postcondition(
         kind=PostconditionKind.REGION_STABLE,
         region=(10, 10, 40, 20),
@@ -187,7 +196,8 @@ def test_region_stable_is_rescuable(tmp_path):
         timeout_s=0.0,
     )
     ok, failed, result = _check(_Vision(set()), _Verifier("yes"), pc, tmp_path)
-    assert ok is True and failed == []
+    assert ok is False and failed
+    assert len(result.postcondition_drift_rescues) == 1
     assert result.drift_oracle_calls == 1
 
 
@@ -278,7 +288,11 @@ def _run(tmp_path, steps, verifier, workflow=None):
     ]
     backend = FakeBackend()
     report = Replayer(
-        backend, vision=vision, state_verifier=verifier, poll_interval_s=0.0
+        backend,
+        vision=vision,
+        state_verifier=verifier,
+        allow_model_grounding=True,
+        poll_interval_s=0.0,
     ).run(
         workflow if workflow is not None else Workflow(name="wf", steps=steps),
         bundle_dir=bundle,
@@ -289,7 +303,6 @@ def _run(tmp_path, steps, verifier, workflow=None):
 
 def test_run_halts_with_reconciliation_when_oracle_says_yes_on_a_write(tmp_path):
     verifier = _Verifier("yes")
-    navigate = _step(_text_present_pc("Claims"), step_id="nav")
     submit = _step(
         _text_present_pc("Claim submitted"),
         step_id="submit",
@@ -298,13 +311,10 @@ def test_run_halts_with_reconciliation_when_oracle_says_yes_on_a_write(tmp_path)
         risk="irreversible",
     )
     after = _step(_text_present_pc("Done"), step_id="after")
-    report, backend = _run(tmp_path, [navigate, submit, after], verifier)
+    report, backend = _run(tmp_path, [submit, after], verifier)
 
     assert report.success is False
-    nav_result, submit_result = report.results[:2]
-    # The navigation step was rescued as before.
-    assert nav_result.ok is True
-    assert nav_result.postcondition_drift_rescues == ["text_present 'Claims'"]
+    (submit_result,) = report.results
     # The write was delivered, its screen check failed, and the oracle was
     # never asked.
     assert submit_result.ok is False
@@ -312,10 +322,10 @@ def test_run_halts_with_reconciliation_when_oracle_says_yes_on_a_write(tmp_path)
     assert submit_result.drift_oracle_calls == 0
     assert submit_result.postcondition_drift_rescues == []
     assert "Postconditions failed" in (submit_result.error or "")
-    assert verifier.calls == 1  # the navigation step only
+    assert verifier.calls == 0
     # Fail-closed: the run stops at the write and never reaches the next step.
-    assert [r.step_id for r in report.results] == ["nav", "submit"]
-    assert len(backend.actions) == 2
+    assert [r.step_id for r in report.results] == ["submit"]
+    assert len(backend.actions) == 1
     # The write may have landed, so a person checks the record. The run never
     # says it stopped before saving.
     assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
@@ -325,7 +335,7 @@ def test_run_halts_with_reconciliation_when_oracle_says_yes_on_a_write(tmp_path)
     assert "Stopped before saving" not in plain.label + plain.meaning
 
 
-def test_run_keeps_the_rescue_on_navigation_steps(tmp_path):
+def test_run_halts_on_a_navigation_step_the_oracle_says_holds(tmp_path):
     verifier = _Verifier("yes")
     steps = [
         _step(_text_present_pc("Patient list"), step_id="nav1"),
@@ -338,14 +348,18 @@ def test_run_keeps_the_rescue_on_navigation_steps(tmp_path):
     ]
     report, backend = _run(tmp_path, steps, verifier)
 
-    assert report.success is True
-    assert [r.postcondition_drift_rescues for r in report.results] == [
-        ["text_present 'Patient list'"],
-        ["text_present 'Search'"],
+    # The model's "yes" is a hint on the halted step, not a pass: the run
+    # stops at the first step for a person to review.
+    assert report.success is False
+    assert [r.step_id for r in report.results] == ["nav1"]
+    assert report.results[0].ok is False
+    assert report.results[0].postcondition_drift_rescues == [
+        "text_present 'Patient list'"
     ]
-    assert [r.drift_oracle_calls for r in report.results] == [1, 1]
-    assert verifier.calls == 2
-    assert len(backend.actions) == 2
+    assert report.results[0].drift_oracle_calls == 1
+    assert report.model_calls == 1
+    assert verifier.calls == 1
+    assert len(backend.actions) == 1
 
 
 def _program_with_handler(step: Step) -> Workflow:

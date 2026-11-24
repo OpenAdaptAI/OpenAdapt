@@ -1,0 +1,27 @@
+{
+  "case_id": "hl-s06",
+  "facts": {
+    "applicant.date_of_birth": "1969-04-05",
+    "applicant.email": "wren.a@example.test",
+    "applicant.first_name": "Wren",
+    "applicant.last_name": "Achterberg",
+    "applicant.phone": "314-555-0126",
+    "coverage.deductible": 1000,
+    "coverage.effective_date": "2026-12-15",
+    "coverage.liability_limit": 300000,
+    "history.prior_claims_5yr": 0,
+    "history.prior_policy_number": "HM-120577",
+    "property.address_line1": "1402 Linden Terrace",
+    "property.city": "Kirkwood",
+    "property.construction_quality": "Standard",
+    "property.exterior_wall": "brick veneer",
+    "property.has_pool": false,
+    "property.roof_material": "Architectural Shingle",
+    "property.roof_year": 2014,
+    "property.square_feet": 1900,
+    "property.state": "MO",
+    "property.stories": "1",
+    "property.year_built": 1958,
+    "property.zip": "63122"
+  }
+}

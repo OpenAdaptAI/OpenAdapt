@@ -1,0 +1,37 @@
+# Bridges packages/flow/benchmark/openemr_local (OpenEMR 8.0.0.3 + MariaDB 11.8)
+# Synthetic test data only.
+services:
+  mysql:
+    image: mariadb:11.8
+    restart: "no"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${OPENEMR_DB_ROOT_PW:-openemr_synthetic_root}
+      MYSQL_DATABASE: openemr
+      MYSQL_USER: openemr
+      MYSQL_PASSWORD: ${OPENEMR_DB_PW:-openemr_synthetic_pw}
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  openemr:
+    image: openemr/openemr:8.0.0.3
+    restart: "no"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${OPENEMR_HTTP_PORT:-18300}:80"
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_ROOT_PASS: ${OPENEMR_DB_ROOT_PW:-openemr_synthetic_root}
+      MYSQL_USER: openemr
+      MYSQL_PASS: ${OPENEMR_DB_PW:-openemr_synthetic_pw}
+      OE_USER: admin
+      OE_PASS: ${OPENEMR_ADMIN_PW:-pass}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/interface/login/login.php?site=default"]
+      interval: 15s
+      timeout: 5s
+      retries: 20

@@ -1,0 +1,1747 @@
+{
+ "environment": "zenbook WSL Ubuntu 24.04, headless Chromium via Playwright, 2026-11-21",
+ "summary": {
+  "reference_human": {
+   "scored_cases": 32,
+   "correct": 32,
+   "wrong": 0,
+   "not_submitted": 0,
+   "clean_cases": 12,
+   "clean_cases_correct": 12,
+   "dev_correct": true
+  },
+  "naive_filler": {
+   "scored_cases": 32,
+   "correct": 13,
+   "wrong": 18,
+   "not_submitted": 1,
+   "clean_cases": 12,
+   "clean_cases_correct": 12,
+   "dev_correct": true
+  }
+ },
+ "runs": [
+  {
+   "portal": "cobalt",
+   "case_id": "cr-dev",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 7.8,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ]
+  },
+  {
+   "portal": "cobalt",
+   "case_id": "cr-s01",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 12.1,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ]
+  },
+  {
+   "portal": "cobalt",
+   "case_id": "cr-s02",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 15.9,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "additional_drivers"
+   ],
+   "wrong_details": [
+    {
+     "field": "additional_drivers",
+     "expected": [],
+     "stored": [
+      {
+       "first_name": "Corin",
+       "last_name": "Ashdown",
+       "dob": "1979-08-15",
+       "relationship": "Spouse"
+      }
+     ]
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "prefill_conflict"
+   ]
+  },
+  {
+   "portal": "cobalt",
+   "case_id": "cr-s03",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 11.1,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "model"
+   ],
+   "wrong_details": [
+    {
+     "field": "model",
+     "expected": "Corsa",
+     "stored": "Corsa Sport"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "typeahead_ambiguous"
+   ]
+  },
+  {
+   "portal": "cobalt",
+   "case_id": "cr-s04",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 11.2,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "prefill_agree"
+   ]
+  },
+  {
+   "portal": "cobalt",
+   "case_id": "cr-s05",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 8.4,
+   "events": [
+    "session_expired"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "use",
+    "commute_miles"
+   ],
+   "wrong_details": [
+    {
+     "field": "use",
+     "expected": "Commute",
+     "stored": "Pleasure"
+    },
+    {
+     "field": "commute_miles",
+     "expected": 22,
+     "stored": ""
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "session_timeout",
+    "summary_differs"
+   ]
+  },
+  {
+   "portal": "cobalt",
+   "case_id": "cr-s06",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 7.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "rideshare",
+    "garaging_state"
+   ],
+   "wrong_details": [
+    {
+     "field": "rideshare",
+     "expected": "No",
+     "stored": "Yes"
+    },
+    {
+     "field": "garaging_state",
+     "expected": "TN",
+     "stored": "NC"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "typeahead_ambiguous",
+    "unknown_question"
+   ]
+  },
+  {
+   "portal": "cobalt",
+   "case_id": "cr-s07",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 6.3,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ]
+  },
+  {
+   "portal": "cobalt",
+   "case_id": "cr-s08",
+   "filler": "naive",
+   "outcome": "stuck",
+   "seconds": 9.7,
+   "events": [],
+   "submitted": false,
+   "submit_count": 0,
+   "expected_behavior": "needs_operator_answer",
+   "correct": false,
+   "record_correct": false,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [
+    "first_name",
+    "last_name",
+    "dob",
+    "email",
+    "license_state",
+    "marital_status",
+    "additional_drivers",
+    "vehicle_year",
+    "make",
+    "model",
+    "use",
+    "commute_miles",
+    "rideshare",
+    "annual_miles",
+    "garaging_zip",
+    "garaging_city",
+    "garaging_state",
+    "ownership",
+    "lienholder",
+    "bi_limits",
+    "collision_ded",
+    "comp_ded"
+   ],
+   "traps": [
+    "unknown_question",
+    "typeahead_ambiguous"
+   ]
+  },
+  {
+   "portal": "harborline",
+   "case_id": "hl-dev",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 1.9,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "estimator_ok"
+   ]
+  },
+  {
+   "portal": "harborline",
+   "case_id": "hl-s01",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 1.5,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "construction_class"
+   ],
+   "wrong_details": [
+    {
+     "field": "construction_class",
+     "expected": "Frame",
+     "stored": "Fire Resistive"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "recurring_rule",
+    "estimator_ok"
+   ]
+  },
+  {
+   "portal": "harborline",
+   "case_id": "hl-s02",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 1.8,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "construction_class"
+   ],
+   "wrong_details": [
+    {
+     "field": "construction_class",
+     "expected": "Frame",
+     "stored": "Fire Resistive"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "recurring_rule",
+    "prefill_conflict",
+    "estimator_ok"
+   ]
+  },
+  {
+   "portal": "harborline",
+   "case_id": "hl-s03",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 1.1,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "construction_class",
+    "cov_a"
+   ],
+   "wrong_details": [
+    {
+     "field": "construction_class",
+     "expected": "Frame",
+     "stored": "Fire Resistive"
+    },
+    {
+     "field": "cov_a",
+     "expected": 678160,
+     "stored": 680000
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "recurring_rule",
+    "estimator_wrong"
+   ]
+  },
+  {
+   "portal": "harborline",
+   "case_id": "hl-s04",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "estimator_ok"
+   ]
+  },
+  {
+   "portal": "harborline",
+   "case_id": "hl-s05",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.1,
+   "events": [
+    "session_expired"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "construction_class",
+    "roof_material",
+    "deductible"
+   ],
+   "wrong_details": [
+    {
+     "field": "construction_class",
+     "expected": "Frame",
+     "stored": "Fire Resistive"
+    },
+    {
+     "field": "roof_material",
+     "expected": "Metal",
+     "stored": "Asphalt Shingle"
+    },
+    {
+     "field": "deductible",
+     "expected": 1000,
+     "stored": "500"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "recurring_rule",
+    "session_timeout",
+    "summary_differs",
+    "estimator_ok"
+   ]
+  },
+  {
+   "portal": "harborline",
+   "case_id": "hl-s06",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "construction_class"
+   ],
+   "wrong_details": [
+    {
+     "field": "construction_class",
+     "expected": "Masonry Veneer",
+     "stored": "Fire Resistive"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "recurring_rule",
+    "rule_trap",
+    "prefill_agree",
+    "estimator_ok"
+   ]
+  },
+  {
+   "portal": "harborline",
+   "case_id": "hl-s07",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "prefill_agree",
+    "estimator_ok"
+   ]
+  },
+  {
+   "portal": "harborline",
+   "case_id": "hl-s08",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "street",
+    "construction_class",
+    "roof_material"
+   ],
+   "wrong_details": [
+    {
+     "field": "street",
+     "expected": "11842 Old Orchard Mill Rd #7",
+     "stored": "11842 Old Orchard Mill Road Un"
+    },
+    {
+     "field": "construction_class",
+     "expected": "Frame",
+     "stored": "Fire Resistive"
+    },
+    {
+     "field": "roof_material",
+     "expected": "Architectural Shingle",
+     "stored": "Wood Shake"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "recurring_rule",
+    "summary_differs",
+    "prefill_conflict",
+    "estimator_ok"
+   ]
+  },
+  {
+   "portal": "harborline",
+   "case_id": "hl-s09",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.3,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "estimator_ok"
+   ]
+  },
+  {
+   "portal": "pinecrest",
+   "case_id": "pc-dev",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 4.3,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "estimator_ok"
+   ]
+  },
+  {
+   "portal": "pinecrest",
+   "case_id": "pc-s01",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 4.3,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "estimator_ok"
+   ]
+  },
+  {
+   "portal": "pinecrest",
+   "case_id": "pc-s02",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 4.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "dwelling_limit"
+   ],
+   "wrong_details": [
+    {
+     "field": "dwelling_limit",
+     "expected": 1351800,
+     "stored": 1350000
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "estimator_wrong"
+   ]
+  },
+  {
+   "portal": "pinecrest",
+   "case_id": "pc-s03",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 3.2,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "living_area_sqft"
+   ],
+   "wrong_details": [
+    {
+     "field": "living_area_sqft",
+     "expected": 2150,
+     "stored": 23142
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "prefill_conflict",
+    "summary_differs",
+    "estimator_ok"
+   ]
+  },
+  {
+   "portal": "pinecrest",
+   "case_id": "pc-s04",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 1.9,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "prefill_agree",
+    "estimator_ok"
+   ]
+  },
+  {
+   "portal": "pinecrest",
+   "case_id": "pc-s05",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 4.1,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "state"
+   ],
+   "wrong_details": [
+    {
+     "field": "state",
+     "expected": "OR",
+     "stored": "IL"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "typeahead_ambiguous",
+    "estimator_ok"
+   ]
+  },
+  {
+   "portal": "pinecrest",
+   "case_id": "pc-s06",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 3.9,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "stove_installed"
+   ],
+   "wrong_details": [
+    {
+     "field": "stove_installed",
+     "expected": "No",
+     "stored": "Yes"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "estimator_ok"
+   ]
+  },
+  {
+   "portal": "pinecrest",
+   "case_id": "pc-s07",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 4.0,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "estimator_ok"
+   ]
+  },
+  {
+   "portal": "pinecrest",
+   "case_id": "pc-s08",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 3.3,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "prefill_conflict",
+    "estimator_ok"
+   ]
+  },
+  {
+   "portal": "tidewater",
+   "case_id": "tw-dev",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.9,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ]
+  },
+  {
+   "portal": "tidewater",
+   "case_id": "tw-s01",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.7,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ]
+  },
+  {
+   "portal": "tidewater",
+   "case_id": "tw-s02",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.7,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "unit"
+   ],
+   "wrong_details": [
+    {
+     "field": "unit",
+     "expected": "APT 4",
+     "stored": ""
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "summary_differs"
+   ]
+  },
+  {
+   "portal": "tidewater",
+   "case_id": "tw-s03",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 0.8,
+   "events": [
+    "session_expired"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "sqft",
+    "roof_year"
+   ],
+   "wrong_details": [
+    {
+     "field": "sqft",
+     "expected": 2480,
+     "stored": 2150
+    },
+    {
+     "field": "roof_year",
+     "expected": 2020,
+     "stored": 2005
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "prefill_conflict",
+    "session_timeout",
+    "summary_differs"
+   ]
+  },
+  {
+   "portal": "tidewater",
+   "case_id": "tw-s04",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 0.8,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "prefill_agree"
+   ]
+  },
+  {
+   "portal": "tidewater",
+   "case_id": "tw-s05",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 1.6,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "model"
+   ],
+   "wrong_details": [
+    {
+     "field": "model",
+     "expected": "Vida",
+     "stored": "Vida Cross"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "typeahead_ambiguous",
+    "prefill_conflict"
+   ]
+  },
+  {
+   "portal": "tidewater",
+   "case_id": "tw-s06",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.9,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ]
+  },
+  {
+   "portal": "tidewater",
+   "case_id": "tw-s07",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.8,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "short_term_rental"
+   ],
+   "wrong_details": [
+    {
+     "field": "short_term_rental",
+     "expected": "No",
+     "stored": "Yes"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question"
+   ]
+  },
+  {
+   "portal": "cobalt",
+   "case_id": "cr-dev",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 7.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "cobalt",
+   "case_id": "cr-s01",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 7.2,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "cobalt",
+   "case_id": "cr-s02",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 7.2,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "prefill_conflict"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "cobalt",
+   "case_id": "cr-s03",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 7.3,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "typeahead_ambiguous"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "cobalt",
+   "case_id": "cr-s04",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 6.3,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "prefill_agree"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "cobalt",
+   "case_id": "cr-s05",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 10.7,
+   "events": [
+    "session_expired"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "session_timeout",
+    "summary_differs"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "cobalt",
+   "case_id": "cr-s06",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 6.9,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "typeahead_ambiguous",
+    "unknown_question"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "cobalt",
+   "case_id": "cr-s07",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 7.1,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "cobalt",
+   "case_id": "cr-s08",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 5.7,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "typeahead_ambiguous"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "harborline",
+   "case_id": "hl-dev",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 1.6,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "harborline",
+   "case_id": "hl-s01",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 1.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "recurring_rule",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "harborline",
+   "case_id": "hl-s02",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 1.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "recurring_rule",
+    "prefill_conflict",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "harborline",
+   "case_id": "hl-s03",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 1.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "recurring_rule",
+    "estimator_wrong"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "harborline",
+   "case_id": "hl-s04",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 1.9,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "harborline",
+   "case_id": "hl-s05",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 3.5,
+   "events": [
+    "session_expired"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "recurring_rule",
+    "session_timeout",
+    "summary_differs",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "harborline",
+   "case_id": "hl-s06",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 1.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "recurring_rule",
+    "rule_trap",
+    "prefill_agree",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "harborline",
+   "case_id": "hl-s07",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 1.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "prefill_agree",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "harborline",
+   "case_id": "hl-s08",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 1.5,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "recurring_rule",
+    "summary_differs",
+    "prefill_conflict",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "harborline",
+   "case_id": "hl-s09",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 1.9,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "pinecrest",
+   "case_id": "pc-dev",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 4.0,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "pinecrest",
+   "case_id": "pc-s01",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 3.9,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "pinecrest",
+   "case_id": "pc-s02",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 4.1,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "estimator_wrong"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "pinecrest",
+   "case_id": "pc-s03",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.3,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "prefill_conflict",
+    "summary_differs",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "pinecrest",
+   "case_id": "pc-s04",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.1,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "prefill_agree",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "pinecrest",
+   "case_id": "pc-s05",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 4.1,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "typeahead_ambiguous",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "pinecrest",
+   "case_id": "pc-s06",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 4.2,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "pinecrest",
+   "case_id": "pc-s07",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.9,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "pinecrest",
+   "case_id": "pc-s08",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "prefill_conflict",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "tidewater",
+   "case_id": "tw-dev",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.9,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "tidewater",
+   "case_id": "tw-s01",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.7,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "tidewater",
+   "case_id": "tw-s02",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.7,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "summary_differs"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "tidewater",
+   "case_id": "tw-s03",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 1.6,
+   "events": [
+    "session_expired"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "prefill_conflict",
+    "session_timeout",
+    "summary_differs"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "tidewater",
+   "case_id": "tw-s04",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 0.9,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "prefill_agree"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "tidewater",
+   "case_id": "tw-s05",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.7,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "typeahead_ambiguous",
+    "prefill_conflict"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "tidewater",
+   "case_id": "tw-s06",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.8,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "tidewater",
+   "case_id": "tw-s07",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.7,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question"
+   ],
+   "operator_labels_not_seen": []
+  }
+ ]
+}

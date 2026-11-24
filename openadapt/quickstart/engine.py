@@ -228,12 +228,15 @@ class StepTicker:
             self._drain()
 
     def _drain(self) -> None:
+        from openadapt_flow import sealed_set
+
+        # The recording is encrypted as it is written; the recorder runs in
+        # this process, so this reads its event log in memory.
         try:
-            with self._events.open("r", encoding="utf-8") as handle:
-                handle.seek(self._offset)
-                text = handle.read()
-        except FileNotFoundError:
+            raw = sealed_set.read_bytes(self._events)
+        except (OSError, sealed_set.SealedSetError):
             return
+        text = raw[self._offset :].decode("utf-8", errors="replace")
         complete, _, _partial = text.rpartition("\n")
         if not complete and not text.endswith("\n"):
             return
@@ -382,7 +385,7 @@ class EarlyScreenRead:
 
     def _loop(self) -> None:
         while not self._stop.wait(_TICK_S):
-            if self._path.is_file():
+            if _artifact_is_file(self._path):
                 time.sleep(_TICK_S)  # let the writer finish the file
                 digest = _sha256(self._path)
                 self._text = read_screen_text(self._path)
@@ -402,10 +405,22 @@ class EarlyScreenRead:
 def _sha256(path: Path) -> Optional[str]:
     import hashlib
 
+    from openadapt_flow import sealed_set
+
     try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
-    except OSError:
+        return hashlib.sha256(sealed_set.read_bytes(path)).hexdigest()
+    except (OSError, sealed_set.SealedSetError):
         return None
+
+
+def _artifact_is_file(path: Path) -> bool:
+    """Whether a run file exists, encrypted or not."""
+    from openadapt_flow import sealed_set
+
+    try:
+        return sealed_set.is_file(path)
+    except sealed_set.SealedSetError:
+        return False
 
 
 class FlowEngine:
@@ -428,19 +443,28 @@ class FlowEngine:
         self._base_url: Optional[str] = None
         self._pool: Any = None
         self._starter: Any = None
+        self._progress: Callable[[str, bool], None] = lambda _text, _milestone: None
 
     # -- lifetime ---------------------------------------------------------
 
-    def __enter__(self) -> "FlowEngine":
+    def set_progress(self, progress: Callable[[str, bool], None]) -> None:
+        """Report startup stages while the runtime and browser come up."""
+        self._progress = progress
+
+    def _start_runtime(self) -> "FlowEngine":
+        self._progress("[1/4] Loading OpenAdapt runtime", True)
         from openadapt_flow import _prewarm
         from openadapt_flow.backends._browser_process import shared_browser
         from openadapt_flow.mockmed.fault_server import serve
 
         # Load OCR while the browser starts; compiling and every run use it.
+        self._progress("[2/4] Prewarming OCR engine", True)
         _prewarm.start()
         self.root.mkdir(parents=True, exist_ok=True)
         try:
+            self._progress("[3/4] Starting browser engine", True)
             self._stack.enter_context(shared_browser(headless=not self.visible))
+            self._progress("[4/4] Starting synthetic clinic app", True)
             base_url, _db, stop = serve()
             self._stack.callback(stop)
         except BaseException:
@@ -448,6 +472,9 @@ class FlowEngine:
             raise
         self._base_url = base_url
         return self
+
+    def __enter__(self) -> "FlowEngine":
+        return self._start_runtime()
 
     def __exit__(self, *exc: object) -> None:
         self._stack.close()
@@ -815,7 +842,7 @@ class FlowEngine:
         receipts = {
             kind: first.run_dir / f"receipt.{kind}"
             for kind in ("json", "md", "png")
-            if (first.run_dir / f"receipt.{kind}").is_file()
+            if _artifact_is_file(first.run_dir / f"receipt.{kind}")
         }
         result = TutorialResult(
             recording_dir=self.recording_dir,
@@ -905,8 +932,10 @@ def readback_fields(
 ) -> list[tuple[str, Optional[str], Optional[str]]]:
     """``(field, literal, param)`` for the first ``record_written`` check in a bundle."""
 
+    from openadapt_flow import sealed_set
+
     try:
-        workflow = json.loads(workflow_json.read_text(encoding="utf-8"))
+        workflow = json.loads(sealed_set.read_text(workflow_json))
     except (OSError, ValueError):
         return []
     for step in workflow.get("steps") or []:

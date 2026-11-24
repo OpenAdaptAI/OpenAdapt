@@ -1,6 +1,45 @@
 # CHANGELOG
 
 
+## Unreleased
+
+
+
+## v0.32.2 (2026-11-24)
+
+### Bug Fixes
+
+- **desktop**: launch authoring Chromium keychain-safe and close what it owns
+
+
+
+## v0.32.1 (2026-11-23)
+
+### Bug Fixes
+
+- **desktop**: sync control overlay contract pin to openadapt-types 0.24.2
+
+
+
+## v0.32.0 (2026-11-22)
+
+### Features
+
+- **design**: share Desktop overlay and phone theme roles
+
+### Bug Fixes
+
+- **desktop**: preserve pinned theme bytes on checkout
+
+
+## v0.31.3 (2026-11-22)
+
+### Bug Fixes
+
+- **desktop**: use native handlers for browser and external URLs
+
+
+
 ## v0.31.2 (2026-11-22)
 
 ### Bug Fixes

@@ -1,0 +1,26 @@
+{
+  "case_id": "hl-s05",
+  "facts": {
+    "applicant.date_of_birth": "1958-09-18",
+    "applicant.email": "g.marchetti@example.test",
+    "applicant.first_name": "Gideon",
+    "applicant.last_name": "Marchetti",
+    "applicant.phone": "801-555-0151",
+    "coverage.deductible": 1000,
+    "coverage.effective_date": "2026-12-15",
+    "coverage.liability_limit": 300000,
+    "history.prior_claims_5yr": 0,
+    "property.address_line1": "3306 Sego Lily Ln",
+    "property.city": "Provo",
+    "property.construction_quality": "Standard",
+    "property.exterior_wall": "vinyl siding",
+    "property.has_pool": false,
+    "property.roof_material": "Metal",
+    "property.roof_year": 2020,
+    "property.square_feet": 1750,
+    "property.state": "UT",
+    "property.stories": "1",
+    "property.year_built": 1974,
+    "property.zip": "84604"
+  }
+}

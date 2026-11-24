@@ -163,9 +163,17 @@ def test_default_mode_program_continue_encrypts_receipts_and_controls(
     tmp_path, default_mode
 ):
     workflow = _attended_program()
-    _bundle, run, _backend, _store, capability = _run_attended_program_to_pause(
-        tmp_path, workflow
-    )
+    # The run itself is a plaintext run directory (attended continuation of
+    # an encrypted run directory is not built yet, docs/phi_at_rest.md); its
+    # attended state is still encrypted in its own containers.
+    sealing = at_rest.seals_by_default
+    at_rest.seals_by_default = lambda: False  # type: ignore[assignment]
+    try:
+        _bundle, run, _backend, _store, capability = _run_attended_program_to_pause(
+            tmp_path, workflow
+        )
+    finally:
+        at_rest.seals_by_default = sealing  # type: ignore[assignment]
     vision = FakeVision()
     vision.text_results["DONE"] = Match(
         point=(10, 10), region=(0, 0, 20, 20), confidence=1.0

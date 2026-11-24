@@ -37,6 +37,7 @@ FLOW_NAMES = {
     "approve": "approve",
     "approve-sanitized": "approve --sanitized",
     "approver-grant": "setup approver-grant",
+    "at-rest": "setup at-rest",
     "attach-seal": "verify attach-seal",
     "bench": "research flow-bench",
     "benchmark": "research benchmark",

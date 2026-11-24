@@ -1,0 +1,1 @@
+| Repair a pinned bundle: the fix runs the pinned bundle's own qualification campaign on a test copy, keeps every write, effect, identity rule and record check, and is re-admitted with signed lineage (at most three repairs, no revoked key) that the pin verifies | On main | Synthetic | [SELF_REPAIR.md](packages/flow/docs/SELF_REPAIR.md#a-pinned-bundle-re-qualify-and-re-admit) |

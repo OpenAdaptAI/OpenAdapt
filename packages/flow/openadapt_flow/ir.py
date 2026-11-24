@@ -59,12 +59,7 @@ from openadapt_flow.job_authoring import (
     validate_authoring_model_json,
 )
 from openadapt_flow.qualification_faults import FaultMutationReceipt
-from openadapt_flow.records.schema import (
-    FieldRead,
-    FieldSpec,
-    GradeGate,
-    ReadProof,
-)
+from openadapt_flow.records.schema import FieldRead, FieldSpec, GradeGate, ReadProof
 
 if TYPE_CHECKING:
     # Type-only import for the Step.effects forward reference. The RUNTIME
@@ -126,6 +121,7 @@ class ActionKind(str, Enum):
     # does not know the value, refuses the whole bundle instead of driving the
     # wrong window (docs/MULTI_SURFACE.md).
     SWITCH_SURFACE = "switch_surface"
+    SECOND_FACTOR = "second_factor"  # a person's sign-in code (second_factor.py)
 
 
 class Landmark(BaseModel):
@@ -2356,6 +2352,7 @@ class Step(BaseModel):
             " compiler.annotate.FieldLabelAnnotator)."
         ),
     )
+    one_time: Optional[Literal["code", "approval"]] = None  # second_factor.py
     native_selection: Optional[NativeSelectContract] = None
     choice: Optional[OptionChoice] = Field(
         default=None,
@@ -2565,13 +2562,16 @@ class Step(BaseModel):
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         """Keep steps without a selected-record parameter byte-identical."""
         data: dict[str, Any] = handler(self)
-        if self.target_param is None:
-            data.pop("target_param", None)
-        if self.native_selection is None:
-            data.pop("native_selection", None)
-        if self.choice is None:
-            data.pop("choice", None)
+        for key in ("target_param", "one_time", "native_selection", "choice"):
+            if getattr(self, key) is None:
+                data.pop(key, None)
         return data
+
+    @model_validator(mode="after")
+    def _validate_one_time(self) -> "Step":
+        from openadapt_flow.second_factor import check_step_shape
+
+        return check_step_shape(self)
 
     @model_validator(mode="after")
     def _validate_target_param(self) -> "Step":
@@ -5168,10 +5168,9 @@ class StepResult(BaseModel):
     # effects were declared with no verifier configured). None is also used for
     # an explicitly approved but unverified GUI write; the separate
     # ``effect_approved_unverified`` flag makes that risk acceptance visible.
-    # ``effect_results``
-    # holds one human-readable verdict line per declared effect, for the
-    # audit trail (mirrors the identity check's report surface). ZERO model
-    # calls on this path — effect verification reads the system of record.
+    # ``effect_results`` holds one human-readable verdict line per declared
+    # effect for the audit trail. ZERO model calls on this path: effect
+    # verification reads the system of record.
     effect_verified: Optional[bool] = None
     effect_approved_unverified: bool = False
     # A governed identity/effect/postcondition refusal is not an ordinary
@@ -5197,12 +5196,9 @@ class StepResult(BaseModel):
             "continuation_preempted",
         ]
     ] = None
-    # One stable, NON-secret-bearing SHA-256 digest per verified effect, taken
-    # AFTER the effect's ValueExpr contract was bound to THIS run's params
-    # (P0-3). Records THAT a parameterized run verified against its own resolved
-    # record/value/idempotency-key (and lets an auditor confirm two runs
-    # resolved differently) without persisting the underlying value (e.g. a
-    # patient identifier). Empty when the step declared no effects.
+    # One NON-secret SHA-256 digest per verified effect, taken AFTER its
+    # ValueExpr contract was bound to THIS run's params (P0-3): proof a run
+    # verified its own record/value/idempotency key, without the value.
     effect_contract_hashes: list[str] = Field(default_factory=list)
     # How this step's write was PERFORMED: "api" when actuated via an
     # ApiBinding (GUI resolve/act skipped), None when it went through the GUI
@@ -5241,11 +5237,14 @@ class StepResult(BaseModel):
             "as proof that settled-state detection ran."
         ),
     )
-    # Drift-oracle: postconditions that deterministically FAILED but were
-    # confirmed by the optional on-prem VLM state-verifier under render drift
-    # (recorded for audit; empty unless an appliance is configured).
+    # Drift-oracle hints: FAILED postconditions the optional VLM state-verifier
+    # said hold. A hint only: they stay failed and the step halts for a person.
     postcondition_drift_rescues: list[str] = Field(default_factory=list)
     drift_oracle_calls: int = 0  # VLM state-verifier calls this step
+    # Model calls by placement (runtime.model_egress); omitted when zero.
+    identity_vlm_calls: int = Field(default=0, ge=0, exclude_if=lambda v: v == 0)
+    local_identity_vlm_calls: int = Field(default=0, ge=0, exclude_if=lambda v: v == 0)
+    grounder_calls: int = Field(default=0, ge=0, exclude_if=lambda v: v == 0)
     #: The uniform page scale (for example 1.25 under 125% zoom) at which a
     #: ``region_stable`` check found its recorded content, when it was found
     #: only there. Set only when this step's own click showed the same scale.
