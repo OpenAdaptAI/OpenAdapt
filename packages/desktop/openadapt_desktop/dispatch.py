@@ -44,6 +44,7 @@ from urllib.parse import urlsplit
 
 from loguru import logger
 
+from openadapt_desktop.chrome_profile import dispatch_handlers as chrome_profile_handlers
 from openadapt_desktop.config import EngineConfig
 from openadapt_desktop.macos_permissions import control_permission_guidance
 from openadapt_desktop.private_fs import ensure_private_dir
@@ -423,8 +424,7 @@ class EngineDispatcher:
             "portal_devices": self.portal_devices,
             "portal_revoke_device": self.portal_revoke_device,
             "portal_notification": self.portal_notification,
-            # Shadow mode (local only, off by default). Turned on only from
-            # the Desktop window after the person acknowledges the notice.
+            # Shadow mode (local only, off by default; enabled from Desktop window).
             "shadow_status": self.shadow_status,
             "shadow_notice": self.shadow_notice,
             "shadow_enable": self.shadow_enable,
@@ -435,20 +435,17 @@ class EngineDispatcher:
             "shadow_set_work_domains": self.shadow_set_work_domains,
             "shadow_decide": self.shadow_decide,
             "shadow_scan": self.shadow_scan,
-            # Unencrypted patient data on this computer (Flow's ledger).
-            "at_rest_status": self.at_rest_status,
+            "at_rest_status": self.at_rest_status,  # Unencrypted patient data (Flow ledger)
+            **chrome_profile_handlers(self.config.data_dir),  # window wire only
         }
 
     # ------------------------------------------------------- shadow mode
-
     @property
     def shadow(self) -> Any:
         if self._shadow is None:
             from openadapt_desktop.shadow_mode import ShadowModeService
 
-            self._shadow = ShadowModeService(
-                self.config.data_dir, emit=lambda event, data: self.emit(event, data)
-            )
+            self._shadow = ShadowModeService(self.config.data_dir, emit=lambda *a: self.emit(*a))
         if not self._shadow_resumed:
             self._shadow_resumed = True
             self._shadow.resume()

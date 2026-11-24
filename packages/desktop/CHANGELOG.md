@@ -1,6 +1,20 @@
 # CHANGELOG
 
 
+## v0.33.0 (2026-11-23)
+
+### Features
+
+- **desktop**: open recordings and runs in an opted-in Chrome profile
+
+### Bug Fixes
+
+- **desktop**: wait for a slow Chrome debugging server before refusing
+- **desktop**: start Chrome without forking and keep dispatch.py small
+- **desktop**: refuse an elevated Windows launch and record lab evidence
+
+
+
 ## v0.32.3 (2026-11-23)
 
 ### Bug Fixes
