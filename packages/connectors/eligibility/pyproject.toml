@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Optional 270/271 healthcare payer eligibility connector for OpenAdapt Flow"
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.11,<3.13"
 dependencies = [
     "openadapt-flow>=3.4.0,<4",
     "pydantic>=2.0",

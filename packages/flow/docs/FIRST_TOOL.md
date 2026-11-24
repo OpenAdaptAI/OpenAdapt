@@ -6,7 +6,7 @@ This version teaches read-only tasks that end in a downloaded file, such as a CS
 
 ## Set up
 
-You need Python 3.10, 3.11 or 3.12 and one of Claude Code, Cursor, Codex or Gemini CLI.
+You need Python 3.11 or 3.12 and one of Claude Code, Cursor, Codex or Gemini CLI.
 
 ```bash
 python -m pip install --upgrade openadapt

@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -229,7 +229,7 @@ class MenuBuilder:
                 # parse the epoch as UTC and convert, rather than
                 # relying on an implicit naive-local conversion.
                 mtime = datetime.fromtimestamp(
-                    d.stat().st_mtime, tz=timezone.utc
+                    d.stat().st_mtime, tz=UTC
                 ).astimezone()
                 captures.append(
                     CaptureInfo(

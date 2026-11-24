@@ -3,7 +3,7 @@ name = "openadapt-capture"
 version = "1.4.0"
 description = "Record desktop mouse, keyboard, and screen activity, then load it from Python"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT"
 authors = [
     {name = "MLDSAI Inc.", email = "richard@openadapt.ai"}
@@ -13,7 +13,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Python Modules",
@@ -160,7 +159,7 @@ exclude = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
@@ -209,16 +208,9 @@ dev = [
 ]
 
 [tool.uv]
-# Lockfile-only floors for security fixes that require Python 3.11+ (Pillow
-# 13.0.0 is the first release fixing GHSA-332p-7hrc-92wf and the other 2026
-# Pillow advisories; filelock 4.2.1 and dnspython 2.9.2 likewise). Python 3.10
-# keeps the last compatible release until the 3.10 floor is dropped.
-#
 # Lockfile-only floor for a transitive dependency of the `share` extra
-# (magic-wormhole -> autobahn). autobahn 26.10.1 fixes GHSA-hxp9-w8x3-p566 and later advisories but
-# requires Python 3.11+, so Python 3.10 keeps the last compatible release.
+# (magic-wormhole -> autobahn). autobahn 26.10.1 fixes GHSA-hxp9-w8x3-p566 and
+# later advisories.
 constraint-dependencies = [
-    "pillow>=13.0.0; python_full_version >= '3.11'",
-    "filelock>=4.2.1; python_full_version >= '3.11'",
-    "autobahn>=26.10.1; python_full_version >= '3.11'",
+    "autobahn>=26.10.1",
 ]

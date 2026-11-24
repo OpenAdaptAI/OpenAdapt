@@ -5,7 +5,7 @@ description = "Give your agent a program, not a mouse: the open-source, verified
 # The package description is README.md with its lifecycle block swapped for a
 # link to the live record; see hatch_build.py.
 dynamic = ["readme"]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT"
 authors = [
     {name = "Richard Abrich", email = "richard@openadapt.ai"}
@@ -41,7 +41,6 @@ classifiers = [
     "Intended Audience :: Healthcare Industry",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Office/Business",
@@ -61,7 +60,7 @@ classifiers = [
 # <3.13. When this launcher also capped Requires-Python at <3.13, pip on 3.13
 # and 3.14 backtracked to openadapt 1.3.0, the newest release with no cap and
 # no engine dependency, and installed an unrelated pre-compiler CLI with no
-# error. The launcher itself runs on any Python >=3.10, so it now installs
+# error. The launcher itself runs on any Python >=3.11, so it now installs
 # everywhere and gates every engine dependency behind the marker below. On an
 # unsupported interpreter the CLI prints how to install with Python 3.12
 # instead of running. Widen the marker (and the classifiers, the CI guard
@@ -231,23 +230,14 @@ exclude = [
 # make the resolver keep a version with a wheel for the oldest supported
 # Python on each platform CI runs.
 required-environments = [
-    "python_version == '3.10' and sys_platform == 'linux'",
-    "python_version == '3.10' and sys_platform == 'darwin'",
-    "python_version == '3.10' and sys_platform == 'win32'",
-]
-
-# Lockfile-only floors for security fixes that require Python 3.11+ (Pillow
-# 13.0.0 is the first release fixing GHSA-332p-7hrc-92wf and the other 2026
-# Pillow advisories; filelock 4.2.1 and dnspython 2.9.2 likewise). Python 3.10
-# keeps the last compatible release until the 3.10 floor is dropped.
-constraint-dependencies = [
-    "pillow>=13.0.0; python_full_version >= '3.11'",
-    "filelock>=4.2.1; python_full_version >= '3.11'",
+    "python_version == '3.11' and sys_platform == 'linux'",
+    "python_version == '3.11' and sys_platform == 'darwin'",
+    "python_version == '3.11' and sys_platform == 'win32'",
 ]
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
