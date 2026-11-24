@@ -37,6 +37,17 @@ import sys
 from pathlib import Path
 from typing import Any
 
+try:
+    from openadapt_flow.verdict import verdict_site
+except ImportError:  # standalone CI script without openadapt_flow installed
+
+    def verdict_site(site: str, *, classes: str = "") -> Any:
+        def _wrap(fn: Any) -> Any:
+            fn.__verdict_site__ = site
+            return fn
+
+        return _wrap
+
 PHASES = ("approved", "held", "resumed")
 # Every column of a record row. Only the target's note may change, and only
 # in a phase that may write; every other value must equal the seed exactly,
@@ -87,6 +98,7 @@ def _diff_from_seed(
     return problems
 
 
+@verdict_site("governed_safety.check", classes="C5")
 def check(evidence: Any) -> list[str]:
     """Return the safety violations in ``evidence``; empty means safe."""
 
