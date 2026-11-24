@@ -99,16 +99,15 @@ def _page_text(endpoint: str, origin: str) -> str:
             browser.close()
 
 
-def _navigate_open_page(endpoint: str, target_url: str) -> None:
-    playwright = pytest.importorskip("playwright.sync_api")
-    with playwright.sync_playwright() as pw:
-        browser = pw.chromium.connect_over_cdp(endpoint)
-        try:
-            pages = [p for c in browser.contexts for p in c.pages]
-            page = pages[0] if pages else browser.contexts[0].new_page()
-            page.goto(target_url, wait_until="domcontentloaded")
-        finally:
-            browser.close()
+def _require_chrome() -> Path:
+    """Return the installed Google Chrome, or skip when there is none."""
+
+    try:
+        return find_chrome()
+    except ChromeProfileError as exc:
+        if exc.code != "chrome_not_installed":
+            raise
+        pytest.skip("Google Chrome isn't installed on this machine")
 
 
 def _cookies_db_exists(user_data: Path) -> bool:
@@ -119,7 +118,7 @@ def _cookies_db_exists(user_data: Path) -> bool:
 
 @pytest.mark.skipif(not ELEVATED, reason="only an elevated Windows process is refused")
 def test_an_elevated_windows_desktop_refuses_real_chrome(tmp_path: Path) -> None:
-    find_chrome()
+    _require_chrome()
     service = ChromeProfileService(tmp_path / "data")
     profile_id = service.create("Synthetic", notice()["sha256"], True)["profile_id"]
     with pytest.raises(ChromeProfileError) as err:
@@ -134,7 +133,7 @@ def test_an_elevated_windows_desktop_refuses_real_chrome(tmp_path: Path) -> None
     "the Windows lab runs this without administrator rights",
 )
 def test_sign_in_persists_and_desktop_closes_only_its_window(tmp_path: Path, portal: str) -> None:
-    find_chrome()  # the job installs nothing; Chrome must already be there
+    chrome = _require_chrome()  # the job installs nothing; Chrome must already be there
     service = ChromeProfileService(tmp_path / "data")
     n = notice()
     profile_id = service.create("Synthetic portal", n["sha256"], True)["profile_id"]
@@ -159,7 +158,7 @@ def test_sign_in_persists_and_desktop_closes_only_its_window(tmp_path: Path, por
         own_dir = Path(tempfile.mkdtemp(prefix="own-chrome-"))
         own = subprocess.Popen(
             [
-                str(find_chrome()),
+                str(chrome),
                 f"--user-data-dir={own_dir}",
                 "--no-first-run",
                 "--no-default-browser-check",
@@ -179,12 +178,9 @@ def test_sign_in_persists_and_desktop_closes_only_its_window(tmp_path: Path, por
 
         # Reopen: Chrome sends the cookie it kept; nothing was typed again.
         _Portal.seen.clear()
+        # open() itself makes a tab land on the URL (macOS can open the launch
+        # tab blank while another Chrome runs); the test doesn't navigate.
         reopened = service.open(profile_id, f"{portal}/home")
-        if not _wait_for(lambda: ("/home", True) in _Portal.seen, 10.0) and not _Portal.seen:
-            # On macOS, launching a second Chrome instance while another Chrome
-            # process is active can occasionally open without loading the CLI
-            # URL; navigate the already-open tab to /home without re-logging in.
-            _navigate_open_page(reopened["browser_cdp_endpoint"], f"{portal}/home")
         assert _wait_for(lambda: ("/home", True) in _Portal.seen, 20.0), (
             f"expected ('/home', True) in {_Portal.seen!r}"
         )

@@ -42,7 +42,10 @@ not secrets.
    receipt with a refuted line) are `inconsistent`. The predicate may carry an
    optional `evidence_scope` block (`openadapt.evidence-scope/v1`, closed; see
    `openadapt_types/evidence_scope.py`); a receipt without it still verifies.
-   With it, a `VERIFIED` outcome needs the word `VERIFIED` (level 3 or 4, with
+   The block is never `null`, an optional field in it (`basis`,
+   `read_back_at`, `recheck_window_s`) is left out rather than set to `null`,
+   and `wire.protocols_parsed` is always present (`[]` when none): those
+   payloads are not canonical, so `malformed`. With it, a `VERIFIED` outcome needs the word `VERIFIED` (level 3 or 4, with
    a basis) or `CONFIRMED`, and no other outcome may carry either; otherwise
    `inconsistent`.
 4. **Commitments.** `sha256("openadapt.receipt-commitment/v1" 0x00 path 0x00

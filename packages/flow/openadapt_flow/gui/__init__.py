@@ -12,6 +12,8 @@ mechanism depends on a browser or names an application:
   is ticked only on a person's grant, never through a fact.
 - :mod:`openadapt_flow.gui.hub`: a hub page whose sections open in dialogs,
   each section's completion read back from the hub.
+- :mod:`openadapt_flow.gui.repeating`: "add another" groups, added to match
+  the intake and checked instance by instance.
 
 Per-app facts (which control, which words, how many writes) are pack data,
 learned from a demonstration or declared by the pack author. The engine holds

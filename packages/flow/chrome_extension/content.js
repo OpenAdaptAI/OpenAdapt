@@ -49,7 +49,31 @@
     "access token",
     "refresh token",
     "secret",
-    "auth"
+    "auth",
+    "token",
+    "jwt",
+    "bearer",
+    "credential",
+    "credentials",
+    "cred",
+    "csrf",
+    "xsrf",
+    "cookie",
+    "signature",
+    "session id",
+    "sessionid",
+    "private key",
+    "access key",
+    "apikey",
+    "salt",
+    "hash",
+    "tfa",
+    "session key",
+    "jsessionid",
+    "sessid",
+    "phpsessid",
+    "oauth verifier",
+    "authn"
   ];
   // secret-field-vocabulary:end
   const SECRET_PHRASE_TOKENS = SECRET_FIELD_PHRASES.map((p) => p.split(' '));

@@ -49,6 +49,7 @@ that it can't verify, in these cases:
 | `consent_required` | You haven't agreed to the notice, or the notice changed since you agreed. |
 | `profile_in_use` | The profile is already open in a Chrome window Desktop didn't open (`SingletonLock` on macOS, `lockfile` on Windows), or Chrome passed the window to a Chrome that was already running and exited. |
 | `attach_unverified` | Chrome didn't report a debugging address, or `/json/version` on that address doesn't name the browser Desktop started (another port, another browser ID, not loopback, or not Google Chrome). |
+| `page_not_loaded` | Chrome opened and was verified, but no tab loaded the requested address. Desktop accepts a tab Chrome reports at the exact address, or, in a window it just started, the launch tab on that address's origin (its own redirect). Otherwise it opens a tab at the address, which may then redirect anywhere, such as to sign-in. It then asks that tab, over its own debugging connection, for its document address and `readyState`, and requires an http(s) document that isn't Chrome's error page, interactive or complete. An error page refuses at once; a tab that hasn't loaded within the launch timeout refuses then. A window Desktop just started is closed again; an already-open window is left as it was. |
 | `default_profile_refused` | The folder is one of Chrome's own profile folders. |
 | `chrome_not_installed` | Google Chrome isn't in its usual install location. |
 

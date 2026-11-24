@@ -17,6 +17,29 @@
 
 ## Unreleased
 
+- `openadapt verify draft` fix-forward for #2438. A clean admission case whose
+  recheck crashed (for example `database is locked`) now records the recheck
+  as `ERROR` and fails, instead of passing with no recheck. Trace and column
+  masking uses the shared token matcher in `openadapt_flow.secret_field_names`,
+  so `totp`, `otpCode`, `userPin`, `mfa_code`, a `cookie` key and the `code`,
+  `sig` and `X-Amz-Signature` query parameters are masked, and `author`,
+  `author_id` and `session_count` are not. The shared vocabulary gains
+  `token`, `jwt`, `bearer`, `credential(s)`, `cred`, `csrf`, `xsrf`,
+  `cookie`, `signature`, `session id`, `sessionid`, `private key`,
+  `access key`, `apikey`, `salt`, `hash`, `tfa`, `session key`,
+  `jsessionid`, `sessid`, `phpsessid`, `oauth verifier` and `authn`, plus
+  exact names (`code`, `sig`, `sid`, `refresh`, `session`, `authorization`)
+  and suffix names (`session`, `authorization`), so `JSESSIONID`,
+  `sso_session` and `proxy-authorization` stay masked as they were; the
+  Chrome extension copies follow. The earlier substring pattern stays as a
+  floor (so `sessionkey`, `pwdhash` and `authz` stay masked), with an
+  explicit list of false positives (`author`, `session_count`,
+  `authorization_id` ...) sent in clear. The admission
+  record is now signed with this computer's key, and `--check` refuses an
+  unsigned record, an edited record, or one no pinned key signed (`--keys`
+  pins another machine's key). `--check` no longer requires `--trace`,
+  `--task`, `--sandbox` and `--out`.
+
 - Checkbox attestations (`openadapt_flow.gui.attestations`) are declared in
   pack data with the digest of their statement and ticked only on an
   `AttestationGrant` from the person who attests. A grant is its own type, so
@@ -27,6 +50,11 @@
   an editable control is a form, never a confirmation. Each section is opened,
   filled and saved, and its completion is read from its card on the hub after
   the save, with the demonstrated number of writes.
+- Repeating structures (`openadapt_flow.gui.repeating`). An "add another"
+  group is learned from a demonstration. A run adds instances until the count
+  matches the intake, fills them in order and reads each one back by the
+  container it was written into. It never deletes an instance and stops on a
+  prefilled one.
 
 ## v4.0.0 (2026-11-24)
 
@@ -38,6 +66,10 @@
   is set. Released `openadapt` launcher `1.23.0` (`openadapt-flow<4`) reads
   run files via plain paths, so this major bump keeps `1.23.0` on Flow 3.4.0
   while pairing Flow 4.0.0 with `openadapt 1.24.0` (`>=4.0.0,<5.0.0`).
+- **Requires `openadapt-types>=0.24.2,<0.25.0`.** Flow 4.0.0 imports
+  modules and names that first ship in types 0.24.2 (`evidence_scope`,
+  `run_ledger`, `receipt`, `exception_card`, and new `check_level` names). The old `>=0.24.0` floor let an install resolve
+  types 0.24.0 and fail on import.
 
 ### Encryption at rest by default
 

@@ -267,7 +267,49 @@ def build() -> dict[str, dict]:
     _handoff_vectors(vectors)
     _canonical_vectors(vectors)
     _chain_vectors(vectors)
+    _evidence_scope_shape_vectors(add, scoped)
     return vectors
+
+
+def _signed_raw(statement_: dict) -> dict:
+    """An envelope signed by this computer's test key, bypassing the builder."""
+    payload = r.canonical_json(statement_).encode()
+    sig = KEYS["this_computer"].sign(r.pae(r.PAYLOAD_TYPE, payload))
+    return {"payloadType": r.PAYLOAD_TYPE, "payload": base64.b64encode(payload).decode(),
+            "signatures": [{"keyid": IDS["this_computer"], "sig": base64.b64encode(sig).decode()}]}
+
+
+def _evidence_scope_shape_vectors(add, scoped: dict) -> None:
+    """An evidence scope with a null or missing field, signed anyway: malformed.
+
+    The Python verifier refuses each because its payload is not the canonical
+    form (the canonical block leaves optional fields out and always lists
+    wire.protocols_parsed); a verifier without a round trip must refuse them too.
+    """
+
+    refused = {"ok": False, "reason": "malformed", "signer_lines": [r.refusal_line("malformed")]}
+
+    def variant(edit, outcome_scope=None):
+        s = copy.deepcopy(outcome_scope or scoped)
+        edit(s["predicate"])
+        return _signed_raw(s)
+
+    add("evidence-scope-null", "An evidence_scope of null: refused, never read as absent.",
+        variant(lambda p: p.update(evidence_scope=None)), refused)
+    add("evidence-scope-null-read-back-at", "A VERIFIED evidence scope with read_back_at set to null: refused.",
+        variant(lambda p: p["evidence_scope"].update(read_back_at=None)), refused)
+    add("evidence-scope-null-recheck-window", "A VERIFIED evidence scope with recheck_window_s set to null: refused.",
+        variant(lambda p: p["evidence_scope"].update(recheck_window_s=None)), refused)
+    shown = statement("STOPPED")
+    shown["predicate"]["evidence_scope"] = copy.deepcopy(scoped["predicate"]["evidence_scope"])
+    shown["predicate"]["evidence_scope"].update(check_level="same_screen", word="SHOWN")
+    del shown["predicate"]["evidence_scope"]["basis"]
+    add("evidence-scope-null-basis", "A SHOWN evidence scope with basis set to null: refused.",
+        variant(lambda p: p["evidence_scope"].update(basis=None), shown), refused)
+    add("evidence-scope-protocols-null", "An evidence scope with wire.protocols_parsed set to null: refused.",
+        variant(lambda p: p["evidence_scope"]["wire"].update(protocols_parsed=None)), refused)
+    add("evidence-scope-protocols-missing", "An evidence scope whose wire leaves out protocols_parsed: refused.",
+        variant(lambda p: p["evidence_scope"]["wire"].pop("protocols_parsed")), refused)
 
 
 def _chain_vectors(vectors) -> None:
