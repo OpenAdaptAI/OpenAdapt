@@ -12,6 +12,11 @@ from tests.test_api_shape_boundaries import browser as browser
 from tests.test_api_shape_boundaries import site_page as site_page
 
 
+@pytest.fixture(autouse=True)
+def _allow_raw_capture_plaintext(monkeypatch):
+    monkeypatch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "synthetic test fixture")
+
+
 def _observe_admission(monkeypatch):
     calls = []
     original = boundaries.admit_api_step

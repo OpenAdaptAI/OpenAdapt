@@ -1,0 +1,27 @@
+{
+  "case_id": "hl-s02",
+  "facts": {
+    "applicant.date_of_birth": "1966-11-02",
+    "applicant.email": "imogen.saltera@example.test",
+    "applicant.first_name": "Imogen",
+    "applicant.last_name": "Saltera",
+    "applicant.phone": "541-555-0139",
+    "coverage.deductible": 2500,
+    "coverage.effective_date": "2026-12-15",
+    "coverage.liability_limit": 300000,
+    "history.prior_claims_5yr": 1,
+    "history.prior_policy_number": "HM-118204",
+    "property.address_line1": "77 Heron Bend Rd",
+    "property.city": "Eugene",
+    "property.construction_quality": "Standard",
+    "property.exterior_wall": "wood siding",
+    "property.has_pool": false,
+    "property.roof_material": "Asphalt Shingle",
+    "property.roof_year": 2019,
+    "property.square_feet": 1980,
+    "property.state": "OR",
+    "property.stories": "1.5",
+    "property.year_built": 1955,
+    "property.zip": "97405"
+  }
+}

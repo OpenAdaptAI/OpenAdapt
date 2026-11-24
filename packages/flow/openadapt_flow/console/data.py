@@ -530,6 +530,28 @@ def _read_json_opt(
         return None
 
 
+def _read_pending(path: Path) -> Optional[dict[str, Any]]:
+    """The run's pending escalation, in either form: plaintext, or encrypted
+    (the default) and opened through the run's own checkpoint store. Only
+    its status and resume index are shown."""
+    plain = _read_json_opt(path / "pending_escalation.json", root=path)
+    if (
+        plain is not None
+        or _contained_file(path, path / "pending_escalation.json.enc") is None
+    ):
+        return plain
+    try:
+        from openadapt_flow import crypto
+        from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
+
+        pending = CheckpointStore(
+            path, key=crypto.resolve_read_key(None)
+        ).read_pending()
+    except Exception:  # noqa: BLE001 - unreadable: shown as nothing, never guessed
+        return None
+    return pending.model_dump(mode="json") if pending is not None else None
+
+
 def run_summary(root: Path, path: Path) -> RunSummary:
     report, err = _load_report(path)
     paused = any(
@@ -679,7 +701,7 @@ def run_detail(root: Path, path: Path) -> dict[str, Any]:
             if report.halt
             else None
         )
-    pending = _read_json_opt(path / "pending_escalation.json", root=path)
+    pending = _read_pending(path)
     out["pending_escalation"] = (
         {
             "category": "operator_review",

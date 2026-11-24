@@ -1,0 +1,476 @@
+{
+  "harborline": {
+    "portal": "harborline",
+    "keys": {
+      "applicant.date_of_birth": {
+        "type": "date"
+      },
+      "applicant.email": {
+        "type": "str"
+      },
+      "applicant.first_name": {
+        "type": "str"
+      },
+      "applicant.last_name": {
+        "type": "str"
+      },
+      "applicant.phone": {
+        "type": "str"
+      },
+      "coverage.deductible": {
+        "type": "int",
+        "note": "whole dollars"
+      },
+      "coverage.effective_date": {
+        "type": "date"
+      },
+      "coverage.liability_limit": {
+        "type": "int",
+        "note": "whole dollars"
+      },
+      "history.prior_claims_5yr": {
+        "type": "int"
+      },
+      "history.prior_policy_number": {
+        "type": "str"
+      },
+      "property.address_line1": {
+        "type": "str"
+      },
+      "property.city": {
+        "type": "str"
+      },
+      "property.construction_quality": {
+        "type": "enum",
+        "values": [
+          "Economy",
+          "Standard",
+          "Custom",
+          "Premium"
+        ]
+      },
+      "property.exterior_wall": {
+        "type": "enum",
+        "values": [
+          "vinyl siding",
+          "wood siding",
+          "cedar siding",
+          "fiber cement siding",
+          "brick veneer",
+          "solid brick",
+          "stone veneer",
+          "stucco",
+          "log"
+        ]
+      },
+      "property.has_pool": {
+        "type": "bool"
+      },
+      "property.pool_fenced": {
+        "type": "bool"
+      },
+      "property.roof_material": {
+        "type": "enum",
+        "values": [
+          "Asphalt Shingle",
+          "Architectural Shingle",
+          "Metal",
+          "Clay Tile",
+          "Wood Shake",
+          "Slate"
+        ]
+      },
+      "property.roof_year": {
+        "type": "int"
+      },
+      "property.square_feet": {
+        "type": "int"
+      },
+      "property.state": {
+        "type": "enum",
+        "values": [
+          "AZ",
+          "CA",
+          "CO",
+          "ID",
+          "IL",
+          "MA",
+          "MO",
+          "NV",
+          "OR",
+          "PA",
+          "TN",
+          "TX",
+          "UT",
+          "WA"
+        ]
+      },
+      "property.stories": {
+        "type": "enum",
+        "values": [
+          "1",
+          "1.5",
+          "2",
+          "3"
+        ]
+      },
+      "property.year_built": {
+        "type": "int"
+      },
+      "property.zip": {
+        "type": "str"
+      }
+    },
+    "dates": "ISO 8601 (YYYY-MM-DD)",
+    "absent_key": "the fact is unknown; the intake never sends null or empty values"
+  },
+  "cobalt": {
+    "portal": "cobalt",
+    "keys": {
+      "applicant.date_of_birth": {
+        "type": "date"
+      },
+      "applicant.email": {
+        "type": "str"
+      },
+      "applicant.first_name": {
+        "type": "str"
+      },
+      "applicant.last_name": {
+        "type": "str"
+      },
+      "applicant.license_state": {
+        "type": "enum",
+        "values": [
+          "AZ",
+          "CA",
+          "CO",
+          "ID",
+          "IL",
+          "MA",
+          "MO",
+          "NC",
+          "NV",
+          "NH",
+          "NJ",
+          "NM",
+          "NY",
+          "OR",
+          "PA",
+          "TN",
+          "TX",
+          "UT",
+          "WA"
+        ]
+      },
+      "applicant.marital_status": {
+        "type": "enum",
+        "values": [
+          "Single",
+          "Married",
+          "Divorced",
+          "Widowed"
+        ]
+      },
+      "coverage.bi_limits": {
+        "type": "enum",
+        "values": [
+          "25/50",
+          "50/100",
+          "100/300",
+          "250/500"
+        ]
+      },
+      "coverage.collision_deductible": {
+        "type": "int",
+        "note": "whole dollars"
+      },
+      "coverage.comprehensive_deductible": {
+        "type": "int",
+        "note": "whole dollars"
+      },
+      "driver2.date_of_birth": {
+        "type": "date"
+      },
+      "driver2.first_name": {
+        "type": "str"
+      },
+      "driver2.last_name": {
+        "type": "str"
+      },
+      "driver2.relationship": {
+        "type": "enum",
+        "values": [
+          "Spouse",
+          "Domestic partner",
+          "Child",
+          "Parent",
+          "Other"
+        ]
+      },
+      "garaging.city": {
+        "type": "str"
+      },
+      "garaging.state": {
+        "type": "enum",
+        "values": [
+          "AZ",
+          "CA",
+          "CO",
+          "ID",
+          "IL",
+          "MA",
+          "MO",
+          "NC",
+          "NV",
+          "NH",
+          "NJ",
+          "NM",
+          "NY",
+          "OR",
+          "PA",
+          "TN",
+          "TX",
+          "UT",
+          "WA"
+        ]
+      },
+      "garaging.zip": {
+        "type": "str"
+      },
+      "household.driver_count": {
+        "type": "int",
+        "note": "drivers in the household, including the applicant"
+      },
+      "vehicle.annual_miles": {
+        "type": "int"
+      },
+      "vehicle.commute_miles_one_way": {
+        "type": "int"
+      },
+      "vehicle.lienholder": {
+        "type": "str"
+      },
+      "vehicle.make": {
+        "type": "enum",
+        "values": [
+          "Halden",
+          "Kestrel",
+          "Marlowe",
+          "Norvik",
+          "Solenne"
+        ]
+      },
+      "vehicle.model": {
+        "type": "str"
+      },
+      "vehicle.ownership": {
+        "type": "enum",
+        "values": [
+          "own",
+          "finance",
+          "lease"
+        ]
+      },
+      "vehicle.primary_use": {
+        "type": "enum",
+        "values": [
+          "commute",
+          "pleasure",
+          "business"
+        ]
+      },
+      "vehicle.year": {
+        "type": "int"
+      }
+    },
+    "dates": "ISO 8601 (YYYY-MM-DD)",
+    "absent_key": "the fact is unknown; the intake never sends null or empty values"
+  },
+  "pinecrest": {
+    "portal": "pinecrest",
+    "keys": {
+      "coverage.deductible": {
+        "type": "int",
+        "note": "whole dollars"
+      },
+      "coverage.effective_date": {
+        "type": "date"
+      },
+      "history.prior_claims_5yr": {
+        "type": "int"
+      },
+      "property.address_line1": {
+        "type": "str"
+      },
+      "property.burglar_alarm": {
+        "type": "bool"
+      },
+      "property.city": {
+        "type": "str"
+      },
+      "property.construction_type": {
+        "type": "enum",
+        "values": [
+          "wood frame",
+          "brick / masonry",
+          "steel / concrete",
+          "log"
+        ]
+      },
+      "property.finish_level": {
+        "type": "enum",
+        "values": [
+          "builder grade",
+          "semi-custom",
+          "custom",
+          "luxury"
+        ]
+      },
+      "property.heating_type": {
+        "type": "enum",
+        "values": [
+          "gas furnace",
+          "electric baseboard",
+          "heat pump",
+          "oil boiler",
+          "wood stove"
+        ]
+      },
+      "property.roof_material": {
+        "type": "enum",
+        "values": [
+          "asphalt shingle",
+          "metal",
+          "tile",
+          "slate",
+          "wood shake"
+        ]
+      },
+      "property.roof_year": {
+        "type": "int"
+      },
+      "property.square_feet": {
+        "type": "int"
+      },
+      "property.state": {
+        "type": "enum",
+        "values": [
+          "ID",
+          "MA",
+          "NC",
+          "OR",
+          "TN",
+          "WA",
+          "IL",
+          "MO"
+        ]
+      },
+      "property.stories": {
+        "type": "enum",
+        "values": [
+          "1",
+          "2",
+          "3+"
+        ]
+      },
+      "property.year_built": {
+        "type": "int"
+      },
+      "property.zip": {
+        "type": "str"
+      }
+    },
+    "dates": "ISO 8601 (YYYY-MM-DD)",
+    "absent_key": "the fact is unknown; the intake never sends null or empty values"
+  },
+  "tidewater": {
+    "portal": "tidewater",
+    "keys": {
+      "applicant.date_of_birth": {
+        "type": "date"
+      },
+      "applicant.email": {
+        "type": "str"
+      },
+      "applicant.first_name": {
+        "type": "str"
+      },
+      "applicant.last_name": {
+        "type": "str"
+      },
+      "history.prior_claims_3yr": {
+        "type": "int"
+      },
+      "household.driver_count": {
+        "type": "int",
+        "note": "drivers in the household, including the applicant"
+      },
+      "property.address_line1": {
+        "type": "str"
+      },
+      "property.address_line2": {
+        "type": "str"
+      },
+      "property.city": {
+        "type": "str"
+      },
+      "property.occupancy": {
+        "type": "enum",
+        "values": [
+          "Owner occupied",
+          "Secondary",
+          "Seasonal",
+          "Rental"
+        ]
+      },
+      "property.roof_year": {
+        "type": "int"
+      },
+      "property.square_feet": {
+        "type": "int"
+      },
+      "property.state": {
+        "type": "enum",
+        "values": [
+          "AZ",
+          "CA",
+          "CO",
+          "ID",
+          "MA",
+          "ME",
+          "NC",
+          "NH",
+          "OR",
+          "RI",
+          "VT",
+          "WA"
+        ]
+      },
+      "property.year_built": {
+        "type": "int"
+      },
+      "property.zip": {
+        "type": "str"
+      },
+      "vehicle.make": {
+        "type": "enum",
+        "values": [
+          "Halden",
+          "Kestrel",
+          "Marlowe",
+          "Norvik",
+          "Solenne"
+        ]
+      },
+      "vehicle.model": {
+        "type": "str"
+      },
+      "vehicle.year": {
+        "type": "int"
+      }
+    },
+    "dates": "ISO 8601 (YYYY-MM-DD)",
+    "absent_key": "the fact is unknown; the intake never sends null or empty values"
+  }
+}

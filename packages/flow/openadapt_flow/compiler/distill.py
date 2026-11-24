@@ -73,7 +73,6 @@ from __future__ import annotations
 import io
 import json
 import re
-import shutil
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
@@ -131,9 +130,12 @@ def _pixels(path: Path) -> Optional[np.ndarray]:
     import numpy as np
     from PIL import Image
 
-    if not path.exists():
+    from openadapt_flow import sealed_set
+
+    # A recording is encrypted by default: frames read in memory.
+    if not sealed_set.is_file(path):
         return None
-    with Image.open(io.BytesIO(path.read_bytes())) as image:
+    with Image.open(io.BytesIO(sealed_set.read_bytes(path))) as image:
         return np.asarray(image.convert("RGB"))
 
 
@@ -391,7 +393,9 @@ def _corrections(events: list[dict[str, Any]], dropped: dict[int, str]) -> None:
 
 
 def _load(recording_dir: Path) -> list[dict[str, Any]]:
-    lines = (recording_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    from openadapt_flow import sealed_set
+
+    lines = sealed_set.read_text(recording_dir / "events.jsonl").splitlines()
     return [json.loads(line) for line in lines if line.strip()]
 
 
@@ -513,8 +517,39 @@ def distill_recording(recording_dir: Path | str, out_dir: Path | str) -> Distill
         if frames_unchanged(frame(event["i"], "before"), frame(event["i"], "after")):
             dropped[pos] = "no_visible_effect"
 
-    dst.mkdir(parents=True)
-    (dst / "frames").mkdir()
+    from contextlib import nullcontext
+
+    from openadapt_flow import sealed_set
+
+    # An encrypted recording (the default) distills into an encrypted one;
+    # nothing it holds is written in plaintext.
+    sealed_src = sealed_set.is_sealed_path(src)
+    if sealed_src:
+        target: Any = sealed_set.writing(
+            dst, "recording", sealed_set.recording_key() or ""
+        )
+    else:
+        dst.mkdir(parents=True)
+        (dst / "frames").mkdir()
+        target = nullcontext()
+    with target:
+        kept_lines = _write_distilled(src, dst, events, dropped, frames)
+        report = _distill_report(src, dst, events, dropped, kept_lines)
+        sealed_set.write_text(
+            dst / "distill.json", json.dumps(report.to_dict(), indent=2) + "\n"
+        )
+    return report
+
+
+def _write_distilled(
+    src: Path,
+    dst: Path,
+    events: list[dict[str, Any]],
+    dropped: dict[int, str],
+    frames: Path,
+) -> list[str]:
+    from openadapt_flow import sealed_set
+
     kept_lines = []
     for new_i, (pos, event) in enumerate(
         (p, e) for p, e in enumerate(events) if p not in dropped
@@ -522,23 +557,37 @@ def distill_recording(recording_dir: Path | str, out_dir: Path | str) -> Distill
         old_i = event["i"]
         for side in ("before", "after"):
             source_frame = frames / f"{old_i:04d}_{side}.png"
-            if source_frame.exists():
-                shutil.copyfile(
-                    source_frame, dst / "frames" / f"{new_i:04d}_{side}.png"
+            if sealed_set.is_file(source_frame):
+                sealed_set.write_bytes(
+                    dst / "frames" / f"{new_i:04d}_{side}.png",
+                    sealed_set.read_bytes(source_frame),
                 )
         kept_lines.append(json.dumps({**event, "i": new_i, "distilled_from_i": old_i}))
-    (dst / "events.jsonl").write_text(
-        "".join(line + "\n" for line in kept_lines), encoding="utf-8"
+    sealed_set.write_text(
+        dst / "events.jsonl", "".join(line + "\n" for line in kept_lines)
     )
     meta_path = src / "meta.json"
-    if meta_path.exists():
-        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    if sealed_set.is_file(meta_path):
+        meta = json.loads(sealed_set.read_text(meta_path))
         meta["distilled_from"] = meta.get("id")
-        (dst / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
-    for name in sorted(p.name for p in src.iterdir() if p.is_file()):
-        if name not in ("events.jsonl", "meta.json") and not (dst / name).exists():
-            shutil.copyfile(src / name, dst / name)
-    report = DistillReport(
+        sealed_set.write_text(dst / "meta.json", json.dumps(meta, indent=2))
+    top = sorted(p.name for p in sealed_set.list_files(src) if p.parent == src)
+    for name in top:
+        if name not in ("events.jsonl", "meta.json") and not sealed_set.is_file(
+            dst / name
+        ):
+            sealed_set.write_bytes(dst / name, sealed_set.read_bytes(src / name))
+    return kept_lines
+
+
+def _distill_report(
+    src: Path,
+    dst: Path,
+    events: list[dict[str, Any]],
+    dropped: dict[int, str],
+    kept_lines: list[str],
+) -> "DistillReport":
+    return DistillReport(
         source=str(src),
         output=str(dst),
         steps_in=len(events),
@@ -550,7 +599,3 @@ def distill_recording(recording_dir: Path | str, out_dir: Path | str) -> Distill
             for pos, rule in sorted(dropped.items())
         ],
     )
-    (dst / "distill.json").write_text(
-        json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8"
-    )
-    return report

@@ -101,23 +101,24 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 
 | Workflow | Job | PR tier | Queue tier | Post-merge tier |
 |---|---|---|---|---|
-| main.yml | `run-ci` | ubuntu-latest, Python 3.12 | ubuntu-latest, Python 3.12 | ubuntu-latest, Python 3.10 to 3.12, and macos-latest, Python 3.12; nightly and dispatch add macOS 3.10 and 3.11 |
+| main.yml | `run-ci` | ubuntu-latest, Python 3.12 | ubuntu-latest, Python 3.12 | ubuntu-latest, Python 3.11 and 3.12, and macos-latest, Python 3.12; nightly and dispatch add macOS 3.11 |
 | main.yml | `unsupported-python-guard` | no | no | Python 3.13 and 3.14 |
-| packages.yml | `types`, `agent` | Python 3.12 | Python 3.12 | Python 3.10 and 3.12 |
-| packages.yml | `verify-clean-install` | Python 3.12 | Python 3.12 | Python 3.10 and 3.12 |
+| packages.yml | `types`, `agent` | Python 3.12 | Python 3.12 | Python 3.11 and 3.12 |
+| packages.yml | `verify-clean-install` | Python 3.12 | Python 3.12 | Python 3.11 and 3.12 |
 | packages.yml | `flow-lint`, `flow-critical`, `flow-onprem-offline` | yes | yes | yes |
 | ci.yml | `smoke` (with the file-size ratchet against the base and the generated-page check), `ci` | yes | yes | no |
 | packages.yml | `flow-unit` | 3 shards packed by measured time, fast lane (without `nightly_only.txt`) | no | 2 shards, without the `live ` entries (nightly runs them) |
 | packages.yml | `flow-native-census` | no | no | Windows and macOS |
-| packages.yml | `capture-linux` | Python 3.12 | Python 3.12 | Python 3.10 (ubuntu-22.04), 3.11, 3.12 |
+| packages.yml | `capture-linux` | Python 3.12 | Python 3.12 | Python 3.11 (ubuntu-22.04), 3.12 |
 | packages.yml | `capture-macos`, `capture-windows` | no | no | yes |
 | packages.yml | `capture-contract`, `capture-core-record` | yes | yes | yes |
-| packages.yml | `privacy` | Python 3.12 | Python 3.12 | Python 3.10 to 3.12 |
+| packages.yml | `privacy` | Python 3.12 | Python 3.12 | Python 3.11 and 3.12 |
 | packages.yml | `privacy-presidio`, `privacy-contract` | yes | yes | yes |
-| packages.yml | `tray` | Linux, Python 3.12 | Linux, Python 3.12 | Linux 3.10 to 3.12, macOS and Windows 3.12 |
+| packages.yml | `tray` | Linux, Python 3.12 | Linux, Python 3.12 | Linux 3.11 and 3.12, macOS and Windows 3.12 |
 | packages.yml | `tray-contract`, `tray-desktop-ipc`, `program-graph`, `install-weight` | yes | yes | yes |
 | packages.yml | `desktop-release-intent` | yes | no | no |
 | desktop-test.yml | `test-python` | ubuntu-latest, Python 3.12 | ubuntu-latest, Python 3.12 | Linux, macOS and Windows, Python 3.11 and 3.12 |
+| desktop-test.yml | `release-intent-tests` | ubuntu-latest, Python 3.12 | ubuntu-latest, Python 3.12 | Linux, macOS and Windows, Python 3.11 and 3.12 |
 | desktop-test.yml | `qualification-contract` | yes | yes | yes |
 | desktop-build.yml | `frontend`, `python-distribution` | yes | yes | yes |
 | desktop-build.yml | `python-sidecar` | ubuntu-22.04 | no | Linux, macOS 15 arm64 and Windows |

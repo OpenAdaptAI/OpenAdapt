@@ -272,6 +272,14 @@ def test_typed_password_reaches_installed_host_redacted(chrome, server, tmp_path
     page.goto(server + "/form")
     worker.evaluate("() => __openadaptExtensionBackground.setRecording(true)")
     page.wait_for_timeout(300)  # SET_RECORDING reaches the content script
+    # /form contains input[type="password"], so auth-interstitial protection
+    # pauses capture immediately until the operator explicitly resumes.
+    auth_pause = worker.evaluate(
+        "() => __openadaptExtensionBackground.getActiveAuthPause()"
+    )
+    assert auth_pause and auth_pause["paused"] is True
+    worker.evaluate("() => __openadaptExtensionBackground.resumeAfterAuth()")
+    page.wait_for_timeout(200)  # SET_AUTH_PAUSED(false) reaches the content script
     page.type("#password", LIVE_SECRET)
     page.type("#memo", "ok")
     page.click("#go")

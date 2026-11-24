@@ -64,19 +64,26 @@ NO_MATCH_TEXT = "No matches were found."
 
 def cmd_record(a: argparse.Namespace) -> None:
     from benchmark.harness.openemr_local import SyntheticPatientSpec
-    from openadapt_flow.network_capture import NetworkCapture
+    from openadapt_flow.network_capture import NetworkCapture, require_raw_ready
     from openadapt_flow.recorder import Recorder
 
     demo = load_demo()
     out = Path(a.out)
     if out.exists():
         raise SystemExit(f"exists: {out}")
+    if not a.no_capture:
+        # Raw bodies (synthetic data) need OPENADAPT_FLOW_PLAINTEXT_AT_REST.
+        require_raw_ready(out)
     f = SpikeFixture()
     reset_and_seed(f)
     print(json.dumps({"record_gate": wait_quiet()}), flush=True)
     backend, close = demo._BasePlaywrightBackend.launch(f.ui_base_url, headless=True)
     try:
-        capture = None if a.no_capture else NetworkCapture(backend.page.context).start()
+        capture = (
+            None
+            if a.no_capture
+            else NetworkCapture(backend.page.context, bodies="raw").start()
+        )
         demo._preauthenticate_browser(backend, f)
         page = backend.page
         form = demo._form_frame(page)

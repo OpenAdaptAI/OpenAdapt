@@ -15,7 +15,8 @@ sandboxed environments where Chromium TCP sockets are disabled):
    - Child popup window (``window.open('/estimator/popup')``) with a
      body-portaled custom combobox that computes replacement cost and syncs it
      back to the parent wizard.
-   - Independent Quote Summary read-back page with normalized formatting.
+   - Quote Summary page with normalized formatting, read back by the acting
+     session (not an independent check).
 
 2. ``LegacyHospitalQueuePortal`` (Held-Out Application):
    - 2FA login wall + session TTL + read-only ``/api/keepalive`` endpoint.
@@ -23,7 +24,7 @@ sandboxed environments where Chromium TCP sockets are disabled):
    - Duplicate-phone confirmation ``<dialog open>`` modal when registering a
      family member sharing an existing phone number.
    - Mints a unique patient identifier (``HMS-2026-XXXXX``) and exposes an
-     independent ``/hms/search`` read-back lookup screen.
+     ``/hms/search`` lookup screen, read back by the acting session.
 """
 
 from __future__ import annotations
@@ -546,13 +547,13 @@ class StatefulUnderwritingPortal(BasePortalApp):
   <fieldset>
     <legend>Applicant Information</legend>
     <div><label for="{fn_id}">Applicant First Name *</label>
-      <input id="{fn_id}" name="first_name" required value="{html.escape(self.draft['first_name'])}"></div>
+      <input id="{fn_id}" name="first_name" required value="{html.escape(self.draft["first_name"])}"></div>
     <div><label for="{ln_id}">Applicant Last Name *</label>
-      <input id="{ln_id}" name="last_name" required value="{html.escape(self.draft['last_name'])}"></div>
+      <input id="{ln_id}" name="last_name" required value="{html.escape(self.draft["last_name"])}"></div>
     <div><label for="{dob_id}">Date of Birth *</label>
-      <input id="{dob_id}" name="dob" type="date" required value="{html.escape(self.draft['dob'])}"></div>
+      <input id="{dob_id}" name="dob" type="date" required value="{html.escape(self.draft["dob"])}"></div>
     <div><label for="{ph_id}">Primary Phone *</label>
-      <input id="{ph_id}" name="phone" required value="{html.escape(self.draft['phone'])}"></div>
+      <input id="{ph_id}" name="phone" required value="{html.escape(self.draft["phone"])}"></div>
     <div><label for="{ms_id}">Marital Status *</label>
       <select id="{ms_id}" name="marital_status" required>
         <option value="">-- Select --</option>
@@ -560,7 +561,7 @@ class StatefulUnderwritingPortal(BasePortalApp):
         <option value="Married" {"selected" if self.draft["marital_status"] == "Married" else ""}>Married</option>
       </select></div>
     <div><label for="{cl_id}">Prior Losses (5 Years) *</label>
-      <input id="{cl_id}" name="prior_claims_count" required value="{html.escape(str(self.draft['prior_claims_count']))}"></div>
+      <input id="{cl_id}" name="prior_claims_count" required value="{html.escape(str(self.draft["prior_claims_count"]))}"></div>
   </fieldset>
   <fieldset>
     <legend>Prefilled Household Members</legend>
@@ -659,11 +660,11 @@ class StatefulUnderwritingPortal(BasePortalApp):
         cur_pool = self.draft["has_pool"]
         return f"""
         <div><label for="{st_id}">Property Street Address *</label>
-          <input id="{st_id}" name="street_address" required value="{html.escape(self.draft['street_address'])}"></div>
+          <input id="{st_id}" name="street_address" required value="{html.escape(self.draft["street_address"])}"></div>
         <div><label for="{yb_id}">Year Built *</label>
-          <input id="{yb_id}" name="year_built" required value="{html.escape(self.draft['year_built'])}"></div>
+          <input id="{yb_id}" name="year_built" required value="{html.escape(self.draft["year_built"])}"></div>
         <div><label for="{ry_id}">Roof Year Installed *</label>
-          <input id="{ry_id}" name="roof_year" required value="{html.escape(self.draft['roof_year'])}" onchange="triggerPpr()"></div>
+          <input id="{ry_id}" name="roof_year" required value="{html.escape(self.draft["roof_year"])}" onchange="triggerPpr()"></div>
         {extra_roof}
         <div><label for="{pl_id}">Swimming Pool on Premises *</label>
           <select id="{pl_id}" name="has_pool" required onchange="triggerPpr()">
@@ -863,50 +864,50 @@ class StatefulUnderwritingPortal(BasePortalApp):
     def _render_quote_summary(self, saved: dict[str, Any]) -> str:
         hh_names = ", ".join(m["full_name"] for m in saved["household_members"])
         return f"""<!doctype html>
-<html><head><meta charset="utf-8"><title>Quote Summary - {html.escape(saved['quote_number'])}</title></head>
+<html><head><meta charset="utf-8"><title>Quote Summary - {html.escape(saved["quote_number"])}</title></head>
 <body data-authenticated-shell="true" data-screen-id="quote_summary" data-summary-ready="true">
   <h1>Bound-Ready Quote Summary</h1>
   <fieldset>
     <legend>Quote Outputs</legend>
     <div><label for="sum_quote_no">Quote Number</label>
-      <input id="sum_quote_no" readonly value="{html.escape(saved['quote_number'])}"></div>
+      <input id="sum_quote_no" readonly value="{html.escape(saved["quote_number"])}"></div>
     <div><label for="sum_premium">Annual Premium</label>
-      <input id="sum_premium" readonly value="{html.escape(_format_usd(saved['annual_premium_dollars']))}"></div>
+      <input id="sum_premium" readonly value="{html.escape(_format_usd(saved["annual_premium_dollars"]))}"></div>
     <div><label for="sum_rc">Replacement Cost</label>
-      <input id="sum_rc" readonly value="{html.escape(_format_usd(saved['replacement_cost_dollars']))}"></div>
+      <input id="sum_rc" readonly value="{html.escape(_format_usd(saved["replacement_cost_dollars"]))}"></div>
   </fieldset>
   <fieldset>
     <legend>Rated Risk &amp; Coverage Verification</legend>
     <div><label for="sum_fname">Applicant First Name</label>
-      <input id="sum_fname" readonly value="{html.escape(saved['first_name'].title())}"></div>
+      <input id="sum_fname" readonly value="{html.escape(saved["first_name"].title())}"></div>
     <div><label for="sum_lname">Applicant Last Name</label>
-      <input id="sum_lname" readonly value="{html.escape(saved['last_name'].title())}"></div>
+      <input id="sum_lname" readonly value="{html.escape(saved["last_name"].title())}"></div>
     <div><label for="sum_dob">Date of Birth</label>
-      <input id="sum_dob" readonly value="{html.escape(saved['dob'])}"></div>
+      <input id="sum_dob" readonly value="{html.escape(saved["dob"])}"></div>
     <div><label for="sum_phone">Primary Phone</label>
-      <input id="sum_phone" readonly value="{html.escape(_format_us_phone(saved['phone']))}"></div>
+      <input id="sum_phone" readonly value="{html.escape(_format_us_phone(saved["phone"]))}"></div>
     <div><label for="sum_street">Property Street Address</label>
-      <input id="sum_street" readonly value="{html.escape(saved['street_address'].upper())}"></div>
+      <input id="sum_street" readonly value="{html.escape(saved["street_address"].upper())}"></div>
     <div><label for="sum_pool">Swimming Pool on Premises</label>
-      <input id="sum_pool" readonly value="{html.escape(saved['has_pool'])}"></div>
+      <input id="sum_pool" readonly value="{html.escape(saved["has_pool"])}"></div>
     <div><label for="sum_trampoline">Trampoline or Diving Apparatus on Premises</label>
-      <input id="sum_trampoline" readonly value="{html.escape(saved['has_trampoline'] or 'N/A')}"></div>
+      <input id="sum_trampoline" readonly value="{html.escape(saved["has_trampoline"] or "N/A")}"></div>
     <div><label for="sum_claims">Prior Losses (5 Years)</label>
-      <input id="sum_claims" readonly value="{html.escape(str(saved['prior_claims_count']))}"></div>
+      <input id="sum_claims" readonly value="{html.escape(str(saved["prior_claims_count"]))}"></div>
     <div><label for="sum_ded">All-Peril Deductible</label>
-      <input id="sum_ded" readonly value="{html.escape(_format_usd(int(saved['deductible'])))}"></div>
+      <input id="sum_ded" readonly value="{html.escape(_format_usd(int(saved["deductible"])))}"></div>
     <div><label for="sum_marital">Marital Status</label>
-      <input id="sum_marital" readonly value="{html.escape(str(saved['marital_status']))}"></div>
+      <input id="sum_marital" readonly value="{html.escape(str(saved["marital_status"]))}"></div>
     <div><label for="sum_year_built">Year Built</label>
-      <input id="sum_year_built" readonly value="{html.escape(str(saved['year_built']))}"></div>
+      <input id="sum_year_built" readonly value="{html.escape(str(saved["year_built"]))}"></div>
     <div><label for="sum_roof_year">Roof Year</label>
-      <input id="sum_roof_year" readonly value="{html.escape(str(saved['roof_year']))}"></div>
+      <input id="sum_roof_year" readonly value="{html.escape(str(saved["roof_year"]))}"></div>
     <div><label for="sum_roof_update">Roof Update Type</label>
-      <input id="sum_roof_update" readonly value="{html.escape(str(saved['roof_update_type']))}"></div>
+      <input id="sum_roof_update" readonly value="{html.escape(str(saved["roof_update_type"]))}"></div>
     <div><label for="sum_pool_fenced">Pool Fenced</label>
-      <input id="sum_pool_fenced" readonly value="{html.escape(str(saved['pool_fenced']))}"></div>
+      <input id="sum_pool_fenced" readonly value="{html.escape(str(saved["pool_fenced"]))}"></div>
     <div><label for="sum_liability">Liability Limit</label>
-      <input id="sum_liability" readonly value="{html.escape(str(saved['liability_limit']))}"></div>
+      <input id="sum_liability" readonly value="{html.escape(str(saved["liability_limit"]))}"></div>
     <div><label for="sum_hh">Household Members</label>
       <input id="sum_hh" readonly value="{html.escape(hh_names)}"></div>
   </fieldset>
@@ -1263,21 +1264,21 @@ class LegacyHospitalQueuePortal(BasePortalApp):
             <fieldset id="hms-chart-card">
               <legend>Verified Patient Chart</legend>
               <div><label for="rd_uhid">Unique Patient ID</label>
-                <input id="rd_uhid" readonly value="{html.escape(rec['uhid'])}"></div>
+                <input id="rd_uhid" readonly value="{html.escape(rec["uhid"])}"></div>
               <div><label for="rd_name">Patient Full Name</label>
-                <input id="rd_name" readonly value="{html.escape(rec['patient_name'])}"></div>
+                <input id="rd_name" readonly value="{html.escape(rec["patient_name"])}"></div>
               <div><label for="rd_dob">Date of Birth</label>
-                <input id="rd_dob" readonly value="{html.escape(rec['dob'])}"></div>
+                <input id="rd_dob" readonly value="{html.escape(rec["dob"])}"></div>
               <div><label for="rd_sex">Biological Sex</label>
-                <input id="rd_sex" readonly value="{html.escape(rec['sex'])}"></div>
+                <input id="rd_sex" readonly value="{html.escape(rec["sex"])}"></div>
               <div><label for="rd_mobile">Mobile Number</label>
-                <input id="rd_mobile" readonly value="{html.escape(rec['mobile'])}"></div>
+                <input id="rd_mobile" readonly value="{html.escape(rec["mobile"])}"></div>
               <div><label for="rd_dept">Clinical Department</label>
-                <input id="rd_dept" readonly value="{html.escape(rec['department'])}"></div>
+                <input id="rd_dept" readonly value="{html.escape(rec["department"])}"></div>
               <div><label for="rd_visit_type">Visit Type</label>
-                <input id="rd_visit_type" readonly value="{html.escape(rec['visit_type'])}"></div>
+                <input id="rd_visit_type" readonly value="{html.escape(rec["visit_type"])}"></div>
               <div><label for="rd_doc">Consulting Doctor</label>
-                <input id="rd_doc" readonly value="{html.escape(rec['consulting_doctor'])}"></div>
+                <input id="rd_doc" readonly value="{html.escape(rec["consulting_doctor"])}"></div>
             </fieldset>"""
         return f"""<!doctype html>
 <html><head><meta charset="utf-8"><title>HMS - Patient Chart Lookup</title></head>

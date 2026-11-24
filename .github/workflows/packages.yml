@@ -35,15 +35,15 @@
 # files by name, failing if any of them is skipped.
 #
 # openadapt-capture (packages/capture) keeps its own uv.lock, so its jobs run
-# `uv sync --locked` against it: Linux on Python 3.10 (with the native AT-SPI
-# smoke on ubuntu-22.04), 3.11 and 3.12; macOS and Windows unit suites, plus
+# `uv sync --locked` against it: Linux on Python 3.11 (with the native AT-SPI
+# smoke on ubuntu-22.04) and 3.12; macOS and Windows unit suites, plus
 # the live recorder tests on Windows; lint; and the release contract. Flow's
 # `capture` extra installs the in-tree capture, so a capture change also
 # re-runs Flow.
 #
 # openadapt-privacy (packages/privacy) keeps its own uv.lock and runs
 # `uv sync --locked` against it: its suite without Presidio on
-# Python 3.10, 3.11 and 3.12, the full suite with Presidio and the spaCy model
+# Python 3.11 and 3.12, the full suite with Presidio and the spaCy model
 # on 3.12, and lint plus the release contract (changelog matches the version,
 # `uv build`, archive boundary).
 #
@@ -69,7 +69,7 @@
 #
 # openadapt-tray (packages/tray) keeps its own uv.lock and runs `uv sync
 # --locked` against it: its suite on Linux with Python 3.12 for a PR and in
-# the queue, plus 3.10, 3.11, macOS and Windows on main; ruff, the version and changelog
+# the queue, plus 3.11, macOS and Windows on main; ruff, the version and changelog
 # contract, `uv build` and the archive boundary; and Desktop's socket test
 # against this tray client, so a tray change cannot break the protocol
 # without the desktop suite running. A desktop change runs that same test in
@@ -114,6 +114,9 @@ jobs:
     timeout-minutes: 5
     outputs:
       flow: ${{ steps.classify.outputs.flow }}
+      flow_at_rest: ${{ steps.classify.outputs.flow_at_rest }}
+      flow_onprem: ${{ steps.classify.outputs.flow_onprem }}
+      flow_agent_frameworks: ${{ steps.classify.outputs.flow_agent_frameworks }}
       flow_unit_shards: ${{ steps.classify.outputs.flow_unit_shards }}
       types: ${{ steps.classify.outputs.types }}
       agent: ${{ steps.classify.outputs.agent }}
@@ -126,6 +129,7 @@ jobs:
       program_graph: ${{ steps.classify.outputs.program_graph }}
       seal_view: ${{ steps.classify.outputs.seal_view }}
       weight: ${{ steps.classify.outputs.weight }}
+      fast_checks: ${{ steps.classify.outputs.fast_checks }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -145,7 +149,7 @@ jobs:
           if [ "$EVENT_NAME" = pull_request ]; then unit_shards=4; else unit_shards=2; fi
           echo "flow_unit_shards=$unit_shards" >> "$GITHUB_OUTPUT"
           all() {
-            for pkg in flow types agent eligibility verify capture privacy desktop tray program_graph weight; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
+            for pkg in flow flow_at_rest flow_onprem flow_agent_frameworks types agent eligibility verify capture privacy desktop tray program_graph seal_view weight fast_checks; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
             exit 0
           }
           case "$EVENT_NAME" in
@@ -177,6 +181,31 @@ jobs:
           # Flow depends on the in-tree types, and its `capture` extra is tested
           # against the in-tree capture.
           flow="$(hit "^packages/(flow|capture|types)/|$browser_support|$wf")"
+          # Sub-package gates on pull requests and queue groups; pushes to main,
+          # schedules and dispatches follow `flow`.
+          # On PRs, `flow_at_rest` uses a fail-closed deny-list: every Python/code
+          # path under packages/{flow,capture,types}/ selects `flow-default-at-rest`
+          # (including benchmark/*.py, examples/*.py, chrome_extension/native_host/*.py,
+          # tests/*.py, and cli_tasks.py). Only non-Python docs, paper, and static
+          # data/asset files under benchmark/, examples/, and chrome_extension/ skip
+          # the duplicate 4-shard run. An AST test in tests/test_ci_efficiency_gating.py
+          # enforces that zero .py files are excluded and 100% of at-rest importers
+          # select true.
+          if [ "$EVENT_NAME" != pull_request ] && [ "$EVENT_NAME" != merge_group ]; then
+            flow_at_rest="$flow"
+            flow_onprem="$flow"
+            flow_agent_frameworks="$flow"
+          else
+            code_changed="$(grep -Ev '^packages/(flow|capture|types)/(docs/|[^/]*\.md$)' <<<"$changed" || true)"
+            hit_code() { if grep -Eq "$1" <<<"$code_changed"; then echo true; else echo false; fi; }
+            flow_code="$(hit_code "^packages/(flow|capture|types)/|$browser_support|$wf")"
+            at_rest_excluded='^packages/flow/([^/]*\.md$|(docs|paper|benchmark|examples|chrome_extension)/.*\.(json|jsonl|md|tex|bib|log|csv|txt|png|svg|gif|html|css|js)$)'
+            at_rest_changed="$(grep -Ev "$at_rest_excluded" <<<"$code_changed" || true)"
+            hit_at_rest() { if grep -Eq "$1" <<<"$at_rest_changed"; then echo true; else echo false; fi; }
+            flow_at_rest="$(hit_at_rest "^packages/(flow|capture|types)/|$browser_support|$wf")"
+            flow_onprem="$flow_code"
+            flow_agent_frameworks="$flow_code"
+          fi
           # The types package is the leaf: only its own files re-run it.
           types="$(hit "^packages/types/|$wf")"
           # The agent shim is tested against the in-tree core.
@@ -196,8 +225,18 @@ jobs:
           # Any package's metadata, or the launcher's, can change what an
           # install pulls in.
           weight="$(hit "^packages/|^pyproject\.toml$|^openadapt/|^hatch_build\.py$|^scripts/install_weight/|$wf")"
+          # Combined fast-checks job runs lightweight lint/release contracts for
+          # capture, privacy, tray, and (on PRs) desktop-release-intent on one VM.
+          if [ "$capture" = true ] || [ "$privacy" = true ] || [ "$tray" = true ] || { [ "$EVENT_NAME" = pull_request ] && [ "$desktop" = true ]; }; then
+            fast_checks=true
+          else
+            fast_checks=false
+          fi
           {
             echo "flow=$flow"
+            echo "flow_at_rest=$flow_at_rest"
+            echo "flow_onprem=$flow_onprem"
+            echo "flow_agent_frameworks=$flow_agent_frameworks"
             echo "types=$types"
             echo "agent=$agent"
             echo "eligibility=$eligibility"
@@ -209,6 +248,7 @@ jobs:
             echo "program_graph=$program_graph"
             echo "seal_view=$seal_view"
             echo "weight=$weight"
+            echo "fast_checks=$fast_checks"
           } | tee -a "$GITHUB_OUTPUT"
 
   types:
@@ -221,7 +261,7 @@ jobs:
       fail-fast: false
       matrix:
         # PR and queue tiers: one Python; main adds the oldest.
-        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.12"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.11", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/types
@@ -258,7 +298,7 @@ jobs:
       - name: Install uv (for the oldest-Python syntax check)
         if: matrix.python-version == '3.12'
         uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
-      - name: Syntax at the oldest supported Python (3.10)
+      - name: Syntax at the oldest supported Python (3.11)
         if: matrix.python-version == '3.12'
         # The PR lane runs Python 3.12 only, so syntax that needs a newer
         # Python than requires-python allows (a 3.12 f-string, say) passed it
@@ -268,8 +308,8 @@ jobs:
         env:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
         run: |
-          ruff check --isolated --select E9 --target-version py310 .
-          uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
+          ruff check --isolated --select E9 --target-version py311 .
+          uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Test
         run: pytest -q
       - name: Build and verify the public distribution boundary
@@ -288,7 +328,7 @@ jobs:
       fail-fast: false
       matrix:
         # PR and queue tiers: one Python; main adds the oldest.
-        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.12"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.11", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/agent
@@ -326,7 +366,7 @@ jobs:
       - name: Install uv (for the oldest-Python syntax check)
         if: matrix.python-version == '3.12'
         uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
-      - name: Syntax at the oldest supported Python (3.10)
+      - name: Syntax at the oldest supported Python (3.11)
         if: matrix.python-version == '3.12'
         # The PR lane runs Python 3.12 only, so syntax that needs a newer
         # Python than requires-python allows (a 3.12 f-string, say) passed it
@@ -336,8 +376,8 @@ jobs:
         env:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
         run: |
-          ruff check --isolated --select E9 --target-version py310 .
-          uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
+          ruff check --isolated --select E9 --target-version py311 .
+          uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Test
         run: pytest -q
 
@@ -350,7 +390,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.12"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.11", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/connectors/eligibility
@@ -435,7 +475,7 @@ jobs:
           python - <<'PY'
           import xml.etree.ElementTree as ET
           cases = ET.parse("tests.xml").getroot().findall(".//testcase")
-          assert len(cases) == 105, "all independent-store controls must run"
+          assert len(cases) == 131, f"expected 131 independent-store, surgical-heal, and portal-readback controls, got {len(cases)}"
           # The PostgreSQL and MySQL quickstart controls need the database
           # services of verify-clean-install, which runs them; nothing else skips.
           skipped = {c.get("name") for c in cases if c.find("skipped") is not None}
@@ -487,9 +527,9 @@ jobs:
       fail-fast: false
       matrix:
         # PR and queue tiers: Python 3.12. Main, dispatch and nightly add the
-        # oldest supported Python, 3.10. On 2026-11-20 the 3.10 lane passed
+        # oldest supported Python, 3.11. On 2026-11-20 the 3.10 lane passed
         # every one of its 88 pull-request runs and used 168 runner-minutes.
-        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.12"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.11", "3.12"]') }}
     services:
       postgres:
         image: postgres:16-alpine
@@ -614,7 +654,7 @@ jobs:
         run: python scripts/check_engine_generality.py
       - name: Install uv (for the oldest-Python syntax check)
         uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
-      - name: Syntax at the oldest supported Python (3.10)
+      - name: Syntax at the oldest supported Python (3.11)
         # The PR lane runs Python 3.12 only, so syntax that needs a newer
         # Python than requires-python allows (a 3.12 f-string, say) passed it
         # and failed only after merge. Check every file at the minimum.
@@ -623,8 +663,8 @@ jobs:
         env:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
         run: |
-          ruff check --isolated --select E9 --target-version py310 .
-          uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
+          ruff check --isolated --select E9 --target-version py311 .
+          uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Ruff format check
         run: ruff format --check openadapt_flow tests benchmark/harness benchmark/phase_latency
       - name: Mypy
@@ -673,6 +713,180 @@ jobs:
             openadapt_flow/compiler/effect_mining.py \
             openadapt_flow/compiler/induction.py \
             openadapt_flow/compiler/loop_authoring.py
+
+  flow-default-at-rest:
+    # The whole flow suite under the product default: encryption at rest on
+    # (no plaintext opt-out). Runs on PRs that touch encryption/storage/durable/
+    # sealing/harness/lock/types/workflow paths (saving a duplicate 4-shard run
+    # on unrelated Flow PRs while flow-unit shard 1 still runs the 21 core
+    # encrypted-at-rest tests) and on every push to main that touches Flow.
+    # Tests that read or plant plaintext files directly, and known open
+    # limitations, are skipped in this mode (tests/default_at_rest_skips.txt, #2423).
+    name: flow default at rest (shard ${{ matrix.shard }}/${{ matrix.of }})
+    needs: scope
+    # PR (when flow_at_rest=true) and push-to-main (when flow=true); skips
+    # merge_group and nightly/dispatch (avoids untriaged nightly e2e under encrypted mode).
+    if: (github.event_name == 'pull_request' || github.event_name == 'push') && github.event.pull_request.draft != true && needs.scope.outputs.flow_at_rest == 'true'
+    runs-on: ubuntu-latest
+    # The nightly tier (a schedule or a dispatch) also measures coverage,
+    # which slows the suite by about a third; it gets 60 minutes.
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each shard runs one pytest-xdist worker per vCPU (four on
+        # ubuntu-latest) and pays about 35 s of setup. Files are packed by
+        # measured time (scripts/ci/flow_shards.py), so the shards finish
+        # together.
+        include: ${{ fromJSON(needs.scope.outputs.flow_unit_shards == '4' && '[{"shard":1,"of":4},{"shard":2,"of":4},{"shard":3,"of":4},{"shard":4,"of":4}]' || '[{"shard":1,"of":2},{"shard":2,"of":2}]') }}
+    defaults:
+      run:
+        working-directory: packages/flow
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      # uv installs the locked requirements into the setup-python interpreter,
+      # in seconds instead of minutes, from a cache keyed on the locks.
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            packages/flow/uv.lock
+            packages/capture/uv.lock
+          cache-suffix: flow-default-at-rest
+      - name: Install from the locks
+        # Flow's lock, then Capture's: the in-tree Capture can need newer
+        # dependencies than the published one Flow's lock names.
+        run: >-
+          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,capture,agent]' --lock packages/capture
+          --editable packages/types --editable packages/capture --editable packages/flow --editable packages/agent --editable .
+      - name: Install tesseract for the flight scrubber's OCR tests
+        # pytesseract comes from Flow's dev extra (locked); this is its binary.
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68
+        with:
+          packages: tesseract-ocr tesseract-ocr-eng
+      - name: Install Harness² for the integration tests
+        # Not on PyPI. Pinned to the commit benchmark.harness.harness2
+        # is written against; it has no runtime dependencies.
+        run: >-
+          uv pip install --system --no-deps
+          'harness2 @ git+https://github.com/google-research/harness2@1cfe254e8d25b15f37048c3730134686abe60335'
+      - name: Verify the in-tree openadapt-capture imports headless
+        run: |
+          python - <<'PY'
+          import pathlib, openadapt_capture
+          here = pathlib.Path(openadapt_capture.__file__).resolve().as_posix()
+          assert "packages/capture/openadapt_capture" in here, here
+          print("openadapt_capture from", here)
+          PY
+      - name: Verify the installed Agent shim, launcher and Flow implementation
+        run: |
+          python - <<'PY'
+          import importlib.metadata
+          import importlib.util
+          import json
+          import pathlib
+
+          root = pathlib.Path.cwd().resolve().parents[1]
+          shim = importlib.util.find_spec("openadapt_agent")
+          expected = root / "packages/agent/src/openadapt_agent/__init__.py"
+          assert (
+              shim and shim.origin and pathlib.Path(shim.origin).resolve() == expected
+          ), shim
+          installed = importlib.metadata.distribution("openadapt-agent")
+          direct = json.loads(installed.read_text("direct_url.json") or "{}")
+          assert direct.get("url") == (root / "packages/agent").as_uri(), direct
+          assert direct.get("dir_info", {}).get("editable") is True, direct
+
+          compatibility = importlib.import_module("openadapt_agent")
+          engine = importlib.import_module("openadapt_flow.agent")
+          assert compatibility is engine
+          implementation = pathlib.Path(engine.__file__).resolve()
+          expected_implementation = root / "packages/flow/openadapt_flow/agent/__init__.py"
+          assert implementation == expected_implementation, implementation
+          print("openadapt-agent shim from", expected)
+          print("openadapt_flow.agent from", implementation)
+
+          launcher_spec = importlib.util.find_spec("openadapt")
+          expected_launcher = root / "openadapt/__init__.py"
+          assert (
+              launcher_spec
+              and launcher_spec.origin
+              and pathlib.Path(launcher_spec.origin).resolve() == expected_launcher
+          ), launcher_spec
+          launcher_distribution = importlib.metadata.distribution("openadapt")
+          launcher_direct = json.loads(
+              launcher_distribution.read_text("direct_url.json") or "{}"
+          )
+          assert launcher_direct.get("url") == root.as_uri(), launcher_direct
+          assert (
+              launcher_direct.get("dir_info", {}).get("editable") is True
+          ), launcher_direct
+          launcher = importlib.import_module("openadapt")
+          assert pathlib.Path(launcher.__file__).resolve() == expected_launcher
+          print("openadapt launcher from", expected_launcher)
+          PY
+      - name: Resolve Playwright version
+        id: pw
+        run: |
+          python -c "import importlib.metadata as m; print('version=' + m.version('playwright'))" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+      - name: Install and launch Playwright browser
+        timeout-minutes: 12
+        run: >-
+          python scripts/install_playwright_browser.py
+          --attempts 2 --attempt-timeout-seconds 270
+      - name: Select this shard's test files
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ matrix.of }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          # Everything outside tests/e2e, minus the installer self-test and the
+          # long qualification campaign. The nightly run (a schedule, or a
+          # dispatch) also takes all of tests/e2e; pull requests and main run
+          # the end-to-end tests flow-critical names. flow_shards.py packs the
+          # files by their measured time (scripts/ci/flow_test_durations.json)
+          # and lists each shard longest first; every file lands in exactly
+          # one shard.
+          e2e=(-not -path 'tests/e2e/*')
+          case "$EVENT_NAME" in schedule|workflow_dispatch) e2e=() ;; esac
+          find tests -name 'test_*.py' "${e2e[@]}" \
+            -not -path 'tests/test_install_playwright_browser.py' \
+            -not -path 'tests/test_qualification_gate_campaign.py' \
+            -not -path 'tests/golden_runs/test_golden_runs.py' \
+            | python ../../scripts/ci/flow_shards.py --shard "$SHARD" --of "$SHARDS" > "$RUNNER_TEMP/shard.txt"
+          wc -l < "$RUNNER_TEMP/shard.txt"
+      - name: Test under the default (encrypted) mode
+        env:
+          OPENADAPT_TEST_DEFAULT_AT_REST: "1"
+          OPENADAPT_TEST_LANE: fast
+        run: |
+          set -uo pipefail
+          mkdir -p runs
+          mapfile -t files < "$RUNNER_TEMP/shard.txt"
+          # The wall-clock bound needs an uncontended worker; flow core unit
+          # runs it alone, so it is not repeated here.
+          pytest -n logical --dist loadscope -q -rfE --timeout 300 \
+            --deselect=tests/test_tx_acid_servers.py::test_50k_seed_speed_and_8_worker_background_concurrency \
+            --basetemp=runs/ci-default \
+            --junitxml=runs/flow-default-at-rest-${{ matrix.shard }}.xml "${files[@]}"
+      - name: Upload the default-mode results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flow-default-at-rest-${{ matrix.shard }}
+          path: packages/flow/runs/flow-default-at-rest-${{ matrix.shard }}.xml
+          if-no-files-found: warn
 
   flow-unit:
     name: flow core unit (shard ${{ matrix.shard }}/${{ matrix.of }})
@@ -855,7 +1069,7 @@ jobs:
           done
           unit_rc=0
           # shellcheck disable=SC2086 # COVERAGE_ARGS is empty or two flags.
-          pytest -n logical --dist loadfile -v --durations=20 --basetemp=runs/ci \
+          pytest -n logical --dist loadscope -v --durations=20 --basetemp=runs/ci \
             --deselect="$serial_case" $COVERAGE_ARGS \
             --junitxml=runs/flow-unit-shard-${{ matrix.shard }}-of-${{ matrix.of }}.xml "${files[@]}" || unit_rc=$?
           if "$run_serial"; then
@@ -884,6 +1098,33 @@ jobs:
           fi
           exit "$unit_rc"
       # Before the claims upload, which tests expect to be the last step.
+      - name: Rollback, checkpoint and key tests under the default (encrypted) mode
+        # The suite above runs with a recorded plaintext opt-out. Encryption is
+        # the default, so run the stores that keep their own state inside a
+        # run directory (rollback, durable checkpoints, the key hierarchy)
+        # with it off as well: a plaintext write inside an encrypted run, or a
+        # reader that assumes plaintext, fails here.
+        if: matrix.shard == 1
+        env:
+          OPENADAPT_TEST_DEFAULT_AT_REST: "1"
+        # The durable and authority files whose tests read files directly
+        # as plaintext are not listed yet (#2423 lists them).
+        run: >-
+          pytest -n logical --dist loadscope -q --basetemp=runs/ci-default-at-rest
+          tests/test_rollback.py tests/test_rollback_qualify.py
+          tests/test_checkpoint_key_derivations.py tests/test_key_hierarchy.py
+          tests/test_at_rest_review_round3.py
+          tests/test_api_step_durable.py tests/test_attended_executor_fence_v13.py
+          tests/test_authoring_authority.py tests/test_continuation_receiver_clock.py
+          tests/test_default_ledger_authority.py tests/test_durable_authority_create.py
+          tests/test_durable_authority_edges_v13.py
+          tests/test_durable_authority_isolation_policy.py
+          tests/test_durable_first_local_delivery.py
+          tests/test_durable_first_local_program_delivery.py
+          tests/test_durable_pipelined_readback.py
+          tests/test_durable_resume_state_binding.py tests/test_durable_runtime.py
+          tests/test_module_durable_authority.py tests/test_realism_durable_resume.py
+          tests/test_tx_atomic_authority.py
       - name: Upload coverage data
         if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -1021,6 +1262,8 @@ jobs:
             tests/e2e/test_browser_teach_write_e2e.py \
             tests/e2e/test_browser_teach_write_guard_e2e.py \
             tests/e2e/test_agent_guard_e2e.py \
+            tests/e2e/test_wrap_example_e2e.py \
+            tests/e2e/test_wrap_command_e2e.py \
             --basetemp=runs/ci-critical-e2e --junitxml=runs/critical-e2e-junit.xml
       - name: Golden runs (report, artifacts and actions unchanged)
         # docs/design/DECOMPOSITION.md, section 3.1. The baselines are Linux
@@ -1103,7 +1346,7 @@ jobs:
   flow-onprem-offline:
     name: flow on-prem offline install, update and rollback (egress blocked)
     needs: scope
-    if: github.event.pull_request.draft != true && (needs.scope.outputs.flow == 'true')
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.flow_onprem == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -1118,7 +1361,9 @@ jobs:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
-          enable-cache: false
+          enable-cache: true
+          cache-dependency-glob: "packages/flow/uv.lock"
+          cache-suffix: flow-onprem-offline
       - name: Signed update and rollback state machine (hermetic, fake build)
         run: bash deploy/on-prem/bin/test-update.sh
       - name: Build two signed offline releases from the lock (connected)
@@ -1142,7 +1387,7 @@ jobs:
   flow-agent-frameworks:
     name: flow agent frameworks (scripted models)
     needs: scope
-    if: github.event.pull_request.draft != true && (needs.scope.outputs.flow == 'true')
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.flow_agent_frameworks == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     defaults:
@@ -1167,6 +1412,15 @@ jobs:
         # need mcp<2 and openai<3. The adapter is tested against this one
         # version, in this job only.
         run: uv pip install --no-config --require-hashes -r ci/crewai-1.6.1.txt
+      - name: Resolve Playwright version
+        id: pw
+        run: |
+          uv run --no-sync python -c "import importlib.metadata as m; print('version=' + m.version('playwright'))" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
       - name: Install and launch Playwright browser
         timeout-minutes: 12
         run: >-
@@ -1178,7 +1432,7 @@ jobs:
           OTEL_SDK_DISABLED: "true"
         run: |
           mkdir -p runs
-          uv run --no-sync pytest -v --timeout=120 -k "not real_model" \
+          uv run --no-sync pytest -n logical --dist loadscope -v --timeout=120 -k "not real_model" \
             tests/test_agent_write_guard.py tests/test_agent_framework_*.py \
             tests/e2e/test_skill_cache_e2e.py \
             --junitxml=runs/frameworks-junit.xml
@@ -1343,13 +1597,13 @@ jobs:
     needs: scope
     if: github.event.pull_request.draft != true && (needs.scope.outputs.capture == 'true')
     # Exercise the oldest Python on pre-2.80 GLib without adding a matrix leg.
-    runs-on: ${{ matrix.python-version == '3.10' && 'ubuntu-22.04' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.python-version == '3.11' && 'ubuntu-22.04' || 'ubuntu-latest' }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         # PR and queue tiers: one Python; main runs all three.
-        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.11", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/capture
@@ -1370,7 +1624,7 @@ jobs:
           install-recommends: "true"
           packages: ffmpeg libportaudio2
       - name: Install native AT-SPI build and smoke dependencies
-        if: matrix.python-version == '3.10'
+        if: matrix.python-version == '3.11'
         uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68
         with:
           install-recommends: "true"
@@ -1378,12 +1632,12 @@ jobs:
             libgirepository1.0-dev libcairo2-dev pkg-config
             gir1.2-atspi-2.0 gir1.2-gtk-3.0 at-spi2-core dbus-x11 xvfb
       - name: Check the GLib and GObject introspection versions
-        if: matrix.python-version == '3.10'
+        if: matrix.python-version == '3.11'
         run: pkg-config --modversion glib-2.0 gobject-introspection-1.0
       - name: Install
-        run: uv sync --locked --extra dev ${{ matrix.python-version == '3.10' && '--extra linux' || '' }}
+        run: uv sync --locked --extra dev ${{ matrix.python-version == '3.11' && '--extra linux' || '' }}
       - name: Verify native AT-SPI dependency compatibility
-        if: matrix.python-version == '3.10'
+        if: matrix.python-version == '3.11'
         env:
           OPENADAPT_TEST_LINUX_ATSPI: "1"
           NO_AT_BRIDGE: "0"
@@ -1465,51 +1719,6 @@ jobs:
           OPENADAPT_CI_NO_INPUT_INJECTION: "1"
         run: uv run --no-sync pytest tests/test_performance.py -v -m slow --timeout=300
 
-  capture-contract:
-    name: capture lint and release contract
-    needs: scope
-    if: github.event.pull_request.draft != true && (needs.scope.outputs.capture == 'true')
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: packages/capture
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
-        with:
-          enable-cache: true
-          cache-dependency-glob: "packages/capture/uv.lock"
-      - name: Set up Python
-        run: uv python install 3.12
-      - name: Install
-        run: uv sync --locked --extra dev
-      - name: Ruff
-        run: uv run --no-sync ruff check openadapt_capture/
-      - name: Syntax at the oldest supported Python (3.10)
-        # The PR lane runs Python 3.12 only, so syntax that needs a newer
-        # Python than requires-python allows (a 3.12 f-string, say) passed it
-        # and failed only after merge. Check every file at the minimum.
-        # Bytecode goes to a temp directory, so later archive checks see a
-        # clean tree.
-        env:
-          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
-        run: |
-          uv run --no-sync ruff check --isolated --select E9 --target-version py310 .
-          uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
-      - name: Verify the maintained changelog
-        # --skip-tags: the monorepo's v* tags are the launcher's. Capture's
-        # release tags through v1.2.2 live in OpenAdaptAI/openadapt-capture.
-        run: uv run --no-sync python scripts/check_changelog.py --skip-tags
-      - name: Build wheel and source distribution
-        run: uv build
-      - name: Verify release archive boundaries
-        run: |
-          uv run --no-sync python scripts/verify_distribution.py dist/*
-          uv run --no-sync python scripts/check_source_boundary.py --require-dist
-
   privacy:
     name: privacy (py${{ matrix.python-version }})
     needs: scope
@@ -1520,7 +1729,7 @@ jobs:
       fail-fast: false
       matrix:
         # PR and queue tiers: one Python; main runs all three.
-        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.11", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/privacy
@@ -1566,47 +1775,6 @@ jobs:
       - name: Test
         run: uv run --no-sync pytest tests/ -v
 
-  privacy-contract:
-    name: privacy lint and release contract
-    needs: scope
-    if: github.event.pull_request.draft != true && (needs.scope.outputs.privacy == 'true')
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: packages/privacy
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
-        with:
-          enable-cache: true
-          cache-dependency-glob: "packages/privacy/uv.lock"
-      - name: Set up Python
-        run: uv python install 3.12
-      - name: Install
-        run: uv sync --locked --python 3.12 --extra dev
-      - name: Ruff
-        run: uv run --no-sync ruff check openadapt_privacy tests scripts
-      - name: Syntax at the oldest supported Python (3.10)
-        # The PR lane runs Python 3.12 only, so syntax that needs a newer
-        # Python than requires-python allows (a 3.12 f-string, say) passed it
-        # and failed only after merge. Check every file at the minimum.
-        # Bytecode goes to a temp directory, so later archive checks see a
-        # clean tree.
-        env:
-          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
-        run: |
-          uv run --no-sync ruff check --isolated --select E9 --target-version py310 .
-          uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
-      - name: Changelog matches the version and the release workflow
-        run: uv run --no-sync pytest tests/test_release_config.py -v
-      - name: Build wheel and source distribution
-        run: uv build
-      - name: Verify release archive boundaries
-        run: uv run --no-sync python scripts/check_source_boundary.py --require-dist
-
   desktop-test:
     name: desktop test
     needs: scope
@@ -1626,9 +1794,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # PR and queue tiers: Linux on Python 3.12. Main adds 3.10, 3.11,
+        # PR and queue tiers: Linux on Python 3.12. Main adds 3.11,
         # macOS and Windows, where the tray's platform handlers differ.
-        include: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '[{"os":"ubuntu-latest","python-version":"3.12"}]' || '[{"os":"ubuntu-latest","python-version":"3.10"},{"os":"ubuntu-latest","python-version":"3.11"},{"os":"ubuntu-latest","python-version":"3.12"},{"os":"macos-latest","python-version":"3.12"},{"os":"windows-latest","python-version":"3.12"}]') }}
+        include: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '[{"os":"ubuntu-latest","python-version":"3.12"}]' || '[{"os":"ubuntu-latest","python-version":"3.11"},{"os":"ubuntu-latest","python-version":"3.12"},{"os":"macos-latest","python-version":"3.12"},{"os":"windows-latest","python-version":"3.12"}]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     defaults:
@@ -1652,48 +1820,6 @@ jobs:
           PYNPUT_BACKEND: ${{ runner.os == 'Linux' && 'dummy' || '' }}
           PYSTRAY_BACKEND: ${{ runner.os == 'Linux' && 'dummy' || '' }}
         run: uv run --no-sync pytest tests -q
-
-  tray-contract:
-    name: tray lint and release contract
-    needs: scope
-    if: github.event.pull_request.draft != true && (needs.scope.outputs.tray == 'true')
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: packages/tray
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
-        with:
-          enable-cache: true
-          cache-dependency-glob: "packages/tray/uv.lock"
-      - name: Set up Python
-        run: uv python install 3.12
-      - name: Install
-        run: uv sync --locked --python 3.12 --extra dev
-      # The whole package, including examples/ and the root helper scripts.
-      - name: Ruff
-        run: uv run --no-sync ruff check .
-      - name: Syntax at the oldest supported Python (3.10)
-        # The PR lane runs Python 3.12 only, so syntax that needs a newer
-        # Python than requires-python allows (a 3.12 f-string, say) passed it
-        # and failed only after merge. Check every file at the minimum.
-        # Bytecode goes to a temp directory, so later archive checks see a
-        # clean tree.
-        env:
-          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
-        run: |
-          uv run --no-sync ruff check --isolated --select E9 --target-version py310 .
-          uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
-      - name: Build wheel and source distribution
-        run: uv build
-      - name: Versions agree and both distributions exist
-        run: uv run --no-sync python scripts/check_release_consistency.py --require-dist
-      - name: Verify release archive boundaries
-        run: uv run --no-sync python scripts/check_source_boundary.py --require-dist
 
   tray-desktop-ipc:
     # Desktop's socket server against this tray's IPC client, both from this
@@ -1865,16 +1991,14 @@ jobs:
   # yet, so a change that should ship must bump the version in its own pull
   # request. This fails a feat, fix or perf without a bump (and prints the
   # prepare_release.py command), and checks a bump's version sources and
-  # changelog section.
-  desktop-release-intent:
-    name: desktop release intent
+  # Consolidated lightweight lint, syntax, release-contract, and desktop
+  # release-intent checks sharing one Ubuntu VM, checkout, and uv setup.
+  fast-checks:
+    name: fast-checks (lint and release contracts)
     needs: scope
-    if: github.event.pull_request.draft != true && (github.event_name == 'pull_request' && needs.scope.outputs.desktop == 'true')
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.fast_checks == 'true')
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: packages/desktop
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1883,11 +2007,64 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - name: Require a version bump for a change that should ship
-        # The checkout is the pull request's merge commit: HEAD^1 is the base
-        # tip. HEAD (the merge) is the head: its versions and changelog are what
-        # would land, and HEAD^1..HEAD lists exactly the pull request's commits.
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            packages/capture/uv.lock
+            packages/privacy/uv.lock
+            packages/tray/uv.lock
+          cache-suffix: fast-checks
+      - name: Desktop release intent
+        if: github.event_name == 'pull_request' && needs.scope.outputs.desktop == 'true'
+        working-directory: packages/desktop
         run: python scripts/check_release_intent.py --base HEAD^1 --head HEAD
+      - name: Capture lint and release contract
+        if: needs.scope.outputs.capture == 'true'
+        working-directory: packages/capture
+        env:
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-capture
+        run: |
+          set -euo pipefail
+          uv python install 3.12
+          uv sync --locked --extra dev
+          uv run --no-sync ruff check openadapt_capture/
+          uv run --no-sync ruff check --isolated --select E9 --target-version py311 .
+          uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
+          uv run --no-sync python scripts/check_changelog.py --skip-tags
+          uv build
+          uv run --no-sync python scripts/verify_distribution.py dist/*
+          uv run --no-sync python scripts/check_source_boundary.py --require-dist
+      - name: Privacy lint and release contract
+        if: needs.scope.outputs.privacy == 'true'
+        working-directory: packages/privacy
+        env:
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-privacy
+        run: |
+          set -euo pipefail
+          uv python install 3.12
+          uv sync --locked --python 3.12 --extra dev
+          uv run --no-sync ruff check openadapt_privacy tests scripts
+          uv run --no-sync ruff check --isolated --select E9 --target-version py311 .
+          uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
+          uv run --no-sync pytest tests/test_release_config.py -v
+          uv build
+          uv run --no-sync python scripts/check_source_boundary.py --require-dist
+      - name: Tray lint and release contract
+        if: needs.scope.outputs.tray == 'true'
+        working-directory: packages/tray
+        env:
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-tray
+        run: |
+          set -euo pipefail
+          uv python install 3.12
+          uv sync --locked --python 3.12 --extra dev
+          uv run --no-sync ruff check .
+          uv run --no-sync ruff check --isolated --select E9 --target-version py311 .
+          uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
+          uv build
+          uv run --no-sync python scripts/check_release_consistency.py --require-dist
+          uv run --no-sync python scripts/check_source_boundary.py --require-dist
 
   packages-gate:
     name: packages-gate
@@ -1900,6 +2077,7 @@ jobs:
       - verify-clean-install
       - flow-lint
       - flow-unit
+      - flow-default-at-rest
       - flow-critical
       - flow-onprem-offline
       - flow-agent-frameworks
@@ -1908,20 +2086,17 @@ jobs:
       - capture-linux
       - capture-macos
       - capture-windows
-      - capture-contract
       - privacy
       - privacy-presidio
-      - privacy-contract
       - desktop-test
       - desktop-build
       - tray
-      - tray-contract
       - tray-desktop-ipc
       - program-graph
       - seal-view
       - install-weight
       - capture-core-record
-      - desktop-release-intent
+      - fast-checks
     # Always runs, so the required check reports on every event, drafts too.
     if: always()
     runs-on: ubuntu-latest
@@ -1957,27 +2132,25 @@ jobs:
               "verify-clean-install": "verify",
               "flow-lint": "flow",
               "flow-unit": "flow",
+              "flow-default-at-rest": "flow_at_rest",
               "flow-critical": "flow",
-              "flow-onprem-offline": "flow",
-              "flow-agent-frameworks": "flow",
+              "flow-onprem-offline": "flow_onprem",
+              "flow-agent-frameworks": "flow_agent_frameworks",
               "flow-native-census": "flow",
               "flow-linux-atspi": "flow",
               "capture-linux": "capture",
               "capture-macos": "capture",
               "capture-windows": "capture",
-              "capture-contract": "capture",
               "capture-core-record": "capture",
               "privacy": "privacy",
               "privacy-presidio": "privacy",
-              "privacy-contract": "privacy",
               "desktop-test": "desktop",
               "desktop-build": "desktop",
-              "desktop-release-intent": "desktop",
               "tray": "tray",
-              "tray-contract": "tray",
               "tray-desktop-ipc": "tray",
               "program-graph": "program_graph",
               "install-weight": "weight",
+              "fast-checks": "fast_checks",
           }
           # Post-merge tier only: skipped on a pull request and in the merge
           # queue; required on a push to main and on dispatch.
@@ -1990,8 +2163,10 @@ jobs:
           # Skipped in the merge queue only: the pull request already passed
           # it on its merge with main (packages-gate is required there).
           not_in_queue = {"flow-unit"}
+          # PR and push-to-main only: skipped in merge queue and nightly runs.
+          pr_or_push_only = {"flow-default-at-rest"}
           # PR tier only: checks a pull request's own diff.
-          pr_only = {"desktop-release-intent"}
+          pr_only = set()
           scope = needs["scope"]
           outputs = scope.get("outputs", {})
           bad = {}
@@ -2010,6 +2185,7 @@ jobs:
               off_tier = (
                   ((pr_tier or queue_tier) and name in post_merge_only)
                   or (queue_tier and name in not_in_queue)
+                  or ((not pr_tier and event != "push") and name in pr_or_push_only)
                   or (not pr_tier and name in pr_only)
               )
               if result == "skipped" and selected and not off_tier:

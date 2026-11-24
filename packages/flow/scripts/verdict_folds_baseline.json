@@ -207,6 +207,9 @@
   "packages/flow/openadapt_flow/assurance.py": {
     "says_success": 1
   },
+  "packages/flow/openadapt_flow/at_rest.py": {
+    "swallow_wide": 1
+  },
   "packages/flow/openadapt_flow/attest_bridge.py": {
     "swallow": 2,
     "swallow_wide": 2
@@ -386,8 +389,9 @@
     "swallow": 6
   },
   "packages/flow/openadapt_flow/compile_agent/pipeline.py": {
-    "cmp_literal": 6,
-    "swallow": 2
+    "cmp_literal": 7,
+    "swallow": 2,
+    "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/compile_agent/repair_bridge.py": {
     "cmp_literal": 4,
@@ -473,9 +477,9 @@
     "cmp_literal": 1
   },
   "packages/flow/openadapt_flow/connector/executor.py": {
-    "cmp_literal": 16,
+    "cmp_literal": 18,
     "swallow": 6,
-    "swallow_wide": 1
+    "swallow_wide": 2
   },
   "packages/flow/openadapt_flow/connector/windows_service.py": {
     "swallow": 6,
@@ -492,7 +496,7 @@
   },
   "packages/flow/openadapt_flow/console/data.py": {
     "cmp_literal": 5,
-    "swallow": 4,
+    "swallow": 5,
     "swallow_wide": 1,
     "empty_change_set": 2
   },
@@ -640,14 +644,24 @@
     "says_success": 1,
     "swallow": 2
   },
+  "packages/flow/openadapt_flow/form_tx/judge.py": {
+    "bool_fold": 1
+  },
   "packages/flow/openadapt_flow/form_tx/playwright_surface.py": {
-    "swallow": 14
+    "swallow": 16
+  },
+  "packages/flow/openadapt_flow/form_tx/receipt.py": {
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/form_tx/reconciler.py": {
+    "swallow_wide": 1
   },
   "packages/flow/openadapt_flow/form_tx/session_lease.py": {
     "cmp_literal": 1,
     "swallow": 1
   },
   "packages/flow/openadapt_flow/form_tx/types.py": {
+    "bool_fold": 1,
     "says_success": 1
   },
   "packages/flow/openadapt_flow/generate/compositional.py": {
@@ -1303,6 +1317,11 @@
   "packages/flow/openadapt_flow/runtime/effects/rest.py": {
     "swallow": 3
   },
+  "packages/flow/openadapt_flow/runtime/effects/row_versions.py": {
+    "says_success": 2,
+    "cmp_literal": 2,
+    "swallow": 6
+  },
   "packages/flow/openadapt_flow/runtime/effects/smart_auth.py": {
     "swallow": 1,
     "swallow_wide": 1
@@ -1369,6 +1388,9 @@
   "packages/flow/openadapt_flow/runtime/remote_vlm.py": {
     "swallow": 4
   },
+  "packages/flow/openadapt_flow/runtime/replay/effects.py": {
+    "bool_fold": 1
+  },
   "packages/flow/openadapt_flow/runtime/replay/settling.py": {
     "swallow": 5,
     "swallow_wide": 1
@@ -1420,6 +1442,9 @@
     "swallow": 1
   },
   "packages/flow/openadapt_flow/seal_timestamp.py": {
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/sealed_set.py": {
     "slice_count": 1
   },
   "packages/flow/openadapt_flow/second_factor.py": {
@@ -1501,7 +1526,8 @@
   "packages/flow/openadapt_flow/tx/induce.py": {
     "swallow": 1,
     "slice_count": 3,
-    "empty_change_set": 1
+    "empty_change_set": 1,
+    "bool_fold": 1
   },
   "packages/flow/openadapt_flow/tx/lens.py": {
     "says_success": 1,
@@ -1603,9 +1629,9 @@
   },
   "packages/flow/openadapt_flow/verify_run.py": {
     "says_success": 4,
-    "cmp_literal": 36,
+    "cmp_literal": 37,
     "bool_fold": 2,
-    "swallow": 5,
+    "swallow": 6,
     "swallow_wide": 4,
     "empty_change_set": 1
   },
@@ -1640,7 +1666,8 @@
   },
   "packages/flow/openadapt_flow/wrap/cli.py": {
     "says_success": 1,
-    "swallow": 1
+    "swallow": 2,
+    "cmp_literal": 1
   },
   "packages/flow/openadapt_flow/wrap/dispatch_cli.py": {
     "says_success": 3

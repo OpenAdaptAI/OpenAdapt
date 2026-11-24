@@ -4,16 +4,16 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-verify"
-version = "0.2.0"
+version = "0.2.1"
 description = "Verify an agent's writes through an independent system-of-record read path"
 readme = "README.md"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.11,<3.13"
 license = "MIT"
 # Flow 3's base install is its verifier, ledger, journal and receipts without
 # the vision stack (NumPy, OpenCV, Pillow, RapidOCR), which is Flow's `vision`
 # extra. tests/test_import_boundary.py proves the verify path never imports it.
 dependencies = [
-    "openadapt-flow[receipts]>=3.0.0,<4",
+    "openadapt-flow[receipts]>=3.0.0,<5",
     "cryptography>=50.0.0",
 ]
 
@@ -24,9 +24,9 @@ dependencies = [
 # yourself for a PostgreSQL read path.
 mysql = ["PyMySQL>=1.1,<2"]
 # Agent frameworks. Each extra is only that framework's SDK.
-openai = ["openadapt-flow[openai-agents]>=3.0.0,<4"]
-claude = ["openadapt-flow[claude-agent-sdk]>=3.0.0,<4"]
-mcp = ["openadapt-flow[agent]>=3.0.0,<4"]
+openai = ["openadapt-flow[openai-agents]>=3.0.0,<5"]
+claude = ["openadapt-flow[claude-agent-sdk]>=3.0.0,<5"]
+mcp = ["openadapt-flow[agent]>=3.0.0,<5"]
 dev = ["pytest>=8", "ruff>=0.4", "mypy>=1.10", "build>=1.2"]
 
 [project.scripts]
@@ -57,7 +57,7 @@ core-metadata-version = "2.4"
 testpaths = ["tests"]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 88
 
 [tool.ruff.lint]
@@ -78,15 +78,15 @@ ignore_missing_imports = true
 # package never use, so the overrides also keep it out of the lock (a marker
 # no environment matches).
 override-dependencies = [
-    "openadapt-flow[receipts,agent,openai-agents,claude-agent-sdk]>=2.6.0,<4",
+    "openadapt-flow[receipts,agent,openai-agents,claude-agent-sdk]>=2.6.0,<5",
     "numpy; python_version < '3'",
     "opencv-python; python_version < '3'",
     "pillow; python_version < '3'",
     "rapidocr-onnxruntime; python_version < '3'",
 ]
 required-environments = [
-    "python_version == '3.10' and sys_platform == 'linux'",
-    "python_version == '3.10' and sys_platform == 'darwin'",
-    "python_version == '3.10' and sys_platform == 'win32'",
+    "python_version == '3.11' and sys_platform == 'linux'",
+    "python_version == '3.11' and sys_platform == 'darwin'",
+    "python_version == '3.11' and sys_platform == 'win32'",
 ]
 
