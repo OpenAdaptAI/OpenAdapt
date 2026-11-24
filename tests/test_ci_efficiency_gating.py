@@ -140,27 +140,34 @@ def test_packages_workflow_enables_loadscope_and_caches() -> None:
             "true",
         ),
         (["packages/flow/openadapt_flow/api.py"], "true", "true", "true"),
+        (["packages/flow/openadapt_flow/cli_tasks.py"], "true", "true", "true"),
         (["packages/flow/openadapt_flow/compiler/distill.py"], "true", "true", "true"),
+        (
+            ["packages/flow/chrome_extension/native_host/openadapt_extension_host.py"],
+            "true",
+            "true",
+            "true",
+        ),
+        (
+            ["packages/flow/tests/test_chrome_extension_cws.py"],
+            "true",
+            "true",
+            "true",
+        ),
         (["packages/capture/openadapt_capture/recorder.py"], "true", "true", "true"),
         (["packages/flow/tests/conftest.py"], "true", "true", "true"),
         (["packages/flow/uv.lock"], "true", "true", "true"),
         (["packages/types/openadapt_types/models.py"], "true", "true", "true"),
         ([".github/workflows/packages.yml"], "true", "true", "true"),
-        # Provably non-storage Flow paths skip the duplicate 4-shard flow-default-at-rest run
+        # Provably non-Python docs/assets/data skip the duplicate 4-shard flow-default-at-rest run
         (["packages/flow/chrome_extension/content.js"], "true", "false", "true"),
-        (
-            ["packages/flow/tests/test_chrome_extension_cws.py"],
-            "true",
-            "false",
-            "true",
-        ),
         (
             ["packages/flow/benchmark/canvas_ladder/results.json"],
             "true",
             "false",
             "true",
         ),
-        (["packages/flow/openadapt_flow/cli_tasks.py"], "true", "false", "true"),
+        (["packages/flow/paper/main.tex"], "true", "false", "true"),
         # Prose-only Flow PRs skip all heavy sub-package jobs
         (["packages/flow/docs/LIMITS.md"], "true", "false", "false"),
         (
@@ -196,17 +203,32 @@ def test_classifier_selects_all_flow_code_and_skips_prose_only_prs(
 
 
 def test_every_at_rest_importer_selects_flow_at_rest(tmp_path: Path) -> None:
-    """AST proof: 100% of files importing at-rest/sealing modules select flow_at_rest=true."""
+    """AST proof: zero .py files under packages/{flow,capture} are excluded and 100% of at-rest importers select flow_at_rest=true."""
     import ast
+
+    classify_step = next(
+        s
+        for s in _load("packages.yml")["jobs"]["scope"]["steps"]
+        if s.get("name") == "Classify the change"
+    )
+    m = re.search(r"at_rest_excluded='([^']+)'", classify_step["run"])
+    assert m is not None
+    excluded_re = re.compile(m.group(1))
 
     sensitive = {"at_rest", "sealed_set", "crypto", "stream_aead", "key_hierarchy"}
     importers: list[str] = []
-    for base in (
-        ROOT / "packages/flow/openadapt_flow",
-        ROOT / "packages/capture/openadapt_capture",
-    ):
+    excluded_py: list[str] = []
+    for base in (ROOT / "packages/flow", ROOT / "packages/capture"):
         for py_file in sorted(base.rglob("*.py")):
-            tree = ast.parse(py_file.read_text(encoding="utf-8"))
+            rel = py_file.relative_to(ROOT).as_posix()
+            if "/.venv/" in rel or "/build/" in rel or "/dist/" in rel:
+                continue
+            if excluded_re.search(rel):
+                excluded_py.append(rel)
+            try:
+                tree = ast.parse(py_file.read_text(encoding="utf-8"))
+            except SyntaxError:
+                continue
             hits = False
             for node in ast.walk(tree):
                 if isinstance(node, ast.ImportFrom):
@@ -223,18 +245,12 @@ def test_every_at_rest_importer_selects_flow_at_rest(tmp_path: Path) -> None:
                     if hits:
                         break
             if hits:
-                importers.append(py_file.relative_to(ROOT).as_posix())
+                importers.append(rel)
 
-    assert importers, "expected at least one at-rest/sealing importer"
-    # Verify every single importer individually selects flow_at_rest=true
-    classify_step = next(
-        s
-        for s in _load("packages.yml")["jobs"]["scope"]["steps"]
-        if s.get("name") == "Classify the change"
+    assert excluded_py == [], (
+        f"Python files must not be excluded by flow_at_rest deny-list: {excluded_py}"
     )
-    m = re.search(r"at_rest_excluded='([^']+)'", classify_step["run"])
-    assert m is not None
-    excluded_re = re.compile(m.group(1))
+    assert importers, "expected at least one at-rest/sealing importer"
     missed = [p for p in importers if excluded_re.search(p)]
     assert missed == [], f"at-rest importers excluded by deny-list: {missed}"
     # Spot-check through the full bash classifier on the first, middle, and last importer

@@ -183,12 +183,14 @@ jobs:
           flow="$(hit "^packages/(flow|capture|types)/|$browser_support|$wf")"
           # Sub-package gates on pull requests and queue groups; pushes to main,
           # schedules and dispatches follow `flow`.
-          # On PRs, `flow_at_rest` uses a fail-closed deny-list: every code path
-          # under packages/{flow,capture,types}/ selects `flow-default-at-rest`
-          # EXCEPT paths provably outside store/sealing code (chrome_extension,
-          # docs, benchmarks, examples, paper, cli_tasks.py). An AST test in
-          # tests/test_ci_efficiency_gating.py enforces that 100% of importers of
-          # at_rest/sealed_set/crypto/stream_aead/key_hierarchy select true.
+          # On PRs, `flow_at_rest` uses a fail-closed deny-list: every Python/code
+          # path under packages/{flow,capture,types}/ selects `flow-default-at-rest`
+          # (including benchmark/*.py, examples/*.py, chrome_extension/native_host/*.py,
+          # tests/*.py, and cli_tasks.py). Only non-Python docs, paper, and static
+          # data/asset files under benchmark/, examples/, and chrome_extension/ skip
+          # the duplicate 4-shard run. An AST test in tests/test_ci_efficiency_gating.py
+          # enforces that zero .py files are excluded and 100% of at-rest importers
+          # select true.
           if [ "$EVENT_NAME" != pull_request ] && [ "$EVENT_NAME" != merge_group ]; then
             flow_at_rest="$flow"
             flow_onprem="$flow"
@@ -197,7 +199,7 @@ jobs:
             code_changed="$(grep -Ev '^packages/(flow|capture|types)/(docs/|[^/]*\.md$)' <<<"$changed" || true)"
             hit_code() { if grep -Eq "$1" <<<"$code_changed"; then echo true; else echo false; fi; }
             flow_code="$(hit_code "^packages/(flow|capture|types)/|$browser_support|$wf")"
-            at_rest_excluded='^packages/flow/(chrome_extension/|benchmark/|examples/|paper/|docs/|[^/]*\.md$|tests/test_chrome_extension_.*\.py$|openadapt_flow/cli_tasks\.py$)'
+            at_rest_excluded='^packages/flow/([^/]*\.md$|(docs|paper|benchmark|examples|chrome_extension)/.*\.(json|jsonl|md|tex|bib|log|csv|txt|png|svg|gif|html|css|js)$)'
             at_rest_changed="$(grep -Ev "$at_rest_excluded" <<<"$code_changed" || true)"
             hit_at_rest() { if grep -Eq "$1" <<<"$at_rest_changed"; then echo true; else echo false; fi; }
             flow_at_rest="$(hit_at_rest "^packages/(flow|capture|types)/|$browser_support|$wf")"
