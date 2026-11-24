@@ -50,7 +50,10 @@ totp, mfa, cookie, signature, session id, api key, ...), so `otpCode`,
 `session_count` are not. A name that is exactly `code`, `sig`, `sid`,
 `refresh`, `session` or `authorization` is masked too, and so is a name
 that ends in `session` or `authorization` (`sso_session`,
-`proxy-authorization`).
+`proxy-authorization`). The earlier substring pattern stays as a floor, so
+compound names such as `sessionkey`, `pwdhash` and `authz` are masked too.
+Only a short list of known false positives (`author`, `authority`,
+`session_count`, `authorization_id` ...) is sent in clear.
 
 **The task** (`--task`):
 

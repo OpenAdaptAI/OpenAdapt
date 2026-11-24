@@ -15,6 +15,7 @@ import sys
 import textwrap
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 import pytest
 import requests
@@ -786,6 +787,32 @@ MASKED_NAMES = [
     "proxy-authorization",
     "oauth_verifier",
     "authn",
+    # Grok's round-3 review on #2635: compound names main's pattern masked
+    "authorization_code",
+    "authorizationCode",
+    "sessionkey",
+    "SESSIONKEY",
+    "session_data",
+    "sessionData",
+    "sessiondata",
+    "session_value",
+    "sessionValue",
+    "session_handle",
+    "sessionHandle",
+    "session_ticket",
+    "sessionTicket",
+    "usersession",
+    "pwdhash",
+    "passhash",
+    "hashkey",
+    "authkey",
+    "authid",
+    "authz",
+    "session_state",
+    "sessionState",
+    "oauth_state",
+    "oauthState",
+    "oauth_nonce",
 ]
 CLEAR_NAMES = [
     "author",
@@ -808,23 +835,8 @@ OLD_SECRET_NAME_RE = re.compile(
     re.I,
 )
 #: Names the old pattern matched only by a substring, and that are not
-#: secrets. Each one is deliberately sent in clear now.
-OLD_OVERMASKED = frozenset(
-    {
-        "author",
-        "author_id",
-        "authored_at",
-        "authority",
-        "session_count",
-        "session_started_at",
-        "authorization_id",
-        "hashtag",
-        "passenger_count",
-        "compass_heading",
-        "refresh_interval",
-        "refreshed_at",
-    }
-)
+#: secrets: the one allowlist :func:`I.is_secret_name` sends in clear.
+OLD_OVERMASKED = I.LEGACY_FALSE_POSITIVES
 #: Every name either list names, plus lookalikes the old pattern matched.
 NAME_CORPUS = sorted(
     {*MASKED_NAMES, *CLEAR_NAMES, *OLD_OVERMASKED}
@@ -869,8 +881,63 @@ def test_every_name_the_old_pattern_masked_is_still_masked(name: str) -> None:
     assert is_secret_name(name), f"{name} was masked on main and now is not"
 
 
+def _generated_names() -> list[str]:
+    """Every old-pattern stem with prefixes, suffixes and casings."""
+    stems = [
+        "pass", "password", "passwd", "pwd", "secret", "token", "apikey",
+        "api_key", "api-key", "hash", "salt", "session", "csrf", "auth",
+        "authz", "authorization", "credential", "bearer", "refresh",
+        "privatekey", "private_key", "accesskey", "access_key", "cred",
+        "pin", "otp", "tfa", "jwt",
+    ]  # fmt: skip
+    prefixes = ["", "user_", "user", "x-", "oauth_", "my", "sso_", "client"]
+    suffixes = ["", "_id", "id", "key", "Key", "_data", "Hash", "_state",
+                "value", "_ticket", "_code", "Count"]  # fmt: skip
+    names = set()
+    for stem in stems:
+        for pre in prefixes:
+            for suf in suffixes:
+                name = pre + stem + suf
+                names.update({name, name.upper(), name.lower()})
+    return sorted(names)
+
+
+def test_no_name_the_old_pattern_masked_is_sent_in_clear() -> None:
+    """For a broad generated corpus: matched by main's pattern and not an
+    allowlisted false positive implies masked, at every call site."""
+    from openadapt_flow.verify_draft.inputs import masked
+    from openadapt_flow.verify_draft.sandbox import Request
+
+    corpus = sorted({*_generated_names(), *NAME_CORPUS})
+    expected = [
+        n
+        for n in corpus
+        if OLD_SECRET_NAME_RE.search(n) and n.lower() not in OLD_OVERMASKED
+    ]
+    assert len(expected) > 2000
+    leaked = [n for n in expected if not I.is_secret_name(n)]
+    assert leaked == []
+    columns = [n for n in expected if n.strip().lower() != "code"]
+    assert [n for n in columns if not A._secret_column(n)] == []
+    value = "corpus-leak-value"
+    for n in expected[::7]:  # every call site, on a sample
+        got = masked(
+            Request(
+                method="POST",
+                url="https://app.test/x?" + urlencode({n: value}),
+                headers={n: value},
+                body=json.dumps({n: value}),
+                mime="application/json",
+                status=200,
+                response=json.dumps({n: value}),
+            )
+        )
+        assert value not in json.dumps(got), n
+
+
 @pytest.mark.parametrize("name", sorted(OLD_OVERMASKED))
 def test_the_old_overmasked_names_are_clear(name: str) -> None:
+    assert {"author", "session_count", "authorization_id"} <= OLD_OVERMASKED
     from openadapt_flow.verify_draft.inputs import is_secret_name
 
     assert OLD_SECRET_NAME_RE.search(name), name  # the list stays honest

@@ -28,15 +28,49 @@ from openadapt_flow.verify_draft.sandbox import Request
 MAX_DESCRIPTION_CHARS = 40_000
 
 
+#: The name pattern #2438 shipped. It stays as a floor, so no name it masked
+#: is sent to the model in clear (``sessionkey``, ``pwdhash``, ``authz``).
+LEGACY_SECRET_NAME_RE = re.compile(
+    r"pass(word)?|secret|token|api[-_]?key|hash|salt|session|csrf|auth"
+    r"|credential|bearer|refresh|private[-_]?key|access[-_]?key"
+    r"|(^|[^a-z0-9])(cred|pin|otp|tfa|jwt)([^a-z0-9]|$)",
+    re.I,
+)
+#: Ordinary names the legacy pattern matched only by a substring. Each is
+#: sent in clear unless the shared matcher calls it secret.
+LEGACY_FALSE_POSITIVES = frozenset(
+    {
+        "author",
+        "author_id",
+        "authored_at",
+        "authority",
+        "session_count",
+        "session_started_at",
+        "authorization_id",
+        "hashtag",
+        "passenger_count",
+        "compass_heading",
+        "refresh_interval",
+        "refreshed_at",
+    }
+)
+
+
 def is_secret_name(name: object) -> bool:
     """True when a field, header, query key or column name looks secret.
 
-    One shared token matcher (:mod:`openadapt_flow.secret_field_names`), so
-    ``otpCode``, ``userPin``, ``X-Amz-Signature`` and a ``cookie`` key are
-    masked while ``author``, ``author_id`` and ``session_count`` stay clear.
+    The shared token matcher (:mod:`openadapt_flow.secret_field_names`)
+    catches ``otpCode``, ``userPin``, ``X-Amz-Signature`` and a ``cookie``
+    key. The legacy pattern is a floor on top of it, except for the listed
+    false positives (``author``, ``session_count`` ...).
     """
 
-    return names_secret_field(name)
+    if names_secret_field(name):
+        return True
+    text = str(name or "")
+    return bool(LEGACY_SECRET_NAME_RE.search(text)) and (
+        text.lower() not in LEGACY_FALSE_POSITIVES
+    )
 
 
 _SECRET_HEADERS = frozenset(
