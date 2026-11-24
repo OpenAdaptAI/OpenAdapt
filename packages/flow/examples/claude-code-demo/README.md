@@ -12,7 +12,7 @@ there.
 
 ## Run it
 
-You need macOS or Linux, Python 3.10 to 3.12 (or [uv](https://docs.astral.sh/uv/)),
+You need macOS or Linux, Python 3.11 or 3.12 (or [uv](https://docs.astral.sh/uv/)),
 and [Claude Code](https://code.claude.com/docs) for the last step. The OpenAdapt
 side makes no model calls and needs no API key.
 
