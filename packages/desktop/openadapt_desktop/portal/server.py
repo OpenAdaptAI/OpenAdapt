@@ -46,6 +46,8 @@ PROTECTED_PREFIX = "/api/portal/"
 SHELL_ASSETS: dict[str, tuple[str, str]] = {
     "/app.js": ("shell/app.js", "application/javascript; charset=utf-8"),
     "/styles.css": ("shell/styles.css", "text/css; charset=utf-8"),
+    "/fonts/PublicSans-Variable.woff2": ("shell/fonts/PublicSans-Variable.woff2", "font/woff2"),
+    "/fonts/OFL-PublicSans.txt": ("shell/fonts/OFL-PublicSans.txt", "text/plain; charset=utf-8"),
     "/manifest.webmanifest": (
         "shell/manifest.webmanifest",
         "application/manifest+json; charset=utf-8",

@@ -1,0 +1,21 @@
+{
+  "case_id": "pc-s03",
+  "facts": {
+    "coverage.deductible": 1000,
+    "coverage.effective_date": "2027-01-01",
+    "history.prior_claims_5yr": 0,
+    "property.address_line1": "238 Fernhollow Way",
+    "property.burglar_alarm": false,
+    "property.city": "Hazel Bluff",
+    "property.construction_type": "wood frame",
+    "property.finish_level": "builder grade",
+    "property.heating_type": "gas furnace",
+    "property.roof_material": "asphalt shingle",
+    "property.roof_year": 2018,
+    "property.square_feet": 2150,
+    "property.state": "OR",
+    "property.stories": "1",
+    "property.year_built": 1979,
+    "property.zip": "97814"
+  }
+}

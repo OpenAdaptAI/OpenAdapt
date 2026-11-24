@@ -211,6 +211,11 @@ def plan_retention(
         raise RetentionError("encrypted_run_required")
     header = _snapshot(root, sealed_set.HEADER, disk[sealed_set.HEADER])
     try:
+        if sealed_set.read_header(root).get("version") == sealed_set.ENVELOPE_VERSION:
+            # A version 3 set opens with a recipient key this computer holds;
+            # the passphrase given here plays no part, so a successful open
+            # would prove nothing about it. Refuse rather than accept any key.
+            raise RetentionError("explicit_key_does_not_open_version_3_run")
         opened = sealed_set.SealedSet.open(root, key, expect="run")
         authenticated = sealed_set._open_index(root, opened._header, opened._key)
         # A live run may reconcile external checkpoints and locks. Retention
