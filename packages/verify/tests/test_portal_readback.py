@@ -16,9 +16,19 @@ from openadapt_verify.portal_readback import (
 )
 
 _SAMPLE_DOM_BYTES = (
-    b"<html><body>"
-    b"Jordan Rivera 03/14/2026 $1,000.00 2000 0 Yes MRN-88041 MRN-88O41 2 \xe2\x82\xac500 500.00"
-    b"</body></html>"
+    b"<html><body><dl>"
+    b"<dt>Insured Name</dt><dd>Jordan Rivera</dd>"
+    b"<dt>Effective Date</dt><dd>03/14/2026</dd>"
+    b"<dt>Deductible</dt><dd>$1,000.00</dd>"
+    b"<dt>Coverage Limit</dt><dd>2000</dd>"
+    b"<dt>Prior Losses</dt><dd>0</dd>"
+    b"<dt>Prior Losses</dt><dd>2</dd>"
+    b"<dt>Bundled Auto</dt><dd>Yes</dd>"
+    b"<dt>Quote ID</dt><dd>MRN-88041</dd>"
+    b"<dt>Policy Ref</dt><dd>MRN-88O41</dd>"
+    b"<dt>Premium</dt><dd>\xe2\x82\xac500</dd>"
+    b"<dt>Premium</dt><dd>500.00</dd>"
+    b"</dl></body></html>"
 )
 _SAMPLE_DOM_SHA = hashlib.sha256(_SAMPLE_DOM_BYTES).hexdigest()
 
@@ -529,3 +539,67 @@ def test_normalize_and_extract_helpers() -> None:
 
     pdf_bytes = _make_synthetic_pdf(["Line (1): OK"], compress=False)
     assert "Line (1): OK" in extract_pdf_text_stdlib(pdf_bytes)
+
+
+def test_fresh_reload_rejects_value_substring_of_larger_amount() -> None:
+    """Probe R5: $500 must not match inside $5000."""
+    dom = b"<html><body><dl><dt>Premium</dt><dd>$5000</dd></dl></body></html>"
+    proof = _valid_reload_proof(summary_dom_sha256=hashlib.sha256(dom).hexdigest())
+    res = FreshReloadSummaryOracle().verify(
+        {"premium": "$500"}, {"premium": "$500"}, proof, summary_dom_bytes=dom
+    )
+    assert res.verdict == "HALT"
+    assert res.receipt_verdict != "CONFIRMED"
+
+
+def test_fresh_reload_rejects_value_under_wrong_label() -> None:
+    """Probe R3: Deductible $500 must not satisfy Premium $500."""
+    dom = (
+        b"<html><body><dl>"
+        b"<dt>Premium</dt><dd>$600</dd>"
+        b"<dt>Deductible</dt><dd>$500</dd>"
+        b"</dl></body></html>"
+    )
+    proof = _valid_reload_proof(summary_dom_sha256=hashlib.sha256(dom).hexdigest())
+    res = FreshReloadSummaryOracle().verify(
+        {"premium": "$500"}, {"premium": "$500"}, proof, summary_dom_bytes=dom
+    )
+    assert res.verdict == "HALT"
+    assert res.receipt_verdict != "CONFIRMED"
+
+
+def test_fresh_reload_rejects_value_only_in_hidden_input_attribute() -> None:
+    """Probe R4: values only in HTML attributes (hidden inputs) must not verify."""
+    dom = (
+        b'<html><body><input type="hidden" name="premium" value="$500">'
+        b"<p>Session expired. Nothing was saved.</p></body></html>"
+    )
+    proof = _valid_reload_proof(summary_dom_sha256=hashlib.sha256(dom).hexdigest())
+    res = FreshReloadSummaryOracle().verify(
+        {"premium": "$500"}, {"premium": "$500"}, proof, summary_dom_bytes=dom
+    )
+    assert res.verdict == "HALT"
+    assert res.receipt_verdict != "CONFIRMED"
+
+
+def test_pdf_font_name_slash_q_does_not_reset_invisible_render_mode(
+    tmp_path: Path,
+) -> None:
+    """P3: a PDF resource name like /Q must not pop graphics state and unhide 3 Tr text."""
+    store = tmp_path / "store"
+    store.mkdir()
+    stream = b"BT 3 Tr /Q 1 Tf (Premium: $500) Tj ET"
+    pdf_bytes = (
+        b"%PDF-1.4\n1 0 obj << /Length "
+        + str(len(stream)).encode()
+        + b" >>\nstream\n"
+        + stream
+        + b"\nendstream\nendobj\n%%EOF\n"
+    )
+    pdf_path = store / "hidden_font_q.pdf"
+    pdf_path.write_bytes(pdf_bytes)
+    res = ConfirmationPdfOracle().verify(
+        pdf_path, {"premium": "$500"}, producer="separate_session"
+    )
+    assert res.verdict == "HALT"
+    assert res.receipt_verdict != "CONFIRMED"

@@ -32,6 +32,7 @@ import zlib
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from decimal import Decimal, InvalidOperation
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit
@@ -366,6 +367,77 @@ def _compare_fields(
     return tuple(checks), confirmed, refuted, abstained
 
 
+class _VisibleTextExtractor(HTMLParser):
+    """Extract ordered visible text nodes from HTML, ignoring attributes and non-rendered elements."""
+
+    _SKIP_TAGS = frozenset({"script", "style", "noscript", "template", "head", "title"})
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._skip_depth = 0
+        self.nodes: list[str] = []
+
+    def handle_starttag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        del attrs
+        if tag.lower() in self._SKIP_TAGS:
+            self._skip_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in self._SKIP_TAGS and self._skip_depth > 0:
+            self._skip_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth > 0:
+            return
+        compact = " ".join(data.split())
+        if compact:
+            self.nodes.append(compact)
+
+
+def _normalize_dom_label(text: str) -> str:
+    cleaned = re.sub(r"[^a-z0-9]+", " ", text.strip().lower()).strip()
+    return cleaned
+
+
+def _dom_value_matches_bound_label(
+    nodes: Sequence[str], field_name: str, expected_val: str
+) -> bool:
+    """Return True iff ``expected_val`` appears in visible DOM text bound to ``field_name``
+    on token boundaries (never in HTML attributes, scripts, substrings of larger numbers,
+    or under a different field's label)."""
+    target_label = _normalize_dom_label(field_name)
+    if not target_label or not expected_val:
+        return False
+    val_re = re.compile(
+        r"(?<![A-Za-z0-9_.])" + re.escape(expected_val) + r"(?![A-Za-z0-9_.])"
+    )
+    for idx, node in enumerate(nodes):
+        # Case 1: Node is the exact label (with optional trailing colon), value is the next node.
+        if _normalize_dom_label(node.rstrip(":")) == target_label:
+            if idx + 1 < len(nodes) and val_re.search(nodes[idx + 1]):
+                return True
+        # Case 2: Same text node "Label: value" or "Label value".
+        if ":" in node:
+            left, right = node.split(":", 1)
+            if _normalize_dom_label(left) == target_label and val_re.search(
+                right.strip()
+            ):
+                return True
+        else:
+            # Check prefix "<label> <value>" where label words match the start of the node.
+            label_words = target_label.split()
+            prefix_re = re.compile(
+                r"^\s*" + r"[\s_-]+".join(re.escape(w) for w in label_words) + r"\s+(.+)$",
+                re.IGNORECASE,
+            )
+            m = prefix_re.match(node)
+            if m and val_re.search(m.group(1).strip()):
+                return True
+    return False
+
+
 class FreshReloadSummaryOracle:
     """Verify persisted portal summary fields against freshly reloaded DOM bytes."""
 
@@ -434,7 +506,10 @@ class FreshReloadSummaryOracle:
             )
 
         dom_text = bytes(summary_dom_bytes).decode("utf-8", errors="replace")
-        dom_text_compact = " ".join(dom_text.split())
+        extractor = _VisibleTextExtractor()
+        extractor.feed(dom_text)
+        extractor.close()
+        dom_nodes = extractor.nodes
         verified_observed: dict[str, Any] = {}
         missing_in_dom: dict[str, str] = {}
         for fname in expected_fields:
@@ -442,11 +517,11 @@ class FreshReloadSummaryOracle:
             if val is None or (isinstance(val, str) and not val.strip()):
                 continue
             compact_val = " ".join(str(val).strip().split())
-            if compact_val in dom_text_compact:
+            if _dom_value_matches_bound_label(dom_nodes, fname, compact_val):
                 verified_observed[fname] = val
             else:
                 missing_in_dom[fname] = (
-                    "observed_value_not_present_in_summary_dom_bytes"
+                    "observed_value_not_bound_to_label_in_summary_dom_bytes"
                 )
 
         parsed_producer = parse_producer(reload_proof.producer)
@@ -569,7 +644,7 @@ def _extract_text_from_content_stream(stream_bytes: bytes) -> list[str]:
     # Match `q`/`Q`, `<d> Tr`, `(text) Tj`, and `[(a) -20 (b)] TJ`.
     # Alternatives inside the TJ array are strictly disjoint (no backtracking).
     token_re = re.compile(
-        r"(?<![A-Za-z0-9_])([qQ])(?![A-Za-z0-9_])"
+        r"(?<![A-Za-z0-9_/])([qQ])(?![A-Za-z0-9_])"
         r"|\b([0-7])\s+Tr\b"
         r"|\(((?:\\.|[^\\()])*)\)\s*Tj"
         r"|\[((?:[^\[\]()]|\((?:\\.|[^\\()])*\))*)\]\s*TJ",

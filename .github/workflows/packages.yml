@@ -457,7 +457,7 @@ jobs:
           python - <<'PY'
           import xml.etree.ElementTree as ET
           cases = ET.parse("tests.xml").getroot().findall(".//testcase")
-          assert len(cases) == 120, f"all independent-store and portal-readback controls must run (got {len(cases)})"
+          assert len(cases) == 124, f"all independent-store and portal-readback controls must run (got {len(cases)})"
           # The PostgreSQL and MySQL quickstart controls need the database
           # services of verify-clean-install, which runs them; nothing else skips.
           skipped = {c.get("name") for c in cases if c.find("skipped") is not None}
