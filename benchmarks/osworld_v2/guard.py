@@ -127,17 +127,50 @@ _SAFE_PYAUTOGUI_FUNCS: dict[str, str] = {
     "write": "type",
     "typewrite": "type",
     "hotkey": "hotkey",
-    "press": "hotkey",
+    "press": "press",
 }
+
+_MODIFIER_KEYS: frozenset[str] = frozenset(
+    {
+        "ctrl",
+        "control",
+        "alt",
+        "shift",
+        "win",
+        "super",
+        "command",
+        "cmd",
+        "option",
+        "meta",
+    }
+)
+
+_TERMINAL_LAUNCHER_HOTKEYS: frozenset[frozenset[str]] = frozenset(
+    {
+        frozenset({"ctrl", "alt", "t"}),
+        frozenset({"control", "alt", "t"}),
+        frozenset({"super", "t"}),
+        frozenset({"win", "r"}),
+        frozenset({"super", "r"}),
+        frozenset({"alt", "f2"}),
+        frozenset({"cmd", "space"}),
+        frozenset({"command", "space"}),
+        frozenset({"ctrl", "shift", "p"}),
+    }
+)
+
+_ALLOWED_DICT_KEYS: frozenset[str] = frozenset({"kind", "target", "payload"})
 
 
 def _parse_raw_env_action(raw_env_action: Any) -> tuple[str, str, str] | None:
     """Strictly parse a raw OSWorld env action into (kind, target, payload).
 
     Returns None (fail closed) for any arbitrary Python code, multi-statement
-    string, non-literal argument, or unsupported structure.
+    string, non-literal argument, unexpected dict keys, or unsupported structure.
     """
     if isinstance(raw_env_action, dict):
+        if not set(raw_env_action.keys()).issubset(_ALLOWED_DICT_KEYS):
+            return None
         kind = raw_env_action.get("kind")
         if not isinstance(kind, str) or kind not in ALLOWED_ACTION_KINDS:
             return None
@@ -196,16 +229,36 @@ def _parse_raw_env_action(raw_env_action: Any) -> tuple[str, str, str] | None:
         if not isinstance(text, str):
             return None
         return ("type", "", text)
-    if kind == "hotkey":
-        keys = [str(a) for a in pos_args]
-        if not keys and "keys" in kw_args:
-            raw_keys = kw_args["keys"]
-            keys = (
-                [str(raw_keys)]
-                if isinstance(raw_keys, str)
-                else [str(k) for k in raw_keys]
+    if kind == "press":
+        raw_keys = kw_args.get("keys", pos_args[0] if pos_args else None)
+        if isinstance(raw_keys, (list, tuple)):
+            if not raw_keys or not all(isinstance(k, str) for k in raw_keys):
+                return None
+            typed = "".join(
+                "\n" if k.lower() in {"enter", "return"} else k for k in raw_keys
             )
-        return ("hotkey", "+".join(keys), "")
+            return ("type", "", typed)
+        if not isinstance(raw_keys, str) or not raw_keys:
+            return None
+        if raw_keys.lower() in {"enter", "return"}:
+            return ("type", "", "\n")
+        if len(raw_keys) == 1:
+            return ("type", "", raw_keys)
+        return ("hotkey", raw_keys, "")
+    if kind == "hotkey":
+        if not pos_args or len(pos_args) > 3:
+            return None
+        if not all(isinstance(a, str) and a for a in pos_args):
+            return None
+        lowered = [a.lower() for a in pos_args]
+        # Require at least one modifier key and reject enter/return/whitespace
+        # so hotkey() cannot be abused to type shell commands.
+        if not any(k in _MODIFIER_KEYS for k in lowered):
+            return None
+        if any(k in {"enter", "return", "space"} or any(c.isspace() for c in k) for k in lowered):
+            if frozenset(lowered) not in _TERMINAL_LAUNCHER_HOTKEYS:
+                return None
+        return ("hotkey", "+".join(pos_args), "")
     return None
 
 
@@ -566,15 +619,35 @@ class OpenAdaptOSWorldGuard:
                 or _EGRESS_SHELL_PATTERN.search(combined_ui)
             )
             targets_terminal = bool(_TERMINAL_TARGET_PATTERN.search(action.target))
+            # P1: untrusted/injection-tainted type containing newline/Enter fails closed
+            # regardless of caller-supplied target or shell obfuscation.
+            submits_line = action.kind == "type" and (
+                "\n" in action.payload or "\r" in action.payload
+            )
+            hotkey_parts = frozenset(
+                p.strip().lower() for p in action.target.split("+") if p.strip()
+            )
+            opens_terminal = (
+                action.kind == "hotkey"
+                and (
+                    hotkey_parts in _TERMINAL_LAUNCHER_HOTKEYS
+                    or "enter" in hotkey_parts
+                    or "return" in hotkey_parts
+                )
+            )
             if (untrusted_source or injection_in_context) and (
-                has_shell_danger or targets_terminal or touches_sensitive
+                has_shell_danger
+                or targets_terminal
+                or touches_sensitive
+                or submits_line
+                or opens_terminal
             ):
                 return GuardVerdict(
                     decision="HALT",
                     vector="indirect_prompt_injection",
                     reason=(
-                        f"Blocked untrusted/injection-tainted {action.kind} targeting "
-                        f"terminal or shell payload ({action.target!r})"
+                        f"Blocked untrusted/injection-tainted {action.kind} "
+                        f"(terminal/newline/launcher/shell risk on {action.target!r})"
                     ),
                     abstained=True,
                 )
@@ -720,7 +793,7 @@ class OpenAdaptOSWorldGuard:
         action: AgentAction,
         raw_env_action: Any,
         *,
-        provenance: SourceTrust = "untrusted",
+        provenance: SourceTrust | None = None,
     ) -> tuple[GuardVerdict, Any]:
         """Bridge helper for live OSWorld / OS-Harm VM environments.
 
@@ -797,15 +870,29 @@ class OpenAdaptOSWorldGuard:
                 None,
             )
 
+        effective_prov: SourceTrust = (
+            provenance
+            if provenance is not None
+            else (
+                self._provenance_provider(action)
+                if self._provenance_provider is not None
+                else "untrusted"
+            )
+        )
         bound_action = AgentAction(
             kind=raw_kind,
             target=action.target or raw_target,
             payload=raw_payload if raw_payload else action.payload,
-            source_trust=provenance,
+            source_trust=effective_prov,
             observed_context=action.observed_context,
             referenced_paths=action.referenced_paths,
         )
-        verdict = self.check_action(bound_action, provenance=provenance)
+        verdict = self.check_action(bound_action, provenance=effective_prov)
         if verdict.decision != "ALLOW":
             return verdict, None
-        return verdict, env.step(raw_env_action)
+        safe_dispatch = (
+            {"kind": raw_kind, "target": raw_target, "payload": raw_payload}
+            if isinstance(raw_env_action, dict)
+            else raw_env_action
+        )
+        return verdict, env.step(safe_dispatch)
