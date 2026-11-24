@@ -119,7 +119,7 @@ able to reuse the taxonomy directly.
 
 ## Build
 
-Requirements: Python 3.10+, `latexmk`, and a TeX distribution with `booktabs`,
+Requirements: Python 3.11+, `latexmk`, and a TeX distribution with `booktabs`,
 `microtype`, `hyperref`, `amssymb`, `array`, `tikz`, and `pgfplots`
 (Debian/Ubuntu: `texlive-latex-extra texlive-pictures texlive-science`).
 
