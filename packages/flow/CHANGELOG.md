@@ -15,7 +15,16 @@
 
 <!-- version list -->
 
-## Unreleased
+## v4.0.0 (2026-11-24)
+
+### Breaking Changes
+
+- **Encryption at rest is now enabled by default** (`#2423`): recordings,
+  compiled bundles, and run directories are written as sealed-set v3
+  encrypted containers unless `OPENADAPT_ENCRYPT_AT_REST=0` or `--no-encrypt`
+  is set. Released `openadapt` launcher `1.23.0` (`openadapt-flow<4`) reads
+  run files via plain paths, so this major bump keeps `1.23.0` on Flow 3.4.0
+  while pairing Flow 4.0.0 with `openadapt 1.24.0` (`>=4.0.0,<5.0.0`).
 
 ### Encryption at rest by default
 
