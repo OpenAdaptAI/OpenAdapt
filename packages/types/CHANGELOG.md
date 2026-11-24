@@ -23,10 +23,13 @@
   `independent_session`. Every other contract keeps the tier-2 floor, and
   every receipt that validated before still validates.
 
-## v0.24.2 (2026-11-22)
+## v0.24.2 (2026-11-23)
 
 0.24.1 was stamped on main but never published. 0.24.2 is the first
-published release with this content, and the version to install.
+published release with this content, and the version to install. Its first
+main push run failed on an unrelated Flow job that #2423 broke, which
+[#2589](https://github.com/OpenAdaptAI/OpenAdapt/pull/2589) fixed, so it
+publishes from the run after that fix.
 
 openadapt-flow 3.4.0 imports `openadapt_types.receipt`, which 0.24.0 does not
 have. This release adds it and the other modules Flow imports on main

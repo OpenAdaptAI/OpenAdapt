@@ -106,6 +106,16 @@ class LocalCustomerStorage:
             pass
         return str(dest)
 
+    def write_diagnostics(self, ref: Optional[str], data: dict[str, Any]) -> None:
+        from openadapt_flow.connector.diagnostics import write_diagnostics
+
+        if not ref:
+            raise ValueError("connector diagnostics require a local report key")
+        report = _customer_path(self.root, ref, kind="report")
+        write_diagnostics(
+            report.with_name(report.name + ".connector-diagnostics"), data
+        )
+
 
 class InMemoryCustomerStorage:
     """Tests/dry-run backend: exact bundle bytes + an in-memory report sink.

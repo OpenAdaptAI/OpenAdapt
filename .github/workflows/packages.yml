@@ -114,6 +114,9 @@ jobs:
     timeout-minutes: 5
     outputs:
       flow: ${{ steps.classify.outputs.flow }}
+      flow_at_rest: ${{ steps.classify.outputs.flow_at_rest }}
+      flow_onprem: ${{ steps.classify.outputs.flow_onprem }}
+      flow_agent_frameworks: ${{ steps.classify.outputs.flow_agent_frameworks }}
       flow_unit_shards: ${{ steps.classify.outputs.flow_unit_shards }}
       types: ${{ steps.classify.outputs.types }}
       agent: ${{ steps.classify.outputs.agent }}
@@ -145,7 +148,7 @@ jobs:
           if [ "$EVENT_NAME" = pull_request ]; then unit_shards=4; else unit_shards=2; fi
           echo "flow_unit_shards=$unit_shards" >> "$GITHUB_OUTPUT"
           all() {
-            for pkg in flow types agent eligibility verify capture privacy desktop tray program_graph weight; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
+            for pkg in flow flow_at_rest flow_onprem flow_agent_frameworks types agent eligibility verify capture privacy desktop tray program_graph seal_view weight; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
             exit 0
           }
           case "$EVENT_NAME" in
@@ -177,6 +180,22 @@ jobs:
           # Flow depends on the in-tree types, and its `capture` extra is tested
           # against the in-tree capture.
           flow="$(hit "^packages/(flow|capture|types)/|$browser_support|$wf")"
+          # Sub-package gates on pull requests and queue groups; pushes to main,
+          # schedules and dispatches follow `flow`. Encryption at rest is the
+          # default for every store, so any Flow, Types or Capture code change can
+          # regress it; only prose (docs/ and top-level *.md) skips these jobs.
+          if [ "$EVENT_NAME" != pull_request ] && [ "$EVENT_NAME" != merge_group ]; then
+            flow_at_rest="$flow"
+            flow_onprem="$flow"
+            flow_agent_frameworks="$flow"
+          else
+            code_changed="$(grep -Ev '^packages/(flow|capture|types)/(docs/|[^/]*\.md$)' <<<"$changed" || true)"
+            hit_code() { if grep -Eq "$1" <<<"$code_changed"; then echo true; else echo false; fi; }
+            flow_code="$(hit_code "^packages/(flow|capture|types)/|$browser_support|$wf")"
+            flow_at_rest="$flow_code"
+            flow_onprem="$flow_code"
+            flow_agent_frameworks="$flow_code"
+          fi
           # The types package is the leaf: only its own files re-run it.
           types="$(hit "^packages/types/|$wf")"
           # The agent shim is tested against the in-tree core.
@@ -198,6 +217,9 @@ jobs:
           weight="$(hit "^packages/|^pyproject\.toml$|^openadapt/|^hatch_build\.py$|^scripts/install_weight/|$wf")"
           {
             echo "flow=$flow"
+            echo "flow_at_rest=$flow_at_rest"
+            echo "flow_onprem=$flow_onprem"
+            echo "flow_agent_frameworks=$flow_agent_frameworks"
             echo "types=$types"
             echo "agent=$agent"
             echo "eligibility=$eligibility"
@@ -674,16 +696,14 @@ jobs:
 
   flow-default-at-rest:
     # The whole flow suite under the product default: encryption at rest on
-    # (no plaintext opt-out). Required on pull requests. Tests that read or
-    # plant plaintext files directly, and known open limitations, are skipped
-    # in this mode with their reason (tests/default_at_rest_skips.txt, #2423).
+    # (no plaintext opt-out). Required on code-changing pull requests (prose-only
+    # Flow PRs skip it via flow_at_rest). Tests that read or plant plaintext files
+    # directly, and known open limitations, are skipped in this mode with their
+    # reason (tests/default_at_rest_skips.txt, #2423).
     name: flow default at rest (shard ${{ matrix.shard }}/${{ matrix.of }})
     needs: scope
-    # PR and post-merge tiers. The merge queue skips it: a pull request can
-    # enter the queue only after packages-gate passed with these shards green
-    # on its merge with main, and flow-critical re-checks the golden path on
-    # the group.
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft != true && needs.scope.outputs.flow == 'true'
+    # PR tier only (as on main): avoids untriaged nightly e2e under encrypted mode.
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft != true && needs.scope.outputs.flow_at_rest == 'true'
     runs-on: ubuntu-latest
     # The nightly tier (a schedule or a dispatch) also measures coverage,
     # which slows the suite by about a third; it gets 60 minutes.
@@ -694,10 +714,7 @@ jobs:
         # Each shard runs one pytest-xdist worker per vCPU (four on
         # ubuntu-latest) and pays about 35 s of setup. Files are packed by
         # measured time (scripts/ci/flow_shards.py), so the shards finish
-        # together. A pull request's fast lane takes four shards: with three,
-        # the identity, wire and verifier tests it must keep held each shard
-        # near 12 minutes of tests (run 44684203094). The full suite on main
-        # and nightly takes two.
+        # together.
         include: [{"shard":1,"of":4},{"shard":2,"of":4},{"shard":3,"of":4},{"shard":4,"of":4}]
     defaults:
       run:
@@ -836,7 +853,7 @@ jobs:
           mapfile -t files < "$RUNNER_TEMP/shard.txt"
           # The wall-clock bound needs an uncontended worker; flow core unit
           # runs it alone, so it is not repeated here.
-          pytest -n logical --dist loadfile -q -rfE --timeout 300 \
+          pytest -n logical --dist loadscope -q -rfE --timeout 300 \
             --deselect=tests/test_tx_acid_servers.py::test_50k_seed_speed_and_8_worker_background_concurrency \
             --basetemp=runs/ci-default \
             --junitxml=runs/flow-default-at-rest-${{ matrix.shard }}.xml "${files[@]}"
@@ -1029,7 +1046,7 @@ jobs:
           done
           unit_rc=0
           # shellcheck disable=SC2086 # COVERAGE_ARGS is empty or two flags.
-          pytest -n logical --dist loadfile -v --durations=20 --basetemp=runs/ci \
+          pytest -n logical --dist loadscope -v --durations=20 --basetemp=runs/ci \
             --deselect="$serial_case" $COVERAGE_ARGS \
             --junitxml=runs/flow-unit-shard-${{ matrix.shard }}-of-${{ matrix.of }}.xml "${files[@]}" || unit_rc=$?
           if "$run_serial"; then
@@ -1070,7 +1087,7 @@ jobs:
         # The durable and authority files whose tests read files directly
         # as plaintext are not listed yet (#2423 lists them).
         run: >-
-          pytest -n logical --dist loadfile -q --basetemp=runs/ci-default-at-rest
+          pytest -n logical --dist loadscope -q --basetemp=runs/ci-default-at-rest
           tests/test_rollback.py tests/test_rollback_qualify.py
           tests/test_checkpoint_key_derivations.py tests/test_key_hierarchy.py
           tests/test_at_rest_review_round3.py
@@ -1305,7 +1322,7 @@ jobs:
   flow-onprem-offline:
     name: flow on-prem offline install, update and rollback (egress blocked)
     needs: scope
-    if: github.event.pull_request.draft != true && (needs.scope.outputs.flow == 'true')
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.flow_onprem == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -1320,7 +1337,9 @@ jobs:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
-          enable-cache: false
+          enable-cache: true
+          cache-dependency-glob: "packages/flow/uv.lock"
+          cache-suffix: flow-onprem-offline
       - name: Signed update and rollback state machine (hermetic, fake build)
         run: bash deploy/on-prem/bin/test-update.sh
       - name: Build two signed offline releases from the lock (connected)
@@ -1344,7 +1363,7 @@ jobs:
   flow-agent-frameworks:
     name: flow agent frameworks (scripted models)
     needs: scope
-    if: github.event.pull_request.draft != true && (needs.scope.outputs.flow == 'true')
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.flow_agent_frameworks == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     defaults:
@@ -1369,6 +1388,15 @@ jobs:
         # need mcp<2 and openai<3. The adapter is tested against this one
         # version, in this job only.
         run: uv pip install --no-config --require-hashes -r ci/crewai-1.6.1.txt
+      - name: Resolve Playwright version
+        id: pw
+        run: |
+          uv run --no-sync python -c "import importlib.metadata as m; print('version=' + m.version('playwright'))" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
       - name: Install and launch Playwright browser
         timeout-minutes: 12
         run: >-
@@ -1380,7 +1408,7 @@ jobs:
           OTEL_SDK_DISABLED: "true"
         run: |
           mkdir -p runs
-          uv run --no-sync pytest -v --timeout=120 -k "not real_model" \
+          uv run --no-sync pytest -n logical --dist loadscope -v --timeout=120 -k "not real_model" \
             tests/test_agent_write_guard.py tests/test_agent_framework_*.py \
             tests/e2e/test_skill_cache_e2e.py \
             --junitxml=runs/frameworks-junit.xml
@@ -2160,10 +2188,10 @@ jobs:
               "verify-clean-install": "verify",
               "flow-lint": "flow",
               "flow-unit": "flow",
-              "flow-default-at-rest": "flow",
+              "flow-default-at-rest": "flow_at_rest",
               "flow-critical": "flow",
-              "flow-onprem-offline": "flow",
-              "flow-agent-frameworks": "flow",
+              "flow-onprem-offline": "flow_onprem",
+              "flow-agent-frameworks": "flow_agent_frameworks",
               "flow-native-census": "flow",
               "flow-linux-atspi": "flow",
               "capture-linux": "capture",
