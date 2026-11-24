@@ -377,9 +377,7 @@ class _VisibleTextExtractor(HTMLParser):
         self._skip_depth = 0
         self.nodes: list[str] = []
 
-    def handle_starttag(
-        self, tag: str, attrs: list[tuple[str, str | None]]
-    ) -> None:
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         del attrs
         if tag.lower() in self._SKIP_TAGS:
             self._skip_depth += 1
@@ -429,7 +427,9 @@ def _dom_value_matches_bound_label(
             # Check prefix "<label> <value>" where label words match the start of the node.
             label_words = target_label.split()
             prefix_re = re.compile(
-                r"^\s*" + r"[\s_-]+".join(re.escape(w) for w in label_words) + r"\s+(.+)$",
+                r"^\s*"
+                + r"[\s_-]+".join(re.escape(w) for w in label_words)
+                + r"\s+(.+)$",
                 re.IGNORECASE,
             )
             m = prefix_re.match(node)
