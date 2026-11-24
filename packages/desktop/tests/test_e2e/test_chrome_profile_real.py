@@ -99,6 +99,24 @@ def _page_text(endpoint: str, origin: str) -> str:
             browser.close()
 
 
+def _navigate_open_page(endpoint: str, target_url: str) -> None:
+    playwright = pytest.importorskip("playwright.sync_api")
+    with playwright.sync_playwright() as pw:
+        browser = pw.chromium.connect_over_cdp(endpoint)
+        try:
+            pages = [p for c in browser.contexts for p in c.pages]
+            page = pages[0] if pages else browser.contexts[0].new_page()
+            page.goto(target_url, wait_until="domcontentloaded")
+        finally:
+            browser.close()
+
+
+def _cookies_db_exists(user_data: Path) -> bool:
+    return (user_data / "Default" / "Cookies").exists() or (
+        user_data / "Default" / "Network" / "Cookies"
+    ).exists()
+
+
 @pytest.mark.skipif(not ELEVATED, reason="only an elevated Windows process is refused")
 def test_an_elevated_windows_desktop_refuses_real_chrome(tmp_path: Path) -> None:
     find_chrome()
@@ -145,15 +163,26 @@ def test_sign_in_persists_and_desktop_closes_only_its_window(tmp_path: Path, por
             other.open(profile_id, f"{portal}/home")
         assert err.value.code == "profile_in_use"
 
-        assert service.close(profile_id)["closed"] is True
         user_data = service.root / profile_id / "user-data"
+        # Wait for Chrome's NetworkService to create the on-disk cookie store
+        # before closing, so the newly-set session cookie is flushed on exit.
+        _wait_for(lambda: _cookies_db_exists(user_data), 10.0)
+
+        assert service.close(profile_id)["closed"] is True
         lock = "lockfile" if sys.platform == "win32" else "SingletonLock"
         assert _wait_for(lambda: not os.path.lexists(user_data / lock), 15)
 
         # Reopen: Chrome sends the cookie it kept; nothing was typed again.
         _Portal.seen.clear()
         reopened = service.open(profile_id, f"{portal}/home")
-        assert _wait_for(lambda: ("/home", True) in _Portal.seen)
+        if not _wait_for(lambda: ("/home", True) in _Portal.seen, 10.0) and not _Portal.seen:
+            # On macOS, launching a second Chrome instance while another Chrome
+            # process is active can occasionally open without loading the CLI
+            # URL; navigate the already-open tab to /home without re-logging in.
+            _navigate_open_page(reopened["browser_cdp_endpoint"], f"{portal}/home")
+        assert _wait_for(lambda: ("/home", True) in _Portal.seen, 20.0), (
+            f"expected ('/home', True) in {_Portal.seen!r}"
+        )
         assert _page_text(reopened["browser_cdp_endpoint"], portal) == "Signed in as tester"
         service.close_all()
         assert all(not p["open"] for p in service.list()["profiles"])

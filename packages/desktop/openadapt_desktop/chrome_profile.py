@@ -323,6 +323,13 @@ def send_browser_close(port: int, browser_path: str, timeout: float = 3.0) -> No
             header = bytes([0x81, 0x80 | 126]) + len(payload).to_bytes(2, "big")
         masked = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
         sock.sendall(header + mask + masked)
+        # Wait briefly for Chrome to acknowledge or close the WebSocket so the
+        # socket does not send an abrupt TCP reset before Browser.close is read.
+        sock.settimeout(min(timeout, 1.0))
+        try:
+            sock.recv(1024)
+        except OSError:
+            pass
 
 
 # ------------------------------------------------------------------ service
