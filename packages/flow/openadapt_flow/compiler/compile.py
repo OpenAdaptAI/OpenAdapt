@@ -921,6 +921,129 @@ def _crop_png(png: bytes, region: Region) -> bytes:
     return encoded
 
 
+def _shows_blackout(png: Optional[bytes], region: Region) -> bool:
+    """Whether ``region`` of the frame is the recorder's solid black box.
+
+    The recorder fills a withheld credential field with black in every frame
+    that still shows it (``Recorder._redact``). Undecodable input counts as
+    blacked out, the safe direction for dropping a pixel invariant.
+    """
+    if png is None:
+        return False
+    img = imgops.decode_bgr(png)
+    if img is None:
+        return True
+    x, y, w, h = region
+    crop = img[max(y, 0) : max(y, 0) + h, max(x, 0) : max(x, 0) + w]
+    if crop.size == 0:
+        return False
+    return bool((crop <= 8).all(axis=-1).mean() >= 0.95)
+
+
+def _clip_away(region: Region, box: Region) -> Optional[Region]:
+    """The largest part of ``region`` above, below, left or right of ``box``."""
+    x, y, w, h = region
+    bx, by, bw, bh = box
+    parts = [
+        (x, y, w, by - y),
+        (x, by + bh, w, y + h - (by + bh)),
+        (x, y, bx - x, h),
+        (bx + bw, y, x + w - (bx + bw), h),
+    ]
+    parts = [p for p in parts if p[2] >= 8 and p[3] >= 8]
+    return max(parts, key=lambda p: p[2] * p[3]) if parts else None
+
+
+def _checks_without_withheld_fields(
+    step: Step,
+    after_png: Optional[bytes],
+    boxes: list[Region],
+    bundle: Path,
+) -> list[dict[str, Any]]:
+    """Keep ``step``'s pixel checks off withheld credential fields.
+
+    The recorder fills a withheld field with black in every frame that still
+    shows it, so a REGION_STABLE crop over one froze a black box that no live
+    screen shows and would refute every run. The check is clipped to the part
+    of its region clear of the box, re-cropped from the same recorded frame;
+    a region with no usable part left is dropped. Returns one note per change.
+    """
+    notes: list[dict[str, Any]] = []
+    if not boxes or not step.expect or after_png is None:
+        return notes
+    kept: list[Postcondition] = []
+    for pc in step.expect:
+        hits = [
+            box
+            for box in boxes
+            if pc.kind is PostconditionKind.REGION_STABLE
+            and pc.region is not None
+            and _regions_intersect(pc.region, box)
+            and _shows_blackout(after_png, box)
+        ]
+        if not hits:
+            kept.append(pc)
+            continue
+        region: Optional[Region] = pc.region
+        for box in hits:
+            if region is not None and _regions_intersect(region, box):
+                region = _clip_away(region, box)
+        if region is not None and any(_regions_intersect(region, b) for b in hits):
+            region = None
+        note = {"step": step.id, "region": list(pc.region or ())}
+        if region is None:
+            notes.append(
+                {
+                    **note,
+                    "change": "drop_region_stable_over_withheld_field",
+                    "evidence": "the recorded crop holds a withheld field's black box",
+                }
+            )
+            continue
+        rel = pc.template or f"templates/{step.id}_expect.png"
+        _sealed.write_bytes(bundle / rel, _crop_png(after_png, region))
+        kept.append(
+            pc.model_copy(
+                update={
+                    "region": region,
+                    "phash": phash_png(after_png, region=region),
+                    "template": rel,
+                }
+            )
+        )
+        notes.append(
+            {
+                **note,
+                "change": "clip_region_stable_off_withheld_field",
+                "evidence": "the recorded crop held a withheld field's black box",
+                "clipped_region": list(region),
+            }
+        )
+    step.expect = kept
+    return notes
+
+
+def _record_withheld_field_changes(
+    changes: list[dict[str, Any]],
+    param_region_drops: list[tuple[str, Region, str]],
+) -> None:
+    """Log each clip; record each drop in ``param_hygiene.json`` like the
+    other dropped REGION_STABLE checks (no new bundle file)."""
+    for change in changes:
+        if change["change"].startswith("drop_"):
+            param_region_drops.append(
+                (change["step"], tuple(change["region"]), "<withheld credential field>")
+            )
+        else:
+            logger.info(
+                "compile-pass %s: REGION_STABLE %s clipped to %s, clear of a "
+                "withheld credential field",
+                change["step"],
+                change["region"],
+                change["clipped_region"],
+            )
+
+
 def _regions_intersect(a: Region, b: Region) -> bool:
     ax, ay, aw, ah = a
     bx, by, bw, bh = b
@@ -2222,7 +2345,7 @@ def _hover_evidence(
         return None  # nothing answered the pointer: no evidence to keep
     crop_rel = f"{HOVER_CROP_DIR}/{step_id}.png"
     (bundle / HOVER_CROP_DIR).mkdir(parents=True, exist_ok=True)
-    (bundle / crop_rel).write_bytes(response.crop)
+    _sealed.write_bytes(bundle / crop_rel, response.crop)
     return HoverEvidence(
         response=True,
         region=hover_mod.relative(response.region, click),
@@ -3850,6 +3973,9 @@ def _compile_recording(
     # changed region rendered a demonstrated parameter value. Reported (not
     # raised) below — the drop is the safe outcome, but it must not be silent.
     param_region_drops: list[tuple[str, Region, str]] = []
+    # Boxes of withheld credential fields seen so far (recorder
+    # ``redacted_region``); recorded frames show them blacked out.
+    secret_field_regions: list[Region] = []
     # Submit-binding observations recorded on click events (unlabeled
     # controls only), attached once every risk decision is final.
     binding_observations: dict[str, object] = {}
@@ -3935,6 +4061,18 @@ def _compile_recording(
         )
         for region, matched in step_region_drops:
             param_region_drops.append((step.id, region, matched))
+        # A withheld credential field is blacked out in this and every later
+        # recorded frame; keep pixel checks off it (_checks_without_withheld_fields).
+        redacted = event.get("redacted_region")
+        if isinstance(redacted, (list, tuple)) and len(redacted) == 4:
+            x0, y0, x1, y1 = (int(v) for v in redacted)
+            secret_field_regions.append((x0, y0, x1, y1))
+        _record_withheld_field_changes(
+            _checks_without_withheld_fields(
+                step, step_after, secret_field_regions, bundle
+            ),
+            param_region_drops,
+        )
         if not step.expect:
             # Nothing visual survived mining: fall back to structural
             # postconditions (URL/title change, new tab) so the step is not
@@ -4300,6 +4438,23 @@ def _compile_recording(
         pixel_verify_enabled=pixel_verify_enabled,
         drop_redundant_keys=drop_redundant_keys,
     )
+    # The focused-field pass above crops the clicked box from the recorded
+    # after-frame, which can still show a neighbouring withheld credential
+    # field as the recorder's black box. Apply the same rule as mining.
+    withheld_boxes: list[Region] = []
+    after_by_step: dict[str, tuple[Optional[bytes], list[Region]]] = {}
+    for step, _sb, after_png, event in pending:
+        redacted = event.get("redacted_region")
+        if isinstance(redacted, (list, tuple)) and len(redacted) == 4:
+            x0, y0, x1, y1 = (int(v) for v in redacted)
+            withheld_boxes.append((x0, y0, x1, y1))
+        after_by_step[step.id] = (after_png, list(withheld_boxes))
+    for step in steps:
+        after, boxes = after_by_step.get(step.id, (None, []))
+        _record_withheld_field_changes(
+            _checks_without_withheld_fields(step, after, boxes, bundle),
+            param_region_drops,
+        )
     compile_notes = [
         *compile_notes,
         *guard_notes,

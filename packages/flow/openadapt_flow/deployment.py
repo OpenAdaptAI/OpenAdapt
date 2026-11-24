@@ -26,7 +26,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Callable, Final, Literal, Mapping, Optional
+from typing import Annotated, Any, Callable, Final, Literal, Mapping, Optional
 
 from pydantic import (
     BaseModel,
@@ -39,6 +39,7 @@ from pydantic import (
     model_validator,
 )
 
+from openadapt_flow.local_state_sources import LocalStateSource
 from openadapt_flow.lookup_capabilities import (
     DeclaredSurface,
     declared_surface_problem,
@@ -225,6 +226,8 @@ BUILTIN_EFFECT_KINDS = frozenset(
         "email",
         "document",
         "document-hash",
+        "local-state",
+        "local_state",
         "desktop_readback",
         "desktop-readback",
         "deferred_report",
@@ -306,7 +309,7 @@ class EffectsConfig(BaseModel):
 
     #: ``none`` | ``onscreen`` | ``ui_readback`` | ``rest`` | ``graphql`` |
     #: ``fhir`` | ``sql`` | ``file`` | ``email`` | ``document`` |
-    #: ``document-hash``, or a PLUGIN
+    #: ``document-hash`` | ``local-state``, or a PLUGIN
     #: kind registered under the
     #: ``openadapt_flow.effect_verifiers`` entry-point group (the customer
     #: adapter SDK seam -- see docs/EFFECT_KIT.md). ``onscreen`` is the no-API
@@ -538,6 +541,15 @@ class EffectsConfig(BaseModel):
     root: Optional[str] = None
     glob: str = "*"
 
+    # -- local-state (files and OS settings on this computer) ----------------
+    #: The typed, read-only sources ``kind: local-state`` reads: ``file``
+    #: (contents and SHA-256), ``macos_defaults`` (a preference key) and
+    #: ``windows_registry`` (a registry value). There is no free-form command;
+    #: see :mod:`openadapt_flow.runtime.effects.local_state`.
+    local_state: list[Annotated[LocalStateSource, Field(discriminator="type")]] = Field(
+        default_factory=list
+    )
+
     # -- plugin record-check packs (registered kinds only) --------------------
     #: Non-secret settings for a PLUGIN verifier kind: the per-system record
     #: check a private pack implements (which read endpoint, which record
@@ -690,6 +702,8 @@ class EffectsConfig(BaseModel):
         ):
             if data.get(added, "") is None:
                 data.pop(added, None)
+        if not data.get("local_state"):
+            data.pop("local_state", None)
         return data
 
     @model_validator(mode="after")
@@ -809,8 +823,8 @@ class GroundingModelConfig(BaseModel):
     #: Root URL of an ``openai_compatible`` endpoint (``/chat/completions`` is
     #: appended). Required for ``openai_compatible``; ignored for ``anthropic``.
     base_url: str = ""
-    #: The vision-capable model id to request. For ``anthropic`` an empty value
-    #: uses the shipped default; for ``openai_compatible`` it is required.
+    #: The vision-capable model id to request. Required for both providers: an
+    #: enabled section with no model is refused, never given a default.
     model: str = ""
     #: NAME of the environment variable holding the API key (never the key
     #: itself). Empty => no auth header sent (a loopback vLLM/Ollama needs none);
@@ -1693,15 +1707,23 @@ def build_model_grounder(cfg: GroundingModelConfig) -> Optional[Any]:
     api_key = os.environ.get(cfg.api_key_env, "") if cfg.api_key_env else ""
 
     if provider == "anthropic":
-        from openadapt_flow.runtime.grounder import _DEFAULT_MODEL, AnthropicGrounder
+        from openadapt_flow.runtime.grounder import AnthropicGrounder
 
-        model = (cfg.model or "").strip() or _DEFAULT_MODEL
+        model = (cfg.model or "").strip()
+        if not model:
+            # A pinned grounding model must name its model: an empty value
+            # never silently becomes the shipped default.
+            print(
+                "grounding_model.provider 'anthropic' requires a model; "
+                "replaying FULLY LOCAL."
+            )
+            return None
         try:
             client = None
             if api_key:
                 import anthropic
 
-                client = anthropic.Anthropic(api_key=api_key)
+                client = anthropic.Anthropic(api_key=api_key, max_retries=0)
             return AnthropicGrounder(model=model, client=client)
         except ImportError:
             print(
@@ -1829,6 +1851,20 @@ def build_replayer(
         if not ok:
             print(f"PHI mode: {reason}; replaying FULLY LOCAL.")
             appliance = None
+    # Regulated if either the authorization or the deployment names it.
+    regulated = "regulated" in {
+        getattr(governed_authorization, "execution_profile", None),
+        getattr(runtime_config, "profile", None),
+    }
+    if appliance is not None and regulated:
+        from openadapt_flow.model_transport import regulated_transport_refusal
+
+        # The URL the appliance client actually sends to.
+        sent_to = getattr(getattr(appliance, "client", None), "_base_url", "")
+        refusal = regulated_transport_refusal(sent_to or "")
+        if refusal is not None:
+            print(f"Regulated profile: {refusal}; the appliance is NOT wired.")
+            appliance = None
     if appliance is not None:
         print(
             "Using on-prem VLM appliance at "
@@ -1861,18 +1897,38 @@ def build_replayer(
                     wire = False
             if wire:
                 model_grounder = build_model_grounder(grounding_cfg)
-                if model_grounder is not None:
-                    print(
-                        "Model grounder wired: "
-                        f"{type(model_grounder).__name__} "
-                        f"(provider={grounding_cfg.provider}). WARNING: "
-                        "screenshots WILL leave the box for this run."
+            if model_grounder is not None and (regulated or phi_on):
+                from openadapt_flow.model_transport import (
+                    built_endpoint,
+                    regulated_transport_refusal,
+                )
+
+                # Check the URL the built client sends to, not the config.
+                sent_to = built_endpoint(model_grounder)
+                refusal = regulated_transport_refusal(sent_to) if regulated else None
+                if refusal is None and phi_on:
+                    ok, reason = phi_grounding_endpoint_allowed(
+                        _host_of(sent_to), allowlist=allowlist, attested=attested
                     )
+                    refusal = None if ok else reason
+                if refusal is not None:
+                    print(f"Model grounder refused: {refusal}; replaying FULLY LOCAL.")
+                    model_grounder = None
+            if model_grounder is not None:
+                print(
+                    "Model grounder wired: "
+                    f"{type(model_grounder).__name__} "
+                    f"(provider={grounding_cfg.provider}). WARNING: "
+                    "screenshots WILL leave the box for this run."
+                )
 
     # The configured model grounder takes precedence as the VLM fallback; the
-    # on-prem appliance grounder is used only when no model grounder is wired.
+    # on-prem appliance grounder is used only when no model is pinned. A pinned
+    # model that can't be wired (unavailable, refused) never falls back to
+    # another placement or model: the grounding rung stays off and a target
+    # the deterministic rungs can't resolve halts for a person.
     fallback = model_grounder
-    if fallback is None and appliance is not None:
+    if fallback is None and appliance is not None and not grounding_cfg.enabled:
         fallback = appliance.grounder
     local_model: Optional[Any] = None
     if runtime_config is not None and runtime_config.local_grounding:
@@ -2361,6 +2417,11 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
         ):
             if isinstance(candidate, dict) and candidate.get(added) is None:
                 candidate.pop(added, None)
+    # ``local_state`` defaults to an empty list; omit it unless configured so
+    # existing verifier identities stay unchanged.
+    for holder in [config, *(config.get("candidates") or [])]:
+        if isinstance(holder, dict) and not holder.get("local_state"):
+            holder.pop("local_state", None)
     # The same rule one level down: ``ui_readback.reference`` came later.
     for holder in [config, *(config.get("candidates") or [])]:
         section = holder.get("ui_readback") if isinstance(holder, dict) else None
@@ -2663,6 +2724,18 @@ def _build_effect_verifier_unredacted(
             glob=cfg.glob,
             producer=cfg.artifact_producer,
             acting_roots=cfg.acting_roots,
+        )
+
+    if kind in ("local-state", "local_state"):
+        if not cfg.local_state:
+            raise ValueError(
+                "effects.kind 'local-state' requires effects.local_state "
+                "(the files or settings to read)"
+            )
+        from openadapt_flow.runtime import LocalStateVerifier
+
+        return LocalStateVerifier(
+            list(cfg.local_state), poll_interval_s=cfg.poll_interval_s
         )
 
     if kind == "graphql":

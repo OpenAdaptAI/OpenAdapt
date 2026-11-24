@@ -63,11 +63,13 @@ for path in (FLOW, HERE):
 
 from qualify_macos import (  # noqa: E402
     APPROVER,
+    SELF_REPAIR_MODE,
     LaterAgent,
     _approver,
     _approver_roster,
     _find_text,
     _rows,
+    _self_repair_legs,
 )
 
 APP_SOURCE = FLOW / "tests" / "native_apps" / "chart_gtk.py"
@@ -149,6 +151,7 @@ def _point(backend: Any, role: str, name: str) -> tuple[int, int]:
 
 def _record(root: Path, db: Path) -> tuple[Path, dict]:
     """Record the healthy workflow on the old version and compile it."""
+    from openadapt_flow import sealed_set as _sealed
     from openadapt_flow.compiler import compile_recording
     from openadapt_flow.ir import Workflow
     from openadapt_flow.policy import evaluate_policy, load_policy
@@ -172,7 +175,9 @@ def _record(root: Path, db: Path) -> tuple[Path, dict]:
     finally:
         app.close()
     events_path = recording / "events.jsonl"
-    events = [json.loads(line) for line in events_path.read_text().splitlines()]
+    # Encrypted at rest by default (#2423): the recording is a sealed set, so
+    # read and rewrite its events through the sealed-set API (in memory).
+    events = [json.loads(line) for line in _sealed.read_text(events_path).splitlines()]
     pad = 6
     for event in events:
         if event.get("kind") == "click":
@@ -182,7 +187,7 @@ def _record(root: Path, db: Path) -> tuple[Path, dict]:
                 banner[2] + 2 * pad,
                 banner[3] + 2 * pad,
             ]
-    events_path.write_text("".join(json.dumps(e) + "\n" for e in events))
+    _sealed.write_text(events_path, "".join(json.dumps(e) + "\n" for e in events))
     bundle = root / "bundle"
     workflow = compile_recording(recording, bundle, name="chart-note-linux")
     save = workflow.steps[-1]
@@ -200,7 +205,7 @@ def _record(root: Path, db: Path) -> tuple[Path, dict]:
     save.risk = "irreversible"
     for step in workflow.steps[:-1]:
         step.risk = "reversible"
-    (bundle / "manifest.json").unlink(missing_ok=True)
+    _sealed.unlink(bundle / "manifest.json", missing_ok=True)
     workflow.save(bundle, encrypt=bool(workflow.encrypted))
     workflow = Workflow.load(bundle)
     report = evaluate_policy(workflow, load_policy("clinical-write"))
@@ -371,9 +376,10 @@ def qualify(root: Path) -> dict[str, Any]:
     clean = _governed(root, bundle, "clean", None)
     other = _governed(root, bundle, "other-patient", "other_patient")
     look_alike = _governed(root, bundle, "look-alike", "look_alike")
-    checked = _repair(root, bundle, "repair-with-record-check")
-    no_verifier = _repair(root, bundle, "repair-no-verifier", verifier=False)
-    demo = _repair(root, bundle, "repair-demo-profile", profile="demo")
+    with _self_repair_legs(bundle, root / "repair-bundle") as plain:
+        checked = _repair(root, plain, "repair-with-record-check")
+        no_verifier = _repair(root, plain, "repair-no-verifier", verifier=False)
+        demo = _repair(root, plain, "repair-demo-profile", profile="demo")
     checks = {
         "demonstration_saved_one_row": _rows(demo_db) == [(PATIENT[0], DEMO_NOTE)],
         "bundle_certified": compiled["certified_clinical_write"],
@@ -420,6 +426,7 @@ def qualify(root: Path) -> dict[str, Any]:
             if "repair_every_backend/results/" not in line
         ],
         "compiled": compiled,
+        "self_repair_mode": SELF_REPAIR_MODE,
         "governed_clean": clean,
         "governed_other_patient": other,
         "governed_look_alike": look_alike,
@@ -455,6 +462,7 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n")
     print(f"linux atspi: {'PASSED' if report['passed'] else 'FAILED'} -> {out}")
+    print(f"  self-repair legs ran {report['self_repair_mode']}")
     for name, ok in report["checks"].items():
         print(f"  {'ok ' if ok else 'BAD'} {name}")
     return 0 if report["passed"] else 1
