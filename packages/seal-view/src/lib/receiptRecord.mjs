@@ -101,6 +101,28 @@ const OPERATIONS = ['write', 'irreversible_write']
 const CHECK_RESULTS = ['confirmed', 'refuted', 'not_checked']
 const STRENGTHS = ['read_back', 'same_screen', 'none']
 const NOT_CHECKED = ['effect_not_declared', 'approved_unverified', 'field_values', 'postconditions', 'uncertain']
+const EVIDENCE_SCOPE_SCHEMA = 'openadapt.evidence-scope/v1'
+const CHECK_LEVELS = ['unchecked', 'same_screen', 'reopened', 'separate_session', 'system_of_record', 'counterparty_confirmed']
+const OUTCOME_WORDS = ['VERIFIED', 'SHOWN', 'CONFIRMED', 'ATTESTED', 'RECORDED']
+const BASIS_LEVEL = {
+    separate_session: 'separate_session',
+    system_api: 'system_of_record',
+    activity_log: 'system_of_record',
+    db_frame: 'system_of_record',
+    owned_connection: 'system_of_record',
+}
+const WIRE_CHANNELS = ['none', 'browser_network', 'http_proxy', 'api_client', 'db_connection']
+const WIRE_PROTOCOLS = ['http', 'graphql', 'fhir', 'sql', 'websocket', 'grpc', 'smtp']
+const NOT_COVERED = ['server_side_async_effects', 'outbound_effects', 'changes_after_read_back', 'fields_not_read', 'other_records', 'other_actors', 'read_back_time']
+const ALWAYS_NOT_COVERED = ['server_side_async_effects', 'outbound_effects']
+const MAX_RECHECK_S = 30 * 24 * 3600
+const EVIDENCE_SCOPE_OUTCOMES = {
+    VERIFIED: ['VERIFIED'],
+    CONFIRMED: ['VERIFIED'],
+    SHOWN: ['UNKNOWN', 'STOPPED', 'FAILED'],
+    ATTESTED: ['UNKNOWN', 'STOPPED', 'FAILED'],
+    RECORDED: ['UNKNOWN', 'STOPPED', 'FAILED'],
+}
 
 class Refusal extends Error {
     constructor(reason, detail = '') {
@@ -171,7 +193,7 @@ function validateStatement(s) {
         str(sub.digest.sha256, SHA256_HEX, `subject[${i}].digest.sha256`)
     }
     const p = s.predicate
-    closed(p, ['program', 'started_hour', 'outcome', 'steps', 'lines', 'checks', 'model_calls', 'disclosure'], ['reason_code', 'confirmations', 'approval'], 'predicate')
+    closed(p, ['program', 'started_hour', 'outcome', 'steps', 'lines', 'checks', 'model_calls', 'disclosure'], ['reason_code', 'confirmations', 'approval', 'evidence_scope'], 'predicate')
     closed(p.program, ['id', 'version_sha256'], [], 'predicate.program')
     str(p.program.id, PROGRAM_ID, 'predicate.program.id')
     str(p.program.version_sha256, SHA256_HEX, 'predicate.program.version_sha256')
@@ -228,6 +250,36 @@ function validateStatement(s) {
         str(p.approval.approver_kind, APPROVER_KINDS, 'predicate.approval.approver_kind')
         if (!isObj(p.approval.commitments) || Object.keys(p.approval.commitments).length > 3) throw new Refusal('malformed', 'predicate.approval.commitments')
     }
+    if ('evidence_scope' in p && p.evidence_scope !== null) {
+        const es = p.evidence_scope
+        closed(es, ['schema', 'check_level', 'word', 'wire', 'not_covered'], ['basis', 'read_back_at', 'recheck_window_s'], 'predicate.evidence_scope')
+        str(es.schema, [EVIDENCE_SCOPE_SCHEMA], 'predicate.evidence_scope.schema')
+        str(es.check_level, CHECK_LEVELS, 'predicate.evidence_scope.check_level')
+        str(es.word, OUTCOME_WORDS, 'predicate.evidence_scope.word')
+        if (es.basis != null) str(es.basis, Object.keys(BASIS_LEVEL), 'predicate.evidence_scope.basis')
+        closed(es.wire, ['channel'], ['protocols_parsed'], 'predicate.evidence_scope.wire')
+        str(es.wire.channel, WIRE_CHANNELS, 'predicate.evidence_scope.wire.channel')
+        const protos = es.wire.protocols_parsed ?? []
+        if (!Array.isArray(protos) || protos.length > 7) throw new Refusal('malformed', 'predicate.evidence_scope.wire.protocols_parsed')
+        protos.forEach((pr, j) => str(pr, WIRE_PROTOCOLS, `predicate.evidence_scope.wire.protocols_parsed[${j}]`))
+        if (new Set(protos).size !== protos.length) throw new Refusal('malformed', 'wire.protocols_parsed repeats a protocol')
+        if (es.wire.channel === 'none' && protos.length) throw new Refusal('malformed', 'a run that watched no wire parsed no protocol')
+        if (es.read_back_at != null) str(es.read_back_at, ISO_SECONDS, 'predicate.evidence_scope.read_back_at')
+        if (es.recheck_window_s != null) int(es.recheck_window_s, 0, MAX_RECHECK_S, 'predicate.evidence_scope.recheck_window_s')
+        if (!Array.isArray(es.not_covered) || es.not_covered.length < 2 || es.not_covered.length > 7) throw new Refusal('malformed', 'predicate.evidence_scope.not_covered')
+        es.not_covered.forEach((nc, j) => str(nc, NOT_COVERED, `predicate.evidence_scope.not_covered[${j}]`))
+        if (new Set(es.not_covered).size !== es.not_covered.length) throw new Refusal('malformed', 'not_covered repeats a code')
+        if (!ALWAYS_NOT_COVERED.every((k) => es.not_covered.includes(k))) throw new Refusal('malformed', 'not_covered must list server_side_async_effects and outbound_effects')
+        if (es.basis != null && BASIS_LEVEL[es.basis] !== es.check_level) throw new Refusal('malformed', `basis ${es.basis} does not reach ${es.check_level}`)
+        if (es.word === 'VERIFIED') {
+            if (!['separate_session', 'system_of_record'].includes(es.check_level) || es.basis == null) throw new Refusal('malformed', 'VERIFIED needs level 3 or 4 and a basis')
+            if (es.read_back_at == null && !es.not_covered.includes('read_back_time')) throw new Refusal('malformed', 'VERIFIED needs read_back_at, or says it has none')
+        }
+        if (es.word === 'SHOWN' && !['same_screen', 'reopened'].includes(es.check_level)) throw new Refusal('malformed', 'SHOWN is a level 1 or 2 re-read of the acting screen')
+        if (es.word === 'CONFIRMED' && es.check_level !== 'counterparty_confirmed') throw new Refusal('malformed', 'CONFIRMED is level 5, the counterparty acknowledgment')
+        if (es.read_back_at != null && es.not_covered.includes('read_back_time')) throw new Refusal('malformed', 'a block with read_back_at covers the read-back time')
+        if (es.recheck_window_s != null && es.read_back_at == null) throw new Refusal('malformed', 'a recheck window needs read_back_at')
+    }
     return { ...s, predicate: { ...p, reason_code: p.reason_code ?? null } }
 }
 
@@ -256,6 +308,7 @@ function inconsistency(s) {
     }
     if (p.checks.lines_confirmed !== tally.confirmed || p.checks.lines_refuted !== tally.refuted || p.checks.lines_not_checked !== tally.not_checked) return 'check counts disagree with the lines'
     if (p.outcome === 'VERIFIED' && tally.refuted) return 'a VERIFIED receipt has a refuted line'
+    if (p.evidence_scope && !EVIDENCE_SCOPE_OUTCOMES[p.evidence_scope.word].includes(p.outcome)) return "the evidence scope's word disagrees with the outcome"
     const steps = p.lines.map((l) => l.step)
     for (let i = 1; i < steps.length; i += 1) if (steps[i] <= steps[i - 1]) return 'lines are not in step order, or repeat a step'
     for (const c of p.confirmations || []) {
