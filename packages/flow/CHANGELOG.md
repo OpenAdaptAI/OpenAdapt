@@ -26,8 +26,12 @@
   `author_id` and `session_count` are not. The shared vocabulary gains
   `token`, `jwt`, `bearer`, `credential(s)`, `cred`, `csrf`, `xsrf`,
   `cookie`, `signature`, `session id`, `sessionid`, `private key`,
-  `access key`, `apikey`, `salt`, `hash` and `tfa`, plus exact names (`code`,
-  `sig`, `sid`, `refresh`); the Chrome extension copies follow. The admission
+  `access key`, `apikey`, `salt`, `hash`, `tfa`, `session key`,
+  `jsessionid`, `sessid`, `phpsessid`, `oauth verifier` and `authn`, plus
+  exact names (`code`, `sig`, `sid`, `refresh`, `session`, `authorization`)
+  and suffix names (`session`, `authorization`), so `JSESSIONID`,
+  `sso_session` and `proxy-authorization` stay masked as they were; the
+  Chrome extension copies follow. The admission
   record is now signed with this computer's key, and `--check` refuses an
   unsigned record, an edited record, or one no pinned key signed (`--keys`
   pins another machine's key). `--check` no longer requires `--trace`,

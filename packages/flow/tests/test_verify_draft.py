@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -770,6 +771,21 @@ MASKED_NAMES = [
     "salt",
     "bearer",
     "X-Amz-Credential",
+    # Grok's round-2 review on #2635: masked on main, must stay masked
+    "session",
+    "SESSION",
+    "JSESSIONID",
+    "PHPSESSID",
+    "sessid",
+    "sso_session",
+    "laravel_session",
+    "session_key",
+    "sessionKey",
+    "x-session",
+    "authorization",
+    "proxy-authorization",
+    "oauth_verifier",
+    "authn",
 ]
 CLEAR_NAMES = [
     "author",
@@ -779,8 +795,86 @@ CLEAR_NAMES = [
     "record_key",
     "productCode",
     "refresh_interval",
+    "authorization_id",
     "memo",
 ]
+
+#: The pattern #2438 shipped (``inputs.SECRET_NAME_RE`` before this fix),
+#: kept here only to prove nothing it masked is now sent in clear.
+OLD_SECRET_NAME_RE = re.compile(
+    r"pass(word)?|secret|token|api[-_]?key|hash|salt|session|csrf|auth"
+    r"|credential|bearer|refresh|private[-_]?key|access[-_]?key"
+    r"|(^|[^a-z0-9])(cred|pin|otp|tfa|jwt)([^a-z0-9]|$)",
+    re.I,
+)
+#: Names the old pattern matched only by a substring, and that are not
+#: secrets. Each one is deliberately sent in clear now.
+OLD_OVERMASKED = frozenset(
+    {
+        "author",
+        "author_id",
+        "authored_at",
+        "authority",
+        "session_count",
+        "session_started_at",
+        "authorization_id",
+        "hashtag",
+        "passenger_count",
+        "compass_heading",
+        "refresh_interval",
+        "refreshed_at",
+    }
+)
+#: Every name either list names, plus lookalikes the old pattern matched.
+NAME_CORPUS = sorted(
+    {*MASKED_NAMES, *CLEAR_NAMES, *OLD_OVERMASKED}
+    | {
+        "user_password",
+        "secretAnswer",
+        "idToken",
+        "apiKey",
+        "content_hash",
+        "pwSalt",
+        "sessionToken",
+        "xsrf-token",
+        "oauth_token",
+        "client_credentials",
+        "bearer_token",
+        "refresh_token",
+        "privateKey",
+        "accessKey",
+        "user-pin",
+        "otp",
+        "tfa",
+        "jwt",
+        "cred",
+        "authToken",
+        "auth",
+        "authCode",
+    }
+)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        n
+        for n in NAME_CORPUS
+        if OLD_SECRET_NAME_RE.search(n) and n not in OLD_OVERMASKED
+    ],
+)
+def test_every_name_the_old_pattern_masked_is_still_masked(name: str) -> None:
+    from openadapt_flow.verify_draft.inputs import is_secret_name
+
+    assert is_secret_name(name), f"{name} was masked on main and now is not"
+
+
+@pytest.mark.parametrize("name", sorted(OLD_OVERMASKED))
+def test_the_old_overmasked_names_are_clear(name: str) -> None:
+    from openadapt_flow.verify_draft.inputs import is_secret_name
+
+    assert OLD_SECRET_NAME_RE.search(name), name  # the list stays honest
+    assert not is_secret_name(name)
 
 
 @pytest.mark.parametrize("name", MASKED_NAMES)

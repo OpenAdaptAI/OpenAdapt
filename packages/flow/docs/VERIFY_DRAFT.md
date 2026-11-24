@@ -47,8 +47,10 @@ look secret. Names are matched as whole tokens against the shared list in
 `openadapt_flow/secret_field_vocabulary.json` (password, token, pin, otp,
 totp, mfa, cookie, signature, session id, api key, ...), so `otpCode`,
 `userPin` and `X-Amz-Signature` are masked while `author` and
-`session_count` are not. A name that is exactly `code`, `sig`, `sid` or
-`refresh` is masked too.
+`session_count` are not. A name that is exactly `code`, `sig`, `sid`,
+`refresh`, `session` or `authorization` is masked too, and so is a name
+that ends in `session` or `authorization` (`sso_session`,
+`proxy-authorization`).
 
 **The task** (`--task`):
 

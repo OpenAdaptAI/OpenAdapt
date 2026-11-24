@@ -164,7 +164,13 @@
     "apikey",
     "salt",
     "hash",
-    "tfa"
+    "tfa",
+    "session key",
+    "jsessionid",
+    "sessid",
+    "phpsessid",
+    "oauth verifier",
+    "authn"
   ];
   // secret-field-vocabulary:end
   const SECRET_PHRASE_TOKENS = SECRET_FIELD_PHRASES.map((p) => p.split(' '));

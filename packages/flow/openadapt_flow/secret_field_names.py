@@ -7,7 +7,10 @@ tokens against ``secret_field_vocabulary.json``. So ``patientSsn``,
 match, while ``pinnedItems``, ``spinnerState`` and ``opinionText`` do not.
 An identifier whose whole token list is one of ``exact_names`` (``code``,
 ``sig``, ``sid``, ``refresh``) is secret too, so ``code`` and ``Sig`` match
-but ``productCode`` and ``refresh_interval`` do not.
+but ``productCode`` and ``refresh_interval`` do not. An identifier whose
+last token is one of ``suffix_names`` (``session``, ``authorization``) is
+secret, so ``sso_session`` and ``proxy-authorization`` match but
+``session_count`` and ``authorization_id`` do not.
 
 ``chrome_extension/content.js`` and ``chrome_extension/network_redact.js``
 implement the same ``fieldTokens`` split and embed the same phrase list; keep
@@ -33,6 +36,10 @@ SECRET_EXACT_NAMES: Final[tuple[str, ...]] = tuple(_VOCABULARY.get("exact_names"
 _EXACT_TOKENS: Final[frozenset[tuple[str, ...]]] = frozenset(
     tuple(name.split()) for name in SECRET_EXACT_NAMES
 )
+#: Identifiers that are secret when this is their last token.
+SECRET_SUFFIX_NAMES: Final[frozenset[str]] = frozenset(
+    _VOCABULARY.get("suffix_names", ())
+)
 
 _LOWER_UPPER = re.compile(r"([a-z0-9])([A-Z])")
 _ACRONYM_WORD = re.compile(r"([A-Z]+)([A-Z][a-z])")
@@ -49,10 +56,12 @@ def field_tokens(value: object) -> list[str]:
 
 def names_secret_field(value: object) -> bool:
     """True when the identifier contains a secret phrase as whole tokens,
-    or is exactly one of the exact names."""
+    is exactly one of the exact names, or ends in a suffix name."""
 
     tokens = field_tokens(value)
     if tuple(tokens) in _EXACT_TOKENS:
+        return True
+    if tokens and tokens[-1] in SECRET_SUFFIX_NAMES:
         return True
     for phrase in _PHRASE_TOKENS:
         width = len(phrase)
