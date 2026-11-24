@@ -535,7 +535,7 @@ def default_deterministic_runner(
     executed_steps = [_render_value(step, arguments) for step in spec.steps]
     writes_applied = 0
     unexecuted_ops: list[str] = []
-    applied_targets: list[dict[str, str]] = []
+    applied_targets: list[dict[str, Any]] = []
 
     for step in executed_steps:
         if not isinstance(step, Mapping):
@@ -734,7 +734,11 @@ def default_readback_oracle(
                         f"Applied write(s) did not target read-back SQLite "
                         f"table {table!r} in {db_path}"
                     ),
-                    observed={"applied_targets": list(applied_targets)},
+                    observed={
+                        "applied_targets": list(applied_targets)
+                        if isinstance(applied_targets, (list, tuple))
+                        else []
+                    },
                 )
             written_rowids = [
                 t["rowid"]
@@ -788,7 +792,11 @@ def default_readback_oracle(
         effective_count = (
             len(rows)
             if written_rowids
-            else (len(rows) - int(before_count) if has_before_count else len(rows))
+            else (
+                len(rows) - int(before_count)
+                if has_before_count and before_count is not None
+                else len(rows)
+            )
         )
         if effective_count == expected_count:
             observed = dict(rows[-1]) if rows else {}
@@ -837,7 +845,11 @@ def default_readback_oracle(
                 reason=(
                     f"Applied write(s) did not target read-back JSON file {file_path}"
                 ),
-                observed={"applied_targets": list(applied_targets)},
+                observed={
+                    "applied_targets": list(applied_targets)
+                    if isinstance(applied_targets, (list, tuple))
+                    else []
+                },
             )
         try:
             observed_data = json.loads(file_path.read_text(encoding="utf-8"))
