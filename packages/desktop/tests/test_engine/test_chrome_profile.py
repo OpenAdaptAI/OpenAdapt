@@ -62,6 +62,12 @@ class Harness:
         self.write_port = True
         self.exit_now = False
         self.close_exits = True
+        # Page targets Chrome reports on /json/list; the launch tab takes the
+        # launch URL unless a test says otherwise.
+        self.launch_tab_url: str | None = None
+        self.targets: list[dict[str, Any]] = []
+        self.created: list[str] = []
+        self.new_tab_url: str | None = None
         chrome = tmp_path / "Google Chrome"
         chrome.write_text("")
         self.chrome = chrome
@@ -72,6 +78,8 @@ class Harness:
             "spawn": self._spawn,
             "json_version": self._json_version,
             "browser_close": self._browser_close,
+            "json_list": self._json_list,
+            "json_new": self._json_new,
             "sleep": lambda _s: None,
             "start_timeout": 0.5,
         }
@@ -85,7 +93,24 @@ class Harness:
         user_data = Path(next(a for a in args if a.startswith("--user-data-dir=")).split("=", 1)[1])
         if self.write_port and not self.exit_now:
             (user_data / "DevToolsActivePort").write_text(f"{self.port}\n{GUID}\n")
+        launch = args[-1] if self.launch_tab_url is None else self.launch_tab_url
+        self.targets.append({"id": f"T{len(self.targets)}", "type": "page", "url": launch})
         return process
+
+    def _json_list(self, port: int) -> list[dict[str, Any]]:
+        assert port == self.port
+        return [dict(t) for t in self.targets]
+
+    def _json_new(self, port: int, url: str) -> dict[str, Any]:
+        assert port == self.port
+        self.created.append(url)
+        target = {
+            "id": f"N{len(self.created)}",
+            "type": "page",
+            "url": url if self.new_tab_url is None else self.new_tab_url,
+        }
+        self.targets.append(target)
+        return dict(target)
 
     def _json_version(self, port: int) -> dict[str, Any]:
         assert port == self.port
@@ -185,6 +210,112 @@ def test_open_launches_official_chrome_on_the_owned_directory(h: Harness) -> Non
     # Desktop passes nothing that touches the keychain or the password store.
     assert not any("keychain" in a or "password-store" in a for a in process.args)
     assert h.service.list()["profiles"][0]["browser_cdp_endpoint"] == result["browser_cdp_endpoint"]
+
+
+def test_open_keeps_the_launch_tab_when_it_is_at_the_url(h: Harness) -> None:
+    h.service.open(h.create(), "https://portal.example/start")
+    assert h.created == []
+
+
+def test_open_keeps_a_launch_tab_that_redirected_within_the_origin(h: Harness) -> None:
+    h.launch_tab_url = "https://portal.example/home"
+    h.service.open(h.create(), "https://portal.example/login")
+    assert h.created == []
+
+
+def test_open_opens_a_tab_at_the_url_when_the_launch_tab_stayed_blank(h: Harness) -> None:
+    h.launch_tab_url = "about:blank"
+    result = h.service.open(h.create(), "https://portal.example/start?next=%2Fhome")
+    assert result["open"] is True
+    assert h.created == ["https://portal.example/start?next=%2Fhome"]
+
+
+def test_a_new_tab_redirected_to_another_origin_counts_as_landed(h: Harness) -> None:
+    h.launch_tab_url = "chrome://newtab/"
+    h.new_tab_url = "https://sso.example/authorize"
+    assert h.service.open(h.create(), "https://portal.example/start")["open"] is True
+    assert h.created == ["https://portal.example/start"]
+
+
+def test_a_page_that_never_loads_is_refused_and_the_window_closed(h: Harness) -> None:
+    h.launch_tab_url = "about:blank"
+    h.new_tab_url = "about:blank"
+    profile_id = h.create()
+    with pytest.raises(ChromeProfileError) as err:
+        h.service.open(profile_id, "https://portal.example/start")
+    assert err.value.code == "page_not_loaded"
+    assert h.created == ["https://portal.example/start"]  # one tab, not one per poll
+    assert h.spawned[0].log == ["terminate"]
+    assert h.service.list()["profiles"][0]["open"] is False
+
+
+def test_an_unreachable_target_list_is_refused(tmp_path: Path) -> None:
+    def boom(_port: int) -> list:
+        raise ConnectionRefusedError
+
+    h = Harness(tmp_path, json_list=boom)
+    with pytest.raises(ChromeProfileError) as err:
+        h.service.open(h.create(), "https://portal.example/start")
+    assert err.value.code == "page_not_loaded"
+
+
+def test_open_without_a_url_checks_no_page(tmp_path: Path) -> None:
+    def never(*_a: Any) -> Any:
+        raise AssertionError("no page check without a URL")
+
+    h = Harness(tmp_path, json_list=never, json_new=never)
+    assert h.service.open(h.create())["open"] is True
+
+
+def test_reopening_an_open_window_with_a_url_lands_on_it(h: Harness) -> None:
+    profile_id = h.create()
+    first = h.service.open(profile_id)
+    assert h.service.open(profile_id, "https://portal.example/next") == first
+    assert len(h.spawned) == 1
+    assert h.created == ["https://portal.example/next"]
+
+
+def test_reopening_an_open_window_on_another_page_of_the_origin_opens_it(h: Harness) -> None:
+    profile_id = h.create()
+    h.service.open(profile_id, "https://portal.example/a")
+    assert h.created == []
+    h.service.open(profile_id, "https://portal.example/b")
+    assert h.created == ["https://portal.example/b"]
+    h.service.open(profile_id, "https://portal.example/b#top")
+    assert h.created == ["https://portal.example/b"]  # already there
+
+
+def test_an_open_window_is_left_open_when_its_page_does_not_load(h: Harness) -> None:
+    profile_id = h.create()
+    h.service.open(profile_id)
+    h.new_tab_url = "about:blank"
+    with pytest.raises(ChromeProfileError) as err:
+        h.service.open(profile_id, "https://portal.example/next")
+    assert err.value.code == "page_not_loaded"
+    assert h.closed == []
+    assert h.service.list()["profiles"][0]["open"] is True
+
+
+def test_json_new_puts_the_percent_encoded_url(monkeypatch) -> None:
+    import httpx
+
+    seen: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, str(request.url)))
+        return httpx.Response(200, json={"id": "N1", "type": "page", "url": "x"})
+
+    real = httpx.Client
+
+    def client(**kwargs: Any) -> httpx.Client:
+        assert kwargs.get("trust_env") is False
+        return real(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(httpx, "Client", client)
+    assert cp.http_json_new(9222, "https://p.example/a?b=1&c=%2F")["id"] == "N1"
+    assert seen == [
+        ("PUT", "http://127.0.0.1:9222/json/new?https%3A%2F%2Fp.example%2Fa%3Fb%3D1%26c%3D%252F")
+    ]
 
 
 def test_open_twice_reuses_the_owned_window(h: Harness) -> None:

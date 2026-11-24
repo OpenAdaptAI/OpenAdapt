@@ -53,7 +53,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from loguru import logger
 
@@ -85,6 +85,7 @@ _LEDGER_SCHEMA = "openadapt.desktop.chrome_profiles.v1"
 _DEVTOOLS_FILE = "DevToolsActivePort"
 _START_TIMEOUT_S = 30.0
 _CLOSE_TIMEOUT_S = 10.0
+_PAGE_GRACE_S = 3.0
 _MAX_NAME = 60
 
 
@@ -271,6 +272,49 @@ def http_json_version(port: int, timeout: float = 5.0) -> dict[str, Any]:
     return data
 
 
+def http_json_list(port: int, timeout: float = 5.0) -> list[dict[str, Any]]:
+    """GET ``/json/list`` (the browser's targets) from loopback, with no proxy."""
+
+    import httpx
+
+    with httpx.Client(trust_env=False, timeout=timeout) as client:
+        response = client.get(f"http://127.0.0.1:{port}/json/list")
+        response.raise_for_status()
+        data = response.json()
+    if not isinstance(data, list):
+        raise ValueError("unexpected /json/list body")
+    return [t for t in data if isinstance(t, dict)]
+
+
+def http_json_new(port: int, url: str, timeout: float = 5.0) -> dict[str, Any]:
+    """PUT ``/json/new?<url>``: open a new page target at ``url``."""
+
+    import httpx
+
+    with httpx.Client(trust_env=False, timeout=timeout) as client:
+        response = client.put(f"http://127.0.0.1:{port}/json/new?{quote(url, safe='')}")
+        response.raise_for_status()
+        data = response.json()
+    if not isinstance(data, dict):
+        raise ValueError("unexpected /json/new body")
+    return data
+
+
+def _origin(url: str) -> tuple[str, str, int | None]:
+    parts = urlsplit(url)
+    return parts.scheme, (parts.hostname or ""), parts.port
+
+
+def page_at(target: dict[str, Any], url: str, *, same_origin: bool = False) -> bool:
+    """Whether a page target is at ``url`` (or, if allowed, on its origin)."""
+
+    current = str(target.get("url") or "")
+    return target.get("type") == "page" and (
+        current.split("#", 1)[0] == url.split("#", 1)[0]
+        or (same_origin and _origin(current) == _origin(url))
+    )
+
+
 def verify_endpoint(version: dict[str, Any], port: int, browser_path: str) -> None:
     """Require ``/json/version`` to name the browser Desktop started."""
 
@@ -361,6 +405,8 @@ class ChromeProfileService:
         spawn: Callable[..., Any] = child_process.popen,
         json_version: Callable[[int], dict[str, Any]] = http_json_version,
         browser_close: Callable[[int, str], None] = send_browser_close,
+        json_list: Callable[[int], list[dict[str, Any]]] = http_json_list,
+        json_new: Callable[[int, str], dict[str, Any]] = http_json_new,
         clock: Callable[[], float] = time.time,
         sleep: Callable[[float], None] = time.sleep,
         start_timeout: float = _START_TIMEOUT_S,
@@ -374,6 +420,8 @@ class ChromeProfileService:
         self._spawn = spawn
         self._json_version = json_version
         self._browser_close = browser_close
+        self._json_list = json_list
+        self._json_new = json_new
         self._clock = clock
         self._sleep = sleep
         self._start_timeout = start_timeout
@@ -553,6 +601,8 @@ class ChromeProfileService:
             owned = self._alive(profile_id)
             if owned is not None:
                 self._verify(owned)
+                if url:
+                    self._ensure_page(owned, str(url), launched=False)
                 return self._opened(profile_id, owned)
             user_data = self._user_data_dir(profile_id)
             self._refuse_default_dir(user_data)
@@ -588,6 +638,8 @@ class ChromeProfileService:
             try:
                 owned = self._await_endpoint(process, user_data)
                 self._verify_when_ready(owned)
+                if url:
+                    self._ensure_page(owned, str(url), launched=True)
             except BaseException:
                 self._stop_process(process, None)
                 raise
@@ -648,6 +700,48 @@ class ChromeProfileService:
                         logger.info("Chrome /json/version failed: {}", type(exc.__cause__).__name__)
                     raise
             self._sleep(0.25)
+
+    def _ensure_page(self, owned: _Owned, url: str, *, launched: bool) -> None:
+        """Make a page target land on ``url`` and confirm Chrome reports it there.
+
+        Chrome usually loads the launch URL in its first tab. It can open that
+        tab blank instead (seen on macOS when another Chrome is running). So
+        after a short wait for the launch tab, Desktop opens a tab at the URL
+        itself, then requires Chrome to report that tab on an http(s) page (a
+        redirect, such as sign-in, may move it). Only the launch tab of a window
+        Desktop just started may count by origin (its own redirect); in a window
+        that was already open, only a tab at the exact URL counts. A page that
+        never lands refuses with ``page_not_loaded``.
+        """
+
+        now = self._clock()
+        deadline = now + self._start_timeout
+        grace = now + min(_PAGE_GRACE_S, self._start_timeout / 2)  # leaves time to open a tab
+        created: str | None = None
+        while True:
+            try:
+                targets = self._json_list(owned.port)
+                if created is None and any(page_at(t, url, same_origin=launched) for t in targets):
+                    return
+                if created is None and self._clock() >= grace:
+                    created = str(self._json_new(owned.port, url).get("id") or "")
+                    targets = self._json_list(owned.port)
+                if created is not None and any(
+                    created
+                    and t.get("id") == created
+                    and t.get("type") == "page"
+                    and urlsplit(str(t.get("url") or "")).scheme in {"http", "https"}
+                    for t in targets
+                ):
+                    return
+            except Exception as exc:  # noqa: BLE001 - any failure is unconfirmed
+                logger.info("Chrome page check failed: {}", type(exc).__name__)
+            if owned.process.poll() is not None or self._clock() >= deadline:
+                raise ChromeProfileError(
+                    "page_not_loaded",
+                    "Chrome opened, but the page didn't load. Check the address and try again.",
+                )
+            self._sleep(0.2)
 
     def _verify(self, owned: _Owned) -> None:
         if owned.process.poll() is not None:
