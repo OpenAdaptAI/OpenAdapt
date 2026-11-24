@@ -52,6 +52,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
+from openadapt_flow.verifier import Outcome
 from openadapt_flow.verify_draft.sandbox import (
     App,
     Move,
@@ -149,6 +150,11 @@ _SECRET_COLUMN = re.compile(
     r"pass(word)?|secret|token|api[-_]?key|hash|salt|(^|_)(otp|tfa)(_|$)", re.I
 )
 _IDENTIFIER = re.compile(r"(^|_)(id|key|no|number|code|slug|mrn|ref|uuid)$", re.I)
+_EXPECT_CONFIRMED = "confirmed"
+_CONFIRMED_LABEL = Outcome.CONFIRMED.value
+_ERROR_LABEL = "ERROR"
+_OK_RECHECKS = ("", _CONFIRMED_LABEL, "NONE")
+_BROKEN_LABELS = ("", _ERROR_LABEL, "NO_BASELINE")
 
 
 class DraftProblem(ValueError):
@@ -655,7 +661,7 @@ class Qualifier:
             case.moved = list(
                 ((result.evidence or {}).get("frame") or {}).get("moves") or []
             )[:20]
-            if rechecks and result.outcome.value == "CONFIRMED":
+            if rechecks and result.outcome.value == _CONFIRMED_LABEL:
                 if result.recheck is None:
                     case.recheck = "NONE"
                     case.reasons.append(
@@ -677,8 +683,19 @@ class Qualifier:
             return pre, post
         except DraftProblem:
             raise
-        except Exception as exc:  # noqa: BLE001 - a broken case is reported, not admitted
-            case.outcome = case.outcome or "ERROR"
+        except (
+            _NotApplicable,
+            _Untestable,
+            VerifierError,
+            WriteBlocked,
+            OSError,
+            RuntimeError,
+            ValueError,
+            TypeError,
+            LookupError,
+            ArithmeticError,
+        ) as exc:
+            case.outcome = case.outcome or _ERROR_LABEL
             case.reasons.append(f"{type(exc).__name__}: {exc}")
             return None
         finally:
@@ -692,19 +709,17 @@ class Qualifier:
         if not case.applicable:
             case.passed = True
             return
-        if case.expect == "confirmed":
+        if case.expect == _EXPECT_CONFIRMED:
             # No recheck scheduled is the late-revert case's failure, not a
             # false stop on a clean write.
-            case.passed = case.outcome == "CONFIRMED" and case.recheck in (
-                "",
-                "CONFIRMED",
-                "NONE",
+            case.passed = (
+                case.outcome == _CONFIRMED_LABEL and case.recheck in _OK_RECHECKS
             )
         else:
             final = case.recheck or case.outcome
             case.passed = (
-                case.outcome not in ("", "ERROR", "NO_BASELINE")
-                and final != "CONFIRMED"
+                case.outcome not in _BROKEN_LABELS
+                and final != _CONFIRMED_LABEL
                 and final != "NONE"
             )
 
@@ -1032,7 +1047,7 @@ class Qualifier:
                     self.store.update(m.table, m.key, {c: m.b[c] for c in m.columns})
 
             self.run(contract, case, values=values, revert=undo, rechecks=True)
-            if case.outcome == "CONFIRMED" and not case.recheck:
+            if case.outcome == _CONFIRMED_LABEL and not case.recheck:
                 case.recheck = "NONE"
             return [case]
 
@@ -1122,7 +1137,7 @@ class Qualifier:
             self.run(contract, case, values=values, fault=guarded)
         finally:
             if not case.applicable or case.untestable:
-                case.outcome = case.outcome if case.outcome not in ("ERROR",) else ""
+                case.outcome = case.outcome if case.outcome != _ERROR_LABEL else ""
                 case.reasons = [
                     r
                     for r in case.reasons
@@ -1195,17 +1210,18 @@ class Qualifier:
             if is_ex and cause == "payload" and col != "+":
                 a.problem = "excluded, but it moves with the values written: the exclusion hides the write"
             out.append(a)
-        moved = {(a.table, a.column) for a in out}
+        observed_cells = {(a.table, a.column) for a in out}
+        observed_tables = {t for t, _ in observed_cells}
         for table, masked_cols in mask.items():
             for col in masked_cols:
                 if col == "*":
-                    unexcused = not any(t == table for t, _ in moved)
+                    unexcused = table not in observed_tables
                     what = "a skipped table"
                 elif col == "+":
-                    unexcused = (table, "+") not in moved
+                    unexcused = (table, "+") not in observed_cells
                     what = "an append-only table"
                 else:
-                    unexcused = (table, col) not in moved
+                    unexcused = (table, col) not in observed_cells
                     what = "excluded"
                 if unexcused:
                     out.append(

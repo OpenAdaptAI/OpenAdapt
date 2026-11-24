@@ -72,18 +72,18 @@ def load_task(path: str | Path) -> Task:
 
 
 def _load_doc(path: Path) -> Any:
+    import yaml
+
     raw = path.read_text(encoding="utf-8")
     try:
         return json.loads(raw)
     except ValueError:
         pass
     try:
-        import yaml
-
         doc = yaml.safe_load(raw)
         if isinstance(doc, (dict, list)):
             return doc
-    except Exception:  # noqa: BLE001 - SDL is neither
+    except (yaml.YAMLError, ValueError):
         pass
     return raw
 
