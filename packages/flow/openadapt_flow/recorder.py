@@ -583,7 +583,11 @@ class Recorder:
             # coordinate space: a framed target's point in one may be
             # frame-local.
             "coordinate_space": "page",
-            "app_url": self._app_url,
+            "app_url": (
+                self._app_url
+                if self._network_capture is None
+                else self._network_capture.minimize_url(self._app_url)
+            ),
             "params": dict(self._params),
             "secret_params": sorted(self._withheld_param_names),
         }

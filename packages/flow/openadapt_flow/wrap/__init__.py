@@ -16,11 +16,29 @@ from openadapt_flow.wrap.checkpoint_spec import (
 from openadapt_flow.wrap.checkpoint_spec import (
     compile_checkpoint_spec as compile_checkpoint_spec,
 )
+from openadapt_flow.wrap.dirty_and_provenance import (
+    DirtyBufferMonitor as DirtyBufferMonitor,
+)
+from openadapt_flow.wrap.dirty_and_provenance import (
+    SsaIdentifierGuard as SsaIdentifierGuard,
+)
 from openadapt_flow.wrap.entity_ledger import (
     CheckpointEnforcer as CheckpointEnforcer,
 )
 from openadapt_flow.wrap.entity_ledger import (
     EntityLedger as EntityLedger,
+)
+from openadapt_flow.wrap.hit_test_oracle import (
+    evaluate_hit_test as evaluate_hit_test,
+)
+from openadapt_flow.wrap.hit_test_oracle import (
+    evaluate_post_click_delta as evaluate_post_click_delta,
+)
+from openadapt_flow.wrap.hit_test_oracle import (
+    safe_click_preflight as safe_click_preflight,
+)
+from openadapt_flow.wrap.origin_firewall import (
+    OriginCapabilityFirewall as OriginCapabilityFirewall,
 )
 
 if TYPE_CHECKING:
