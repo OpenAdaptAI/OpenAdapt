@@ -269,12 +269,18 @@ def load_compiled_tools(cache_dir: Union[str, Path]) -> tuple[WorkflowToolSpec, 
     root = Path(cache_dir).expanduser()
     if not root.is_dir():
         raise FileNotFoundError(f"Compiled plan directory not found: {root}")
+    resolved_root = root.resolve()
 
     specs: list[WorkflowToolSpec] = []
     seen: set[str] = set()
     for path in sorted(root.glob("*.json")):
+        resolved_path = path.resolve()
+        if not resolved_path.is_relative_to(resolved_root):
+            raise ValueError(
+                f"Refusing compiled plan symlink escaping cache directory: {path}"
+            )
         try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
+            raw = json.loads(resolved_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise ValueError(f"Invalid JSON in compiled plan {path}: {exc}") from exc
         if (

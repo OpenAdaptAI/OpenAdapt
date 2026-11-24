@@ -105,18 +105,29 @@ class ParameterBinder:
         if not value:
             return value, ()
 
-        # Sort by value length descending so longer values match before substrings.
+        # Single-pass regex alternation ordered by value length descending so
+        # longer values match before substrings and already-inserted {{name}}
+        # placeholders can never be re-matched by another parameter's value.
         ordered = sorted(
             validated.items(),
             key=lambda kv: (-len(kv[1]), kv[0]),
         )
-        templated = value
-        bound_names: list[str] = []
+        val_to_name: dict[str, str] = {}
         for pname, pval in ordered:
-            if pval in templated:
-                templated = templated.replace(pval, f"{{{{{pname}}}}}")
-                if pname not in bound_names:
-                    bound_names.append(pname)
+            val_to_name.setdefault(pval, pname)
+        if not val_to_name:
+            return value, ()
+
+        pattern = re.compile("|".join(re.escape(v) for v in val_to_name))
+        bound_names: list[str] = []
+
+        def _replace(match: re.Match[str]) -> str:
+            pname = val_to_name[match.group(0)]
+            if pname not in bound_names:
+                bound_names.append(pname)
+            return f"{{{{{pname}}}}}"
+
+        templated = pattern.sub(_replace, value)
         return templated, tuple(bound_names)
 
     @classmethod
@@ -178,6 +189,25 @@ class ParameterBinder:
             else:
                 out[str(key)] = val
         return out
+
+    @classmethod
+    def redact_secrets(cls, text: str, params: Mapping[str, Any]) -> str:
+        """Replace any secret-named parameter values in ``text`` with ``<redacted>``."""
+        if not text:
+            return text
+        secret_vals = sorted(
+            {
+                str(raw_val)
+                for key, raw_val in params.items()
+                if cls.is_secret_param(key) and str(raw_val)
+            },
+            key=len,
+            reverse=True,
+        )
+        if not secret_vals:
+            return text
+        pattern = re.compile("|".join(re.escape(v) for v in secret_vals))
+        return pattern.sub("<redacted>", text)
 
     @classmethod
     def assert_no_secrets_leaked(
@@ -311,8 +341,8 @@ class CompiledPlan:
         if not _SAFE_NAME_RE.match(name):
             raise ValueError(f"Invalid compiled plan name: {name!r}")
         raw_steps = data.get("steps")
-        if not isinstance(raw_steps, list):
-            raise ValueError("Compiled plan 'steps' must be a list.")
+        if not isinstance(raw_steps, list) or not raw_steps:
+            raise ValueError("Compiled plan 'steps' must be a non-empty list.")
         return cls(
             name=name,
             description=str(data.get("description") or f"Compiled JIT workflow {name}"),
@@ -827,12 +857,60 @@ async def replay_step_async(
     raise StepReplayError(step_index, step, last_err)
 
 
+def _reject_secret_expectations(
+    expectations: Optional[Mapping[str, Any]],
+    params: Optional[Mapping[str, Any]] = None,
+) -> None:
+    """Reject secret-named keys or secret-param references in readback_expectations."""
+    if not expectations:
+        return
+    secret_names = (
+        {k for k in params if ParameterBinder.is_secret_param(k)} if params else set()
+    )
+    secret_vals = (
+        {
+            str(v)
+            for k, v in params.items()
+            if ParameterBinder.is_secret_param(k) and str(v)
+        }
+        if params
+        else set()
+    )
+
+    def _walk(obj: Any, path: str) -> None:
+        if isinstance(obj, Mapping):
+            for key, val in obj.items():
+                key_s = str(key)
+                if ParameterBinder.is_secret_param(key_s):
+                    raise ValueError(
+                        f"Secret-named key {key_s!r} is not allowed in readback_expectations."
+                    )
+                _walk(val, f"{path}.{key_s}")
+        elif isinstance(obj, (list, tuple)):
+            for idx, item in enumerate(obj):
+                _walk(item, f"{path}[{idx}]")
+        elif isinstance(obj, str):
+            for ref in _TEMPLATE_VAR_RE.findall(obj):
+                if ParameterBinder.is_secret_param(ref) or ref in secret_names:
+                    raise ValueError(
+                        f"Secret parameter reference {{{{{ref}}}}} is not allowed in readback_expectations ({path})."
+                    )
+            for sval in secret_vals:
+                if sval in obj:
+                    raise ValueError(
+                        f"Secret parameter value is not allowed in readback_expectations ({path})."
+                    )
+
+    _walk(expectations, "readback_expectations")
+
+
 def _default_fresh_reload_readback_sync(
     page: Any,
     params: Mapping[str, Any],
     expectations: Mapping[str, Any],
 ) -> tuple[bool, str]:
     """Reload the page and check that non-secret expected values appear in the reloaded DOM."""
+    _reject_secret_expectations(expectations, params)
     reload_fn = getattr(page, "reload", None)
     if not callable(reload_fn):
         return False, "Page does not expose reload() for fresh_reload read-back."
@@ -869,6 +947,7 @@ async def _default_fresh_reload_readback_async(
     params: Mapping[str, Any],
     expectations: Mapping[str, Any],
 ) -> tuple[bool, str]:
+    _reject_secret_expectations(expectations, params)
     reload_fn = getattr(page, "reload", None)
     if not callable(reload_fn):
         return False, "Page does not expose reload() for fresh_reload read-back."
@@ -898,6 +977,50 @@ async def _default_fresh_reload_readback_async(
     if missing:
         return False, f"Fresh reload missing expected value(s): {', '.join(missing)}"
     return True, "Fresh reload confirmed expected values."
+
+
+def _run_readback_sync(
+    *,
+    page: Any,
+    params: Mapping[str, Any],
+    expectations: Mapping[str, Any],
+    readback_fn: Optional[Callable[..., Any]],
+) -> tuple[bool, str]:
+    _reject_secret_expectations(expectations, params)
+    try:
+        ok, reason = (
+            _interpret_readback_outcome(readback_fn(page, params))
+            if readback_fn is not None
+            else _default_fresh_reload_readback_sync(page, params, expectations)
+        )
+    except Exception as exc:  # noqa: BLE001 - transport/reload error is UNCONFIRMED_WRITE
+        ok = False
+        reason = f"Read-back error ({type(exc).__name__}): {exc}"
+    return ok, ParameterBinder.redact_secrets(reason, params)
+
+
+async def _run_readback_async(
+    *,
+    page: Any,
+    params: Mapping[str, Any],
+    expectations: Mapping[str, Any],
+    readback_fn: Optional[Callable[..., Any]],
+) -> tuple[bool, str]:
+    _reject_secret_expectations(expectations, params)
+    try:
+        if readback_fn is not None:
+            rb_raw = readback_fn(page, params)
+            if inspect.isawaitable(rb_raw):
+                rb_raw = await rb_raw
+            ok, reason = _interpret_readback_outcome(rb_raw)
+        else:
+            ok, reason = await _default_fresh_reload_readback_async(
+                page, params, expectations
+            )
+    except Exception as exc:  # noqa: BLE001 - transport/reload error is UNCONFIRMED_WRITE
+        ok = False
+        reason = f"Read-back error ({type(exc).__name__}): {exc}"
+    return ok, ParameterBinder.redact_secrets(reason, params)
 
 
 def _interpret_readback_outcome(outcome: Any) -> tuple[bool, str]:
@@ -976,6 +1099,7 @@ def _build_plan_from_recording(
     param_names = tuple(sorted(validated.keys()))
     steps = _bind_recorded_actions(recorded, validated)
     if readback_expectations is not None:
+        _reject_secret_expectations(readback_expectations, validated)
         templated_rb = ParameterBinder.bind_mapping(readback_expectations, validated)
     else:
         templated_rb = {
@@ -1063,6 +1187,7 @@ def jit_wrap(
         raise ValueError(f"Invalid JIT workflow name: {name!r}")
     if max_heal_steps < 0:
         raise ValueError("max_heal_steps must be >= 0")
+    _reject_secret_expectations(readback_expectations)
 
     plan_path = Path(cache_dir) / f"{name}.json"
 
@@ -1080,12 +1205,22 @@ def jit_wrap(
                 if not plan_path.exists():
                     proxy = RecordingPageProxy(page)
                     ret_val = fn(proxy, dict(validated))
-                    rb_ok, rb_reason = (
-                        _interpret_readback_outcome(readback_fn(page, validated))
-                        if readback_fn is not None
-                        else _default_fresh_reload_readback_sync(
-                            page, validated, readback_expectations or {}
+                    if not proxy.recorded:
+                        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+                        return JitResult(
+                            mode="cold",
+                            status="STOPPED",
+                            latency_ms=elapsed_ms,
+                            estimated_usd=estimated_cold_usd,
+                            plan_path=None,
+                            reason="Cold run recorded 0 actions; refusing to compile an empty plan.",
+                            value=ret_val,
                         )
+                    rb_ok, rb_reason = _run_readback_sync(
+                        page=page,
+                        params=validated,
+                        expectations=readback_expectations or {},
+                        readback_fn=readback_fn,
                     )
                     elapsed_ms = (time.perf_counter() - t0) * 1000.0
                     if not rb_ok:
@@ -1115,6 +1250,7 @@ def jit_wrap(
                         verified=True,
                         reason=rb_reason,
                         signing_key=signing_key,
+                        llm_calls=1,
                     )
                     return JitResult(
                         mode="cold",
@@ -1149,7 +1285,10 @@ def jit_wrap(
                                 estimated_usd=estimated_cold_usd,
                                 healed_steps=tuple(healed_indices),
                                 plan_path=plan_path,
-                                reason=f"Exceeded max_heal_steps={max_heal_steps}: {err}",
+                                reason=ParameterBinder.redact_secrets(
+                                    f"Exceeded max_heal_steps={max_heal_steps}: {err}",
+                                    validated,
+                                ),
                                 stats=plan.stats,
                             )
                         heal_proxy = RecordingPageProxy(page)
@@ -1171,7 +1310,10 @@ def jit_wrap(
                                 estimated_usd=estimated_cold_usd,
                                 healed_steps=tuple(healed_indices),
                                 plan_path=plan_path,
-                                reason=f"Self-heal raised at step {idx}: {heal_exc}",
+                                reason=ParameterBinder.redact_secrets(
+                                    f"Self-heal raised at step {idx}: {heal_exc}",
+                                    validated,
+                                ),
                                 stats=plan.stats,
                             )
 
@@ -1214,16 +1356,15 @@ def jit_wrap(
                             candidate_steps[idx : idx + 1] = healed_with_counts
                             idx += len(healed_with_counts)
                         else:
-                            # Full wrapped agent recovered from step `idx` to completion.
-                            candidate_steps[idx:] = healed_with_counts
+                            # Full wrapped agent re-ran the workflow from scratch; replace full plan.
+                            candidate_steps = healed_with_counts
                             break
 
-                rb_ok, rb_reason = (
-                    _interpret_readback_outcome(readback_fn(page, validated))
-                    if readback_fn is not None
-                    else _default_fresh_reload_readback_sync(
-                        page, validated, plan.readback_expectations
-                    )
+                rb_ok, rb_reason = _run_readback_sync(
+                    page=page,
+                    params=validated,
+                    expectations=plan.readback_expectations,
+                    readback_fn=readback_fn,
                 )
                 elapsed_ms = (time.perf_counter() - t0) * 1000.0
                 mode: JitMode = "healed" if healed_indices else "warm"
@@ -1275,6 +1416,7 @@ def jit_wrap(
                     verified=True,
                     reason=rb_reason,
                     signing_key=signing_key,
+                    llm_calls=len(healed_indices),
                 )
                 return JitResult(
                     mode=mode,
@@ -1298,15 +1440,23 @@ def jit_wrap(
             if not plan_path.exists():
                 proxy = RecordingPageProxy(page)
                 ret_val = await fn(proxy, dict(validated))
-                if readback_fn is not None:
-                    rb_raw = readback_fn(page, validated)
-                    if inspect.isawaitable(rb_raw):
-                        rb_raw = await rb_raw
-                    rb_ok, rb_reason = _interpret_readback_outcome(rb_raw)
-                else:
-                    rb_ok, rb_reason = await _default_fresh_reload_readback_async(
-                        page, validated, readback_expectations or {}
+                if not proxy.recorded:
+                    elapsed_ms = (time.perf_counter() - t0) * 1000.0
+                    return JitResult(
+                        mode="cold",
+                        status="STOPPED",
+                        latency_ms=elapsed_ms,
+                        estimated_usd=estimated_cold_usd,
+                        plan_path=None,
+                        reason="Cold run recorded 0 actions; refusing to compile an empty plan.",
+                        value=ret_val,
                     )
+                rb_ok, rb_reason = await _run_readback_async(
+                    page=page,
+                    params=validated,
+                    expectations=readback_expectations or {},
+                    readback_fn=readback_fn,
+                )
                 elapsed_ms = (time.perf_counter() - t0) * 1000.0
                 if not rb_ok:
                     return JitResult(
@@ -1335,6 +1485,7 @@ def jit_wrap(
                     verified=True,
                     reason=rb_reason,
                     signing_key=signing_key,
+                    llm_calls=1,
                 )
                 return JitResult(
                     mode="cold",
@@ -1368,7 +1519,10 @@ def jit_wrap(
                             estimated_usd=estimated_cold_usd,
                             healed_steps=tuple(healed_indices),
                             plan_path=plan_path,
-                            reason=f"Exceeded max_heal_steps={max_heal_steps}: {err}",
+                            reason=ParameterBinder.redact_secrets(
+                                f"Exceeded max_heal_steps={max_heal_steps}: {err}",
+                                validated,
+                            ),
                             stats=plan.stats,
                         )
                     heal_proxy = RecordingPageProxy(page)
@@ -1390,7 +1544,10 @@ def jit_wrap(
                             estimated_usd=estimated_cold_usd,
                             healed_steps=tuple(healed_indices),
                             plan_path=plan_path,
-                            reason=f"Self-heal raised at step {idx}: {heal_exc}",
+                            reason=ParameterBinder.redact_secrets(
+                                f"Self-heal raised at step {idx}: {heal_exc}",
+                                validated,
+                            ),
                             stats=plan.stats,
                         )
 
@@ -1430,18 +1587,15 @@ def jit_wrap(
                         candidate_steps[idx : idx + 1] = healed_with_counts
                         idx += len(healed_with_counts)
                     else:
-                        candidate_steps[idx:] = healed_with_counts
+                        candidate_steps = healed_with_counts
                         break
 
-            if readback_fn is not None:
-                rb_raw = readback_fn(page, validated)
-                if inspect.isawaitable(rb_raw):
-                    rb_raw = await rb_raw
-                rb_ok, rb_reason = _interpret_readback_outcome(rb_raw)
-            else:
-                rb_ok, rb_reason = await _default_fresh_reload_readback_async(
-                    page, validated, plan.readback_expectations
-                )
+            rb_ok, rb_reason = await _run_readback_async(
+                page=page,
+                params=validated,
+                expectations=plan.readback_expectations,
+                readback_fn=readback_fn,
+            )
             elapsed_ms = (time.perf_counter() - t0) * 1000.0
             mode: JitMode = "healed" if healed_indices else "warm"
             est_usd = estimated_cold_usd if healed_indices else 0.0
@@ -1491,6 +1645,7 @@ def jit_wrap(
                 verified=True,
                 reason=rb_reason,
                 signing_key=signing_key,
+                llm_calls=len(healed_indices),
             )
             return JitResult(
                 mode=mode,
