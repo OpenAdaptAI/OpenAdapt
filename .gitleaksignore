@@ -219,6 +219,10 @@ cc5fba3e0b69646430c7e11ae0c181aaaad82d7f:packages/flow/tests/test_sanitized_arti
 f92237889163b242800c6aecd7c334c174ce4428:packages/flow/tests/test_connector_pilot.py:generic-api-key:56
 # #2293 squash merge: the same tx/lens.py:885 type annotation that is already ignored at 7571d9c8 (no secret).
 5e37bf177d46afddb4e48ea7b1bf87499964e276:packages/flow/openadapt_flow/tx/lens.py:generic-api-key:885
+# PR #2419: EspoCRM's synthetic account row ids ("__key": "6b0157...") in the
+# openadapt test proof runs' table dumps (no secret).
+98c1dd9385e2e2f9a9da7be8dd67773ded477632:packages/flow/benchmark/agent_test_proof/runs/esp-scripted/evidence/esp-wrong-value-r1/table_after.json:generic-api-key:11
+98c1dd9385e2e2f9a9da7be8dd67773ded477632:packages/flow/benchmark/agent_test_proof/runs/esp-scripted/evidence/esp-collateral-edit-r1/table_after.json:generic-api-key:11
 # PR #2411: benchmark/hooks_live/runs/*/report.json from one live hooks run. Each match is
 # "hold_key", a SHA-256 digest of a declared write's name and values (or of a call), not a
 # credential. The reports must stay byte-identical because signed receipts cover them; the

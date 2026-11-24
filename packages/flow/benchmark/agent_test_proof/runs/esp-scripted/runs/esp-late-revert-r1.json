@@ -1,0 +1,54 @@
+{
+ "scenario": "esp-late-revert",
+ "rep": 1,
+ "fault": "late_revert",
+ "note": "The save lands correctly; 45 s later the account is deleted.",
+ "task": {
+  "name": "Orchid Pharmacy",
+  "website": "orchid.example.invalid",
+  "type": "Customer",
+  "industry": "Healthcare",
+  "description": "Late hours on weekdays."
+ },
+ "end_url": "http://127.0.0.1:9689/#Account/view/6b0157ae8495881a6",
+ "agent_s": 6.3,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE http://127.0.0.1:9689/#Account/create",
+  "claim_line": true,
+  "final_text": "RESULT: DONE http://127.0.0.1:9689/#Account/create"
+ },
+ "model_calls": 0,
+ "late": "deleted 1 new record(s)",
+ "store": {
+  "correct": false,
+  "reasons": [
+   "no new record"
+  ],
+  "new": [],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": true,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795250093.823,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "fault": "late_revert",
+   "status": 200,
+   "accepted": true,
+   "late": "scheduled in 45 s",
+   "ms": 293
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

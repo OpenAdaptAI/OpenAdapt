@@ -1,0 +1,57 @@
+{
+ "scenario": "esp-wrong-value",
+ "rep": 1,
+ "fault": "wrong_value",
+ "note": "The industry changes on the way in.",
+ "task": {
+  "name": "Larkspur Foods",
+  "website": "larkspur.example.invalid",
+  "type": "Customer",
+  "industry": "Hospitality",
+  "description": "Catering for events."
+ },
+ "end_url": "http://127.0.0.1:9689/#Account/view/6b01578438ca16de0",
+ "agent_s": 7.3,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE http://127.0.0.1:9689/#Account/create",
+  "claim_line": true,
+  "final_text": "RESULT: DONE http://127.0.0.1:9689/#Account/create"
+ },
+ "model_calls": 0,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "wrong value: 6b01578438ca16de0 industry: want 'Hospitality' got 'Agriculture'"
+  ],
+  "new": [
+   "6b01578438ca16de0"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": true,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795250050.707,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "fault": "wrong_value",
+   "rewritten": [
+    "industry"
+   ],
+   "status": 200,
+   "accepted": true,
+   "ms": 413
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": true,
+ "collateral_edit": false,
+ "agent_collateral": false
+}
