@@ -26,8 +26,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional
 
-from openadapt_types.check_level import Basis, CheckLevel
-from openadapt_types.evidence_scope import build_evidence_scope
+from openadapt_flow.check_level import Basis, CheckLevel
 
 __all__ = [
     "CACHE_BYPASS_HEADERS",
@@ -127,7 +126,9 @@ def tx_evidence_scope(
     with a basis is ``VERIFIED``.
     """
 
-    from openadapt_types.check_level import CONFIRMED_WORD
+    from openadapt_types.evidence_scope import build_evidence_scope
+
+    from openadapt_flow.check_level import CONFIRMED_WORD
 
     level = (
         CheckLevel.SYSTEM_OF_RECORD

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Mapping, Optional
 
-from openadapt_types.check_level import (
+from openadapt_flow.check_level import (
     Basis,
     CheckLevel,
     from_verification_tier,

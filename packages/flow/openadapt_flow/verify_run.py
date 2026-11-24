@@ -64,7 +64,8 @@ from openadapt_types.approval import (
     CHECKED_HOW_VALUES,
     checked_how_for_flow_tier,
 )
-from openadapt_types.check_level import (
+
+from openadapt_flow.check_level import (
     CONFIRMED_WORD,
     VERIFIED_LEVELS,
     VERIFIED_WORD,
@@ -73,11 +74,17 @@ from openadapt_types.check_level import (
     from_verification_tier,
     to_effect_strength,
 )
-from openadapt_types.evidence_scope import (
-    EVIDENCE_SCOPE_FIELD,
-    build_evidence_scope,
-    evidence_scope_problem,
-)
+
+try:
+    from openadapt_types.evidence_scope import (
+        EVIDENCE_SCOPE_FIELD,
+        build_evidence_scope,
+        evidence_scope_problem,
+    )
+except ImportError:  # pragma: no cover - pre-0.24.3 published openadapt-types shim
+    EVIDENCE_SCOPE_FIELD = "evidence_scope"
+    build_evidence_scope = None  # type: ignore[assignment]
+    evidence_scope_problem = None  # type: ignore[assignment]
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from openadapt_flow.complete_read import CompleteReadProvider

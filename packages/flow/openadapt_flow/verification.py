@@ -5,9 +5,11 @@ from __future__ import annotations
 from enum import IntEnum
 from typing import Any, Optional
 
-from openadapt_types.check_level import to_oracle_tier
-
-from openadapt_flow.check_level import CheckLevel, from_verification_tier
+from openadapt_flow.check_level import (
+    CheckLevel,
+    from_verification_tier,
+    to_oracle_tier,
+)
 
 
 class EffectContractMutationError(RuntimeError):

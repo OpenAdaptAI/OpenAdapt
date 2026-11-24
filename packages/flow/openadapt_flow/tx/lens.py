@@ -25,8 +25,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
-from openadapt_types.check_level import Basis
 
+from openadapt_flow.check_level import Basis
 from openadapt_flow.tx.api_readback import (
     CACHE_BYPASS_HEADERS,
     api_readback_basis,
