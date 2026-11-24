@@ -99,6 +99,7 @@ from openadapt_flow.runtime.effects.learned import (
     covers,
     set_columns,
 )
+from openadapt_flow.runtime.effects.row_versions import FrameRowVersions
 from openadapt_flow.runtime.effects.versions import FrameVersions, VersionVerdict
 
 FrameStatus = Literal["held", "refuted", "not_checked"]
@@ -516,6 +517,10 @@ class FrameSpec(BaseModel):
     #: (``versions.FrameVersions``): a version in the window that isn't the
     #: agent's own is a lost update.
     versions: Optional[FrameVersions] = None
+    #: The target's own row versions, held from the baseline
+    #: (``row_versions.FrameRowVersions``, PostgreSQL): two transactions
+    #: writing the target in the window are a lost update.
+    row_versions: Optional[FrameRowVersions] = None
     #: Complete type/table change feeds for a provisional then final verdict.
     history: Optional[FrameHistory] = None
     #: Moves a person approved from ``openadapt-flow learn``
@@ -534,6 +539,8 @@ class FrameSpec(BaseModel):
             data.pop("identities", None)
         if data.get("versions") is None:
             data.pop("versions", None)
+        if data.get("row_versions") is None:
+            data.pop("row_versions", None)
         if data.get("learned") is None:
             data.pop("learned", None)
         if data.get("target_fields_by_surface") is None:
@@ -543,6 +550,12 @@ class FrameSpec(BaseModel):
     @model_validator(mode="after")
     def _database_attribution(self) -> "FrameSpec":
         a = self.attribution
+        if self.row_versions is not None:
+            if self.database is None or self.database.dialect != "postgresql":
+                raise ValueError(
+                    "frame.row_versions reads through frame.database, PostgreSQL only"
+                )
+            self.row_versions.names()
         if (
             self.history is not None
             and self.database is not None
@@ -762,6 +775,7 @@ class FrameVerdict:
                     "learned": {
                         "proposal_sha256": spec.learned.proposal_sha256,
                         "excuses": len(spec.learned.excuses),
+                        "source": spec.learned.source,
                         "used": sorted(self.learned_used),
                     }
                 }

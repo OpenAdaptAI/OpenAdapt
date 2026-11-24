@@ -26,6 +26,10 @@ from openadapt.quickstart.scene import MOCKMED, Scene
 
 #: The placeholder app address in the "try it on your own app" command.
 YOUR_APP_URL = "https://your-app.example"
+#: One-line Python drop-in for Playwright/CUA agents via ``openadapt-verify``.
+VERIFY_SNIPPET = (
+    'with checked_write("verify.yaml", values): ...  # from openadapt_verify'
+)
 #: Where the finale points for Seals of real runs, after the person's own.
 REAL_SEALS_URL = "https://openadapt.ai/seals"
 
@@ -102,6 +106,8 @@ class NextSteps:
     verify: Optional[str]
     record: str
     agent: str
+    #: One-line drop-in snippet for Playwright/CUA scripts (``openadapt-verify``).
+    verify_snippet: str = VERIFY_SNIPPET
     #: Under ``uvx`` only: the command that installs this version for good.
     keep: Optional[str] = None
     #: Under ``uvx`` only: a warning when the shell's ``openadapt`` is another
@@ -410,6 +416,7 @@ def _act1_subtitle(visible: bool, scene: Scene = MOCKMED) -> str:
 
 
 __all__ = [
+    "VERIFY_SNIPPET",
     "YOUR_APP_URL",
     "display_path",
     "Engine",

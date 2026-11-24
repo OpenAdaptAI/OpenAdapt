@@ -270,6 +270,8 @@ class _FakeRemoteIdentity:
 
 
 class _FakeLocalIdentity:
+    MAY_EGRESS = False  # in process: no frame leaves the box
+
     def __init__(self, answer: str):
         self.answer = answer
 

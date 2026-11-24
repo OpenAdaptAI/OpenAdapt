@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenAdapt Guard</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="header">
+        <div>
+          <h1 class="title">OpenAdapt Guard</h1>
+          <p class="subtitle">Local read-back checks &amp; Ed25519 signed receipts</p>
+        </div>
+        <span id="verdict-badge" class="badge badge-idle">IDLE</span>
+      </header>
+
+      <section class="controls">
+        <button id="arm-btn" class="btn btn-primary" type="button">
+          Arm Guard on This Tab
+        </button>
+        <p id="arm-status" class="hint" role="status" aria-live="polite">
+          Click to watch form submits on the active tab. Zero telemetry, zero egress.
+        </p>
+      </section>
+
+      <section id="summary-section" class="card hidden">
+        <div class="meta-row">
+          <span class="meta-label">Page</span>
+          <code id="page-path" class="meta-value"></code>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Verified</span>
+          <span id="verified-at" class="meta-value"></span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Redacted</span>
+          <span id="excluded-count" class="meta-value"></span>
+        </div>
+
+        <div id="banners-box" class="banners hidden">
+          <strong>Error banners detected:</strong>
+          <ul id="banners-list"></ul>
+        </div>
+
+        <table class="diff-table">
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Intended</th>
+              <th>Observed</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="diff-body"></tbody>
+        </table>
+      </section>
+
+      <section id="receipt-actions" class="actions hidden">
+        <button id="verify-btn" class="btn btn-secondary" type="button">
+          Verify Signature
+        </button>
+        <button id="export-btn" class="btn btn-secondary" type="button">
+          Export Signed Receipt JSON
+        </button>
+        <p id="verify-status" class="hint" role="status" aria-live="polite"></p>
+      </section>
+    </main>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

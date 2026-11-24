@@ -1,0 +1,1 @@
+| Read a save back while the next item runs (pipelined read-back, REST, FHIR, GraphQL or SQL record checks) | Released ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic | `--readback-window`, [THROUGHPUT.md](packages/flow/docs/THROUGHPUT.md) |

@@ -281,6 +281,9 @@ class _ReadyVision(FakeVision):
 
 
 class _CountingStateVerifier:
+    # A remote verifier: its calls are the run's external network evidence.
+    MAY_EGRESS = True
+
     def __init__(self, *, holds: bool) -> None:
         self.result = holds
         self.calls = 0
@@ -2873,6 +2876,7 @@ def test_resume_preserves_failed_leg_model_and_network_evidence(tmp_path):
         FakeBackend(),
         vision=_ReadyVision(),
         state_verifier=verifier,
+        allow_model_grounding=True,
         governed_authorization=authorization,
         durable=True,
         require_settled=True,

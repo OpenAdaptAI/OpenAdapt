@@ -913,6 +913,12 @@ def keep_prior_state(
         payload["existing_ids"] = existing
         payload["restore"] = restored
         path = prior_state_path(run_dir, step.id)
+        from openadapt_flow import sealed_set
+
+        if sealed_set.is_sealed_path(run_dir):
+            # Record values: encrypted with the rest of an encrypted run.
+            sealed_set.write_text(path, json.dumps(payload))
+            return path
         path.parent.mkdir(parents=True, exist_ok=True)
         staging = path.with_name(f".{path.name}.{os.getpid()}")
         fd = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -925,12 +931,14 @@ def keep_prior_state(
 
 
 def read_prior_state(run_dir: Path | str, step_id: str) -> Optional[dict[str, Any]]:
+    from openadapt_flow import sealed_set
+
     path = prior_state_path(run_dir, step_id)
-    if not path.is_file():
-        return None
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        if not sealed_set.is_file(path):
+            return None
+        raw = json.loads(sealed_set.read_text(path))
+    except (OSError, ValueError):
         return None
     if not isinstance(raw, dict) or raw.get("schema") != _PRIOR_SCHEMA:
         return None

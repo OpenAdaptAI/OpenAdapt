@@ -864,6 +864,7 @@ def _navigation_only(step: Step) -> bool:
         ActionKind.TYPE,
         ActionKind.SELECT_OPTION,
         ActionKind.READ,
+        ActionKind.SECOND_FACTOR,
     ) and not _step_consequential(step)
 
 

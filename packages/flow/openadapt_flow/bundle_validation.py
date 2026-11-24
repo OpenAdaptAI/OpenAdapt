@@ -1231,6 +1231,17 @@ def _verify_asset_hashes(
     decrypted_assets: Optional[dict[str, bytes]] = None,
 ) -> None:
     bundle = Path(bundle_dir)
+    if decrypted_assets is None:
+        from openadapt_flow import sealed_set
+
+        if sealed_set.is_sealed_path(bundle):
+            # An encrypted bundle (the default): hash each asset's
+            # authenticated plaintext, read in memory.
+            decrypted_assets = {}
+            for rel in stored.file_hashes:
+                path = bundle_asset_path(bundle, rel)
+                if sealed_set.is_file(path):
+                    decrypted_assets[rel] = sealed_set.read_bytes(path)
     for rel, expected in stored.file_hashes.items():
         path = bundle_asset_path(bundle, rel)
         if decrypted_assets is not None:

@@ -1,0 +1,1 @@
+| Run a worklist on several workers at once, one signed-in session each, each item claimed once, with a stop on any worker stopping all | Released ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic patients on a local OpenEMR test copy | `--workers`, [THROUGHPUT.md](packages/flow/docs/THROUGHPUT.md) |

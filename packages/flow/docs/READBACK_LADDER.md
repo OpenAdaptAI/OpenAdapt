@@ -12,7 +12,7 @@ records the level for each save (`readback.saves`) and for the run
 | `same_screen` | The screen said it saved | The value was read on the screen the save left | 4 |
 | `reopened` | Reopened in the same session | The acting session reset its state, found the record again and read it | 3 |
 | `separate_session` | Checked in a separate session | A separately signed-in session opened the record and read it (`ui_readback`) | 2 |
-| `system_of_record` | Checked in your system's records | An API, database, FHIR or file read found the record | 1 |
+| `system_of_record` | Checked in your system's records | An API, database or FHIR read, or a read of a file the system itself wrote (`artifact_producer: system_of_record`), found the record | 1 |
 
 ## What makes a run VERIFIED
 

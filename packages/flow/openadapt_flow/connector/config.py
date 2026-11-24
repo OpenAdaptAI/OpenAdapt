@@ -107,6 +107,36 @@ class ConnectorSettings:
     #: Qualified jobs must match it exactly; never built from a remote proof.
     qualification_authority_file: Optional[str] = None
 
+    def validate_run_config(self) -> None:
+        """Check local startup configuration before connecting or leasing work."""
+        from openadapt_flow import at_rest
+        from openadapt_flow.deployment import load_deployment
+
+        if not self.profile:
+            raise ConnectorConfigError(
+                "Set --profile, BYOC_PROFILE or connector.toml profile to a deployment "
+                "file with runtime.profile set to standard or regulated."
+            )
+        try:
+            deployment = load_deployment(self.profile)
+        except (OSError, ValueError) as exc:
+            # A parser error can quote local config values. Log only our diagnostic.
+            raise ConnectorConfigError(
+                "Cannot read a valid deployment profile. Check the local deployment "
+                "file and set runtime.profile to standard or regulated."
+            ) from exc
+        if deployment.runtime.profile not in {"standard", "regulated"}:
+            raise ConnectorConfigError(
+                "Managed dispatch requires runtime.profile set to standard or regulated."
+            )
+        if self.storage_root and at_rest.ledger_path().resolve().is_relative_to(
+            Path(self.storage_root).resolve()
+        ):
+            raise ConnectorConfigError(
+                "The plaintext ledger must be outside the job-addressable storage_root. "
+                f"Set {at_rest.LEDGER_DIR_ENV} to a separate private directory."
+            )
+
     def pinned_admission_keys(self) -> frozenset[str]:
         keys = {k.strip().lower() for k in self.trusted_admission_keys.split(",")}
         return frozenset(

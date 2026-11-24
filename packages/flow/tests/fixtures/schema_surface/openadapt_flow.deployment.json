@@ -2408,6 +2408,31 @@
         "title": "Glob",
         "type": "string"
        },
+       "local_state": {
+        "items": {
+         "discriminator": {
+          "mapping": {
+           "file": "#/$defs/FileSource",
+           "macos_defaults": "#/$defs/MacosDefaultsSource",
+           "windows_registry": "#/$defs/WindowsRegistrySource"
+          },
+          "propertyName": "type"
+         },
+         "oneOf": [
+          {
+           "$ref": "#/$defs/FileSource"
+          },
+          {
+           "$ref": "#/$defs/MacosDefaultsSource"
+          },
+          {
+           "$ref": "#/$defs/WindowsRegistrySource"
+          }
+         ]
+        },
+        "title": "Local State",
+        "type": "array"
+       },
        "options": {
         "additionalProperties": true,
         "title": "Options",
@@ -2436,6 +2461,25 @@
         "default": 0.2,
         "title": "Poll Interval S",
         "type": "number"
+       },
+       "artifact_producer": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Artifact Producer"
+       },
+       "acting_roots": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Acting Roots",
+        "type": "array"
        }
       },
       "title": "EffectsConfig",
@@ -2481,6 +2525,33 @@
        }
       },
       "title": "FieldReader",
+      "type": "object"
+     },
+     "FileSource": {
+      "additionalProperties": false,
+      "description": "A file on this computer: its contents and SHA-256.",
+      "properties": {
+       "id": {
+        "title": "Id",
+        "type": "string"
+       },
+       "type": {
+        "const": "file",
+        "default": "file",
+        "title": "Type",
+        "type": "string"
+       },
+       "path": {
+        "minLength": 1,
+        "title": "Path",
+        "type": "string"
+       }
+      },
+      "required": [
+       "id",
+       "path"
+      ],
+      "title": "FileSource",
       "type": "object"
      },
      "FinalCheck": {
@@ -3174,6 +3245,39 @@
        }
       },
       "title": "IdentitySection",
+      "type": "object"
+     },
+     "MacosDefaultsSource": {
+      "additionalProperties": false,
+      "description": "One key in a macOS preferences domain.",
+      "properties": {
+       "id": {
+        "title": "Id",
+        "type": "string"
+       },
+       "type": {
+        "const": "macos_defaults",
+        "default": "macos_defaults",
+        "title": "Type",
+        "type": "string"
+       },
+       "domain": {
+        "title": "Domain",
+        "type": "string"
+       },
+       "key": {
+        "maxLength": 255,
+        "minLength": 1,
+        "title": "Key",
+        "type": "string"
+       }
+      },
+      "required": [
+       "id",
+       "domain",
+       "key"
+      ],
+      "title": "MacosDefaultsSource",
       "type": "object"
      },
      "OpenStep": {
@@ -4707,6 +4811,49 @@
       "title": "ValueExpr",
       "type": "object"
      },
+     "WindowsRegistrySource": {
+      "additionalProperties": false,
+      "description": "One value in the Windows registry.",
+      "properties": {
+       "id": {
+        "title": "Id",
+        "type": "string"
+       },
+       "type": {
+        "const": "windows_registry",
+        "default": "windows_registry",
+        "title": "Type",
+        "type": "string"
+       },
+       "hive": {
+        "enum": [
+         "HKCU",
+         "HKLM"
+        ],
+        "title": "Hive",
+        "type": "string"
+       },
+       "path": {
+        "maxLength": 1024,
+        "minLength": 1,
+        "title": "Path",
+        "type": "string"
+       },
+       "name": {
+        "default": "",
+        "maxLength": 16383,
+        "title": "Name",
+        "type": "string"
+       }
+      },
+      "required": [
+       "id",
+       "hive",
+       "path"
+      ],
+      "title": "WindowsRegistrySource",
+      "type": "object"
+     },
      "WorklistAccount": {
       "additionalProperties": false,
       "description": "One signed-in session for a parallel worklist worker.\n\nHolds env var NAMES only, never a credential value.",
@@ -5981,6 +6128,31 @@
         "title": "Glob",
         "type": "string"
        },
+       "local_state": {
+        "items": {
+         "discriminator": {
+          "mapping": {
+           "file": "#/$defs/FileSource",
+           "macos_defaults": "#/$defs/MacosDefaultsSource",
+           "windows_registry": "#/$defs/WindowsRegistrySource"
+          },
+          "propertyName": "type"
+         },
+         "oneOf": [
+          {
+           "$ref": "#/$defs/FileSource"
+          },
+          {
+           "$ref": "#/$defs/MacosDefaultsSource"
+          },
+          {
+           "$ref": "#/$defs/WindowsRegistrySource"
+          }
+         ]
+        },
+        "title": "Local State",
+        "type": "array"
+       },
        "options": {
         "additionalProperties": true,
         "title": "Options",
@@ -6009,6 +6181,25 @@
         "default": 0.2,
         "title": "Poll Interval S",
         "type": "number"
+       },
+       "artifact_producer": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Artifact Producer"
+       },
+       "acting_roots": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Acting Roots",
+        "type": "array"
        }
       },
       "title": "EffectsConfig",
@@ -6054,6 +6245,33 @@
        }
       },
       "title": "FieldReader",
+      "type": "object"
+     },
+     "FileSource": {
+      "additionalProperties": false,
+      "description": "A file on this computer: its contents and SHA-256.",
+      "properties": {
+       "id": {
+        "title": "Id",
+        "type": "string"
+       },
+       "type": {
+        "const": "file",
+        "default": "file",
+        "title": "Type",
+        "type": "string"
+       },
+       "path": {
+        "minLength": 1,
+        "title": "Path",
+        "type": "string"
+       }
+      },
+      "required": [
+       "id",
+       "path"
+      ],
+      "title": "FileSource",
       "type": "object"
      },
      "FinalCheck": {
@@ -6343,6 +6561,39 @@
        "explained"
       ],
       "title": "HistoryView",
+      "type": "object"
+     },
+     "MacosDefaultsSource": {
+      "additionalProperties": false,
+      "description": "One key in a macOS preferences domain.",
+      "properties": {
+       "id": {
+        "title": "Id",
+        "type": "string"
+       },
+       "type": {
+        "const": "macos_defaults",
+        "default": "macos_defaults",
+        "title": "Type",
+        "type": "string"
+       },
+       "domain": {
+        "title": "Domain",
+        "type": "string"
+       },
+       "key": {
+        "maxLength": 255,
+        "minLength": 1,
+        "title": "Key",
+        "type": "string"
+       }
+      },
+      "required": [
+       "id",
+       "domain",
+       "key"
+      ],
+      "title": "MacosDefaultsSource",
       "type": "object"
      },
      "OpenStep": {
@@ -7203,6 +7454,49 @@
        }
       },
       "title": "ValueExpr",
+      "type": "object"
+     },
+     "WindowsRegistrySource": {
+      "additionalProperties": false,
+      "description": "One value in the Windows registry.",
+      "properties": {
+       "id": {
+        "title": "Id",
+        "type": "string"
+       },
+       "type": {
+        "const": "windows_registry",
+        "default": "windows_registry",
+        "title": "Type",
+        "type": "string"
+       },
+       "hive": {
+        "enum": [
+         "HKCU",
+         "HKLM"
+        ],
+        "title": "Hive",
+        "type": "string"
+       },
+       "path": {
+        "maxLength": 1024,
+        "minLength": 1,
+        "title": "Path",
+        "type": "string"
+       },
+       "name": {
+        "default": "",
+        "maxLength": 16383,
+        "title": "Name",
+        "type": "string"
+       }
+      },
+      "required": [
+       "id",
+       "hive",
+       "path"
+      ],
+      "title": "WindowsRegistrySource",
       "type": "object"
      }
     },
