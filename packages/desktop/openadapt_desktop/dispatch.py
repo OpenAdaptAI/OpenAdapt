@@ -444,7 +444,7 @@ class EngineDispatcher:
         if self._shadow is None:
             from openadapt_desktop.shadow_mode import ShadowModeService
 
-            self._shadow = ShadowModeService(self.config.data_dir, emit=self.emit)
+            self._shadow = ShadowModeService(self.config.data_dir, emit=lambda *a: self.emit(*a))
         if not self._shadow_resumed:
             self._shadow_resumed = True
             self._shadow.resume()

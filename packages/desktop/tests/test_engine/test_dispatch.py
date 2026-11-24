@@ -2933,3 +2933,12 @@ class TestDryRunCommands:
             {"workflow_id": "anything"}, run=False, stop_before_effect=True
         )
         assert response["pre_action_refusal"] is True
+
+    def test_shadow_emit_follows_runtime_reassignment(self, deps):
+        disp, _db, _events = deps
+        disp._shadow_resumed = True
+        shadow = disp.shadow
+        reassigned: list[tuple[str, dict]] = []
+        disp.emit = lambda event, data: reassigned.append((event, data))
+        shadow._emit("shadow.test", {"ok": True})
+        assert reassigned == [("shadow.test", {"ok": True})]
