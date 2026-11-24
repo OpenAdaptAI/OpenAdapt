@@ -18,7 +18,7 @@ import time
 from typing import Any
 
 from openadapt_flow.agent_test.agents.common import AgentContext, AgentResult
-from openadapt_flow.agent_test.browser import run_steps
+from openadapt_flow.agent_test.browser import browser_errors, run_steps
 from openadapt_flow.agent_test.packs import fill
 
 
@@ -31,7 +31,7 @@ def run_scripted(ctx: AgentContext, readback: bool) -> AgentResult:
         )
     try:
         run_steps(page, ctx.base_url, app.scripted, ctx.values)
-    except Exception as exc:  # noqa: BLE001
+    except browser_errors() as exc:
         return AgentResult(
             f"RESULT: NOT DONE the form could not be filled: {exc}"[:300]
         )
@@ -43,7 +43,7 @@ def run_scripted(ctx: AgentContext, readback: bool) -> AgentResult:
     time.sleep(float(app.readback.get("settle_s", 2)))
     try:
         problem = check_readback(page, ctx.base_url, steps, ctx.values)
-    except Exception as exc:  # noqa: BLE001
+    except browser_errors() as exc:
         return AgentResult(f"RESULT: NOT DONE the read-back failed: {exc}"[:300])
     if problem:
         return AgentResult(f"RESULT: NOT DONE read-back: {problem}"[:300])

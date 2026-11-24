@@ -1,0 +1,27 @@
+{
+  "case_id": "hl-s09",
+  "facts": {
+    "applicant.date_of_birth": "1993-08-19",
+    "applicant.email": "annika.t@example.test",
+    "applicant.first_name": "Annika",
+    "applicant.last_name": "Thorsrud",
+    "applicant.phone": "775-555-0145",
+    "coverage.deductible": 5000,
+    "coverage.effective_date": "2026-12-15",
+    "coverage.liability_limit": 100000,
+    "history.prior_claims_5yr": 0,
+    "property.address_line1": "27 Sagebrush Loop",
+    "property.city": "Reno",
+    "property.construction_quality": "Economy",
+    "property.exterior_wall": "stucco",
+    "property.has_pool": true,
+    "property.pool_fenced": false,
+    "property.roof_material": "Clay Tile",
+    "property.roof_year": 2012,
+    "property.square_feet": 1500,
+    "property.state": "NV",
+    "property.stories": "1",
+    "property.year_built": 1988,
+    "property.zip": "89523"
+  }
+}

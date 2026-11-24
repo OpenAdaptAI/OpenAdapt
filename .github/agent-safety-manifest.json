@@ -16,6 +16,7 @@
         "packages/flow/openadapt_flow/ir.py",
         "packages/flow/openadapt_flow/runtime/replayer.py",
         "packages/flow/openadapt_flow/runtime/effects/**",
+        "packages/flow/openadapt_flow/local_state_sources.py",
         "packages/flow/tests/test_verify_run.py",
         "packages/flow/tests/test_verify_tools.py"
       ]

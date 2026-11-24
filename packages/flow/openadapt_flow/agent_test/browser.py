@@ -120,7 +120,7 @@ class Screen:
     def _settle(self) -> None:
         try:
             self.page.wait_for_load_state("networkidle", timeout=3000)
-        except Exception:  # noqa: BLE001 - a busy page is still a page
+        except browser_errors():
             pass
 
     def _do(self, what: str, **kw: Any) -> None:
@@ -187,6 +187,25 @@ class Screen:
         self._settle()
 
 
+def browser_errors() -> tuple[type[BaseException], ...]:
+    """Expected Playwright / runtime / I/O errors during browser driving."""
+    base: tuple[type[BaseException], ...] = (
+        RuntimeError,
+        OSError,
+        TimeoutError,
+        ValueError,
+        KeyError,
+        TypeError,
+        AttributeError,
+        LookupError,
+    )
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+    except ImportError:
+        return base
+    return (PlaywrightError, *base)
+
+
 def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -225,7 +244,7 @@ def run_steps(
             page.eval_on_selector(st["submit"], "f => setTimeout(() => f.submit(), 0)")
             try:
                 page.wait_for_load_state("load", timeout=max(timeout, 60000))
-            except Exception:  # noqa: BLE001
+            except browser_errors():
                 pass
         elif "eval" in st:
             page.evaluate(st["eval"])
@@ -234,7 +253,7 @@ def run_steps(
         elif "wait" in st:
             try:
                 page.wait_for_load_state(st["wait"], timeout=max(timeout, 30000))
-            except Exception:  # noqa: BLE001 - a page that keeps polling
+            except browser_errors():
                 pass
         elif "wait_selector" in st:
             page.wait_for_selector(
@@ -315,7 +334,7 @@ class AppBrowser:
         sel = self.app.signed_out_selector
         try:
             return bool(sel and screen.page.locator(sel).count())
-        except Exception:  # noqa: BLE001
+        except browser_errors():
             return False
 
     def open(self) -> tuple[Any, Screen]:
@@ -339,6 +358,6 @@ class AppBrowser:
                 page.goto(home)
         try:
             page.wait_for_load_state("networkidle", timeout=15000)
-        except Exception:  # noqa: BLE001
+        except browser_errors():
             pass
         return ctx, Screen(page, log=blocked, allowed=allowed)

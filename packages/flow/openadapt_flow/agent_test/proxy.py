@@ -118,6 +118,10 @@ class Armed:
     delay_s: float = 0.0
 
 
+_FAULT_REFUSED = "refused"
+_HOOK_ERRORS = (OSError, RuntimeError, ValueError, KeyError, TimeoutError)
+
+
 class FrontDoor:
     """The proxy; one per app stack, armed per scenario."""
 
@@ -264,7 +268,7 @@ class FrontDoor:
                         except (KeyError, ValueError) as exc:
                             entry["rewrite_failed"] = str(exc)
                             ok = False
-                    if fault is not None and fault.kind == "refused":
+                    if fault is not None and fault.kind == _FAULT_REFUSED:
                         entry["status"] = 503
                         with door.lock:
                             door.delivered = ok
@@ -290,7 +294,7 @@ class FrontDoor:
                                 try:
                                     entry["after_save"] = fault.after_save()
                                     ok = not entry["after_save"].startswith("failed")
-                                except Exception as exc:  # noqa: BLE001
+                                except _HOOK_ERRORS as exc:
                                     entry["after_save"] = f"failed: {exc}"[:300]
                                     ok = False
                             else:
@@ -304,7 +308,7 @@ class FrontDoor:
                                 def fire() -> None:
                                     try:
                                         door.late_result = later()
-                                    except Exception as exc:  # noqa: BLE001
+                                    except _HOOK_ERRORS as exc:
                                         door.late_result = f"failed: {exc}"[:300]
 
                                 t = threading.Timer(fault.delay_s, fire)

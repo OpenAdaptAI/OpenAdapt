@@ -20,7 +20,7 @@ import json
 import sys
 from typing import Any, Optional
 
-from openadapt_flow.agent_test.browser import chord, off_app
+from openadapt_flow.agent_test.browser import browser_errors, chord, off_app
 
 _CONTROLS_JS = """
 () => {
@@ -131,7 +131,7 @@ class Driver:
         try:
             self.page.wait_for_load_state("load", timeout=15000)
             self.page.wait_for_load_state("networkidle", timeout=4000)
-        except Exception:  # noqa: BLE001
+        except browser_errors():
             pass
 
     def call(self, name: str, args: dict[str, Any]) -> str:
@@ -150,7 +150,7 @@ class Driver:
                             "controls": fr.evaluate(_CONTROLS_JS)[:120],
                         }
                     )
-                except Exception:  # noqa: BLE001
+                except browser_errors():
                     continue
             return json.dumps(
                 {"url": page.url, "text": text, "controls": controls, "frames": frames},
@@ -172,7 +172,7 @@ class Driver:
             v = str(args["value"])
             try:
                 target.select_option(str(args["selector"]), v, timeout=10000)
-            except Exception:  # noqa: BLE001 - by label
+            except browser_errors():
                 target.select_option(str(args["selector"]), label=v, timeout=10000)
             return "selected"
         if name == "click":
@@ -200,13 +200,13 @@ class Driver:
         try:
             if page.locator(selector).count():
                 return page
-        except Exception:  # noqa: BLE001
+        except browser_errors():
             return page
         for fr in page.frames[1:]:
             try:
                 if fr.locator(selector).count():
                     return fr
-            except Exception:  # noqa: BLE001
+            except browser_errors():
                 continue
         return page
 
@@ -250,7 +250,7 @@ def serve(cdp: str, base: str) -> None:
                         "content": [{"type": "text", "text": text}],
                         "isError": False,
                     }
-                except Exception as exc:  # noqa: BLE001 - the agent hears about it
+                except browser_errors() as exc:
                     result = {
                         "content": [{"type": "text", "text": f"Error: {exc}"[:500]}],
                         "isError": True,

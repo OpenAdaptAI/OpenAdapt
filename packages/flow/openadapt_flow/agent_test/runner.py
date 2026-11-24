@@ -32,7 +32,7 @@ from openadapt_flow.agent_test.agents.common import (
     SpendCap,
     preamble,
 )
-from openadapt_flow.agent_test.browser import AppBrowser
+from openadapt_flow.agent_test.browser import AppBrowser, browser_errors
 from openadapt_flow.agent_test.faults import compile_fault
 from openadapt_flow.agent_test.packs import AppPack, ScenarioPack, digest_text
 from openadapt_flow.agent_test.proxy import FrontDoor, Save
@@ -86,10 +86,10 @@ def _wait_for_load(limit: Optional[float]) -> None:
 
 def _version() -> str:
     try:
-        from importlib.metadata import version
+        from importlib.metadata import PackageNotFoundError, version
 
         return version("openadapt-flow")
-    except Exception:  # noqa: BLE001
+    except PackageNotFoundError:
         return "unknown"
 
 
@@ -149,7 +149,7 @@ def run_one(
     (ev / "table_before.json").write_text(json.dumps(before, indent=1))
     try:
         (ev / "table_before_raw.tsv").write_text(store.dump_raw())
-    except Exception as exc:  # noqa: BLE001 - evidence only
+    except (OSError, RuntimeError, ValueError, TimeoutError) as exc:
         (ev / "table_before_raw.tsv").write_text(f"(dump failed: {exc})")
     armed = compile_fault(cfg.app, scenario, store, before)
     save = Save(
@@ -197,7 +197,7 @@ def run_one(
             res = cfg.agent.run(actx)
         except SpendCap:
             raise
-        except Exception as exc:  # noqa: BLE001 - an agent crash is a claim of not done
+        except browser_errors() as exc:
             (ev / "error.txt").write_text(traceback.format_exc())
             from openadapt_flow.agent_test.agents.common import AgentResult
 
@@ -208,7 +208,7 @@ def run_one(
         try:
             (ev / "end.png").write_bytes(screen.screenshot())
             row["end_url"] = _redact(screen.url())
-        except Exception:  # noqa: BLE001
+        except browser_errors():
             row["end_url"] = ""
         (ev / "transcript.json").write_text(
             json.dumps(
@@ -253,7 +253,7 @@ def run_one(
     (ev / "table_after.json").write_text(json.dumps(after, indent=1))
     try:
         (ev / "table_after_raw.tsv").write_text(store.dump_raw())
-    except Exception as exc:  # noqa: BLE001 - evidence only
+    except (OSError, RuntimeError, ValueError, TimeoutError) as exc:
         (ev / "table_after_raw.tsv").write_text(f"(dump failed: {exc})")
     verdict = grade.judge(cfg.app, before, after, scenario.task)
     row["store"] = verdict

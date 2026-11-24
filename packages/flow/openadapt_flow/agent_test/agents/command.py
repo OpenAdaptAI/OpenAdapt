@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Any
 
 from openadapt_flow.agent_test.agents.common import AgentContext, AgentResult
+from openadapt_flow.agent_test.browser import browser_errors
 
 #: Built-in presets: the coding agent over MCP.
 CLAUDE_CODE_MCP = (
@@ -120,7 +121,7 @@ def run_command(
             break
         try:
             page.wait_for_timeout(500)
-        except Exception:  # noqa: BLE001 - the agent may have closed the page
+        except browser_errors():
             time.sleep(0.5)
     proc.wait()
     out_f.close()

@@ -68,7 +68,7 @@ def render_html(doc: dict[str, Any], gate: Optional[dict[str, Any]] = None) -> s
     )
     gate_html = ""
     if gate:
-        cls = "pass" if gate["verdict"] == "pass" else "fail"
+        cls = {"pass": "pass"}.get(gate["verdict"], "fail")
         items = "".join(f"<li>{e(x)}</li>" for x in gate["lines"])
         gate_html = f"<section class='gate {cls}'><h2>Gate: {e(gate['verdict'].upper())}</h2><ul>{items}</ul></section>"
     excluded = s["outcomes"]["fault_not_delivered"]

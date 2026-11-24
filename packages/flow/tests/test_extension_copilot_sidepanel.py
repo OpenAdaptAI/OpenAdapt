@@ -757,6 +757,29 @@ def test_sidepanel_idle_running_text_input_badge_and_scroll(chrome_copilot):
     assert panel_page.locator("#status-pill").inner_text() == "Running"
     assert panel_page.locator("#progress-counter").inner_text() == "2 / 5"
 
+    # 2b. A submit whose read-back could not cover every field is never shown
+    # as running or verified.
+    bridge.publish_state(
+        CopilotViewState(
+            run_id="run-e2e-002",
+            binding=_binding("run-e2e-002"),
+            outcome=FormTxOutcome.READBACK_INCOMPLETE,
+            status_line="Submitted; 1 field could not be read back.",
+            fields_filled_auto=5,
+            total_bound_fields=5,
+            halts=(),
+        )
+    )
+    panel_page.locator("#refresh-btn").click()
+    panel_page.locator('#status-pill[data-status="action_needed"]').wait_for(
+        timeout=10000
+    )
+    assert (
+        panel_page.locator("#status-pill").inner_text()
+        == "Submitted, Not Fully Checked"
+    )
+    assert panel_page.locator("#verified-receipt-card").count() == 0
+
     # 3. Publish text-input ungrounded halt below spacer + scalar prefill value conflict.
     bridge.publish_state(
         CopilotViewState(
@@ -818,12 +841,15 @@ def test_sidepanel_idle_running_text_input_badge_and_scroll(chrome_copilot):
         timeout=10000
     )
 
-    # Verify Chrome action badge shows HALT while not recording, and REC takes precedence when recording.
+    # Verify Chrome action badge shows HALT while not recording, REC takes
+    # precedence when recording, and clearing any password-field auth pause
+    # restores HALT once recording stops.
     badge_halt = worker.evaluate("() => chrome.action.getBadgeText({})")
     assert badge_halt == "HALT"
     worker.evaluate("() => __openadaptExtensionBackground.setRecording(true)")
     assert worker.evaluate("() => chrome.action.getBadgeText({})") == "REC"
     worker.evaluate("() => __openadaptExtensionBackground.setRecording(false)")
+    worker.evaluate("() => __openadaptExtensionBackground.resumeAfterAuth()")
     assert worker.evaluate("() => chrome.action.getBadgeText({})") == "HALT"
 
     # Verify first attention element (#coverage-tier below 1400px spacer) scrolled into view.

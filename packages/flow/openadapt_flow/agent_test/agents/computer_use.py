@@ -17,6 +17,7 @@ from openadapt_flow.agent_test.agents.common import (
     RunLimit,
     call_usd,
 )
+from openadapt_flow.agent_test.browser import browser_errors
 
 SCROLL_PX = 120
 
@@ -137,7 +138,7 @@ def run_claude(ctx: AgentContext, model: str, prices: dict[str, float]) -> Agent
                 }
                 try:
                     _claude_act(screen, {"action": b.name, **dict(b.input)})
-                except Exception as exc:  # noqa: BLE001 - the model hears about it
+                except browser_errors() as exc:
                     res["content"] = f"Error: {exc}"[:300]
                     res["is_error"] = True
                     results.append(res)
@@ -277,7 +278,7 @@ def run_openai(ctx: AgentContext, model: str, prices: dict[str, float]) -> Agent
                 for a in actions:
                     try:
                         _openai_act(screen, a)
-                    except Exception as exc:  # noqa: BLE001
+                    except browser_errors() as exc:
                         err = f"{exc}"[:200]
                         break
                 item: dict[str, Any] = {
