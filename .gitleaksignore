@@ -235,3 +235,10 @@ f92237889163b242800c6aecd7c334c174ce4428:packages/flow/tests/test_connector_pilo
 # relay test in one commit; not a credential. The test now draws a nonce from
 # os.urandom at runtime.
 e09ebaec9b380b8217471cccb4031511ac7c966e:packages/flow/tests/test_readiness_devtools_relay.py:generic-api-key:44
+# PR #2429: sha256 digests of the synthetic held-out benchmark's answers file in
+# MANIFEST.json, under the old "answer_key" names (renamed to answers.json and
+# answers_sha256, so new commits no longer match). Digests, not keys.
+36be56dcd6fdc9adc97567bce272ab81d2a528ff:packages/flow/benchmark/form_tx_heldout/MANIFEST.json:generic-api-key:3
+36be56dcd6fdc9adc97567bce272ab81d2a528ff:packages/flow/benchmark/form_tx_heldout/MANIFEST.json:generic-api-key:8
+3146a82dd83641e83021d7034aaf03411c635555:packages/flow/benchmark/form_tx_heldout/MANIFEST.json:generic-api-key:3
+3146a82dd83641e83021d7034aaf03411c635555:packages/flow/benchmark/form_tx_heldout/MANIFEST.json:generic-api-key:6

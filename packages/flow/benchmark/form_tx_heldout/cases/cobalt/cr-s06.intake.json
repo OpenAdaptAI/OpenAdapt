@@ -1,0 +1,24 @@
+{
+  "case_id": "cr-s06",
+  "facts": {
+    "applicant.date_of_birth": "1980-07-08",
+    "applicant.email": "thandiwe.corrigan@example.test",
+    "applicant.first_name": "Thandiwe",
+    "applicant.last_name": "Corrigan",
+    "applicant.license_state": "TN",
+    "applicant.marital_status": "Single",
+    "coverage.bi_limits": "100/300",
+    "coverage.collision_deductible": 1000,
+    "coverage.comprehensive_deductible": 1000,
+    "garaging.city": "Fairview",
+    "garaging.state": "TN",
+    "garaging.zip": "37062",
+    "household.driver_count": 1,
+    "vehicle.annual_miles": 18000,
+    "vehicle.make": "Halden",
+    "vehicle.model": "Fjord Touring",
+    "vehicle.ownership": "own",
+    "vehicle.primary_use": "business",
+    "vehicle.year": 2023
+  }
+}

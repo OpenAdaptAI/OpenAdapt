@@ -339,10 +339,13 @@ class RunReceipt(BaseModel):
             and self.effect_assurance != _ASSURANCE_BY_TIER[self.effect_tier_reached]
         ):
             raise ValueError("effect assurance disagrees with the effect tier")
-        if (self.model_calls > 0) != ("model" in self.evidence_classes):
-            raise ValueError("model-call count and evidence class disagree")
-        if self.model_calls > 0 and self.external_network_calls != "observed":
-            raise ValueError("model calls require observed external network calls")
+        # ``model_calls`` is off-box calls only; in-process ones never count.
+        from openadapt_flow.model_call_evidence import model_call_evidence_error
+
+        if error := model_call_evidence_error(
+            self.model_calls, self.evidence_classes, self.external_network_calls
+        ):
+            raise ValueError(error)
         expected = hashlib.sha256(self.canonical_json(include_digest=False)).hexdigest()
         if self.receipt_digest != expected:
             raise ValueError("receipt digest does not match its canonical payload")
