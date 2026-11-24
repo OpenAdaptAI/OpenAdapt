@@ -35,6 +35,7 @@ from openadapt_flow.form_tx.types import (
     FieldAnchorSpec,
     FieldBindingSpec,
     FieldCodecSpec,
+    FieldWriteRecord,
     FormCodecKind,
     FormHaltKind,
     FormPack,
@@ -53,7 +54,10 @@ from openadapt_flow.form_tx.types import (
     PopupSubroutineSpec,
     PrefillPolicy,
     ProvenanceKind,
+    ReadbackFieldVerdict,
+    ReadbackStatus,
     SummaryCheckSpec,
+    SummaryVerdict,
     UIProfileSpec,
     WizardScreenSpec,
     canonical_sha256,
@@ -100,7 +104,19 @@ class FakePopupFormSurface:
     garage_bays: str = ""
     require_unmapped_garage_bays: bool = False
     broken_return_write: bool = False
+    # The estimator keeps only the first three digits of living area, as a
+    # badly built widget might. The parent form never shows the input.
+    truncate_living_area: bool = False
     mutation_count: int = 0
+
+    @property
+    def confirmed_mutation_count(self) -> int:
+        return self.mutation_count
+
+    def has_confirmed_mutation_since(
+        self, since_mutation_count: int, *, url_patterns: Sequence[str] = ()
+    ) -> bool:
+        return self.mutation_count > since_mutation_count
 
     def reset_mutation_counter(self) -> None:
         self.mutation_count = 0
@@ -172,7 +188,7 @@ class FakePopupFormSurface:
 
     def fill_text(self, dom_selector: str, value: str) -> None:
         if dom_selector == "#popup-living-area":
-            self.living_area_sqft = value
+            self.living_area_sqft = value[:3] if self.truncate_living_area else value
         elif dom_selector == "#popup-construction-year":
             self.construction_year = value
         elif dom_selector == "#popup-garage-bays":
@@ -206,6 +222,10 @@ class FakePopupFormSurface:
                 sqft = int(self.living_area_sqft.replace(",", "").strip())
                 estimate_dollars = sqft * 200
                 self.parent.values["replacement_cost"] = f"${estimate_dollars:,.2f}"
+                # The portal stores the estimator inputs with the quote, so
+                # the summary can show them.
+                self.parent.values["living_area_sqft"] = self.living_area_sqft
+                self.parent.values["construction_year"] = self.construction_year
             return
         raise KeyError(f"Unknown popup click selector: {dom_selector}")
 
@@ -247,6 +267,7 @@ class FakeStatefulFormSurface:
         popup_broken_return: bool = False,
         popup_require_unmapped_garage: bool = False,
         duplicate_ambiguous_first_name: bool = False,
+        popup_truncate_living_area: bool = False,
     ) -> None:
         landmarks = ("#session-user-badge",) if require_authenticated_landmark else ()
         self._ui_profile = UIProfileSpec(
@@ -302,6 +323,7 @@ class FakeStatefulFormSurface:
         self.popup_broken_return = popup_broken_return
         self.popup_require_unmapped_garage = popup_require_unmapped_garage
         self.duplicate_ambiguous_first_name = duplicate_ambiguous_first_name
+        self.popup_truncate_living_area = popup_truncate_living_area
 
     @property
     def ui_profile(self) -> UIProfileSpec:
@@ -310,6 +332,15 @@ class FakeStatefulFormSurface:
     @property
     def mutation_count(self) -> int:
         return self._mutation_count
+
+    @property
+    def confirmed_mutation_count(self) -> int:
+        return self._mutation_count
+
+    def has_confirmed_mutation_since(
+        self, since_mutation_count: int, *, url_patterns: Sequence[str] = ()
+    ) -> bool:
+        return self._mutation_count > since_mutation_count
 
     def reset_mutation_counter(self) -> None:
         self._mutation_count = 0
@@ -460,6 +491,7 @@ class FakeStatefulFormSurface:
             parent=self,
             broken_return_write=self.popup_broken_return,
             require_unmapped_garage_bays=self.popup_require_unmapped_garage,
+            truncate_living_area=self.popup_truncate_living_area,
         )
         yield popup
 
@@ -811,12 +843,23 @@ class FakeStatefulFormSurface:
                     "Estimated Replacement Cost",
                 ),
                 ("terms_accepted", "#sum-terms", "Attestation Accepted"),
+                ("living_area_sqft", "#sum-living-area", "Living Area Square Feet"),
+                ("construction_year", "#sum-construction-year", "Year Built"),
             ]
             for key, sel, label in summary_items:
                 if key in self.drop_summary_fields:
                     continue
                 val = rec.get(key, "")
-                if key in ("pool_fenced", "has_trampoline") and not val:
+                if (
+                    key
+                    in (
+                        "pool_fenced",
+                        "has_trampoline",
+                        "living_area_sqft",
+                        "construction_year",
+                    )
+                    and not val
+                ):
                     continue
                 controls.append(
                     ObservedControl(
@@ -885,6 +928,7 @@ def _build_pack(
     prior_claims_policy: PrefillPolicy = PrefillPolicy.HALT_ON_CONFLICT,
     modal_policy: str = "halt_for_human",
     use_lookup_search: bool = False,
+    readback_popup_inputs: bool = True,
 ) -> FormPack:
     state_codec = FieldCodecSpec(
         kind=FormCodecKind.ENUM_MAP,
@@ -1024,6 +1068,30 @@ def _build_pack(
                     section_patterns=("Summary Readback",),
                 ),
                 codec=cents_codec,
+            ),
+            *(
+                (
+                    FieldBindingSpec(
+                        binding_id="rb_living_area_sqft",
+                        dossier_key="living_area_sqft",
+                        anchor=FieldAnchorSpec(
+                            label_patterns=("Living Area Square Feet",),
+                            section_patterns=("Summary Readback",),
+                        ),
+                        codec=int_codec,
+                    ),
+                    FieldBindingSpec(
+                        binding_id="rb_construction_year",
+                        dossier_key="construction_year",
+                        anchor=FieldAnchorSpec(
+                            label_patterns=("Year Built",),
+                            section_patterns=("Summary Readback",),
+                        ),
+                        codec=int_codec,
+                    ),
+                )
+                if readback_popup_inputs
+                else ()
             ),
         ),
         outputs=(
@@ -1200,6 +1268,7 @@ def _build_pack(
             ),
         ),
         summary_check=summary_check,
+        commit_url_patterns=("/api/submit",),
         max_commit_mutations=1,
     )
 
@@ -1304,7 +1373,8 @@ def test_ppr_conditional_cascade_human_resume_popup_summary_and_receipt() -> Non
     }
     assert done.summary_verdict is not None
     assert done.summary_verdict.passed is True
-    assert done.summary_verdict.checked_count == 12
+    assert done.summary_verdict.checked_count == 14
+    assert done.summary_verdict.not_checked_keys == ()
 
     verdict_by_key = {v.dossier_key: v for v in done.summary_verdict.field_verdicts}
     assert verdict_by_key["has_trampoline"].provenance == ProvenanceKind.HUMAN_OPERATOR
@@ -1395,7 +1465,11 @@ def test_entity_table_prefill_conflict_dismiss_accept_and_broken_dismiss() -> No
             idempotency_key="idem_accept_spouse",
         ),
     )
-    assert done_b.outcome == FormTxOutcome.VERIFIED_DONE
+    # The kept entity row has no read-back, so it is not_checked: the run
+    # cannot end verified_done with a receipt (absent-evidence-as-success).
+    assert done_b.outcome == FormTxOutcome.READBACK_INCOMPLETE
+    assert done_b.receipt is None
+    assert any(k.startswith("entity:") for k in done_b.summary_verdict.not_checked_keys)
     assert len(surface_b.household_rows) == 2
 
     # Path C: Fail-closed when dismiss click fails to remove row
@@ -1702,9 +1776,17 @@ def test_auth_wall_popup_failures_ambiguous_anchor_and_mutation_budget() -> None
             idempotency_key="idem_popup_garage",
         ),
     )
-    # The unknown popup answer has no final read-back binding: do not issue proof.
-    assert done_pop_ug.outcome == FormTxOutcome.READBACK_REFUTED
+    # The operator's popup answer is not stored with the quote, so the summary
+    # cannot show it. It matched when re-read before apply, but that is not a
+    # read-back of the record: it stays not_checked and no proof is issued.
+    assert done_pop_ug.outcome == FormTxOutcome.READBACK_INCOMPLETE
     assert done_pop_ug.receipt is None
+    assert done_pop_ug.summary_verdict is not None
+    garage = {v.dossier_key: v for v in done_pop_ug.summary_verdict.field_verdicts}[
+        "control:Attached Garage Bays"
+    ]
+    assert garage.status == ReadbackStatus.NOT_CHECKED
+    assert "re-read before apply" in garage.reason
 
     # 5. Ambiguous anchor match -> AMBIGUOUS_OPTION_OR_TARGET
     surface_amb = FakeStatefulFormSurface(duplicate_ambiguous_first_name=True)
@@ -1745,14 +1827,18 @@ def test_summary_judge_catches_silent_server_corruption_dropped_field_and_lookup
     assert res_corrupt.summary_verdict.passed is False
     assert res_corrupt.summary_verdict.failed_keys == ("phone_number",)
 
-    # 2. Server drops last_name read-back field on summary screen -> READBACK_REFUTED
+    # 2. Server drops last_name from the summary: it cannot be read back, so
+    # it is not_checked (never passed) and the run is not verified.
     surface_drop = FakeStatefulFormSurface(drop_summary_fields=("last_name",))
     res_drop = FormReconciler(surface_drop).run_until_halt_or_done(
         ReconcilerSession(pack, dossier)
     )
-    assert res_drop.outcome == FormTxOutcome.READBACK_REFUTED
+    assert res_drop.outcome == FormTxOutcome.READBACK_INCOMPLETE
+    assert res_drop.receipt is None
     assert res_drop.summary_verdict is not None
-    assert res_drop.summary_verdict.failed_keys == ("last_name",)
+    assert res_drop.summary_verdict.passed is False
+    assert res_drop.summary_verdict.failed_keys == ()
+    assert res_drop.summary_verdict.not_checked_keys == ("last_name",)
 
     # 3. Server fails to render required confirmation_code output -> READBACK_REFUTED
     surface_missing_out = FakeStatefulFormSurface(drop_confirmation_output=True)
@@ -1801,6 +1887,27 @@ def test_summary_judge_catches_silent_server_corruption_dropped_field_and_lookup
     )
 
 
+def _all_bound_passed(pack: FormPack, dossier: InputDossier) -> SummaryVerdict:
+    """A passing verdict for every bound field the dossier has a value for."""
+    keys = sorted(
+        {b.dossier_key for b in pack.bindings if dossier.facts.get(b.dossier_key)}
+    )
+    return SummaryVerdict(
+        passed=True,
+        checked_count=len(keys),
+        field_verdicts=tuple(
+            ReadbackFieldVerdict(
+                dossier_key=k,
+                codec_kind=FormCodecKind.WHITESPACE_COLLAPSE,
+                passed=True,
+                status=ReadbackStatus.PASSED,
+                provenance=ProvenanceKind.INTAKE_DOCUMENT,
+            )
+            for k in keys
+        ),
+    )
+
+
 def test_ed25519_key_persistence_and_single_bit_receipt_tamper_detection(
     tmp_path: Path,
 ) -> None:
@@ -1813,16 +1920,31 @@ def test_ed25519_key_persistence_and_single_bit_receipt_tamper_detection(
     reloaded_key = load_or_create_ed25519_key(key_file)
     assert ed25519_public_key_hex(created_key) == ed25519_public_key_hex(reloaded_key)
 
+    from openadapt_flow.form_tx.types import read_subjects, subjects_digest
+
     pack = _build_pack()
     dossier = _build_dossier(has_pool="No")
+    bound_writes = tuple(
+        FieldWriteRecord(
+            field_key=b.dossier_key,
+            dossier_key=b.dossier_key,
+            source="auto_fill",
+            selector=f"#{b.dossier_key}",
+        )
+        for b in pack.bindings
+        if dossier.facts.get(b.dossier_key) is not None
+    )
+    verdict = _all_bound_passed(pack, dossier).model_copy(
+        update={"ledger_digest": subjects_digest(read_subjects(bound_writes, ()))}
+    )
     receipt = issue_form_tx_receipt(
         run_id="run_tamper_test",
-        readback_passed=True,
-        readback_checked_count=10,
+        summary_verdict=verdict,
+        writes=bound_writes,
         pack=pack,
         dossier=dossier,
         signing_key=created_key,
-        fields_filled_auto=10,
+        fields_filled_auto=len(bound_writes),
         commit_mutations_observed=1,
         outputs={"confirmation_code": "CONF-777"},
     )
@@ -2168,13 +2290,17 @@ def test_receipt_raw_seed_loading_and_strict_validation_edges(tmp_path: Path) ->
     with pytest.raises(ValueError):
         load_or_create_ed25519_key(bad_path)
 
+    from openadapt_flow.form_tx.types import read_subjects, subjects_digest
+
     pack = _build_pack()
     dossier = _build_dossier(has_pool="No")
     # Passing (priv, pub) keypair tuple directly
     rcpt = issue_form_tx_receipt(
         run_id="r_tuple",
-        readback_passed=True,
-        readback_checked_count=1,
+        summary_verdict=_all_bound_passed(pack, dossier).model_copy(
+            update={"ledger_digest": subjects_digest(read_subjects((), ()))}
+        ),
+        writes=(),
         pack=pack,
         dossier=dossier,
         signing_key=(priv, pub),
@@ -2487,11 +2613,19 @@ def test_readback_contract_cannot_verify_an_unchecked_commit(contract: str) -> N
             f"run_incomplete_{contract}", pack, _build_dossier(has_pool="No")
         )
     )
-    assert result.outcome == FormTxOutcome.READBACK_REFUTED
+    # No contract at all is refuted; a contract that leaves typed fields
+    # uncovered reports them as not_checked. Neither is ever verified.
+    assert result.outcome == (
+        FormTxOutcome.READBACK_REFUTED
+        if contract == "missing"
+        else FormTxOutcome.READBACK_INCOMPLETE
+    )
     assert result.safe_to_retry is False
     assert result.receipt is None
     assert result.summary_verdict is not None
     assert result.summary_verdict.passed is False
+    if contract != "missing":
+        assert result.summary_verdict.not_checked_keys
 
 
 def test_verified_receipt_requires_positive_readback_evidence() -> None:
@@ -2509,3 +2643,541 @@ def test_verified_receipt_requires_positive_readback_evidence() -> None:
                 signing_key=private,
                 **evidence,
             )
+
+
+# --- Read-back coverage: every typed or selected field gets a verdict -------
+#
+# On main before this change, fields typed inside a popup estimator
+# (living_area_sqft, construction_year) were never part of the read-back, and
+# a run that typed them could still end VERIFIED_DONE with a signed receipt.
+
+
+class _SpySurface:
+    """Wrap a surface and record every selector the layer writes to."""
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+        self.written: set[str] = set()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+    def _spy(self, selector: str) -> None:
+        self.written.add(selector)
+
+    def fill_text(self, dom_selector: str, value: str) -> None:
+        self._spy(dom_selector)
+        self._inner.fill_text(dom_selector, value)
+
+    def select_native_option(self, dom_selector: str, option_value: str) -> None:
+        self._spy(dom_selector)
+        self._inner.select_native_option(dom_selector, option_value)
+
+    def set_checkbox_or_radio(self, dom_selector: str, checked: bool = True) -> None:
+        self._spy(dom_selector)
+        self._inner.set_checkbox_or_radio(dom_selector, checked)
+
+    def choose_portal_combobox_option(self, dom_selector: str, option: Any) -> None:
+        self._spy(dom_selector)
+        self._inner.choose_portal_combobox_option(dom_selector, option)
+
+    @contextmanager
+    def open_popup_surface(self, trigger_selector: str, **kwargs: Any) -> Iterator[Any]:
+        with self._inner.open_popup_surface(trigger_selector, **kwargs) as popup:
+            spy = _SpySurface(popup)
+            yield spy
+            self.written |= spy.written
+
+
+def _run_pool_case(pack: FormPack) -> tuple[Any, ReconcilerSession, _SpySurface]:
+    spy = _SpySurface(FakeStatefulFormSurface())
+    reconciler = FormReconciler(spy)  # type: ignore[arg-type]
+    session = reconciler.create_session(pack, _build_dossier(has_pool="Yes"))
+    halted = reconciler.run_until_halt_or_done(session)
+    assert halted.outcome == FormTxOutcome.HALTED_NEEDS_HUMAN
+    done = reconciler.apply_human_resolution(
+        session,
+        HumanResolutionInput(
+            halt_id=halted.halts[0].halt_id,
+            action=HumanDecisionAction.PROVIDE_VALUE,
+            actor_id="op",
+            provided_value="No",
+            mapped_dossier_key="has_trampoline",
+            idempotency_key="ik_cov_trampoline",
+        ),
+    )
+    return done, session, spy
+
+
+def test_popup_inputs_the_summary_omits_are_not_checked_and_never_verified() -> None:
+    # Old bug: these two fields were typed but had no verdict at all, and the
+    # run ended verified with a signed receipt.
+    done, session, _ = _run_pool_case(_build_pack(readback_popup_inputs=False))
+    assert done.outcome == FormTxOutcome.READBACK_INCOMPLETE
+    assert done.receipt is None
+    assert done.safe_to_retry is False
+    verdict = done.summary_verdict
+    assert verdict is not None
+    assert verdict.passed is False
+    assert verdict.failed_keys == ()
+    assert verdict.not_checked_keys == ("construction_year", "living_area_sqft")
+    by_key = {v.dossier_key: v for v in verdict.field_verdicts}
+    for key in verdict.not_checked_keys:
+        assert by_key[key].status == ReadbackStatus.NOT_CHECKED
+        assert by_key[key].passed is False
+        assert "re-read before apply" in by_key[key].reason
+    assert verdict.checked_count == len(verdict.field_verdicts) - 2
+
+
+def test_popup_input_that_does_not_hold_its_value_stops_before_apply() -> None:
+    surface = FakeStatefulFormSurface(popup_truncate_living_area=True)
+    reconciler = FormReconciler(surface)
+    session = reconciler.create_session(
+        _build_pack(readback_popup_inputs=False), _build_dossier(has_pool="No")
+    )
+    result = reconciler.run_until_halt_or_done(session)
+    assert result.outcome == FormTxOutcome.HALTED_NEEDS_HUMAN
+    assert result.halts[0].field_label == "Living Area (Sq Ft)"
+    # Nothing was applied or submitted.
+    assert surface.values["replacement_cost"] == "$0.00"
+    assert surface.committed_record is None
+
+
+def test_every_written_selector_is_in_the_ledger_and_every_ledger_entry_has_a_verdict() -> (
+    None
+):
+    done, session, spy = _run_pool_case(_build_pack())
+    assert done.outcome == FormTxOutcome.VERIFIED_DONE
+    ledger_selectors = {w.selector for w in session.writes}
+    assert spy.written, "the spy saw no writes"
+    assert spy.written <= ledger_selectors
+    assert done.summary_verdict is not None
+    verdict_keys = {v.dossier_key for v in done.summary_verdict.field_verdicts}
+    for write in session.writes:
+        assert write.field_key in verdict_keys, write
+    assert {"living_area_sqft", "construction_year", "has_trampoline"} <= {
+        w.field_key for w in session.writes
+    }
+
+
+def test_operator_value_on_unbound_control_is_not_checked() -> None:
+    spy = _SpySurface(FakeStatefulFormSurface())
+    reconciler = FormReconciler(spy)  # type: ignore[arg-type]
+    session = reconciler.create_session(_build_pack(), _build_dossier(has_pool="Yes"))
+    halted = reconciler.run_until_halt_or_done(session)
+    done = reconciler.apply_human_resolution(
+        session,
+        HumanResolutionInput(
+            halt_id=halted.halts[0].halt_id,
+            action=HumanDecisionAction.PROVIDE_VALUE,
+            actor_id="op",
+            provided_value="No",
+            idempotency_key="ik_unbound_trampoline",
+        ),
+    )
+    # The summary shows a trampoline answer the layer cannot attribute to any
+    # expected value, so the run is refuted; the operator's control itself
+    # is reported as not_checked, never passed.
+    assert done.outcome == FormTxOutcome.READBACK_REFUTED
+    assert done.receipt is None
+    assert done.summary_verdict is not None
+    assert "control:Trampoline on Premises" in done.summary_verdict.not_checked_keys
+    assert "has_trampoline" in done.summary_verdict.failed_keys
+
+
+def test_a_mismatch_still_refutes_even_when_other_fields_are_unchecked() -> None:
+    surface = FakeStatefulFormSurface(
+        corrupt_summary_overrides={"phone_number": "415-555-9999"},
+        drop_summary_fields=("last_name",),
+    )
+    result = FormReconciler(surface).run_until_halt_or_done(
+        ReconcilerSession(_build_pack(), _build_dossier(has_pool="No"))
+    )
+    assert result.outcome == FormTxOutcome.READBACK_REFUTED
+    assert result.summary_verdict is not None
+    assert result.summary_verdict.failed_keys == ("phone_number",)
+    assert result.summary_verdict.not_checked_keys == ("last_name",)
+
+
+def test_verdict_and_receipt_models_refuse_a_pass_with_unchecked_fields() -> None:
+    from openadapt_flow.form_tx.types import ReadbackFieldVerdict, SummaryVerdict
+
+    with pytest.raises(ValueError):
+        ReadbackFieldVerdict(
+            dossier_key="k",
+            codec_kind=FormCodecKind.EXACT,
+            passed=True,
+            status=ReadbackStatus.NOT_CHECKED,
+            provenance=ProvenanceKind.INTAKE_DOCUMENT,
+        )
+    unchecked = ReadbackFieldVerdict(
+        dossier_key="k",
+        codec_kind=FormCodecKind.EXACT,
+        passed=False,
+        status=ReadbackStatus.NOT_CHECKED,
+        provenance=ProvenanceKind.INTAKE_DOCUMENT,
+    )
+    with pytest.raises(ValueError):
+        SummaryVerdict(passed=True, checked_count=1, field_verdicts=(unchecked,))
+    verdict = SummaryVerdict(
+        passed=False,
+        checked_count=0,
+        not_checked_keys=("k",),
+        field_verdicts=(unchecked,),
+    )
+    private, _ = generate_ed25519_keypair()
+    with pytest.raises(ValueError, match="read-back evidence"):
+        issue_form_tx_receipt(
+            run_id="run_unchecked",
+            pack=_build_pack(),
+            dossier=_build_dossier(has_pool="No"),
+            signing_key=private,
+            summary_verdict=verdict,
+            readback_passed=True,
+            readback_checked_count=3,
+        )
+
+
+def test_pre_apply_reread_halts_when_a_popup_value_changed_after_typing() -> None:
+    parent = FakeStatefulFormSurface()
+    pack = _build_pack(readback_popup_inputs=False)
+    session = ReconcilerSession(pack, _build_dossier(has_pool="No"))
+    subroutine = pack.popup_subroutines[0]
+    session.record_write(
+        source="auto_fill",
+        dossier_key="living_area_sqft",
+        label="Living Area (Sq Ft)",
+        selector="#popup-living-area",
+        in_popup_subroutine=subroutine.subroutine_id,
+    )
+    # The widget rewrote the value after it was typed (for example on blur).
+    popup = FakePopupFormSurface(parent=parent, living_area_sqft="2,4")
+    halt = FormReconciler(parent)._check_popup_entries_before_apply(
+        session, popup, parent.snapshot(), subroutine
+    )
+    assert halt is not None
+    assert halt.kind == FormHaltKind.POPUP_CONTRACT_FAILED
+    assert "before apply" in halt.message
+    (write,) = [w for w in session.writes if w.field_key == "living_area_sqft"]
+    assert not write.checked_before_apply
+
+    popup_ok = FakePopupFormSurface(parent=parent, living_area_sqft="2425")
+    assert (
+        FormReconciler(parent)._check_popup_entries_before_apply(
+            session, popup_ok, parent.snapshot(), subroutine
+        )
+        is None
+    )
+    (write,) = [w for w in session.writes if w.field_key == "living_area_sqft"]
+    assert write.checked_before_apply
+
+
+def test_public_signer_rejects_inconsistent_write_ledger_and_duplicate_verdict_coverage() -> (
+    None
+):
+    from openadapt_flow.form_tx.types import read_subjects, subjects_digest
+
+    pack = _build_pack()
+    dossier = _build_dossier(has_pool="No")
+    private, _ = generate_ed25519_keypair()
+
+    # Missing ledger_digest on SummaryVerdict is refused for newly issued receipts.
+    with pytest.raises(ValueError, match="ledger_digest"):
+        issue_form_tx_receipt(
+            run_id="run_no_digest",
+            summary_verdict=_all_bound_passed(pack, dossier),
+            writes=(),
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=0,
+            commit_mutations_observed=1,
+        )
+
+    # Empty write ledger contradicting a nonzero fields_filled_auto must fail.
+    with pytest.raises(ValueError, match="auto-fill count does not match"):
+        issue_form_tx_receipt(
+            run_id="run_incomplete_ledger",
+            summary_verdict=_all_bound_passed(pack, dossier).model_copy(
+                update={"ledger_digest": subjects_digest(read_subjects((), ()))}
+            ),
+            writes=(),
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=3,
+            commit_mutations_observed=1,
+        )
+
+    # Ledger with only kept_matching controls cannot back fields_filled_auto > 0.
+    kept_only = (
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="kept_matching",
+            selector="#first-name",
+            screen_id="applicant",
+        ),
+    )
+    kept_digest = subjects_digest(read_subjects(kept_only, ()))
+    with pytest.raises(ValueError, match="auto-fill count does not match"):
+        issue_form_tx_receipt(
+            run_id="run_kept_only",
+            summary_verdict=_all_bound_passed(pack, dossier).model_copy(
+                update={"ledger_digest": kept_digest}
+            ),
+            writes=kept_only,
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=1,
+            commit_mutations_observed=1,
+        )
+
+    # Flipping a kept_matching subject to auto_fill between judge and signer
+    # invalidates ledger_digest because source is bound in the subject digest.
+    flipped_to_auto = (
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="auto_fill",
+            selector="#first-name",
+            screen_id="applicant",
+        ),
+    )
+    with pytest.raises(ValueError, match="does not match the run ledger"):
+        issue_form_tx_receipt(
+            run_id="run_source_flip",
+            summary_verdict=_all_bound_passed(pack, dossier).model_copy(
+                update={"ledger_digest": kept_digest}
+            ),
+            writes=flipped_to_auto,
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=1,
+            commit_mutations_observed=1,
+        )
+
+    # Under-claiming fields_filled_auto below recorded auto_fill subjects is also refused.
+    with pytest.raises(ValueError, match="auto-fill count does not match"):
+        issue_form_tx_receipt(
+            run_id="run_underclaim",
+            summary_verdict=_all_bound_passed(pack, dossier).model_copy(
+                update={
+                    "ledger_digest": subjects_digest(read_subjects(flipped_to_auto, ()))
+                }
+            ),
+            writes=flipped_to_auto,
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=0,
+            commit_mutations_observed=1,
+        )
+
+    # Duplicate auto_fill entries for the same control count as one subject.
+    dup_auto = (
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="auto_fill",
+            selector="#first-name",
+            screen_id="applicant",
+        ),
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="auto_fill",
+            selector="#first-name",
+            screen_id="applicant",
+        ),
+    )
+    with pytest.raises(ValueError, match="auto-fill count does not match"):
+        issue_form_tx_receipt(
+            run_id="run_dup_auto",
+            summary_verdict=_all_bound_passed(pack, dossier).model_copy(
+                update={"ledger_digest": subjects_digest(read_subjects(dup_auto, ()))}
+            ),
+            writes=dup_auto,
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=2,
+            commit_mutations_observed=1,
+        )
+
+    # Omitting a popup subject recorded in SummaryVerdict.ledger_digest is refused.
+    full_writes = (
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="auto_fill",
+            selector="#first-name",
+            screen_id="applicant",
+        ),
+        FieldWriteRecord(
+            field_key="living_area_sqft",
+            dossier_key="living_area_sqft",
+            source="auto_fill",
+            selector="#popup-living-area",
+            in_popup_subroutine="calc",
+        ),
+    )
+
+    judge_verdict = _all_bound_passed(pack, dossier).model_copy(
+        update={"ledger_digest": subjects_digest(read_subjects(full_writes, ()))}
+    )
+    with pytest.raises(ValueError, match="does not match the run ledger"):
+        issue_form_tx_receipt(
+            run_id="run_omitted_popup",
+            summary_verdict=judge_verdict,
+            writes=full_writes[:1],
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=1,
+            commit_mutations_observed=1,
+        )
+
+    # Two subjects sharing one key cannot be covered by two verdicts without
+    # distinct observation evidence.
+    two_writes = (
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="auto_fill",
+            selector="#first-name",
+            screen_id="applicant",
+        ),
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="auto_fill",
+            selector="#popup-first-name",
+            in_popup_subroutine="calc",
+        ),
+    )
+    base_verdict = _all_bound_passed(pack, dossier)
+    dup_verdict = base_verdict.model_copy(
+        update={
+            "field_verdicts": (
+                *base_verdict.field_verdicts,
+                ReadbackFieldVerdict(
+                    dossier_key="first_name",
+                    codec_kind=FormCodecKind.WHITESPACE_COLLAPSE,
+                    passed=True,
+                    status=ReadbackStatus.PASSED,
+                    provenance=ProvenanceKind.INTAKE_DOCUMENT,
+                ),
+            ),
+            "observations_per_key": None,
+            "ledger_digest": subjects_digest(read_subjects(two_writes, ())),
+        }
+    )
+    with pytest.raises(ValueError, match="uncovered"):
+        issue_form_tx_receipt(
+            run_id="run_dup_verdict_no_obs",
+            summary_verdict=dup_verdict,
+            writes=two_writes,
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=2,
+            commit_mutations_observed=1,
+        )
+
+
+def test_commit_confirmation_requires_response_for_request_started_by_commit_click() -> (
+    None
+):
+    from types import SimpleNamespace
+
+    from openadapt_flow.form_tx.playwright_surface import PlaywrightFormSurface
+
+    listeners: dict[str, list[Any]] = {}
+
+    class _FakeContext:
+        def on(self, event: str, cb: Any) -> None:
+            listeners.setdefault(event, []).append(cb)
+
+        def remove_listener(self, event: str, cb: Any) -> None:
+            pass
+
+    class _FakePage:
+        context = _FakeContext()
+
+        def evaluate(self, *_a: Any, **_kw: Any) -> None:
+            return None
+
+    page = _FakePage()
+    other_page = _FakePage()
+    own_frame = SimpleNamespace(page=page)
+    other_frame = SimpleNamespace(page=other_page)
+    surface = PlaywrightFormSurface(page, UIProfileSpec(profile_id="generic_web_ui"))
+
+    # Request 1 started BEFORE commit click.
+    req1 = SimpleNamespace(
+        method="POST", url="https://example.test/draft", frame=own_frame
+    )
+    surface._on_request(req1)
+    pre_commit = surface.mutation_count
+    assert pre_commit == 1
+
+    # Request from ANOTHER page in the browser context succeeding does NOT confirm.
+    req_other = SimpleNamespace(
+        method="POST", url="https://example.test/other-tab", frame=other_frame
+    )
+    surface._on_request(req_other)
+    surface._on_response(SimpleNamespace(request=req_other, status=200))
+    assert surface.has_confirmed_mutation_since(pre_commit) is False
+
+    # Request 2 started BY commit click on own page fails with 500;
+    # a late 200 for pre-commit req1 AND a background autosave 200 on own page
+    # STILL do not confirm because an own-page mutation after commit failed.
+    req2 = SimpleNamespace(
+        method="POST", url="https://example.test/submit", frame=own_frame
+    )
+    surface._on_request(req2)
+    surface._on_response(SimpleNamespace(request=req2, status=500))
+    surface._on_response(SimpleNamespace(request=req1, status=200))
+    req_bg = SimpleNamespace(
+        method="POST", url="https://example.test/autosave", frame=own_frame
+    )
+    surface._on_request(req_bg)
+    surface._on_response(SimpleNamespace(request=req_bg, status=200))
+    assert surface.has_confirmed_mutation_since(pre_commit) is False
+
+    # A same-page draft autosave succeeding does NOT satisfy a declared commit endpoint pattern.
+    autosave_pre = surface.mutation_count
+    req_autosave = SimpleNamespace(
+        method="POST", url="https://example.test/draft/autosave", frame=own_frame
+    )
+    surface._on_request(req_autosave)
+    surface._on_response(SimpleNamespace(request=req_autosave, status=200))
+    assert (
+        surface.has_confirmed_mutation_since(autosave_pre, url_patterns=("/submit",))
+        is False
+    )
+
+    # A clean commit window on own page where the commit endpoint succeeds with 201 -> confirmed.
+    clean_pre = surface.mutation_count
+    req3 = SimpleNamespace(
+        method="POST", url="https://example.test/submit", frame=own_frame
+    )
+    surface._on_request(req3)
+    surface._on_response(SimpleNamespace(request=req3, status=201))
+    assert (
+        surface.has_confirmed_mutation_since(clean_pre, url_patterns=("/submit",))
+        is True
+    )
+
+    # A pack declaring neither commit_url_patterns nor a record-specific lookup
+    # stays DELIVERY_UNCERTAIN rather than trusting an unattributed mutation.
+    unattributed_pack = _build_pack(use_lookup_search=False).model_copy(
+        update={"commit_url_patterns": ()}
+    )
+    unattributed_res = FormReconciler(FakeStatefulFormSurface()).run_until_halt_or_done(
+        ReconcilerSession(unattributed_pack, _build_dossier(has_pool="No"))
+    )
+    assert unattributed_res.outcome == FormTxOutcome.DELIVERY_UNCERTAIN

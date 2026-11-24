@@ -88,6 +88,13 @@
     if (state.outcome === 'verified_done') {
       return { text: 'Verified Done', status: 'verified_done' };
     }
+    // Submitted but not verified: a person must look before anyone relies on it.
+    if (state.outcome === 'readback_refuted') {
+      return { text: 'Read-back Mismatch', status: 'action_needed' };
+    }
+    if (state.outcome === 'readback_incomplete') {
+      return { text: 'Submitted, Not Fully Checked', status: 'action_needed' };
+    }
     const hasHalts = Array.isArray(state.halts) && state.halts.length > 0;
     if (
       hasHalts ||
