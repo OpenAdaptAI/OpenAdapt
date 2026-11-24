@@ -1317,6 +1317,11 @@
   "packages/flow/openadapt_flow/runtime/effects/rest.py": {
     "swallow": 3
   },
+  "packages/flow/openadapt_flow/runtime/effects/row_versions.py": {
+    "says_success": 2,
+    "cmp_literal": 2,
+    "swallow": 6
+  },
   "packages/flow/openadapt_flow/runtime/effects/smart_auth.py": {
     "swallow": 1,
     "swallow_wide": 1
@@ -1620,9 +1625,9 @@
   },
   "packages/flow/openadapt_flow/verify_run.py": {
     "says_success": 4,
-    "cmp_literal": 36,
+    "cmp_literal": 37,
     "bool_fold": 2,
-    "swallow": 5,
+    "swallow": 6,
     "swallow_wide": 4,
     "empty_change_set": 1
   },
@@ -1657,7 +1662,8 @@
   },
   "packages/flow/openadapt_flow/wrap/cli.py": {
     "says_success": 1,
-    "swallow": 2
+    "swallow": 2,
+    "cmp_literal": 1
   },
   "packages/flow/openadapt_flow/wrap/dispatch_cli.py": {
     "says_success": 3
