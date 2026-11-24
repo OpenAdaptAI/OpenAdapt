@@ -33,13 +33,22 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from openadapt_flow.runtime.effects.effect import ValueExpr
+from openadapt_flow.verdict import (
+    Obligations,
+    Observed,
+    Result,
+    Status,
+    Subject,
+    settle,
+)
+from openadapt_flow.verdict_sites import verdict_site
 
 VersionStatus = Literal["held", "refuted", "not_checked"]
 
@@ -222,6 +231,7 @@ def _resolve_self(
     return out
 
 
+@verdict_site("versions.judge", classes="C1 C5")
 def judge_versions(
     spec: FrameVersions,
     stored: Mapping[str, Any],
@@ -257,131 +267,190 @@ def judge_versions(
         mine = resolved
     before: Mapping[str, Any] = stored.get("records") or {}
     out = VersionVerdict("held")
-    worst: Optional[VersionVerdict] = None
-
-    def stop(status: VersionStatus, problem: str, reason: str) -> None:
-        nonlocal worst
-        if worst is None or (worst.status == "not_checked" and status == "refuted"):
-            worst = VersionVerdict(status, problem, reason=reason)
+    # The obligations come from the plan: that the reads succeeded (the
+    # early return above refused an unreadable one), then one per target.
+    # With no target (all creates) that one still has to hold, so the set is
+    # never empty.
+    read = Subject(surface="versions", key="reads")
+    subjects = [read]
+    results = [
+        Result.held(
+            read,
+            Observed(len(rows), complete=True),
+            "the versions were read before and after the write",
+        )
+    ]
+    #: Per target, in order: the problems found, each (status, code, reason).
+    problems: dict[int, list[tuple[VersionStatus, str, str]]] = {}
 
     seen: set[Optional[str]] = set()
     for target, existed, changed in targets:
         if target in seen:
             continue
         seen.add(target)
-        if target is None:
+        n = len(subjects)
+        subject = Subject(surface="versions", key=f"target:{n}")
+        subjects.append(subject)
+        found = problems.setdefault(n, [])
+
+        def stop(status: VersionStatus, problem: str, reason: str) -> None:
+            found.append((status, problem, reason))
+
+        _judge_target(
+            spec, before, rows, key, mine, out, target, existed, changed, stop
+        )
+        if not found:
+            results.append(Result.held(subject, Observed(target), "the agent's own"))
+        elif any(status == "refuted" for status, _, _ in found):
+            # A refutation stands even when another read of the same target
+            # can't be explained: adding a duplicate or a null row never hides
+            # a version by someone else.
+            results.append(
+                Result.refuted(subject, Observed(target, complete=False), "refuted")
+            )
+        else:
+            results.append(Result.not_checked(subject, found[0][1]))
+    settled = settle(Obligations.fix(subjects, source="frame.versions"), results)
+    label = settled.label(precedence=(Status.REFUTED, Status.NOT_CHECKED))
+    if label is Status.HELD:
+        out.reason = f"{out.targets} target(s): every new version is the agent's own"
+        return out
+    wanted: VersionStatus = "refuted" if label is Status.REFUTED else "not_checked"
+    # The first problem of the worst kind, in target order, names the verdict.
+    status, problem, reason = next(
+        (p for n in sorted(problems) for p in problems[n] if p[0] == wanted),
+        ("not_checked", "missing", "the version check could not be settled"),
+    )
+    return VersionVerdict(
+        status,
+        problem,
+        targets=out.targets,
+        new_versions=out.new_versions,
+        own_versions=out.own_versions,
+        reason=reason,
+    )
+
+
+def _judge_target(
+    spec: FrameVersions,
+    before: Mapping[str, Any],
+    rows: Sequence[Mapping[str, Any]],
+    key: bytes,
+    mine: set[str],
+    out: VersionVerdict,
+    target: Optional[str],
+    existed: bool,
+    changed: bool,
+    stop: Callable[[VersionStatus, str, str], None],
+) -> None:
+    """Every problem with one target, through ``stop``. A problem that only
+    leaves the target unexplained doesn't end the search for one that
+    refutes it."""
+
+    if target is None:
+        stop(
+            "not_checked",
+            "no_target_id",
+            f"a target record has no {spec.target_field or 'identity'} field, "
+            "so its versions can't be found",
+        )
+        return
+    base = before.get(_mac(key, "record", target))
+    if base is None:
+        if existed:
             stop(
                 "not_checked",
-                "no_target_id",
-                f"a target record has no {spec.target_field or 'identity'} field, "
-                "so its versions can't be found",
+                "missing",
+                "the target existed before the write but had no version",
             )
-            continue
-        base = before.get(_mac(key, "record", target))
-        if base is None:
-            if existed:
+        return  # created in the window: no earlier version to overwrite
+    out.targets += 1
+    now = [r for r in rows if _text(_get(r, spec.record_field)) == target]
+    if not now:
+        stop("not_checked", "missing", "the target has no version after the write")
+        return
+    old = set(base.get("versions") or [])
+    versions = [_text(_get(r, spec.version_field)) for r in now]
+    if base.get("null") or any(v is None for v in versions):
+        stop(
+            "not_checked",
+            "null_version",
+            "a version of the target reads as null, so saves can't be told apart",
+        )
+        return
+    macs = [_mac(key, "version", target, str(v)) for v in versions]
+    if base.get("dup") or len(set(macs)) != len(macs):
+        stop(
+            "not_checked",
+            "duplicate_version",
+            "two rows of the target's versions hold the same version, so a "
+            "save could hide behind another",
+        )
+    # One row per new version: a version read twice is one save.
+    fresh: list[tuple[Optional[str], Mapping[str, Any]]] = []
+    fresh_macs: set[str] = set()
+    for v, r, m in zip(versions, now, macs):
+        if m not in old and m not in fresh_macs:
+            fresh_macs.add(m)
+            fresh.append((v, r))
+    out.new_versions += len(fresh)
+    if changed and not fresh:
+        stop(
+            "not_checked",
+            "no_new_version",
+            "the target changed in the window but no new version of it was "
+            "read, so who saved it can't be told",
+        )
+    if spec.author_field and not old <= set(macs):
+        stop(
+            "not_checked",
+            "history_changed",
+            "a version of the target read before the write is gone after it: "
+            "the read isn't a history that only grows, so a save in the "
+            "window could be hidden",
+        )
+    if spec.author_field:
+        for _version, r in fresh:
+            author = _text(_get(r, spec.author_field))
+            if author is None:
                 stop(
                     "not_checked",
-                    "missing",
-                    "the target existed before the write but had no version",
+                    "no_author",
+                    "a new version of the target names no author, so it "
+                    "can't be told from another user's save",
                 )
-            continue  # created in the window: no earlier version to overwrite
-        out.targets += 1
-        now = [r for r in rows if _text(_get(r, spec.record_field)) == target]
-        if not now:
-            stop("not_checked", "missing", "the target has no version after the write")
-            continue
-        old = set(base.get("versions") or [])
-        versions = [_text(_get(r, spec.version_field)) for r in now]
-        if base.get("null") or any(v is None for v in versions):
-            stop(
-                "not_checked",
-                "null_version",
-                "a version of the target reads as null, so saves can't be told apart",
-            )
-            continue
-        macs = [_mac(key, "version", target, str(v)) for v in versions]
-        if base.get("dup") or len(set(macs)) != len(macs):
-            stop(
-                "not_checked",
-                "duplicate_version",
-                "two rows of the target's versions hold the same version, so a "
-                "save could hide behind another",
-            )
-            continue
-        fresh = [(v, r) for v, r, m in zip(versions, now, macs) if m not in old]
-        out.new_versions += len(fresh)
-        if changed and not fresh:
-            stop(
-                "not_checked",
-                "no_new_version",
-                "the target changed in the window but no new version of it was "
-                "read, so who saved it can't be told",
-            )
-            continue
-        if spec.author_field and not old <= set(macs):
-            stop(
-                "not_checked",
-                "history_changed",
-                "a version of the target read before the write is gone after it: "
-                "the read isn't a history that only grows, so a save in the "
-                "window could be hidden",
-            )
-            continue
-        if spec.author_field:
-            for _version, r in fresh:
-                author = _text(_get(r, spec.author_field))
-                if author is None:
-                    stop(
-                        "not_checked",
-                        "no_author",
-                        "a new version of the target names no author, so it "
-                        "can't be told from another user's save",
-                    )
-                elif author in mine:
-                    out.own_versions += 1
-                else:
-                    stop(
-                        "refuted",
-                        "another_author",
-                        "lost update: another user saved a version of the target "
-                        "inside the window, and the agent's save came after it "
-                        "or beside it",
-                    )
-            continue
-        # No authors: count whole-number steps.
-        values = [_text(_get(r, spec.version_field)) for r in now]
-        if not base.get("whole") or any(
-            v is None or not _WHOLE.match(v) for v in values
-        ):
-            stop(
-                "not_checked",
-                "not_a_number",
-                "the target's versions aren't whole numbers, and no author is "
-                "read, so the steps in the window can't be counted",
-            )
-            continue
-        steps = max(int(v) for v in values if v is not None) - int(base["max"] or 0)
-        if steps < 0 or (steps == 0 and fresh):
-            stop(
-                "refuted",
-                "went_back",
-                "the target's version went back or was replaced in the window",
-            )
-        elif steps > 1 or len(fresh) > 1:
-            stop(
-                "refuted",
-                "extra_steps",
-                f"lost update: the target moved {max(steps, len(fresh))} versions "
-                "in the window; one save is the agent's, and no author is read "
-                "to say whose the others are",
-            )
-    if worst is not None:
-        worst.targets, worst.new_versions, worst.own_versions = (
-            out.targets,
-            out.new_versions,
-            out.own_versions,
+            elif author in mine:
+                out.own_versions += 1
+            else:
+                stop(
+                    "refuted",
+                    "another_author",
+                    "lost update: another user saved a version of the target "
+                    "inside the window, and the agent's save came after it "
+                    "or beside it",
+                )
+        return
+    # No authors: count whole-number steps.
+    if not base.get("whole") or any(not _WHOLE.match(str(v)) for v in versions):
+        stop(
+            "not_checked",
+            "not_a_number",
+            "the target's versions aren't whole numbers, and no author is "
+            "read, so the steps in the window can't be counted",
         )
-        return worst
-    out.reason = f"{out.targets} target(s): every new version is the agent's own"
-    return out
+        return
+    steps = max(int(str(v)) for v in versions) - int(base["max"] or 0)
+    if steps < 0 or (steps == 0 and fresh):
+        stop(
+            "refuted",
+            "went_back",
+            "the target's version went back or was replaced in the window",
+        )
+    elif steps > 1 or len(fresh) > 1:
+        stop(
+            "refuted",
+            "extra_steps",
+            f"lost update: the target moved {max(steps, len(fresh))} versions "
+            "in the window; one save is the agent's, and no author is read "
+            "to say whose the others are",
+        )

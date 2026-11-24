@@ -33,6 +33,7 @@ import re
 import secrets
 import shutil
 import tempfile
+import tomllib
 import webbrowser
 import zipfile
 from contextlib import nullcontext
@@ -43,11 +44,6 @@ from io import BytesIO
 from pathlib import Path, PurePosixPath
 from typing import Any, Optional
 from urllib.parse import parse_qs
-
-try:  # Python 3.10 compatibility
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - exercised on 3.10 CI
-    import tomli as tomllib
 
 from openadapt_flow import artifacts, crypto, privacy, sealed_set
 from openadapt_flow.sanitization_policy import (
