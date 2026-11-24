@@ -432,8 +432,9 @@ def _utf8(data: bytes, *, cut: bool = False) -> Optional[str]:
     a character split by the cut, and are dropped.
     """
     for drop in range(4 if cut else 1):
+        trimmed = data[:-drop] if drop else data
         try:
-            return data[: len(data) - drop].decode("utf-8")
+            return trimmed.decode("utf-8")
         except UnicodeDecodeError:
             continue
     return None
