@@ -1612,9 +1612,7 @@ class RemoteDisplayBackend:
         if self._require_input_trust and not self._client.input_trusted():
             raise RemoteDisplayError(
                 "process is not trusted to inject OS input, so input would be "
-                "silently dropped. macOS: "
-                + _mac_control_remedy()
-                + " "
+                "silently dropped. macOS: " + _mac_control_remedy() + " "
                 "Windows: the target window belongs to an elevated (or "
                 "unknown-elevation) process and UIPI would discard our input "
                 "— run the driver elevated. Refusing to emit an input that "
