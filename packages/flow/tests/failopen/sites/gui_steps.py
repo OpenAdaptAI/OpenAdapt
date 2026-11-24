@@ -1,7 +1,10 @@
 """gui.steps.judge_step (C3 C5): did a step (a link, a tab, a button) do what
 the demonstration showed?
 
-A commit holds only on exactly the demonstrated number of writes; a
+A commit holds only on exactly the demonstrated number of writes, each
+returning what the demonstrated one did (a 302 to a sign-in page is not the
+302 to the confirmation page the demo saw, and an outcome in the old
+path-only ``"3xx <path>"`` form is not checked); a
 navigation only when the screen moved and nothing was written. Write counts
 that are not whole numbers, and roles nobody listed, are not checked.
 
@@ -26,6 +29,8 @@ RELEVANT = {
         "writes_before",
         "writes_after",
         "after_complete",
+        "expected_outcomes",
+        "outcomes",
     ),
     "navigate": ("role", "writes_before", "writes_after", "moved", "after_complete"),
     "in_place": ("role", "writes_before", "writes_after", "moved", "after_complete"),
@@ -42,6 +47,8 @@ def _ev(role: str, **over: Any) -> dict[str, Any]:
         "moved": role == "navigate",
         "after_complete": True,
         "after_errors": (),
+        "expected_outcomes": ("2xx",) if role == "commit" else None,
+        "outcomes": ("2xx",) if role == "commit" else None,
     }
     return {**base, **over}
 
@@ -93,6 +100,52 @@ register(
             Seed(_ev("in_place"), True, "nothing written"),
             Seed(_ev("commit", writes_after=3), False, "a commit that wrote nothing"),
             Seed(_ev("commit", writes_after=5), False, "two writes for one"),
+            Seed(
+                _ev("commit", outcomes=("redirect /login",)),
+                False,
+                "a redirect to sign-in where the demo saved",
+            ),
+            Seed(
+                _ev(
+                    "commit",
+                    expected_outcomes=("redirect /done",),
+                    outcomes=("redirect /login",),
+                ),
+                False,
+                "a redirect elsewhere than the demo's",
+            ),
+            Seed(
+                _ev(
+                    "commit",
+                    expected_outcomes=("redirect /register?status=saved",),
+                    outcomes=("redirect /register?status=session-expired",),
+                ),
+                False,
+                "a redirect to the same path with another query",
+            ),
+            Seed(
+                _ev(
+                    "commit",
+                    expected_outcomes=("redirect /records/{id}",),
+                    outcomes=("redirect /records/{id}",),
+                ),
+                True,
+                "a redirect to the record just created",
+            ),
+            Seed(
+                _ev(
+                    "commit",
+                    expected_outcomes=("3xx /done",),
+                    outcomes=("3xx /done",),
+                ),
+                False,
+                "an outcome learned in the old path-only form",
+            ),
+            Seed(
+                _ev("commit", expected_outcomes=None),
+                False,
+                "a spec with no recorded outcomes",
+            ),
             Seed(_ev("navigate", writes_after=4), False, "a navigation that wrote"),
             Seed(_ev("navigate", moved=False), False, "did not move"),
             Seed(_ev("commit", after_errors=("Card declined",)), False, "error shown"),
@@ -109,6 +162,8 @@ register(
                 "writes_after",
                 "moved",
                 "after_complete",
+                "expected_outcomes",
+                "outcomes",
             )
         ),
         partial=lambda ev: [("after_complete", {**ev, "after_complete": False})],

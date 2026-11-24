@@ -1,0 +1,26 @@
+{
+  "case_id": "hl-s04",
+  "facts": {
+    "applicant.date_of_birth": "1990-05-14",
+    "applicant.email": "priya.v@example.test",
+    "applicant.first_name": "Priya",
+    "applicant.last_name": "Vandersloot",
+    "applicant.phone": "720-555-0108",
+    "coverage.deductible": 1000,
+    "coverage.effective_date": "2026-12-15",
+    "coverage.liability_limit": 300000,
+    "history.prior_claims_5yr": 0,
+    "property.address_line1": "9 Juniper Hollow",
+    "property.city": "Golden",
+    "property.construction_quality": "Standard",
+    "property.exterior_wall": "stucco",
+    "property.has_pool": false,
+    "property.roof_material": "Clay Tile",
+    "property.roof_year": 2018,
+    "property.square_feet": 2100,
+    "property.state": "CO",
+    "property.stories": "2",
+    "property.year_built": 2001,
+    "property.zip": "80401"
+  }
+}

@@ -124,7 +124,10 @@ def django_admin(tmp_path: Path):
             proc.kill()
 
 
-def test_a_django_admin_recording_keeps_no_rendered_token(django_admin, tmp_path):
+def test_a_django_admin_recording_keeps_no_rendered_token(
+    django_admin, tmp_path, monkeypatch
+):
+    monkeypatch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "synthetic test fixture")
     sync_api = pytest.importorskip("playwright.sync_api")
     base, password = django_admin
     with sync_api.sync_playwright() as pw:
@@ -134,7 +137,7 @@ def test_a_django_admin_recording_keeps_no_rendered_token(django_admin, tmp_path
             pytest.skip(f"chromium unavailable: {exc}")
         try:
             context = browser.new_context()
-            capture = nc.NetworkCapture(context).start()
+            capture = nc.NetworkCapture(context, bodies="raw").start()
             t0 = time.monotonic()
             page = context.new_page()
             page.goto(f"{base}/admin/login/?next=/admin/auth/group/add/")

@@ -18,10 +18,17 @@ from its words:
   and asks :func:`judge_step` whether it did what the demonstration showed.
 
 :func:`judge_step` is a verdict site. A commit step holds only when the
-backend counted exactly the writes the demonstration made. A backend that
-cannot count writes never shows a commit, so a commit through a plain link
-that sends nothing the backend counts stays unproven, as it should: the run
-has no evidence the record was saved. A navigation step that wrote, or that
+backend counted exactly the writes the demonstration made, and each returned
+what the demonstrated one did: the same status class and, for a redirect,
+the same ``Location`` key (path and query, with minted ids replaced; see
+:func:`~openadapt_flow.gui.dom.location_key`). A save bounced to a sign-in
+page is a 302 like a save that went to its confirmation page; only the
+``Location`` tells them apart. A commit spec with no recorded outcomes, or
+with an outcome in the old path-only ``"3xx <path>"`` form (an older pack),
+is never clicked. A
+backend that cannot count writes never shows a commit, so a commit through a
+plain link that sends nothing the backend counts stays unproven, as it
+should: the run has no evidence the record was saved. A navigation step that wrote, or that
 left the screen as it was, is refuted.
 """
 
@@ -42,6 +49,7 @@ from openadapt_flow.gui.model import (
     match_one,
     screen_signature,
     spec_for,
+    write_outcomes_of,
 )
 from openadapt_flow.verdict import Observed, Result, Status, Subject
 from openadapt_flow.verdict_sites import verdict_site
@@ -71,12 +79,17 @@ class StepSpec:
     """Pack data for one step: which control, and what it did in the demo.
 
     ``writes`` is the number of writes the demonstration counted for it: at
-    least 1 for a commit, 0 otherwise."""
+    least 1 for a commit, 0 otherwise. ``outcomes`` is what each of a
+    commit's writes returned in the demo, sorted (``"2xx"``,
+    ``"redirect /done"``); None on a spec learned before outcomes were
+    recorded. Such a commit is not taken, and nor is one with an outcome in
+    the old ``"3xx <path>"`` form."""
 
     step_id: str
     control: ControlSpec
     role: StepRole
     writes: int = 0
+    outcomes: Optional[tuple[str, ...]] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.role, StepRole):
@@ -85,6 +98,10 @@ class StepSpec:
             raise ValueError("a commit step wrote at least once in the demo")
         if self.role is not StepRole.COMMIT and self.writes != 0:
             raise ValueError("only a commit step writes")
+        if self.outcomes is not None and (
+            self.role is not StepRole.COMMIT or len(self.outcomes) != self.writes
+        ):
+            raise ValueError("a commit records one outcome per demonstrated write")
 
 
 @dataclass(frozen=True)
@@ -149,13 +166,28 @@ def learn_steps(demo: Sequence[DemoStep]) -> tuple[LearnedStep, ...]:
             )
             continue
         writes = int(step.writes or 0) if role is StepRole.COMMIT else 0
+        outcomes = None
+        if role is StepRole.COMMIT:
+            outcomes = _outcomes(step.write_outcomes)
+            if outcomes is None or len(outcomes) != writes or _legacy(outcomes):
+                out.append(
+                    LearnedStep(
+                        index,
+                        step.target,
+                        role,
+                        step.writes,
+                        None,
+                        "the backend did not report what this commit's writes returned",
+                    )
+                )
+                continue
         out.append(
             LearnedStep(
                 index,
                 step.target,
                 role,
                 step.writes,
-                StepSpec(f"step-{index}", spec, role, writes),
+                StepSpec(f"step-{index}", spec, role, writes, outcomes),
             )
         )
     return tuple(out)
@@ -184,6 +216,9 @@ class StepEvidence:
     after_complete: object
     after_errors: tuple[str, ...] = ()
     run_id: str = ""
+    #: What the demo's writes returned, and what this step's writes did.
+    expected_outcomes: object = None
+    outcomes: object = None
 
 
 def _count(value: object) -> Optional[int]:
@@ -192,12 +227,37 @@ def _count(value: object) -> Optional[int]:
     return value
 
 
+#: The prefix of a redirect outcome learned before the query and minted ids
+#: were part of the key. Such an outcome is never compared: its path-only
+#: key could match a replay that went somewhere else.
+LEGACY_REDIRECT = "3xx "
+
+
+def _legacy(outcomes: object) -> bool:
+    """Whether any outcome is in the old path-only redirect form."""
+    return isinstance(outcomes, (tuple, list)) and any(
+        isinstance(o, str) and o.startswith(LEGACY_REDIRECT) for o in outcomes
+    )
+
+
+def _outcomes(value: object) -> Optional[tuple[str, ...]]:
+    """``value`` as a sorted tuple of non-empty strings, else None."""
+    if not isinstance(value, (tuple, list)):
+        return None
+    if not all(isinstance(v, str) and v for v in value):
+        return None
+    return tuple(sorted(value))
+
+
 @verdict_site("gui.steps.judge_step", classes="C3 C5")
 def judge_step(ev: StepEvidence) -> Result:
     """Did the step do what the demonstration showed?
 
     - ``commit``: exactly ``expected_writes`` new writes, on a complete read
-      with no error shown. No write, or a different number, is refuted.
+      with no error shown, each returning what the demo's did (status class,
+      and the ``Location`` key of a redirect). No write, a different
+      number, or a different outcome is refuted; outcomes missing on either
+      side, or in the old path-only ``"3xx <path>"`` form, are not checked.
     - ``navigate``: the screen changed and nothing was written.
     - ``in_place``: nothing was written and the screen did not move.
     - ``unknown`` or any role nobody listed: not checked.
@@ -234,6 +294,27 @@ def judge_step(ev: StepEvidence) -> Result:
                 subject,
                 obs,
                 f"the commit step wrote {delta} times; the demo wrote {want}",
+            )
+        want_out, got_out = _outcomes(ev.expected_outcomes), _outcomes(ev.outcomes)
+        if want_out is None or len(want_out) != want:
+            return Result.not_checked(
+                subject, "the demo did not record what its writes returned"
+            )
+        if _legacy(want_out) or _legacy(got_out):
+            return Result.not_checked(
+                subject,
+                "an outcome is in the old path-only redirect form; relearn the step",
+            )
+        if got_out is None or len(got_out) != delta:
+            return Result.not_checked(
+                subject, "the backend did not report what the writes returned"
+            )
+        if got_out != want_out:
+            return Result.refuted(
+                subject,
+                obs,
+                f"the commit's writes returned {', '.join(got_out)}; "
+                f"the demo's returned {', '.join(want_out)}",
             )
     elif delta:
         return Result.refuted(subject, obs, f"a {role.value} step wrote {delta} times")
@@ -276,9 +357,11 @@ def take_step(
 ) -> StepOutcome:
     """Resolve ``spec`` on the live screen, click it, and judge it.
 
-    Nothing is clicked when the control is missing or ambiguous, or when the
+    Nothing is clicked when the control is missing or ambiguous, when the
     backend cannot count writes (no step could be judged there, so none is
-    attempted)."""
+    attempted), or for a commit when the spec or the backend has no record of
+    what the writes returned, or the spec has it only in the old path-only
+    redirect form."""
 
     subject = Subject(run_id=run_id, surface="gui", key=spec.step_id, field="step")
     before_screen = screen if screen is not None else actuator.observe()
@@ -301,12 +384,30 @@ def take_step(
             False,
             ctrl,
         )
+    o0 = write_outcomes_of(actuator)
+    if spec.role is StepRole.COMMIT and (
+        spec.outcomes is None or o0 is None or _legacy(spec.outcomes)
+    ):
+        # Without the demo's outcomes in the current form, or a backend that
+        # reports them, a commit bounced to a sign-in page looks like one
+        # that saved.
+        return StepOutcome(
+            Result.not_checked(
+                subject,
+                "the spec or the backend has no record of what the commit's "
+                "writes returned; the commit is not taken",
+            ),
+            False,
+            ctrl,
+        )
     err_fn = getattr(actuator, "write_errors", None)
     err0 = len(err_fn()) if callable(err_fn) else 0
     actuator.click(ctrl.handle)
     after = actuator.observe()
     w1 = actuator.write_count()
     write_errors = tuple(err_fn()[err0:]) if callable(err_fn) else ()
+    o1 = write_outcomes_of(actuator)
+    outcomes = None if o0 is None or o1 is None else o1[len(o0) :]
     ev = StepEvidence(
         step_id=spec.step_id,
         role=spec.role,
@@ -319,5 +420,7 @@ def take_step(
         + tuple(c.error for c in after.controls if c.error)
         + write_errors,
         run_id=run_id,
+        expected_outcomes=spec.outcomes if spec.role is StepRole.COMMIT else None,
+        outcomes=outcomes,
     )
     return StepOutcome(judge_step(ev), True, ctrl, after)

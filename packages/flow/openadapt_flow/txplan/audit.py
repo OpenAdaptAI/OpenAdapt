@@ -235,6 +235,19 @@ class SearchEmpty(_Closed):
     absent: list[str] = Field(default_factory=list)
 
 
+class SearchMatch(_Closed):
+    """Which search items count as matches.
+
+    ``path`` is resolved on the parent of each item (the list element
+    above the last step of ``search_items``). For ``entry.*.resource``,
+    the parent is the entry, so ``path: search.mode`` / ``equals: match``
+    keeps real matches and drops ``outcome`` entries.
+    """
+
+    path: str
+    equals: str
+
+
 class ScopedCollection(_Closed):
     """``collections[].scoped``: resource-scoped verification of one collection."""
 
@@ -249,6 +262,9 @@ class ScopedCollection(_Closed):
     #: and where the matches are in its answer.
     search: Optional[str] = None
     search_items: str = ""
+    #: Which items at ``search_items`` are matches. Resolved on the parent
+    #: of each item (see :class:`SearchMatch`).
+    search_match: Optional[SearchMatch] = None
     #: How an empty search answer looks when it leaves the items field out
     #: (a FHIR searchset Bundle omits ``entry`` when nothing matched). Every
     #: ``equals`` path must hold its value and every ``absent`` path must be
@@ -283,6 +299,12 @@ class ScopedCollection(_Closed):
     def _search_empty_needs_items(self) -> "ScopedCollection":
         if self.search_empty is not None and not self.search_items:
             raise ValueError("search_empty needs search_items (an object answer)")
+        if self.search_match is not None:
+            parts = [p for p in (self.search_items or "").split(".") if p]
+            if len(parts) != 3 or parts[1] != "*":
+                raise ValueError(
+                    "search_match needs search_items of the form name.*.field"
+                )
         return self
 
 

@@ -62,6 +62,7 @@ from typing import Any, Callable, Optional
 from PIL import Image, ImageDraw
 
 from openadapt_flow import sealed_set as _sealed
+from openadapt_flow.at_rest import POLICY
 from openadapt_flow.backend import (
     Backend,
     PageCloseExpectationBackend,
@@ -228,7 +229,7 @@ class Recorder:
         surface_id: str = PRIMARY_SURFACE_ID,
         surface_kind: Optional[str] = None,
         page_backend_factory: Optional[Callable[[Any], Backend]] = None,
-        encryption_key: Optional[str] = None,
+        encryption_key: Optional[str] | object = POLICY,
         finalize_on_finish: bool = True,
         capture_hover: bool = False,
         event_clock: Optional[list[float]] = None,
@@ -273,6 +274,11 @@ class Recorder:
         # sealed set that is finalized (indexed) when the recording finishes.
         self._sealed_writer: Optional[_sealed.SealedSetWriter] = None
         self._finalize_on_finish = finalize_on_finish
+        # Encrypted by default (the at-rest policy decides); an explicit
+        # ``None`` is plaintext that strict mode refuses and the ledger records.
+        encryption_key = _sealed.new_artifact_key(
+            encryption_key, "a recording", self._dir
+        )
         if encryption_key:
             self._sealed_writer = _sealed.SealedSetWriter(
                 self._dir, "recording", encryption_key
@@ -577,7 +583,11 @@ class Recorder:
             # coordinate space: a framed target's point in one may be
             # frame-local.
             "coordinate_space": "page",
-            "app_url": self._app_url,
+            "app_url": (
+                self._app_url
+                if self._network_capture is None
+                else self._network_capture.minimize_url(self._app_url)
+            ),
             "params": dict(self._params),
             "secret_params": sorted(self._withheld_param_names),
         }

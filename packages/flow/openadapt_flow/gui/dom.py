@@ -12,6 +12,42 @@ requests whose path matches a pattern the pack declares (an app whose commit
 is a plain link). Nothing else counts, so a page that saves by some other
 route shows no write, and no write means no commit.
 
+A write counts only when it answered 2xx or 3xx, and the actuator keeps what
+each counted write returned (:meth:`PageActuator.write_outcomes`): ``"2xx"``,
+or ``"redirect <key>"`` for a 3xx, so a replay that is bounced to a sign-in
+page does not pass for one that saved. A 4xx or 5xx, a 3xx with no
+``Location``, and a request that failed are write errors. The page's own
+origin is read when an action starts and cleared when :meth:`PageActuator.observe`
+has read the settled page, so a later response is not judged against it.
+
+The redirect key (:func:`location_key`) is the ``Location`` path, without a
+trailing slash, then ``?`` and the query's ``key=value`` pairs, decoded,
+re-quoted and sorted (a blank value kept, a repeated key kept once per
+value). Only the fragment is dropped, so ``/register?status=saved`` and
+``/register?status=session-expired`` differ, as do ``?page=done`` and
+``?page=login``. A target on another origin than the request's is prefixed
+with that origin. An id the server mints is replaced by ``{id}`` before the
+two are compared: a path segment that is all digits, a UUID, or 16 or more
+hex characters, and a query value that is a UUID or 16 or more hex
+characters. So a post-redirect-get to the new record (``/records/101`` in
+the demo, ``/records/102`` on replay) matches, and ``/records/{id}`` still
+differs from ``/login``. Words are never replaced.
+
+An outcome learned before this format (``"3xx <path>"``, path only) is not
+compared: :func:`~openadapt_flow.gui.steps.take_step` does not click such a
+commit, and :func:`~openadapt_flow.gui.steps.judge_step` does not check it.
+
+Known limits:
+
+- A query value that is all digits is kept as it is, because a number in a
+  query is as often a result code (``?saved=1`` vs ``?saved=0``) as a
+  record id. A redirect to ``?id=101`` in the demo and ``?id=102`` on replay
+  is refuted on every run, failing closed.
+- A page that starts a ``fetch()`` write and then navigates away aborts its
+  own request (``net::ERR_ABORTED``). That shows as a write error, so such a
+  step is refuted on every run, failing closed, even when the server got the
+  write.
+
 Handles are CSS paths (``#id`` when the id is unique, else ``nth-of-type``
 steps), computed without touching the page.
 """
@@ -23,7 +59,7 @@ from typing import Any, Optional, Sequence
 
 from openadapt_flow.gui.model import ROLES, Container, Control, Dialog, Screen
 
-__all__ = ["OBSERVE_JS", "PageActuator", "screen_from_dom"]
+__all__ = ["OBSERVE_JS", "REDIRECT", "PageActuator", "location_key", "screen_from_dom"]
 
 #: Cap on the page text kept; a longer page is a partial read.
 TEXT_CAP = 20000
@@ -252,6 +288,59 @@ def _origin_of(url: str) -> str:
     return f"{parts.scheme.lower()}://{parts.netloc.lower()}"
 
 
+#: The prefix of a redirect outcome: ``"redirect <key>"``.
+REDIRECT = "redirect "
+
+#: What an id the server mints is replaced by in a redirect key.
+ID_PLACEHOLDER = "{id}"
+
+_UUID = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+_LONG_HEX = re.compile(r"[0-9a-fA-F]{16,}")
+_DIGITS = re.compile(r"[0-9]+")
+
+
+def _minted(value: str, *, digits: bool) -> bool:
+    """Whether a whole, decoded path segment or query value is an id."""
+    if _UUID.fullmatch(value) or _LONG_HEX.fullmatch(value):
+        return True
+    return digits and _DIGITS.fullmatch(value) is not None
+
+
+def _part(value: str, *, digits: bool) -> str:
+    from urllib.parse import quote
+
+    return ID_PLACEHOLDER if _minted(value, digits=digits) else quote(value, safe="")
+
+
+def location_key(request_url: str, target: str) -> str:
+    """A redirect target as the demo and a replay compare it.
+
+    The path, without a trailing slash, each segment decoded and re-quoted,
+    and an id segment (all digits, a UUID, 16+ hex) replaced by ``{id}``;
+    then ``?`` and the sorted ``key=value`` query pairs, decoded and
+    re-quoted, with a UUID or 16+ hex value replaced by ``{id}``. The
+    fragment is dropped. A target on another origin than the request's is
+    prefixed with that origin."""
+    from urllib.parse import parse_qsl, quote, unquote, urlsplit
+
+    parts = urlsplit(target)
+    segments = [
+        _part(unquote(seg), digits=True) if seg else ""
+        for seg in parts.path.rstrip("/").split("/")
+    ]
+    path = "/".join(segments) or "/"
+    pairs = sorted(
+        (quote(k, safe=""), _part(v, digits=False))
+        for k, v in parse_qsl(parts.query, keep_blank_values=True)
+    )
+    query = "&".join(f"{k}={v}" for k, v in pairs)
+    key = f"{path}?{query}" if query else path
+    origin = _origin_of(target)
+    return key if origin == _origin_of(request_url) else f"{origin}{key}"
+
+
 class PageActuator:
     """An :class:`~openadapt_flow.gui.model.Actuator` over a Playwright page.
 
@@ -272,6 +361,8 @@ class PageActuator:
         self.page = page
         self._writes = 0
         self._write_errors: list[str] = []
+        self._outcomes: list[str] = []
+        self._step_origin = ""
         self._get_writes = tuple(re.compile(p) for p in write_get_paths)
         self._allowed_origins = frozenset(
             o for o in (_origin_of(raw) for raw in allowed_origins) if o
@@ -282,7 +373,7 @@ class PageActuator:
     def _is_counted_write_request(self, request: Any) -> bool:
         req_url = str(request.url)
         req_origin = _origin_of(req_url)
-        page_origin = _origin_of(str(getattr(self.page, "url", "") or ""))
+        page_origin = self._step_origin or self._page_origin()
         if not req_origin:
             return False
         if req_origin != page_origin and req_origin not in self._allowed_origins:
@@ -298,18 +389,42 @@ class PageActuator:
                 return True
         return False
 
+    def _page_origin(self) -> str:
+        return _origin_of(str(getattr(self.page, "url", "") or ""))
+
+    def _start_action(self) -> None:
+        # The page's origin when the action starts: a response that arrives
+        # mid-navigation must not make the new page's origin "own".
+        self._step_origin = self._page_origin()
+
     def _on_response(self, response: Any) -> None:
+        from urllib.parse import urljoin, urlsplit
+
         request = response.request
         if not self._is_counted_write_request(request):
             return
         status = int(response.status)
-        if 200 <= status < 400:
+        method = str(request.method).upper()
+        req_url = str(request.url)
+        path = urlsplit(req_url).path or "/"
+        if 200 <= status < 300:
             self._writes += 1
+            self._outcomes.append("2xx")
+        elif 300 <= status < 400:
+            headers = getattr(response, "headers", None) or {}
+            location = next(
+                (str(v) for k, v in headers.items() if str(k).lower() == "location"),
+                "",
+            ).strip()
+            target = urljoin(req_url, location) if location else ""
+            if not _origin_of(target):
+                self._write_errors.append(
+                    f"{method} {path} returned HTTP {status} with no usable Location"
+                )
+                return
+            self._writes += 1
+            self._outcomes.append(REDIRECT + location_key(req_url, target))
         elif status >= 400:
-            from urllib.parse import urlsplit
-
-            method = str(request.method).upper()
-            path = urlsplit(str(request.url)).path or "/"
             self._write_errors.append(f"{method} {path} returned HTTP {status}")
 
     def _on_request_failed(self, request: Any) -> None:
@@ -321,6 +436,11 @@ class PageActuator:
         path = urlsplit(str(request.url)).path or "/"
         failure = getattr(request, "failure", None) or "request failed"
         self._write_errors.append(f"{method} {path} failed: {failure}")
+
+    def write_outcomes(self) -> tuple[str, ...]:
+        """What each counted write returned, in arrival order: ``"2xx"`` or
+        ``"redirect <key>"`` (see :func:`location_key`)."""
+        return tuple(self._outcomes)
 
     def write_errors(self) -> tuple[str, ...]:
         """Refuting HTTP 4xx/5xx or failed write-request errors observed so far."""
@@ -339,14 +459,21 @@ class PageActuator:
         for attempt in range(3):
             self._settle()
             try:
-                return screen_from_dom(self.page.evaluate(OBSERVE_JS, TEXT_CAP))
+                screen = screen_from_dom(self.page.evaluate(OBSERVE_JS, TEXT_CAP))
             except PlaywrightError as exc:
                 if attempt == 2 or "context was destroyed" not in str(exc):
                     raise
                 self.page.wait_for_timeout(100)
+                continue
+            # The action's page is read; a response from here on is judged
+            # against the page as it is then, not the origin the action
+            # started on.
+            self._step_origin = ""
+            return screen
         raise AssertionError("unreachable")
 
     def click(self, handle: str) -> None:
+        self._start_action()
         self.page.locator(handle).click()
         # A click may start a navigation or a request a moment later; give
         # it time to start before waiting for the page to settle.
@@ -354,11 +481,13 @@ class PageActuator:
         self._settle()
 
     def set_text(self, handle: str, value: str) -> None:
+        self._start_action()
         self.page.locator(handle).fill(value)
         self.page.locator(handle).dispatch_event("change")
         self._settle()
 
     def set_checked(self, handle: str, checked: bool) -> None:
+        self._start_action()
         self.page.locator(handle).set_checked(checked)
         self._settle()
 

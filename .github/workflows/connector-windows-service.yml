@@ -51,9 +51,9 @@ jobs:
           --lock 'packages/flow[connector-windows]'
           --editable packages/types --editable packages/flow
 
-      - name: Unit tests (service wrapper)
+      - name: Unit tests (service wrapper and child output)
         working-directory: packages/flow
-        run: python -m pytest tests/test_connector_windows_service.py -q -p no:cacheprovider
+        run: python -m pytest tests/test_connector_windows_service.py tests/test_connector_diagnostic_process.py -q -p no:cacheprovider
 
       - name: Start the stub control plane on 127.0.0.1
         run: |
@@ -84,12 +84,15 @@ jobs:
           New-Item -ItemType Directory -Force -Path $env:CONNECTOR_DIR | Out-Null
           $storage = Join-Path $env:RUNNER_TEMP 'byoc-storage'
           New-Item -ItemType Directory -Force -Path $storage | Out-Null
+          $profilePath = Join-Path $env:CONNECTOR_DIR 'deployment.yaml'
+          [IO.File]::WriteAllText($profilePath, "runtime: {profile: standard}`n")
           $toml = @(
             '[connector]',
             "control_plane_url = `"http://127.0.0.1:$env:STUB_PORT`"",
             "token = `"$env:CI_CONNECTOR_TOKEN`"",
             'org_id = "org_stub"',
             'poll_wait_s = 2',
+            "profile = '$profilePath'",
             'storage_backend = "local"',
             "storage_root = '$storage'"
           ) -join "`n"

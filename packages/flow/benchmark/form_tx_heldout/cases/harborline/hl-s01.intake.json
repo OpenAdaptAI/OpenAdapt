@@ -1,0 +1,26 @@
+{
+  "case_id": "hl-s01",
+  "facts": {
+    "applicant.date_of_birth": "1971-07-22",
+    "applicant.email": "tbrandvold@example.test",
+    "applicant.first_name": "Theo",
+    "applicant.last_name": "Brandvold",
+    "applicant.phone": "208-555-0164",
+    "coverage.deductible": 1000,
+    "coverage.effective_date": "2026-12-01",
+    "coverage.liability_limit": 300000,
+    "history.prior_claims_5yr": 0,
+    "property.address_line1": "418 Cottonwood Dr",
+    "property.city": "Boise",
+    "property.construction_quality": "Standard",
+    "property.exterior_wall": "vinyl siding",
+    "property.has_pool": false,
+    "property.roof_material": "Asphalt Shingle",
+    "property.roof_year": 2017,
+    "property.square_feet": 1620,
+    "property.state": "ID",
+    "property.stories": "1",
+    "property.year_built": 1968,
+    "property.zip": "83704"
+  }
+}

@@ -9,7 +9,9 @@ benchmark portal. Every record is synthetic.
 from __future__ import annotations
 
 import contextlib
+import http.server
 import json
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterator, Optional
 from urllib.parse import parse_qs, urlsplit
@@ -26,26 +28,28 @@ class App:
     routes: dict[tuple[str, str], Handler]
     state: dict[str, Any] = field(default_factory=dict)
     log: list[tuple[str, str]] = field(default_factory=list)
+    _origin: str = ""
 
     @property
     def origin(self) -> str:
-        return f"http://{self.host}"
+        return self._origin or f"http://{self.host}"
 
-    def handle(self, route: Any) -> None:
-        req = route.request
-        parts = urlsplit(req.url)
-        method = req.method.upper()
-        body = req.post_data or ""
+    def dispatch(self, method: str, target: str, body: str = "") -> tuple[int, str]:
+        parts = urlsplit(target)
+        verb = method.upper()
         form = parse_qs(body) if body and not body.startswith("{") else {}
         if body.startswith("{"):
             form = {k: [str(v)] for k, v in json.loads(body).items()}
         form.update(parse_qs(parts.query))
-        self.log.append((method, parts.path))
-        fn = self.routes.get((method, parts.path)) or self.routes.get((method, "*"))
+        self.log.append((verb, parts.path))
+        fn = self.routes.get((verb, parts.path)) or self.routes.get((verb, "*"))
         if fn is None:
-            route.fulfill(status=404, body="not found")
-            return
-        status, html = fn(self, parts.path, method, form)
+            return 404, "not found"
+        return fn(self, parts.path, verb, form)
+
+    def handle(self, route: Any) -> None:
+        req = route.request
+        status, html = self.dispatch(req.method, req.url, req.post_data or "")
         if status in (302, 303):
             route.fulfill(status=status, headers={"Location": html}, body="")
             return
@@ -54,11 +58,43 @@ class App:
 
 @contextlib.contextmanager
 def serve(page: Any, app: App) -> Iterator[App]:
-    page.context.route(f"{app.origin}/**", app.handle)
+    class _Handler(http.server.BaseHTTPRequestHandler):
+        def _run(self) -> None:
+            length = int(self.headers.get("Content-Length") or 0)
+            body = self.rfile.read(length).decode("utf-8") if length else ""
+            status, payload = app.dispatch(self.command, self.path, body)
+            if status in (302, 303):
+                self.send_response(status)
+                self.send_header("Location", payload)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            encoded = payload.encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
+        do_GET = _run
+        do_POST = _run
+
+        def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
+            return
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    prev_origin = app._origin
+    app._origin = f"http://127.0.0.1:{port}"
     try:
         yield app
     finally:
-        page.context.unroute(f"{app.origin}/**")
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2.0)
+        app._origin = prev_origin
 
 
 def page(title: str, body: str) -> str:
@@ -69,18 +105,40 @@ def page(title: str, body: str) -> str:
 
 
 def registration_app(
-    *, next_writes: bool = False, commit_posts: int = 1, error_after: bool = False
+    *,
+    next_writes: bool = False,
+    commit_posts: int = 1,
+    error_after: bool = False,
+    fetch_writes: bool = False,
+    redirect: str = "",
+    saves: Optional[bool] = None,
+    first_id: int = 101,
 ) -> App:
     """Contact details, then a ticket, then Register. "Continue" is a link that
     keeps the values in session storage. ``next_writes`` makes the link also
     post a draft (an app that changed); ``commit_posts`` is how many requests
-    Register sends; ``error_after`` shows an alert after the commit."""
+    Register sends; ``error_after`` shows an alert after the commit.
 
-    draft = (
-        "(function(){var x=new XMLHttpRequest();x.open('POST','/draft',false);x.send('{}');})();"
-        if next_writes
-        else ""
-    )
+    The extra writes are synchronous XHR, which finish before the page
+    navigates; ``fetch_writes`` sends them with ``fetch()`` instead, which the
+    navigation aborts. ``redirect="/done"`` saves and answers 302 to the
+    confirmation page; ``redirect="/login"`` saves nothing and answers 302 to
+    a plain sign-in page (an expired session), with no alert. ``saves`` says
+    whether Register saves (by default, unless the redirect is ``/login``).
+    ``{id}`` in ``redirect`` is the new record's id, counted from
+    ``first_id`` (a post-redirect-get to the record just created)."""
+
+    keeps = redirect != "/login" if saves is None else saves
+
+    def _post(path: str, body: str) -> str:
+        if fetch_writes:
+            return f"fetch('{path}',{{method:'POST',body:{body}}});"
+        return (
+            "(function(){var x=new XMLHttpRequest();"
+            f"x.open('POST','{path}',false);x.send({body});}})();"
+        )
+
+    draft = _post("/draft", "'{}'") if next_writes else ""
 
     def contact(app: App, path: str, method: str, form: dict) -> tuple[int, str]:
         return 200, page(
@@ -97,7 +155,7 @@ sessionStorage.setItem('em',em.value);{draft}return true;}}</script></main>""",
 
     def ticket(app: App, path: str, method: str, form: dict) -> tuple[int, str]:
         sends = "".join(
-            "(function(){var x=new XMLHttpRequest();x.open('POST','/register',false);x.send(JSON.stringify(data()));})();"
+            _post("/register", "JSON.stringify(data())")
             for _ in range(commit_posts - 1)
         )
         return 200, page(
@@ -116,14 +174,30 @@ function fill(){{hn.value=sessionStorage.getItem('nm');he.value=sessionStorage.g
         )
 
     def register(app: App, path: str, method: str, form: dict) -> tuple[int, str]:
-        app.state.setdefault("records", []).append(
-            {k: v[0] for k, v in form.items() if v}
-        )
+        if not keeps:
+            return 302, redirect or "/login"
+        records = app.state.setdefault("records", [])
+        records.append({k: v[0] for k, v in form.items() if v})
+        if redirect:
+            return 302, redirect.replace("{id}", str(first_id + len(records) - 1))
         return done(app, path, method, form)
+
+    def login(app: App, path: str, method: str, form: dict) -> tuple[int, str]:
+        return 200, page(
+            "Sign in",
+            """<main><h1>Sign in</h1><p>Your session expired.</p><form>
+<label for="u">Email</label><input id="u" type="email">
+<button type="button">Sign in</button></form></main>""",
+        )
 
     def done(app: App, path: str, method: str, form: dict) -> tuple[int, str]:
         alert = '<p role="alert">Payment could not be taken</p>' if error_after else ""
         return 200, page("Done", f"<main><h1>Registration received</h1>{alert}</main>")
+
+    def landing(app: App, path: str, method: str, form: dict) -> tuple[int, str]:
+        # Any other page a redirect lands on: a record, or a status page.
+        status = form.get("status", [""])[0]
+        return 200, page("Result", f"<main><h1>{path}</h1><p>{status}</p></main>")
 
     def draft_ok(app: App, path: str, method: str, form: dict) -> tuple[int, str]:
         return 200, "{}"
@@ -135,7 +209,9 @@ function fill(){{hn.value=sessionStorage.getItem('nm');he.value=sessionStorage.g
             ("GET", "/ticket"): ticket,
             ("POST", "/register"): register,
             ("GET", "/done"): done,
+            ("GET", "/login"): login,
             ("POST", "/draft"): draft_ok,
+            ("GET", "*"): landing,
         },
     )
 

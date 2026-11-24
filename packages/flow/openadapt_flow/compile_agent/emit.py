@@ -58,12 +58,12 @@ def {func}({signature}) -> dict:
         stopped; it is in the exception inbox, and the record should be checked
         before calling again.
     """
-    from openadapt_flow.compile_agent import run_compiled_params as {dispatch_symbol}
+    from openadapt_flow.compile_agent import run_compiled_tool as {dispatch_symbol}
 
     if {generation_symbol} == 1:
         with {scoped_server_type}({server_symbol}.get_context()):
-            return {dispatch_symbol}({task_symbol}, {values}).to_dict()
-    return {dispatch_symbol}({task_symbol}, {values}).to_dict()
+            return {dispatch_symbol}({task_symbol}, {values})
+    return {dispatch_symbol}({task_symbol}, {values})
 
 
 async def {bound_call_symbol}(self, name, arguments, context=None):
@@ -109,7 +109,7 @@ def emit_mcp(compiler: "FirstRunCompiler", out_path: Path) -> Path:
     meta_symbol = symbols.allocate("request_meta")
     task_symbol = symbols.allocate("TASK_DIR")
     server_symbol = symbols.allocate("mcp")
-    dispatch_symbol = symbols.allocate("run_compiled_params")
+    dispatch_symbol = symbols.allocate("run_compiled_tool")
     function_symbol = symbols.allocate(_func_name(compiler.task.task_id))
     # MCP binds arguments through a Pydantic field model. Keep every declared
     # schema key separate from both that model and the Python namespace.

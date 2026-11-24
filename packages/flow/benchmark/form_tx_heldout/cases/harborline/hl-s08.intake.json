@@ -1,0 +1,26 @@
+{
+  "case_id": "hl-s08",
+  "facts": {
+    "applicant.date_of_birth": "1975-02-27",
+    "applicant.email": "leontyne.f@example.test",
+    "applicant.first_name": "Leontyne",
+    "applicant.last_name": "Fairweather",
+    "applicant.phone": "617-555-0190",
+    "coverage.deductible": 2500,
+    "coverage.effective_date": "2026-12-15",
+    "coverage.liability_limit": 300000,
+    "history.prior_claims_5yr": 0,
+    "history.prior_policy_number": "HM-102266",
+    "property.address_line1": "11842 Old Orchard Mill Road Unit 7",
+    "property.city": "Newton",
+    "property.construction_quality": "Standard",
+    "property.exterior_wall": "wood siding",
+    "property.has_pool": false,
+    "property.roof_year": 2022,
+    "property.square_feet": 2240,
+    "property.state": "MA",
+    "property.stories": "2",
+    "property.year_built": 1949,
+    "property.zip": "02459"
+  }
+}
