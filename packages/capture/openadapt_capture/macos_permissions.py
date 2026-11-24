@@ -15,7 +15,7 @@ def control_permission_guidance(version: str | None = None) -> dict[str, str]:
     if version is None:
         try:
             version = platform.mac_ver()[0]
-        except Exception:
+        except (OSError, ValueError, TypeError, RuntimeError):
             version = ""
     valid = re.fullmatch(r"[0-9]+\.[0-9]+(?:\.[0-9]+)?", version)
     scope = "unknown"
