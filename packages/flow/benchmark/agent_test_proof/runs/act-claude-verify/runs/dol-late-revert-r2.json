@@ -1,0 +1,64 @@
+{
+ "scenario": "dol-late-revert",
+ "rep": 2,
+ "fault": "late_revert",
+ "note": "The save lands correctly; 45 s later the phone is blanked again.",
+ "task": {
+  "lastname": "Okafor",
+  "firstname": "Chidi",
+  "poste": "Planner",
+  "phone": "555-0209",
+  "email": "c.okafor@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/list.php?leftmenu=contacts",
+ "agent_s": 42.5,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE Contact \"Chidi Okafor\" created (list now shows 4 contacts; page URL and id not visible)",
+  "claim_line": true,
+  "final_text": "I added Chidi Okafor as a new contact with no third party, and the contact list now shows 4 records. Exactly one is Chidi Okafor, and the other three (Oskar Brandt, Samir Haddad, Elena Novak) are unchanged.\n\nI filled in only these fields:\n- **Job position:** Planner\n- **Business phone:** I typed 555-0209, but Dolibarr saves and shows it as 5550209. The existing contacts' phones display the same way (digits only).\n- **Email:** c.okafor@example.invalid\n\nThe browser shows no address bar, so I couldn't read the record's ID or URL.\n\nRESULT: DONE Contact \"Chidi Okafor\" created (list now shows 4 contacts; page URL and id not visible)"
+ },
+ "model_calls": 9,
+ "late": "reverted 1 new record(s)",
+ "store": {
+  "correct": false,
+  "reasons": [
+   "wrong value: 67 phone: want '555-0209' got ''"
+  ],
+  "new": [
+   "67"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": true,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795247528.144,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 36
+  },
+  {
+   "t": 1795247559.331,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "late_revert",
+   "status": 302,
+   "accepted": true,
+   "late": "scheduled in 45 s",
+   "ms": 54
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": true,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

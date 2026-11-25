@@ -475,7 +475,7 @@ jobs:
           python - <<'PY'
           import xml.etree.ElementTree as ET
           cases = ET.parse("tests.xml").getroot().findall(".//testcase")
-          assert len(cases) == 110, f"expected 110 independent-store + surgical-heal controls, got {len(cases)}"
+          assert len(cases) == 182, f"expected 182 independent-store, surgical-heal, portal-readback, mcpify, commit-firewall, and jit controls, got {len(cases)}"
           # The PostgreSQL and MySQL quickstart controls need the database
           # services of verify-clean-install, which runs them; nothing else skips.
           skipped = {c.get("name") for c in cases if c.find("skipped") is not None}
@@ -605,7 +605,7 @@ jobs:
           "$RUNNER_TEMP/tests/bin/python" - "$RUNNER_TEMP/clean-tests.xml" <<'PY'
           import sys, xml.etree.ElementTree as ET
           cases = ET.parse(sys.argv[1]).getroot().findall(".//testcase")
-          assert len(cases) == 16, len(cases)
+          assert len(cases) == 17, len(cases)
           assert not any(c.find("skipped") is not None for c in cases), "database controls must run"
           PY
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -897,9 +897,10 @@ jobs:
     # the group.
     if: github.event.pull_request.draft != true && (needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group')
     runs-on: ubuntu-latest
-    # The nightly tier (a schedule or a dispatch) also measures coverage,
-    # which slows the suite by about a third; it gets 60 minutes.
-    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 60 || 40 }}
+    # Push runs on main execute the full 2-shard suite (~39m on shard 2/2) and
+    # nightly/dispatch runs also measure coverage; give both 60 minutes while
+    # keeping the 4-shard PR fast lane at 40 minutes.
+    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push') && 60 || 40 }}
     strategy:
       fail-fast: false
       matrix:

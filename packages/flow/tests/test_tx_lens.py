@@ -551,7 +551,7 @@ def test_replace_mode_update_preserves_untouched_fields_in_o1_reads(
     )
     result = engine.execute(task)
 
-    assert result.outcome == "UNCERTAIN"
+    assert result.outcome == "CONFIRMED"
     assert result.occ_status == "UNKNOWN"
     assert result.rows_read == 2
     assert store.sql_rows_read == 2  # Exactly 2 rows read out of 5,000!
@@ -583,7 +583,8 @@ def test_replace_mode_update_preserves_untouched_fields_in_o1_reads(
     assert result.receipt_path is not None
     verified = verify_tx_receipt(result.receipt_path, engine.public_key)
     assert verified["schema_version"] == TX_RECEIPT_SCHEMA
-    assert verified["outcome"] == "UNCERTAIN"
+    assert verified["outcome"] == "CONFIRMED"
+    assert verified["evidence_scope"]["basis"] == "system_api"
     assert verified["occ_status"] == "UNKNOWN"
     assert verified["rows_read"] == 2
     assert "r0_hmac_sha256" in verified
@@ -1030,7 +1031,7 @@ def test_occ_detects_same_record_races_while_ignoring_other_row_traffic(
                     intended_delta={"phone": f"(555) 900-{idx:04d}"},
                 )
             )
-            assert clean_res.outcome == "UNCERTAIN"
+            assert clean_res.outcome == "CONFIRMED"
             assert clean_res.occ_status == "UNKNOWN"
             assert clean_res.rows_read == 2
     finally:
@@ -1283,7 +1284,7 @@ def test_identity_codec_opt_in_and_certified_pack_and_lazy_judge(
             intended_delta={"phone": "(555) 1010"},
         )
     )
-    assert ok_res.outcome == "UNCERTAIN"
+    assert ok_res.outcome == "CONFIRMED"
 
     # Legacy pack names retain probe observations, but never grant authority
     uncertified_pack = CertifiedLensPack(

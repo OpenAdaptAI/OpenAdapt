@@ -1,0 +1,6 @@
+instruction: 'Update the recipe lentil-soup: set its description to ''Red lentils,
+  cumin and lemon. Ready in 40 minutes.'' and its yield to ''6 bowls''.'
+params:
+  slug: lentil-soup
+  description: Red lentils, cumin and lemon. Ready in 40 minutes.
+  recipe_yield: 6 bowls

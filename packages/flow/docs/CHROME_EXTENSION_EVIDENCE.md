@@ -69,7 +69,15 @@ keeps only typed `frame` keys again (defense in depth).
   on ingest. A field is secret when its `type` is `password`, it carries
   `data-openadapt-secret`, its `autocomplete` is `current-password`,
   `new-password` or `one-time-code`, or its `name` **or** `id` (each checked on
-  its own) matches the secret pattern.
+  its own) matches the secret pattern. The content script also checks
+  `aria-label` and `autocomplete`.
+- Field names are also split into lowercase tokens (camelCase and PascalCase
+  boundaries, `_`, `-`, `.`, spaces) and matched as whole tokens against one
+  shared list, `openadapt_flow/secret_field_vocabulary.json` (ssn, cvv, pin,
+  otp, card number, ...). So `patientSsn`, `PatientSSN`, `card.cvv` and
+  "Card CVV" are secret, while `pinnedItems` and `productCode` are not.
+  `content.js` and `network_redact.js` embed the same list, and a test fails
+  when a copy differs.
 - Local native messaging only; no remote endpoints.
 - Missing evidence file → empty capture (degrade cleanly).
 

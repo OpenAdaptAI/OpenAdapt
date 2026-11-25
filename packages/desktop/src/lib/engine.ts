@@ -106,6 +106,14 @@ export const CMD = {
   AUTHORING_DENY: "authoring_deny",
   AUTHORING_STATUS: "authoring_status",
   AT_REST_STATUS: "at_rest_status",
+  // Desktop-managed Chrome profiles a person opted in to (window only).
+  CHROME_PROFILE_NOTICE: "chrome_profile_notice",
+  CHROME_PROFILE_LIST: "chrome_profile_list",
+  CHROME_PROFILE_CREATE: "chrome_profile_create",
+  CHROME_PROFILE_ACKNOWLEDGE: "chrome_profile_acknowledge",
+  CHROME_PROFILE_OPEN: "chrome_profile_open",
+  CHROME_PROFILE_CLOSE: "chrome_profile_close",
+  CHROME_PROFILE_REVOKE: "chrome_profile_revoke",
   AUTHORING_PIN_TARGET: "authoring_pin_target",
   // config / settings (lane, phi_mode, hosted host)
   GET_CONFIG: "get_config",

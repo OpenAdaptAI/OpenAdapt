@@ -12,6 +12,90 @@
   const SECRET_NAME =
     /pass(word|wd|phrase)?\b|passwd|pwd|secret|private[_ -]?key|api[_ -]?key|apikey|token|card[_ -]?(number|num|no)|cc[-_ ]?num(ber)?|cc[-_ ]?csc|cc[-_ ]?exp|(^|[_ -])ssn($|[_ -])|user[_ -]?ssn|social[-_ ]?security|(^|[_ -])cvv($|[_ -])|(^|[_ -])cvc($|[_ -])|security[-_ ]?code|^pin$|(^|[_ -])pin($|[_ -])|^otp$|(^|[_ -])otp($|[_ -])|^code$|sms[-_ ]?code|one[-_ ]?time[-_ ]?code|mfa|2fa|totp|authenticator|passkey|webauthn|duo|verification[-_ ]?code/i;
   const SECRET_AUTOCOMPLETE = /(^|\s)(current-password|new-password|one-time-code|cc-number|cc-csc|cc-exp|cc-exp-month|cc-exp-year)(\s|$)/;
+  // Token-based secret field names, shared with the engine. Identifiers are
+  // split at camelCase / PascalCase boundaries and non-alphanumerics, then
+  // lowercased; a phrase must appear as whole consecutive tokens, so
+  // patientSsn and "Card CVV" match but pinnedItems does not.
+  // secret-field-vocabulary:begin (copy of openadapt_flow/secret_field_vocabulary.json)
+  const SECRET_FIELD_PHRASES = [
+    "password",
+    "passwd",
+    "pwd",
+    "passphrase",
+    "passcode",
+    "pin",
+    "ssn",
+    "social security",
+    "sin",
+    "tax id",
+    "cvv",
+    "cvv2",
+    "cvc",
+    "cvc2",
+    "csc",
+    "card number",
+    "cc number",
+    "iban",
+    "account number",
+    "routing",
+    "otp",
+    "one time code",
+    "verification code",
+    "mfa",
+    "totp",
+    "2fa",
+    "sms code",
+    "api key",
+    "access token",
+    "refresh token",
+    "secret",
+    "auth",
+    "token",
+    "jwt",
+    "bearer",
+    "credential",
+    "credentials",
+    "cred",
+    "csrf",
+    "xsrf",
+    "cookie",
+    "signature",
+    "session id",
+    "sessionid",
+    "private key",
+    "access key",
+    "apikey",
+    "salt",
+    "hash",
+    "tfa",
+    "session key",
+    "jsessionid",
+    "sessid",
+    "phpsessid",
+    "oauth verifier",
+    "authn"
+  ];
+  // secret-field-vocabulary:end
+  const SECRET_PHRASE_TOKENS = SECRET_FIELD_PHRASES.map((p) => p.split(' '));
+
+  function fieldTokens(value) {
+    return String(value == null ? '' : value)
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean);
+  }
+
+  function namesSecretField(value) {
+    const tokens = fieldTokens(value);
+    return SECRET_PHRASE_TOKENS.some((phrase) => {
+      for (let start = 0; start + phrase.length <= tokens.length; start++) {
+        if (phrase.every((word, i) => tokens[start + i] === word)) return true;
+      }
+      return false;
+    });
+  }
 
   let recording = false;
   let authPaused = false;
@@ -28,12 +112,17 @@
     // a secret or MFA attribute, and every field MFA_ATTR_RE flags is secret.
     for (const attr of ['name', 'id', 'aria-label']) {
       const candidate = el.getAttribute(attr);
-      if (candidate && (SECRET_NAME.test(String(candidate)) || MFA_ATTR_RE.test(String(candidate)))) {
+      if (
+        candidate &&
+        (SECRET_NAME.test(String(candidate)) ||
+          MFA_ATTR_RE.test(String(candidate)) ||
+          namesSecretField(candidate))
+      ) {
         return true;
       }
     }
     const autocomplete = String(el.getAttribute('autocomplete') || '').toLowerCase();
-    if (SECRET_AUTOCOMPLETE.test(autocomplete)) return true;
+    if (SECRET_AUTOCOMPLETE.test(autocomplete) || namesSecretField(autocomplete)) return true;
     return false;
   }
 

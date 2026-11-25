@@ -880,6 +880,73 @@ def _quickstart_own(root: Path, url: Optional[str], watch: bool) -> None:
     default=None,
     help="With --own: your web app's address. Recording opens a browser window.",
 )
+@click.option(
+    "--task",
+    type=click.Choice(["night-shift", "calendar-block"]),
+    default=None,
+    help=(
+        "Built-in OS everyday task (no sample app, no login): "
+        "night-shift (macOS Night Shift / Windows Night Light) or "
+        "calendar-block (parameterized recurring Calendar block)."
+    ),
+)
+@click.option(
+    "--title",
+    default=None,
+    help="With --task calendar-block: Calendar event title.",
+)
+@click.option(
+    "--calendar",
+    "calendar_name",
+    default=None,
+    help="With --task calendar-block: macOS Calendar name (default: Calendar).",
+)
+@click.option(
+    "--start",
+    "start_iso",
+    default=None,
+    help="With --task calendar-block: ISO-8601 start timestamp.",
+)
+@click.option(
+    "--duration",
+    "duration_minutes",
+    type=int,
+    default=None,
+    help="With --task calendar-block: duration in minutes (default: 30).",
+)
+@click.option(
+    "--recurrence",
+    type=click.Choice(["none", "daily", "weekly", "weekdays"]),
+    default=None,
+    help="With --task calendar-block: recurrence cadence (default: weekly).",
+)
+@click.option(
+    "--event-uid",
+    default=None,
+    help=(
+        "With --task calendar-block: optional EventKit eventIdentifier to bind "
+        "forward and revert checks to one specific event (without --event-uid, "
+        "the check matches any event with the same calendar, title, time, and recurrence)."
+    ),
+)
+@click.option(
+    "--revert/--no-revert",
+    default=True,
+    show_default=True,
+    help=(
+        "With --task: write a revert_verify.yaml check file to run after undoing "
+        "the change (withheld when baseline is not confirmed or Night Shift baseline is unreadable)."
+    ),
+)
+@click.option(
+    "--probe-baseline",
+    is_flag=True,
+    default=False,
+    help=(
+        "With --task calendar-block: run an opt-in read-only macOS EventKit "
+        "baseline check (requires Calendars privacy permission)."
+    ),
+)
 @click.option("--headed", is_flag=True, hidden=True)
 @click.option("--headless", is_flag=True, hidden=True)
 @click.option("--break-it", "break_it", is_flag=True, hidden=True)
@@ -895,6 +962,15 @@ def quickstart(
     more: bool,
     own: bool,
     url: Optional[str],
+    task: Optional[str],
+    title: Optional[str],
+    calendar_name: Optional[str],
+    start_iso: Optional[str],
+    duration_minutes: Optional[int],
+    recurrence: Optional[str],
+    event_uid: Optional[str],
+    revert: bool,
+    probe_baseline: bool,
     headed: bool,
     headless: bool,
     break_it: bool,
@@ -923,6 +999,62 @@ def quickstart(
     _require_supported_python()
     if url is not None and not own:
         raise click.UsageError("--url works with --own.")
+    calendar_opts_used = any(
+        opt is not None
+        for opt in (
+            title,
+            calendar_name,
+            start_iso,
+            duration_minutes,
+            recurrence,
+            event_uid,
+        )
+    )
+    if (calendar_opts_used or probe_baseline) and task != "calendar-block":
+        raise click.UsageError(
+            "--title, --calendar, --start, --duration, --recurrence, --event-uid, "
+            "and --probe-baseline require --task calendar-block."
+        )
+    if task is not None:
+        if own:
+            raise click.UsageError("--task cannot be combined with --own.")
+        from openadapt.quickstart.everyday import (
+            DEFAULT_CALENDAR_NAME,
+            DEFAULT_CALENDAR_TITLE,
+            DEFAULT_DURATION_MINUTES,
+            DEFAULT_RECURRENCE,
+            EverydayTaskError,
+            run_everyday_task,
+        )
+
+        root = _quickstart_root(out)
+        try:
+            run_everyday_task(
+                task,
+                root,
+                title=title if title is not None else DEFAULT_CALENDAR_TITLE,
+                calendar_name=(
+                    calendar_name
+                    if calendar_name is not None
+                    else DEFAULT_CALENDAR_NAME
+                ),
+                start_iso=start_iso,
+                duration_minutes=(
+                    duration_minutes
+                    if duration_minutes is not None
+                    else DEFAULT_DURATION_MINUTES
+                ),
+                recurrence=(
+                    recurrence if recurrence is not None else DEFAULT_RECURRENCE
+                ),
+                event_uid=event_uid,
+                revert=revert,
+                probe_baseline=probe_baseline,
+                say=click.echo,
+            )
+        except EverydayTaskError as error:
+            raise click.ClickException(str(error)) from error
+        return
     if own:
         _quickstart_own(_quickstart_root(out), url, watch or headed)
         return
@@ -1341,9 +1473,10 @@ _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]
 # public_seal module, and the quickstart's encrypted checkpoints rely on its
 # key derivation once per store. Launcher 1.23 requires Flow 3.3: the OpenEMR
 # quickstart's referral program checks its date picker against the run's
-# clock (`Postcondition.text_clock`), which Flow 3.2 ignores. Flow 4.0
-# removes and renames APIs the launcher doesn't use, so it is accepted too.
-_SUPPORTED_FLOW_RANGE = ">=3.3.0,<5.0.0"
+# clock (`Postcondition.text_clock`), which Flow 3.2 ignores. Launcher 1.24
+# requires Flow 4.0 (encryption at rest by default, receipts, handoffs/A2A,
+# `openadapt wrap`, and `openadapt flight`).
+_SUPPORTED_FLOW_RANGE = ">=4.0.0,<5.0.0"
 _RDP_INSTALL_COMMAND = _pip_install("openadapt[rdp]")
 _CHROMIUM_SYSTEM_LIBS_COMMAND = (
     f"{shlex.quote(sys.executable)} -m playwright install-deps chromium"
@@ -1353,7 +1486,7 @@ _CHROMIUM_SYSTEM_LIBS_COMMAND = (
 def _supported_flow_version(value: str) -> bool:
     """Return whether a stable Flow version is in the launcher's supported range."""
     parsed = _release_tuple(value)
-    return parsed is not None and (3, 3, 0) <= parsed < (5, 0, 0)
+    return parsed is not None and (4, 0, 0) <= parsed < (5, 0, 0)
 
 
 # The Python modules each native or remote Flow backend imports when its
@@ -1896,6 +2029,35 @@ def verify_serve(contracts: str, state: Optional[str]) -> None:
     sys.exit(int(agent_main(argv) or 0))
 
 
+@verify.command(
+    "draft",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+    add_help_option=False,
+)
+@click.pass_context
+def verify_draft(ctx: click.Context) -> None:
+    """Draft a write contract with a model; admit it only if OpenAdapt
+    qualifies it on a sandbox.
+
+    `openadapt verify draft --describe openapi.json --trace demo.har
+    --task task.yaml --sandbox sandbox.yaml --out DIR`. The model (key from
+    ANTHROPIC_API_KEY) works at setup only; an admitted contract runs with no
+    model calls. `--help` lists every option.
+    """
+    _require_supported_python()
+    draft_main = _optional_engine_entrypoint(
+        ctx, ("openadapt_flow.verify_draft.draft",)
+    )
+    if draft_main is None:
+        click.echo(
+            "Error: this openadapt-flow installation has no verify draft command.",
+            err=True,
+        )
+        click.echo("Upgrade with: pip install --upgrade openadapt", err=True)
+        sys.exit(2)
+    sys.exit(int(draft_main(list(ctx.args)) or 0))
+
+
 def _protected_ledger_requested() -> bool:
     name = "OPENADAPT_LEDGER_AUTHORITY_CONFIG"
     if name not in os.environ:
@@ -2306,6 +2468,36 @@ def _wrap_arguments(parsed: list[str]) -> list[str]:
     ]:
         return raw
     return parsed
+
+
+@main.command(
+    "test",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        # openadapt_flow.agent_test owns its argparse help.
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def agent_test_command(command_ctx: click.Context) -> None:
+    """Test an agent on real apps with planted faults, for CI.
+
+    Runs any agent against stateful scenarios on an app in local containers
+    (OpenEMR, Dolibarr, EspoCRM), plants faults on its saves, grades the
+    app's database, and gates against a stored baseline. Every argument
+    passes to openadapt_flow.agent_test unchanged.
+    """
+    _require_supported_python()
+    test_main = _optional_engine_entrypoint(
+        command_ctx, ("openadapt_flow.agent_test.cli",)
+    )
+    if test_main is None:
+        click.echo(
+            "Error: this openadapt-flow installation has no test command.", err=True
+        )
+        sys.exit(2)
+    sys.exit(int(test_main(list(command_ctx.args)) or 0))
 
 
 @main.command(

@@ -1,0 +1,432 @@
+{
+ "app": "mockloan",
+ "untuned": false,
+ "describe": "db",
+ "operator_setup_seconds": 0.0,
+ "operator_inputs": [
+  "app base URL",
+  "SQLite file path (read and admin)"
+ ],
+ "setup_minutes": 1.36,
+ "person_decisions": 0,
+ "questions": [],
+ "drafts": 1,
+ "drafts_admitted": 1,
+ "drafts_rejected": 0,
+ "admitted": true,
+ "reason": "admitted",
+ "model": "claude-opus-5-5",
+ "prompt_sha256": "sha256:738a1230c4d9449f3f23487d338fce9fc8f35779f3511bf2093fc4f7c6252840",
+ "model_calls": [
+  {
+   "at": 1795247669.287714,
+   "label": "mockloan",
+   "request_model": "claude-opus-5-5",
+   "response_model": "claude-opus-5-5",
+   "input_tokens": 583,
+   "output_tokens": 1575,
+   "cache_read_tokens": 0,
+   "cache_write_tokens": 2155,
+   "seconds": 14.8,
+   "request_id": "",
+   "stop_reason": "end_turn"
+  }
+ ],
+ "rounds": [
+  {
+   "admitted": true,
+   "faults_applicable": 8,
+   "faults_caught": 8,
+   "clean": 5,
+   "false_stops": [],
+   "probe_writes_confirmed": 5,
+   "attribution_problems": [],
+   "not_applicable": {
+    "lost_update": "the write creates a record; nothing can be overwritten"
+   },
+   "seconds": 66.86
+  }
+ ],
+ "notes": [
+  "MockLoan has no sign-in: the two actors send identical requests"
+ ],
+ "heldout": {
+  "cases": [
+   {
+    "group": "clean",
+    "name": "clean-1",
+    "detail": "the write with payload 1",
+    "expect": "confirmed",
+    "outcome": "CONFIRMED",
+    "recheck": "CONFIRMED",
+    "passed": true,
+    "applicable": true,
+    "note": "",
+    "reasons": [],
+    "moved": [],
+    "seconds": 3.81
+   },
+   {
+    "group": "clean",
+    "name": "clean-2",
+    "detail": "the write with payload 2",
+    "expect": "confirmed",
+    "outcome": "CONFIRMED",
+    "recheck": "CONFIRMED",
+    "passed": true,
+    "applicable": true,
+    "note": "",
+    "reasons": [],
+    "moved": [],
+    "seconds": 3.99
+   },
+   {
+    "group": "clean",
+    "name": "clean-3",
+    "detail": "the write with payload 3",
+    "expect": "confirmed",
+    "outcome": "CONFIRMED",
+    "recheck": "CONFIRMED",
+    "passed": true,
+    "applicable": true,
+    "note": "",
+    "reasons": [],
+    "moved": [],
+    "seconds": 4.0
+   },
+   {
+    "group": "clean",
+    "name": "clean-4",
+    "detail": "the write with payload 4",
+    "expect": "confirmed",
+    "outcome": "CONFIRMED",
+    "recheck": "CONFIRMED",
+    "passed": true,
+    "applicable": true,
+    "note": "",
+    "reasons": [],
+    "moved": [],
+    "seconds": 4.0
+   },
+   {
+    "group": "clean",
+    "name": "clean-5",
+    "detail": "the write with payload 5",
+    "expect": "confirmed",
+    "outcome": "CONFIRMED",
+    "recheck": "CONFIRMED",
+    "passed": true,
+    "applicable": true,
+    "note": "",
+    "reasons": [],
+    "moved": [],
+    "seconds": 4.02
+   },
+   {
+    "group": "fault",
+    "name": "wrong_value:amount",
+    "detail": "records.amount holds another value",
+    "expect": "refuted",
+    "outcome": "REFUTED",
+    "recheck": "",
+    "passed": true,
+    "applicable": true,
+    "note": "",
+    "reasons": [
+     "record_written was refuted: observed absent, 0 of 1 expected record(s)",
+     "1 record(s) outside the declared write moved (added); 1 of them no actor explains"
+    ],
+    "moved": [
+     {
+      "row": true,
+      "table": "records",
+      "change": "added",
+      "columns": [
+       "amount",
+       "id",
+       "loan_id",
+       "memo",
+       "product",
+       "source",
+       "surface"
+      ],
+      "target": false,
+      "attribution": "unattributed",
+      "actor_columns": []
+     }
+    ],
+    "seconds": 6.24
+   },
+   {
+    "group": "fault",
+    "name": "wrong_value:loan_id",
+    "detail": "records.loan_id holds another value",
+    "expect": "refuted",
+    "outcome": "REFUTED",
+    "recheck": "",
+    "passed": true,
+    "applicable": true,
+    "note": "",
+    "reasons": [
+     "record_written was refuted: observed absent, 0 of 1 expected record(s)",
+     "1 record(s) outside the declared write moved (added); 1 of them no actor explains"
+    ],
+    "moved": [
+     {
+      "row": true,
+      "table": "records",
+      "change": "added",
+      "columns": [
+       "amount",
+       "id",
+       "loan_id",
+       "memo",
+       "product",
+       "source",
+       "surface"
+      ],
+      "target": false,
+      "attribution": "unattributed",
+      "actor_columns": []
+     }
+    ],
+    "seconds": 6.22
+   },
+   {
+    "group": "fault",
+    "name": "wrong_value:memo",
+    "detail": "records.memo holds another value",
+    "expect": "refuted",
+    "outcome": "REFUTED",
+    "recheck": "",
+    "passed": true,
+    "applicable": true,
+    "note": "",
+    "reasons": [
+     "record_written was refuted: observed absent, 0 of 1 expected record(s)",
+     "1 record(s) outside the declared write moved (added); 1 of them no actor explains"
+    ],
+    "moved": [
+     {
+      "row": true,
+      "table": "records",
+      "change": "added",
+      "columns": [
+       "amount",
+       "id",
+       "loan_id",
+       "memo",
+       "product",
+       "source",
+       "surface"
+      ],
+      "target": false,
+      "attribution": "unattributed",
+      "actor_columns": []
+     }
+    ],
+    "seconds": 6.23
+   },
+   {
+    "group": "fault",
+    "name": "wrong_value:product",
+    "detail": "records.product holds another value",
+    "expect": "refuted",
+    "outcome": "REFUTED",
+    "recheck": "",
+    "passed": true,
+    "applicable": true,
+    "note": "",
+    "reasons": [
+     "record_written was refuted: observed absent, 0 of 1 expected record(s)",
+     "1 record(s) outside the declared write moved (added); 1 of them no actor explains"
+    ],
+    "moved": [
+     {
+      "row": true,
+      "table": "records",
+      "change": "added",
+      "columns": [
+       "amount",
+       "id",
+       "loan_id",
+       "memo",
+       "product",
+       "source",
+       "surface"
+      ],
+      "target": false,
+      "attribution": "unattributed",
+      "actor_columns": []
+     }
+    ],
+    "seconds": 6.21
+   },
+   {
+    "group": "fault",
+    "name": "wrong_row",
+    "detail": "the new records row is filed under another loan_id",
+    "expect": "refuted",
+    "outcome": "REFUTED",
+    "recheck": "",
+    "passed": true,
+    "applicable": true,
+    "note": "",
+    "reasons": [
+     "record_written was refuted: observed absent, 0 of 1 expected record(s)",
+     "1 record(s) outside the declared write moved (added); 1 of them no actor explains"
+    ],
+    "moved": [
+     {
+      "row": true,
+      "table": "records",
+      "change": "added",
+      "columns": [
+       "amount",
+       "id",
+       "loan_id",
+       "memo",
+       "product",
+       "source",
+       "surface"
+      ],
+      "target": false,
+      "attribution": "unattributed",
+      "actor_columns": []
+     }
+    ],
+    "seconds": 6.22
+   },
+   {
+    "group": "fault",
+    "name": "duplicate",
+    "detail": "a second copy of the records record",
+    "expect": "refuted",
+    "outcome": "REFUTED",
+    "recheck": "",
+    "passed": true,
+    "applicable": true,
+    "note": "",
+    "reasons": [
+     "record_written was refuted: observed conflicting, 2 of 1 expected record(s)"
+    ],
+    "moved": [],
+    "seconds": 6.24
+   },
+   {
+    "group": "fault",
+    "name": "sibling_edit",
+    "detail": "another records row's loan_id edited beside the write",
+    "expect": "refuted",
+    "outcome": "REFUTED",
+    "recheck": "",
+    "passed": true,
+    "applicable": true,
+    "note": "",
+    "reasons": [
+     "1 record(s) outside the declared write moved (changed); 1 of them no actor explains"
+    ],
+    "moved": [
+     {
+      "row": true,
+      "table": "records",
+      "change": "changed",
+      "columns": [
+       "loan_id"
+      ],
+      "target": false,
+      "attribution": "unattributed",
+      "actor_columns": []
+     }
+    ],
+    "seconds": 1.03
+   },
+   {
+    "group": "fault",
+    "name": "late_revert",
+    "detail": "the records write undone after the check",
+    "expect": "refuted",
+    "outcome": "CONFIRMED",
+    "recheck": "REFUTED",
+    "passed": true,
+    "applicable": true,
+    "note": "",
+    "reasons": [
+     "1 record(s) moved after the verdict that nothing explains (removed); the earlier CONFIRMED no longer stands"
+    ],
+    "moved": [],
+    "seconds": 3.59
+   },
+   {
+    "group": "fault",
+    "name": "lost_update",
+    "detail": "",
+    "expect": "refuted",
+    "outcome": "",
+    "recheck": "",
+    "passed": true,
+    "applicable": false,
+    "note": "the write creates a record; nothing can be overwritten",
+    "reasons": [],
+    "moved": [],
+    "seconds": 0.0
+   },
+   {
+    "group": "fault",
+    "name": "app_sibling",
+    "detail": "the same write also sent to {'loan_id': 'LN-1002'} through the app",
+    "expect": "refuted",
+    "outcome": "REFUTED",
+    "recheck": "",
+    "passed": true,
+    "applicable": true,
+    "note": "",
+    "reasons": [
+     "1 record(s) outside the declared write moved (added); 1 of them no actor explains"
+    ],
+    "moved": [
+     {
+      "row": true,
+      "table": "records",
+      "change": "added",
+      "columns": [
+       "amount",
+       "id",
+       "loan_id",
+       "memo",
+       "product",
+       "source",
+       "surface"
+      ],
+      "target": false,
+      "attribution": "unattributed",
+      "actor_columns": []
+     }
+    ],
+    "seconds": 1.02
+   },
+   {
+    "group": "fault",
+    "name": "app_duplicate",
+    "detail": "the write sent twice through the app",
+    "expect": "refuted",
+    "outcome": "REFUTED",
+    "recheck": "",
+    "passed": true,
+    "applicable": true,
+    "note": "",
+    "reasons": [
+     "record_written was refuted: observed conflicting, 2 of 1 expected record(s)"
+    ],
+    "moved": [],
+    "seconds": 6.22
+   }
+  ],
+  "faults_applicable": 10,
+  "faults_caught": 10,
+  "faults_missed": [],
+  "clean": 5,
+  "false_stops": [],
+  "problems": []
+ }
+}

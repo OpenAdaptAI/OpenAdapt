@@ -1,0 +1,54 @@
+[
+ {
+  "__key": "1",
+  "fname": "Marta",
+  "lname": "Kowal",
+  "DOB": "1975-02-11",
+  "sex": "Female",
+  "street": "9 Oak Row",
+  "city": "Springfield",
+  "state": "MA",
+  "postal_code": "01104",
+  "phone_home": "413-555-0121",
+  "email": "m.kowal@example.invalid"
+ },
+ {
+  "__key": "2",
+  "fname": "Joseph",
+  "lname": "Adeyemi",
+  "DOB": "1958-09-23",
+  "sex": "Male",
+  "street": "120 River Road",
+  "city": "Springfield",
+  "state": "MA",
+  "postal_code": "01103",
+  "phone_home": "413-555-0122",
+  "email": "j.adeyemi@example.invalid"
+ },
+ {
+  "__key": "3",
+  "fname": "Hana",
+  "lname": "Sato",
+  "DOB": "1999-04-02",
+  "sex": "Female",
+  "street": "5 Hill Court",
+  "city": "Springfield",
+  "state": "MA",
+  "postal_code": "01105",
+  "phone_home": "413-555-0123",
+  "email": "h.sato@example.invalid"
+ },
+ {
+  "__key": "4",
+  "fname": "Nadia",
+  "lname": "Petrenko",
+  "DOB": "1996-02-12",
+  "sex": "Female",
+  "street": "29 HAWTHORN DRIVE",
+  "city": "SPRINGFIELD",
+  "state": "MA",
+  "postal_code": "01104",
+  "phone_home": "413-555-0308",
+  "email": "n.petrenko@example.invalid"
+ }
+]

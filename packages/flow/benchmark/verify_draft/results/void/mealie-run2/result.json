@@ -1,0 +1,99 @@
+{
+ "app": "mealie",
+ "untuned": true,
+ "describe": "openapi",
+ "operator_setup_seconds": 3.3,
+ "operator_inputs": [
+  "app base URL",
+  "two users' sign-in (user, password env)",
+  "read-only DB connection",
+  "admin DB connection"
+ ],
+ "setup_minutes": 9.2,
+ "person_decisions": 0,
+ "questions": [],
+ "drafts": 2,
+ "drafts_admitted": 0,
+ "drafts_rejected": 2,
+ "admitted": false,
+ "reason": "refused after 3 round(s): [FAILED] clean clean-1: the write with payload 1. Expected confirmed, got REFUTED. Reasons: the target's versions aren't whole numbers and no author is read, so the saves in the window can't be counted; 8 record(s) outside the declared write moved (removed); 8 of them no actor explains. Moved: nutrition removed None; settings removed None; ingredients removed None; instructions removed None; recipe_instructions removed [] (unattributed)\n[FAILED] clean clean-2: the write with payload 2. Expected confirmed, got REFUTED. Reasons: the target's versions aren't whole numbers and no author is read, so the saves in the window can't be counted; 8 record(s) outside the declared write moved (removed); 8 of them no actor explains. Moved: nutrition removed None; settings removed None; ingredients removed None; instructions removed None; recipe_instructions removed [] (unattributed)\n[FAILED] clean clean-3: the write with payload 3. Expected confirmed, got REFUTED. Reasons: the target's versions aren't whole numbers and no author is read, so the saves in the window can't be counted; 8 record(s) outside the declared write moved (removed); 8 of them no actor explains. Moved: nutrition removed None; settings removed None; ingredients removed None; instructions removed None; recipe_instructions removed [] (unattributed)\n[FAILED] clean clean-4: the write with payload 4. Expected confirmed, got REFUTED. Reasons: the target's versions aren't whole numbers and no author is read, so the saves in the window can't be counted; 8 record(s) outside the declared write moved (removed); 8 of them no actor explains. Moved: nutrition removed None; settings removed None; ingredients removed None; instructions removed None; recipe_instructions removed [] (unattributed)\n[FAILED] clean clean-5: the write with payload 5. Expected confirmed, got REFUTED. Reasons: the target's versions aren't whole numbers and no author is read, so the saves in the window can't be counted; 8 recor",
+ "model": "claude-opus-5-5",
+ "prompt_sha256": "sha256:738a1230c4d9449f3f23487d338fce9fc8f35779f3511bf2093fc4f7c6252840",
+ "model_calls": [
+  {
+   "at": 1795246641.254219,
+   "label": "mealie",
+   "request_model": "claude-opus-5-5",
+   "response_model": "claude-opus-5-5",
+   "input_tokens": 19914,
+   "output_tokens": 2641,
+   "cache_read_tokens": 2155,
+   "cache_write_tokens": 0,
+   "seconds": 25.64,
+   "request_id": "",
+   "stop_reason": "end_turn"
+  },
+  {
+   "at": 1795246895.488529,
+   "label": "mealie",
+   "request_model": "claude-opus-5-5",
+   "response_model": "claude-opus-5-5",
+   "input_tokens": 21852,
+   "output_tokens": 9619,
+   "cache_read_tokens": 2155,
+   "cache_write_tokens": 0,
+   "seconds": 92.65,
+   "request_id": "",
+   "stop_reason": "end_turn"
+  },
+  {
+   "at": 1795246918.697357,
+   "label": "mealie",
+   "request_model": "claude-opus-5-5",
+   "response_model": "claude-opus-5-5",
+   "input_tokens": 25057,
+   "output_tokens": 3114,
+   "cache_read_tokens": 2155,
+   "cache_write_tokens": 0,
+   "seconds": 23.2,
+   "request_id": "",
+   "stop_reason": "end_turn"
+  }
+ ],
+ "rounds": [
+  {
+   "admitted": false,
+   "faults_applicable": 8,
+   "faults_caught": 6,
+   "clean": 5,
+   "false_stops": [],
+   "probe_writes_confirmed": 4,
+   "attribution_problems": [
+    "recipe_instructions.id: excluded, but it moves with the values written: the exclusion hides the write",
+    "recipe_nutrition.id: excluded, but it moves with the values written: the exclusion hides the write",
+    "recipe_settings.id: excluded, but it moves with the values written: the exclusion hides the write",
+    "recipes_ingredients.id: excluded, but it moves with the values written: the exclusion hides the write"
+   ],
+   "not_applicable": {},
+   "seconds": 161.52
+  },
+  {
+   "admitted": false,
+   "faults_applicable": 8,
+   "faults_caught": 8,
+   "clean": 5,
+   "false_stops": [
+    "clean-1",
+    "clean-2",
+    "clean-3",
+    "clean-4",
+    "clean-5"
+   ],
+   "probe_writes_confirmed": 0,
+   "attribution_problems": [],
+   "not_applicable": {},
+   "seconds": 242.79
+  }
+ ],
+ "notes": []
+}

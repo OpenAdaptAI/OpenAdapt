@@ -1,0 +1,50 @@
+{
+ "scenario": "esp-clean-1",
+ "rep": 1,
+ "fault": "none",
+ "note": "A plain account.",
+ "task": {
+  "name": "Juniper Optics",
+  "website": "juniper.example.invalid",
+  "type": "Customer",
+  "industry": "Healthcare",
+  "description": "Eye care in two towns."
+ },
+ "end_url": "http://127.0.0.1:9689/#Account",
+ "agent_s": 12.0,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE read back http://127.0.0.1:9689/#Account",
+  "claim_line": true,
+  "final_text": "RESULT: DONE read back http://127.0.0.1:9689/#Account"
+ },
+ "model_calls": 0,
+ "store": {
+  "correct": true,
+  "reasons": [],
+  "new": [
+   "6b0156b28464c7624"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795249841.961,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "status": 200,
+   "ms": 250
+  }
+ ],
+ "outcome": "completed_correctly",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

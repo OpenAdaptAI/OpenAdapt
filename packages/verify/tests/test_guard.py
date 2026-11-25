@@ -81,3 +81,32 @@ def test_context_manager_reads_back_then_propagates(store, tmp_path):
             store.save(VALUES)
             raise RuntimeError("after the write")
     assert write.result.outcome is Outcome.CONFIRMED
+
+
+def test_decorator_and_context_manager_record_agent_and_verifier_adapter(
+    store, tmp_path
+):
+    @verified(
+        store.contract(),
+        agent_used="claude-code",
+        verifier_adapter="deterministic+Veto-4B-r6",
+        workdir=tmp_path / "w",
+    )
+    def save(code, quantity):
+        return store.save({"code": code, "quantity": quantity})
+
+    reply = save(**VALUES)
+    assert reply["agent_used"] == "claude-code"
+    assert reply["verifier_adapter"] == "deterministic+Veto-4B-r6"
+
+    other = {"code": "item-19", "quantity": "5"}
+    with checked_write(
+        store.contract(),
+        other,
+        agent_used="gpt-5.4",
+        verifier_adapter="deterministic",
+        workdir=tmp_path / "c",
+    ) as write:
+        store.save(other)
+    assert write.agent_used == "gpt-5.4"
+    assert write.verifier_adapter == "deterministic"

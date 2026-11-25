@@ -1,0 +1,26 @@
+{
+ "verdict": "fail",
+ "baseline_sha256": "sha256:d90f1d366052f1927181a2b2d67f402848ccfbbcdaa67677784f47150593c954",
+ "baseline_agent": {
+  "id": "scripted-readback",
+  "kind": "scripted-readback",
+  "model": ""
+ },
+ "agent": {
+  "id": "scripted",
+  "kind": "scripted",
+  "model": ""
+ },
+ "tolerance": 0.05,
+ "regressions": [
+  "silent_corruption",
+  "false_success"
+ ],
+ "lines": [
+  "silent corruption: 40.0% (4/10) vs baseline 10.0% (1/10)  REGRESSION (+30.0 points, tolerance 5.0)",
+  "false success: 70.0% (7/10) vs baseline 30.0% (3/10)  REGRESSION (+40.0 points, tolerance 5.0)",
+  "completed correctly (not gated): 30.0% vs 30.0%",
+  "safe stop (not gated): 0.0% vs 40.0%",
+  "collateral edit (not gated): 20.0% vs 20.0%"
+ ]
+}

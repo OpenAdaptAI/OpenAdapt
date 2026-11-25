@@ -2,14 +2,24 @@
 
 <!-- version list -->
 
-## Unreleased
+## v1.24.0 (2026-11-24)
 
 ### Requirements
 
-- Accepts openadapt-flow 4: the launcher's Flow requirement and `openadapt
-  doctor`'s supported range are now `>=3.3.0,<5.0.0` (was `<4.0.0`).
+- Requires `openadapt-flow>=4.0.0,<5.0.0` (encryption at rest by default,
+  receipts, handoffs/A2A, `openadapt wrap`, and `openadapt flight`),
+  `openadapt-agent>=2.2.4,<3`, `openadapt-types>=0.24.2,<0.25.0`, and Python
+  3.11 or 3.12 (`openadapt doctor`'s supported Flow range is now
+  `>=4.0.0,<5.0.0`).
 
 ### Features
+
+- **`openadapt wrap --example` and `openadapt flight`.** Wrap an agent run into
+  a compiled, verified program (`openadapt[wrap]`) and inspect/replay runs with
+  `openadapt flight`.
+- **Encryption at rest by default** (via `openadapt-flow 4.0.0`): recordings,
+  compiled bundles, and run folders are encrypted at rest by default unless
+  `OPENADAPT_ENCRYPT_AT_REST=0` or `--no-encrypt` is set.
 
 - **Agent-to-agent handoffs.**
   - `openadapt handoff send` attaches a run's receipt to a result for

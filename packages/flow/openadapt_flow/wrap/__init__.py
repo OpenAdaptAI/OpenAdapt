@@ -278,6 +278,28 @@ class WrappedTask:
         return result
 
 
+def _agent_used(run: SkillRun, agent: Any) -> str | None:
+    """Identify the agent or compiled plan that produced this wrapped run."""
+    if run.path == "program":
+        sha = run.replay.get("program_sha256") if isinstance(run.replay, dict) else None
+        return f"compiled-plan@{str(sha)[:12]}" if sha else "compiled-plan"
+    if agent is None:
+        return None
+    command = getattr(agent, "command", None)
+    if (
+        isinstance(command, (list, tuple))
+        and command
+        and isinstance(command[0], str)
+        and command[0].strip()
+    ):
+        return Path(command[0]).name
+    for attr in ("model", "provider", "model_key_provider"):
+        val = getattr(agent, attr, None)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return None
+
+
 def _result(run: SkillRun, agent: Any) -> dict[str, Any]:
     """Keep raw inputs, model summaries and exception text out of run records."""
     from openadapt_flow.integrations.agents.skills import _skill_usage
@@ -297,6 +319,8 @@ def _result(run: SkillRun, agent: Any) -> dict[str, Any]:
         "wire_checked": run.wire_checked,
         "receipt": run.replay.get("receipt"),
         "receipt_outcome": run.replay.get("receipt_outcome"),
+        "agent_used": _agent_used(run, agent),
+        "verifier_adapter": "deterministic",
     }
     if run.status == "CACHE_HALTED":
         # The engine's own halt reason (a step and a check), scrubbed under

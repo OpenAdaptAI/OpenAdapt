@@ -1,6 +1,53 @@
 # CHANGELOG
 
 
+## v0.35.0 (2026-11-24)
+
+### Features
+
+- **desktop**: add local Before/After step screenshot preview to WatchRun
+- **desktop**: redesign desktop app UI for modern native-grade clarity and polish
+
+### Bug Fixes
+
+- **desktop**: use official OpenAdapt mark in desktop brand header
+
+
+
+## v0.34.0 (2026-11-24)
+
+### Features
+
+- **desktop**: redesign desktop app UI for modern native-grade clarity and polish
+
+### Bug Fixes
+
+- **desktop**: use official OpenAdapt mark in desktop brand header
+
+
+
+## v0.33.1 (2026-11-24)
+
+### Bug Fixes
+
+- **desktop**: open() lands on the requested URL; skip real-Chrome test without Chrome (fix-forward #2358)
+
+
+
+## v0.33.0 (2026-11-23)
+
+### Features
+
+- **desktop**: open recordings and runs in an opted-in Chrome profile
+
+### Bug Fixes
+
+- **desktop**: wait for a slow Chrome debugging server before refusing
+- **desktop**: start Chrome without forking and keep dispatch.py small
+- **desktop**: refuse an elevated Windows launch and record lab evidence
+
+
+
 ## v0.32.3 (2026-11-23)
 
 ### Bug Fixes

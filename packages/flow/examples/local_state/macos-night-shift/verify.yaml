@@ -1,0 +1,17 @@
+# Check a macOS Night Shift toggle through CoreBrightness (read-only).
+# Compare the `value` field ("true" or "false") after toggling Night Shift
+# in System Settings or Control Center.
+schema_version: openadapt.verify/v1
+minimum_effect_strength: independent_system_of_record
+verifier:
+  kind: local-state
+  local_state:
+    - type: macos_night_shift
+      id: night_shift
+frame:
+  target_fields: [enabled, value]
+effects:
+  - kind: field_equals
+    match: {id: night_shift}
+    field: value
+    value: {param: target_enabled}

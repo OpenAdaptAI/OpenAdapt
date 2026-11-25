@@ -1,0 +1,326 @@
+[workbench] store: 4 tables; trace: 1 write request(s)
+[workbench] demonstration: changed patients, columns ['email', 'phone']
+[workbench] round 1: ADMITTED (17/17 cases, 51s)
+{
+ "app": "workbench",
+ "untuned": false,
+ "describe": "db",
+ "operator_setup_seconds": 1.6,
+ "operator_inputs": [
+  "app base URL",
+  "agent sign-in (user, password)",
+  "read-only DB connection",
+  "admin DB connection"
+ ],
+ "setup_minutes": 1.32,
+ "person_decisions": 0,
+ "questions": [],
+ "drafts": 1,
+ "drafts_admitted": 1,
+ "drafts_rejected": 0,
+ "admitted": true,
+ "reason": "admitted",
+ "model": "claude-opus-5-5",
+ "prompt_sha256": "sha256:c33fbf890663c5314f9afb16035a491c6526217054cfacda14685bd0caf0d796",
+ "rounds": [
+  {
+   "admitted": true,
+   "faults_applicable": 6,
+   "faults_caught": 6,
+   "clean": 5,
+   "false_stops": [],
+   "probe_writes_confirmed": 5,
+   "attribution_problems": [],
+   "not_applicable": {
+    "lost_update": "the app refused the stale save: it prevents lost updates itself"
+   },
+   "seconds": 50.89
+  }
+ ],
+ "notes": [
+  "the workbench signs in one user only: the second actor is a second session of it, so the lost-update case runs but the attribution probe has no real actor axis"
+ ],
+ "heldout": {
+  "cases": [
+   {
+    "group": "clean",
+    "name": "clean-1",
+    "detail": "the write with payload 1",
+    "expect": "confirmed",
+    "outcome": "CONFIRMED",
+    "recheck": "CONFIRMED",
+    "passed": true,
+    "applicable": true,
+    "untestable": false,
+    "note": "",
+    "reasons": [],
+    "moved": [],
+    "seconds": 3.15
+   },
+   {
+    "group": "clean",
+    "name": "clean-2",
+    "detail": "the write with payload 2",
+    "expect": "confirmed",
+    "outcome": "CONFIRMED",
+    "recheck": "CONFIRMED",
+    "passed": true,
+    "applicable": true,
+    "untestable": false,
+    "note": "",
+    "reasons": [],
+    "moved": [],
+    "seconds": 4.03
+   },
+   {
+    "group": "clean",
+    "name": "clean-3",
+    "detail": "the write with payload 3",
+    "expect": "confirmed",
+    "outcome": "CONFIRMED",
+    "recheck": "CONFIRMED",
+    "passed": true,
+    "applicable": true,
+    "untestable": false,
+    "note": "",
+    "reasons": [],
+    "moved": [],
+    "seconds": 4.26
+   },
+   {
+    "group": "clean",
+    "name": "clean-4",
+    "detail": "the write with payload 4",
+    "expect": "confirmed",
+    "outcome": "CONFIRMED",
+    "recheck": "CONFIRMED",
+    "passed": true,
+    "applicable": true,
+    "untestable": false,
+    "note": "",
+    "reasons": [],
+    "moved": [],
+    "seconds": 3.74
+   },
+   {
+    "group": "clean",
+    "name": "clean-5",
+    "detail": "the write with payload 5",
+    "expect": "confirmed",
+    "outcome": "CONFIRMED",
+    "recheck": "CONFIRMED",
+    "passed": true,
+    "applicable": true,
+    "untestable": false,
+    "note": "",
+    "reasons": [],
+    "moved": [],
+    "seconds": 3.99
+   },
+   {
+    "group": "fault",
+    "name": "wrong_value:email",
+    "detail": "patients.email holds another value",
+    "expect": "refuted",
+    "outcome": "REFUTED",
+    "recheck": "",
+    "passed": true,
+    "applicable": true,
+    "untestable": false,
+    "note": "",
+    "reasons": [
+     "record_written was refuted: observed absent, 0 of 1 expected record(s)",
+     "1 record(s) outside the declared write moved (changed); 1 of them no actor explains"
+    ],
+    "moved": [
+     {
+      "row": true,
+      "table": "patients",
+      "change": "changed",
+      "columns": [
+       "email",
+       "phone",
+       "updated_by",
+       "version"
+      ],
+      "target": false,
+      "attribution": "unattributed",
+      "actor_columns": []
+     }
+    ],
+    "seconds": 6.26
+   },
+   {
+    "group": "fault",
+    "name": "wrong_value:phone",
+    "detail": "patients.phone holds another value",
+    "expect": "refuted",
+    "outcome": "REFUTED",
+    "recheck": "",
+    "passed": true,
+    "applicable": true,
+    "untestable": false,
+    "note": "",
+    "reasons": [
+     "record_written was refuted: observed absent, 0 of 1 expected record(s)",
+     "1 record(s) outside the declared write moved (changed); 1 of them no actor explains"
+    ],
+    "moved": [
+     {
+      "row": true,
+      "table": "patients",
+      "change": "changed",
+      "columns": [
+       "email",
+       "phone",
+       "updated_by",
+       "version"
+      ],
+      "target": false,
+      "attribution": "unattributed",
+      "actor_columns": []
+     }
+    ],
+    "seconds": 6.8
+   },
+   {
+    "group": "fault",
+    "name": "wrong_row",
+    "detail": "the update landed on another patients row",
+    "expect": "refuted",
+    "outcome": "REFUTED",
+    "recheck": "",
+    "passed": true,
+    "applicable": true,
+    "untestable": false,
+    "note": "",
+    "reasons": [
+     "record_written was refuted: observed absent, 0 of 1 expected record(s)",
+     "1 record(s) outside the declared write moved (changed); 1 of them no actor explains"
+    ],
+    "moved": [
+     {
+      "row": true,
+      "table": "patients",
+      "change": "changed",
+      "columns": [
+       "email",
+       "phone",
+       "updated_by",
+       "version"
+      ],
+      "target": false,
+      "attribution": "unattributed",
+      "actor_columns": []
+     }
+    ],
+    "seconds": 6.62
+   },
+   {
+    "group": "fault",
+    "name": "duplicate",
+    "detail": "a second copy of the patients record",
+    "expect": "refuted",
+    "outcome": "REFUTED",
+    "recheck": "",
+    "passed": true,
+    "applicable": true,
+    "untestable": false,
+    "note": "",
+    "reasons": [
+     "1 record(s) outside the declared write moved (added); 1 of them no actor explains"
+    ],
+    "moved": [
+     {
+      "row": true,
+      "table": "patients",
+      "change": "added",
+      "columns": [
+       "dob",
+       "email",
+       "first_name",
+       "id",
+       "last_name",
+       "mrn",
+       "phone",
+       "status",
+       "updated_by",
+       "version"
+      ],
+      "target": false,
+      "attribution": "unattributed",
+      "actor_columns": []
+     }
+    ],
+    "seconds": 1.76
+   },
+   {
+    "group": "fault",
+    "name": "sibling_edit",
+    "detail": "another patients row's mrn edited beside the write",
+    "expect": "refuted",
+    "outcome": "REFUTED",
+    "recheck": "",
+    "passed": true,
+    "applicable": true,
+    "untestable": false,
+    "note": "",
+    "reasons": [
+     "1 record(s) outside the declared write moved (changed); 1 of them no actor explains"
+    ],
+    "moved": [
+     {
+      "row": true,
+      "table": "patients",
+      "change": "changed",
+      "columns": [
+       "mrn"
+      ],
+      "target": false,
+      "attribution": "unattributed",
+      "actor_columns": []
+     }
+    ],
+    "seconds": 1.69
+   },
+   {
+    "group": "fault",
+    "name": "late_revert",
+    "detail": "the patients write undone after the check",
+    "expect": "refuted",
+    "outcome": "CONFIRMED",
+    "recheck": "REFUTED",
+    "passed": true,
+    "applicable": true,
+    "untestable": false,
+    "note": "",
+    "reasons": [
+     "1 record(s) moved after the verdict that nothing explains (changed); the earlier CONFIRMED no longer stands"
+    ],
+    "moved": [],
+    "seconds": 4.08
+   },
+   {
+    "group": "fault",
+    "name": "lost_update",
+    "detail": "the other user saves the record, then the agent's save overwrites it",
+    "expect": "refuted",
+    "outcome": "",
+    "recheck": "",
+    "passed": true,
+    "applicable": false,
+    "untestable": false,
+    "note": "the app refused the stale save: it prevents lost updates itself",
+    "reasons": [],
+    "moved": [],
+    "seconds": 0.08
+   }
+  ],
+  "faults_applicable": 6,
+  "faults_caught": 6,
+  "faults_missed": [],
+  "clean": 5,
+  "false_stops": [],
+  "problems": []
+ }
+}

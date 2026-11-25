@@ -2,6 +2,11 @@
 
 ## v0.1.0 (unreleased)
 
+- The receipt verifier refuses an `evidence_scope` the Python verifier
+  refuses: a `null` block, `basis`, `read_back_at` or `recheck_window_s` set
+  to `null`, and a `wire` without `protocols_parsed`. Before, it read those
+  as absent and could say VERIFIED where Python said malformed. Six shared
+  vectors in `packages/types` pin the answer.
 - Every string a reader sees says "receipt", not "Seal". The verdict card
   always shows a signer line ("Signed by this computer", "Demo key: checks
   only in this demo" with `host.signer: 'demo'`, or "Not verified: unknown

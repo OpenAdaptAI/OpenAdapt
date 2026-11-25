@@ -1,0 +1,28 @@
+schema_version: openadapt.verify-sandbox/v1
+app:
+  base_url: http://127.0.0.1:58055
+actors:
+  agent:
+    id: clinician
+    login:
+      method: POST
+      path: /login
+      form:
+        username: clinician
+        password: synthetic
+store:
+  dialect: postgresql
+  read:
+    sql_driver: psycopg2
+    sql_connect_args:
+      host: 127.0.0.1
+      port: 9796
+      dbname: wb_mockmed
+      user: wb_reader
+  admin:
+    sql_driver: psycopg2
+    sql_connect_args:
+      host: 127.0.0.1
+      port: 9796
+      dbname: wb_mockmed
+      user: wb_admin
