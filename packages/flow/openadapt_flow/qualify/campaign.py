@@ -60,9 +60,29 @@ from openadapt_flow.qualify.config import (
     QualifyConfigError,
     VerifyConfig,
 )
+from openadapt_flow.qualify.environment import (
+    web_environment_digest,
+    web_environment_payload,
+)
 from openadapt_flow.qualify.keys import LocalTestKey, new_local_test_key
 from openadapt_flow.subroutines import SubroutineLibrary, uses_subroutines
 from openadapt_flow.verification import VerificationTier
+
+
+def _same_field(record: Mapping[str, Any], key: str, want: Any) -> bool:
+    """Whether ``record[key]`` equals ``want``, by text.
+
+    A null equals only a field that is there and null: ``str(None)`` is
+    ``"None"``, which would match the text ``"None"`` or a missing field.
+    """
+
+    if key not in record:
+        return False
+    have = record[key]
+    if have is None or want is None:
+        return have is None and want is None
+    return str(have) == str(want)
+
 
 #: (case id, expected outcome, oracle kind), in run order.
 CASES: tuple[tuple[str, str, str], ...] = (
@@ -1367,7 +1387,9 @@ def qualify(
     )
     backend, close = opener()
     try:
-        environment = surfaces.environment_payload(backend, config)
+        environment = surfaces.environment_payload(
+            backend, config, web_payload_fn=web_environment_payload
+        )
     finally:
         close()
     setup = configure_project(
@@ -1774,7 +1796,9 @@ def qualify(
         notes=notes,
         reports=reports,
         observer=setup.observer,
-        environment_digest=surfaces.environment_digest(environment, config),
+        environment_digest=surfaces.environment_digest(
+            environment, config, web_digest_fn=web_environment_digest
+        ),
         result=qresult,
         admission_note=admission_note,
         lookup=lookup_record,

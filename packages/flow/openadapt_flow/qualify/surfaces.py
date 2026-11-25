@@ -30,7 +30,9 @@ def fault_driver(workflow: Any, config: Any, *, key_id: str) -> Any:
     return kind(workflow, key_id=key_id)
 
 
-def environment_payload(backend: Any, config: Any) -> dict[str, Any]:
+def environment_payload(
+    backend: Any, config: Any, *, web_payload_fn: Any = None
+) -> dict[str, Any]:
     if config.app.target == "windows":
         if not callable(getattr(backend, "stage_qualification_fault", None)):
             raise ValueError("Windows qualification needs an opt-in native fault agent")
@@ -47,18 +49,22 @@ def environment_payload(backend: Any, config: Any) -> dict[str, Any]:
                 "Windows qualification needs enabled fault, UIA, environment and native keyboard lease capabilities"
             )
         return observer(config).observe(backend, "windows").model_dump(mode="json")
-    return web_environment_payload(
+    payload_fn = web_payload_fn or web_environment_payload
+    return payload_fn(
         backend,
         application_version=config.app.version,
         headless=config.app.headless,
     )
 
 
-def environment_digest(environment: dict[str, Any], config: Any) -> str:
+def environment_digest(
+    environment: dict[str, Any], config: Any, *, web_digest_fn: Any = None
+) -> str:
+    digest_fn = web_digest_fn or web_environment_digest
     return (
         environment["environment_digest"]
         if config.app.target == "windows"
-        else web_environment_digest(environment)
+        else digest_fn(environment)
     )
 
 
