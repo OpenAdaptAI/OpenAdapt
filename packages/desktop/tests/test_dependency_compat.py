@@ -66,18 +66,6 @@ def _bundled_flow_types_specifier() -> tuple[Version, SpecifierSet]:
             "the bundled openadapt-flow runtime is not installed; the "
             "qualification-contract job runs this file with --extra build"
         )
-    bundled = _locked_version(FLOW)
-    if Version(installed.version) != bundled:
-        # The unit job installs the in-tree Flow on purpose. Its range is not
-        # the one Desktop ships with, so only the bundled pin is comparable.
-        message = (
-            f"installed {FLOW} {installed.version} is not the bundled pin "
-            f"{bundled}; the qualification-contract job checks the bundled range"
-        )
-        if os.environ.get("OPENADAPT_DESKTOP_REQUIRE_BUNDLED_FLOW") == "1":
-            pytest.fail(message)
-        pytest.skip(message)
-    requires = installed.requires or []
     for raw in requires:
         requirement = Requirement(raw)
         if _canonical(requirement.name) == TYPES and requirement.marker is None:
@@ -110,6 +98,15 @@ def test_types_range_matches_the_bundled_flow_runtime() -> None:
     desktop = _desktop_types_requirement().specifier
     installed_flow_version, flow = _bundled_flow_types_specifier()
     bundled_pin = _bundled_flow_pin()
+    if (
+        os.environ.get("OPENADAPT_DESKTOP_REQUIRE_BUNDLED_FLOW") == "1"
+        and bundled_pin is not None
+        and installed_flow_version != bundled_pin
+    ):
+        pytest.fail(
+            f"OPENADAPT_DESKTOP_REQUIRE_BUNDLED_FLOW=1 but installed {FLOW} "
+            f"{installed_flow_version} is not the bundled pin {bundled_pin}"
+        )
     if bundled_pin is None or installed_flow_version == bundled_pin:
         assert desktop == flow, (
             f"Desktop declares {TYPES}{desktop} but the bundled {FLOW} declares "
