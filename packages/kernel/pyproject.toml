@@ -17,6 +17,9 @@ dependencies = [
 browser = ["playwright>=1.45.0"]
 dev = ["pytest>=8", "ruff>=0.4", "mypy>=1.10"]
 
+[project.scripts]
+openadapt-kernel = "openadapt_kernel.cli:main"
+
 [tool.hatch.build]
 dev-mode-dirs = ["src"]
 
