@@ -650,7 +650,12 @@ class OpenEMREngine:
             return facts, len(after - before), screenshot
 
         facts, new_charts, screenshot = self._main.submit(work).result()
-        (run_dir / "quickstart-readback.json").write_text(
+        from openadapt_flow import sealed_set
+
+        # Through the run's sealed set: a plaintext file in an encrypted run
+        # makes sealing it refuse (and this one names a patient).
+        sealed_set.write_text(
+            run_dir / "quickstart-readback.json",
             json.dumps(
                 {
                     "existing_chart": "Rosa Delgado, born 1958-03-27",
@@ -659,7 +664,7 @@ class OpenEMREngine:
                 },
                 indent=2,
             )
-            + "\n"
+            + "\n",
         )
         return BreakFacts(
             run_dir=run_dir,

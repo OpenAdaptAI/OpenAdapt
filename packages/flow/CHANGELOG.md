@@ -17,28 +17,37 @@
 
 ## Unreleased
 
-- `openadapt verify draft` fix-forward for #2438. A clean admission case whose
-  recheck crashed (for example `database is locked`) now records the recheck
-  as `ERROR` and fails, instead of passing with no recheck. Trace and column
-  masking uses the shared token matcher in `openadapt_flow.secret_field_names`,
-  so `totp`, `otpCode`, `userPin`, `mfa_code`, a `cookie` key and the `code`,
-  `sig` and `X-Amz-Signature` query parameters are masked, and `author`,
-  `author_id` and `session_count` are not. The shared vocabulary gains
-  `token`, `jwt`, `bearer`, `credential(s)`, `cred`, `csrf`, `xsrf`,
-  `cookie`, `signature`, `session id`, `sessionid`, `private key`,
-  `access key`, `apikey`, `salt`, `hash`, `tfa`, `session key`,
+- `openadapt quickstart` no longer exits 1 on a fresh machine with encryption
+  at rest on, the default since 4.0.0 (#2682). The tutorial wrote its run
+  summary (`run-summary.json`, `.md`, `.png`) in plaintext into the encrypted
+  run folder, outside the folder's sealed index, so sealing the run failed
+  with `report_unreadable` ("holds run-summary.json in plaintext, outside its
+  sealed index"). `write_receipt` now writes the summary through the run's
+  sealed set, and the run inventory names the three summary files as
+  allow-listed plaintext, as it already did for their pre-3.5 names
+  (`receipt.md`, `receipt.png`). Any other plaintext file in a sealed run
+  still makes it refuse. The OpenEMR quickstart driver's halted-run screenshot
+  is also written through the set. - `openadapt verify draft` fix-forward for
+  #2438. A clean admission case whose recheck crashed (for example `database
+  is locked`) now records the recheck as `ERROR` and fails, instead of passing
+  with no recheck. Trace and column masking uses the shared token matcher in
+  `openadapt_flow.secret_field_names`, so `totp`, `otpCode`, `userPin`,
+  `mfa_code`, a `cookie` key and the `code`, `sig` and `X-Amz-Signature` query
+  parameters are masked, and `author`, `author_id` and `session_count` are
+  not. The shared vocabulary gains `token`, `jwt`, `bearer`, `credential(s)`,
+  `cred`, `csrf`, `xsrf`, `cookie`, `signature`, `session id`, `sessionid`,
+  `private key`, `access key`, `apikey`, `salt`, `hash`, `tfa`, `session key`,
   `jsessionid`, `sessid`, `phpsessid`, `oauth verifier` and `authn`, plus
   exact names (`code`, `sig`, `sid`, `refresh`, `session`, `authorization`)
   and suffix names (`session`, `authorization`), so `JSESSIONID`,
-  `sso_session` and `proxy-authorization` stay masked as they were; the
-  Chrome extension copies follow. The earlier substring pattern stays as a
-  floor (so `sessionkey`, `pwdhash` and `authz` stay masked), with an
-  explicit list of false positives (`author`, `session_count`,
-  `authorization_id` ...) sent in clear. The admission
-  record is now signed with this computer's key, and `--check` refuses an
-  unsigned record, an edited record, or one no pinned key signed (`--keys`
-  pins another machine's key). `--check` no longer requires `--trace`,
-  `--task`, `--sandbox` and `--out`.
+  `sso_session` and `proxy-authorization` stay masked as they were; the Chrome
+  extension copies follow. The earlier substring pattern stays as a floor (so
+  `sessionkey`, `pwdhash` and `authz` stay masked), with an explicit list of
+  false positives (`author`, `session_count`, `authorization_id` ...) sent in
+  clear. The admission record is now signed with this computer's key, and
+  `--check` refuses an unsigned record, an edited record, or one no pinned key
+  signed (`--keys` pins another machine's key). `--check` no longer requires
+  `--trace`, `--task`, `--sandbox` and `--out`.
 
 - Checkbox attestations (`openadapt_flow.gui.attestations`) are declared in
   pack data with the digest of their statement and ticked only on an

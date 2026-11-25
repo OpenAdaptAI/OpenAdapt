@@ -299,6 +299,14 @@ RUN_FILES: Final[tuple[FileKind, ...]] = (
     FileKind("receipt.json", "structural", "the allow-listed run receipt"),
     FileKind("receipt.md", "structural", "the allow-listed run receipt as text"),
     FileKind("receipt.png", "structural", "the allow-listed run receipt as an image"),
+    # The run summary is the allow-listed receipt under its Flow 3.5 name
+    # (receipt.json now holds the signed receipt): outcomes, counts and
+    # digests, no record text. receipt.write_receipt writes it through the set.
+    FileKind("run-summary.json", "structural", "the allow-listed run summary"),
+    FileKind("run-summary.md", "structural", "the allow-listed run summary as text"),
+    FileKind(
+        "run-summary.png", "structural", "the allow-listed run summary as an image"
+    ),
     FileKind(
         "seal.html",
         "export",

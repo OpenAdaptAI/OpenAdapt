@@ -2,6 +2,13 @@
 
 <!-- version list -->
 
+## Unreleased
+
+- `openadapt quickstart --app openemr` writes its `quickstart-readback.json`
+  through the encrypted run folder's sealed set instead of in plaintext, so
+  the halted run can still be sealed. The MockMed quickstart fix for
+  encryption at rest is in openadapt-flow (see its changelog).
+
 ## v1.24.0 (2026-11-24)
 
 ### Requirements
