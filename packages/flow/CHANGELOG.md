@@ -15,7 +15,7 @@
 
 <!-- version list -->
 
-## Unreleased
+## v4.0.1 (2026-11-25)
 
 ### Native Windows qualification
 
