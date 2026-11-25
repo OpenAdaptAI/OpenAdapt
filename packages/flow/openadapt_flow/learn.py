@@ -53,10 +53,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-from openadapt_flow.verifier import Outcome
-
-_CONFIRMED_VALUE = Outcome.CONFIRMED.value
-
 EPISODE_SCHEMA = "openadapt.learn-episode/v1"
 PROPOSAL_SCHEMA = "openadapt.learn-proposal/v1"
 
@@ -136,7 +132,13 @@ def episode_record(episode: Any, result: Any) -> dict[str, Any]:
         if isinstance(moves, list):
             out["moves"] = [dict(m) for m in moves if isinstance(m, Mapping)]
         side = frame.get("side_effect_moves")
-        if out["outcome"] == _CONFIRMED_VALUE and isinstance(side, list) and side:
+        from openadapt_flow.verifier import Outcome
+
+        if (
+            out["outcome"] == Outcome.CONFIRMED.value
+            and isinstance(side, list)
+            and side
+        ):
             # Logged side effects (rows outside the entity tables): the
             # write passed, and these are the learner's candidates.
             out["moves"] = [dict(m) for m in side if isinstance(m, Mapping)]
@@ -349,8 +351,10 @@ def _why_ignored(ep: Mapping[str, Any]) -> Optional[str]:
         if ep.get("frame") != "refuted":
             return "nothing moved in the read-only window"
         return _why_rows_ignored(ep)
+    from openadapt_flow.verifier import Outcome
+
     outcome = ep.get("outcome")
-    if outcome == _CONFIRMED_VALUE:
+    if outcome == Outcome.CONFIRMED.value:
         if ep.get("logged") and ep.get("delta") == "held":
             # Passed with logged side effects: they are candidate excuses.
             return _why_rows_ignored(ep)
