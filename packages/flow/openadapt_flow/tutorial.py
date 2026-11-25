@@ -933,36 +933,18 @@ def start_demo_app_for_replay(
     *,
     workflow: Any,
     drift: Optional[str] = None,
-    need_verifier: bool = False,
-) -> tuple[str, Any, Callable[[], None]]:
-    """Start MockMed for ``flow replay --demo-app`` and return ``(url, verifier, stop)``."""
-    from openadapt_flow.mockmed.fault_server import (
-        MOCKMED_RECORDS_READ_CONTRACT,
-    )
-    from openadapt_flow.mockmed.fault_server import (
-        serve as serve_fault_demo,
-    )
+) -> tuple[str, Callable[[], None]]:
+    """Start MockMed for ``flow replay --demo-app`` and return ``(url, stop)``.
+
+    Does not attach an independent effect verifier: the Demo profile must still
+    refuse to report ``VERIFIED`` on declared consequential effects without an
+    explicit deployment or verifier.
+    """
+    from openadapt_flow.mockmed.fault_server import serve as serve_fault_demo
 
     base_url, _db, stop = serve_fault_demo(port=0)
     url = demo_app_entry_url(base_url, workflow=workflow, drift=drift)
-    verifier = None
-    if need_verifier and any(
-        getattr(step, "effects", None)
-        for step in (getattr(workflow, "steps", None) or [])
-    ):
-        from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
-
-        verifier = build_effect_verifier(
-            EffectsConfig.model_validate(
-                {
-                    **MOCKMED_RECORDS_READ_CONTRACT,
-                    "base_url": base_url,
-                    "timeout_s": 2.0,
-                    "poll_interval_s": 0.05,
-                }
-            )
-        )
-    return url, verifier, stop
+    return url, stop
 
 
 def demo_execute_admissions() -> tuple[Any, ...]:

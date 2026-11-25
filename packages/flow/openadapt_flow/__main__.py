@@ -3205,11 +3205,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     if url is None and demo_app:
         from openadapt_flow.tutorial import start_demo_app_for_replay
 
-        url, demo_verifier, stop = start_demo_app_for_replay(
-            workflow=workflow, drift=args.drift, need_verifier=effect_verifier is None
-        )
-        if effect_verifier is None and demo_verifier is not None:
-            effect_verifier = demo_verifier
+        url, stop = start_demo_app_for_replay(workflow=workflow, drift=args.drift)
         drift_note = f" (drift: {args.drift})" if args.drift else ""
         print(f"--demo-app: replaying against bundled demo app{drift_note}")
 
