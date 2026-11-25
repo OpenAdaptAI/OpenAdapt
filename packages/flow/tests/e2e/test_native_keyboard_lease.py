@@ -183,6 +183,31 @@ def _read(backend, automation_id: str) -> str:
     return result["text"]
 
 
+def _read_label(backend, automation_id: str) -> str:
+    """Read a non-value display label (preview_text only; complete stays False)."""
+    result = backend.read_structural(StructuralLocator(automation_id=automation_id))
+    if result is None:
+        pytest.fail("UIA structural read unavailable", pytrace=False)
+    match, count = result["match"], result["candidate_count"]
+    if match != "unique" or count != 1:
+        reason = "not_unique" if result["reason"] == "not_unique" else "unclassified"
+        pytest.fail(
+            f"UIA census refused (match={match}, candidate_count={count}, reason={reason})",
+            pytrace=False,
+        )
+    if result["complete"] is not False or result["text"] is not None:
+        pytest.fail(
+            "UIA display label unexpectedly claimed complete value proof", pytrace=False
+        )
+    preview = result.get("preview_text")
+    if not isinstance(preview, str):
+        pytest.fail(
+            "UIA display label preview_text unavailable after unique match",
+            pytrace=False,
+        )
+    return preview
+
+
 def _values(backend) -> dict[str, str]:
     return {aid: _read(backend, aid) for aid in ("searchBox", "noteBox")}
 
@@ -192,6 +217,15 @@ def _wait_value(backend, automation_id: str, expected: str) -> None:
     while _read(backend, automation_id) != expected:
         assert time.monotonic() < deadline, (
             f"UIA {automation_id} did not reach {expected!r}"
+        )
+        time.sleep(0.05)
+
+
+def _wait_label(backend, automation_id: str, expected: str) -> None:
+    deadline = time.monotonic() + 15
+    while _read_label(backend, automation_id) != expected:
+        assert time.monotonic() < deadline, (
+            f"UIA label {automation_id} did not reach {expected!r}"
         )
         time.sleep(0.05)
 
@@ -206,7 +240,7 @@ def _validate(backend, host, baseline, header, context, expected) -> dict[str, A
     assert target["locator"]["automation_id"] == "noteBox"
     assert target["target_fingerprint"] == handle.target_fingerprint
     assert tuple(target["point"]) == tuple(handle.point)
-    assert _read(backend, "patientHeader") == header
+    assert _read_label(backend, "patientHeader") == header
     assert backend._guard_context() == context
     assert _values(backend) == expected
     assert host.rows() == baseline
@@ -365,7 +399,7 @@ def test_native_keyboard_lease_actual_delivery_and_refusal(tmp_path, monkeypatch
         backend.click(*points["searchBox"])
         backend.type_text(target["first"])
         backend.press("enter")
-        _wait_value(backend, "patientHeader", header)
+        _wait_label(backend, "patientHeader", header)
         backend.click(*points["noteBox"])
         context = backend._guard_context()
         before = {"searchBox": target["first"], "noteBox": ""}
@@ -874,7 +908,7 @@ def test_native_editable_values_and_runtime_type_retry(tmp_path, monkeypatch):
         backend.click(*points["searchBox"])
         backend.type_text(target["first"])
         backend.press("enter")
-        _wait_value(backend, "patientHeader", header)
+        _wait_label(backend, "patientHeader", header)
         evidence["observations"].append(
             _editable_positive(
                 backend, transport, tmp_path, "noteBox", points["noteBox"], ""
@@ -945,7 +979,7 @@ def test_native_editable_values_and_runtime_type_retry(tmp_path, monkeypatch):
             StructuralLocator(automation_id="patientHeader")
         )
         assert header_handle is not None
-        assert _read(backend, "patientHeader") == header
+        assert _read_label(backend, "patientHeader") == header
         text = "lease runtime"
         recorder = Recorder(backend, tmp_path / "runtime-recording")
         before_png = backend.screenshot()
@@ -984,7 +1018,10 @@ def test_native_editable_values_and_runtime_type_retry(tmp_path, monkeypatch):
             _fixture_command(tmp_path, "clear-note")
             assert backend.text_value_at(*points["noteBox"]) == ""
             assert backend.focused_text_value() == ""
-            assert _read(backend, "patientHeader") == header and host.rows() == baseline
+            assert (
+                _read_label(backend, "patientHeader") == header
+                and host.rows() == baseline
+            )
             case: dict[str, Any] = {"case": outcome, "planted": []}
             evidence["runtime"].append(case)
             start = len(transport.events)
@@ -1053,7 +1090,10 @@ def test_native_editable_values_and_runtime_type_retry(tmp_path, monkeypatch):
             assert receipt.operation == "physical_type_text" and receipt.native is False
             assert backend.text_value_at(*points["noteBox"]) == text
             assert backend.focused_text_value() == text
-            assert _read(backend, "patientHeader") == header and host.rows() == baseline
+            assert (
+                _read_label(backend, "patientHeader") == header
+                and host.rows() == baseline
+            )
             assert result.before_png is not None
             retained = run_dir / result.before_png
             assert retained.is_file()
