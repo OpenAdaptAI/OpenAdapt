@@ -90,16 +90,31 @@ def changelog_top(text: str) -> str | None:
     return match.group(1) if match else None
 
 
-def dependency_floors(dependencies: list[str]) -> dict[str, str]:
-    """Each released package a requirement list names, with its >= bound."""
-    floors = {}
-    for requirement in dependencies:
+def dependency_floors(
+    dependencies: list[str],
+    optional_dependencies: dict[str, list[str]] | None = None,
+    *,
+    exclude: str | None = None,
+) -> dict[str, str]:
+    """Each released package a project's dependencies or extras name, with its highest >= bound."""
+    all_requirements = list(dependencies)
+    if optional_dependencies:
+        for extra_requirements in optional_dependencies.values():
+            all_requirements.extend(extra_requirements)
+    floors: dict[str, str] = {}
+    for requirement in all_requirements:
         match = _REQUIREMENT.match(requirement.split(";")[0].strip())
-        if not match or match.group(1) not in PACKAGES.values():
+        if not match:
+            continue
+        name = match.group(1)
+        if name not in PACKAGES.values() or name == exclude:
             continue
         bound = re.search(r">=\s*([^,\s]+)", match.group(2))
         if bound:
-            floors[match.group(1)] = bound.group(1)
+            floor = bound.group(1)
+            existing = floors.get(name)
+            if existing is None or version_key(floor) > version_key(existing):
+                floors[name] = floor
     return floors
 
 
@@ -253,7 +268,11 @@ def main(argv: list[str] | None = None) -> int:
         version = meta["project"]["version"]
         tag = f"{project}-v{version}"
         versions, files = _pypi(project, version)
-        floors = dependency_floors(meta["project"].get("dependencies", []))
+        floors = dependency_floors(
+            meta["project"].get("dependencies", []),
+            meta["project"].get("optional-dependencies"),
+            exclude=project,
+        )
         served = {name: _pypi(name, floor)[0] for name, floor in floors.items()}
         tag_commit = _tag_commit(tag)
         published = bool(tag_commit) and _release_published(repo, tag)

@@ -1,16 +1,10 @@
 name: Protected safety review
 
-# This is deliberately pull_request_target: verifier code and the manifest come
-# from the trusted base. The job reads PR metadata/comments over the API and
-# never checks out or executes pull-request-head code.
+# Manual-only (workflow_dispatch). The automatic PR/comment/merge_group gate
+# is disabled; PRs touching workflows or verifier code are gated by unit and
+# contract tests, gitleaks, dependency-review, ci, and Merge Queue.
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened, ready_for_review, edited]
-  issue_comment:
-    types: [created, edited, deleted]
-  merge_group:
-    types: [checks_requested]
-    branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: protected-safety-review-${{ github.event.pull_request.number || github.event.issue.number || github.event.merge_group.head_sha || github.ref }}
@@ -25,7 +19,7 @@ permissions:
 jobs:
   evaluate:
     name: Evaluate protected-path evidence
-    if: github.event_name == 'pull_request_target' || github.event_name == 'merge_group' || github.event.issue.pull_request != null
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

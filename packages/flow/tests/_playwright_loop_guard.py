@@ -18,6 +18,8 @@ The timed-out test still fails; this only keeps that failure from spreading.
 from __future__ import annotations
 
 import asyncio
+import traceback
+from types import TracebackType
 
 # pytest-timeout's failure text is "Timeout (>Ns) from pytest-timeout."
 _PYTEST_TIMEOUT_MARK = "from pytest-timeout"
@@ -27,6 +29,21 @@ def is_pytest_timeout(exc: BaseException | None) -> bool:
     """True when ``exc`` is the failure pytest-timeout raises in a test."""
 
     return exc is not None and _PYTEST_TIMEOUT_MARK in str(exc)
+
+
+def has_playwright_frame(tb: TracebackType | None) -> bool:
+    """True when the traceback includes a frame inside ``playwright``."""
+
+    if tb is None:
+        return False
+    for frame, _ in traceback.walk_tb(tb):
+        module_name = str(frame.f_globals.get("__name__", ""))
+        if module_name == "playwright" or module_name.startswith("playwright."):
+            return True
+        filename = frame.f_code.co_filename.replace("\\", "/")
+        if "/playwright/" in filename:
+            return True
+    return False
 
 
 def clear_leaked_running_loop() -> bool:

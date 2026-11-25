@@ -767,8 +767,11 @@ def test_workflow_uses_trusted_main_for_merge_group_not_group_content() -> None:
         Path(__file__).parents[1] / ".github/workflows/protected-safety-review.yml"
     )
     text = workflow.read_text(encoding="utf-8")
-    assert "merge_group:" in text
-    assert "github.event_name == 'merge_group'" in text
+    assert "workflow_dispatch:" in text
+    assert "pull_request_target:" not in text
+    assert "issue_comment:" not in text
+    assert "merge_group:" not in text
+    assert "github.event_name == 'workflow_dispatch'" in text
     assert "ref: ${{ github.event.pull_request.base.sha || 'refs/heads/main' }}" in text
     assert 'run: echo "sha=$(git rev-parse HEAD)"' in text
     assert "TRUSTED_BASE_SHA: ${{ steps.trusted_base.outputs.sha }}" in text
