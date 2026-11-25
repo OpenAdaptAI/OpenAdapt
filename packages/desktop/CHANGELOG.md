@@ -1,6 +1,18 @@
 # CHANGELOG
 
 
+## v0.34.0 (2026-11-24)
+
+### Features
+
+- **desktop**: redesign desktop app UI for modern native-grade clarity and polish
+
+### Bug Fixes
+
+- **desktop**: use official OpenAdapt mark in desktop brand header
+
+
+
 ## v0.33.1 (2026-11-24)
 
 ### Bug Fixes

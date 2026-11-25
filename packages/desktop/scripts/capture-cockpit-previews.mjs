@@ -58,6 +58,13 @@ const base = argValue('--base', 'http://127.0.0.1:1420').replace(/\/$/, '');
 const outDir = path.resolve(argValue('--out', path.join(repo, 'captures')));
 const only = argValue('--only', '');
 const set = argValue('--set', 'published');
+const dpr = Math.max(1, Number(argValue('--dpr', '1')) || 1);
+const viewportOverride = argValue('--viewport', '');
+const parsedViewportOverride = (() => {
+  if (!viewportOverride) return null;
+  const match = viewportOverride.match(/^(\d+)x(\d+)$/i);
+  return match ? { width: Number(match[1]), height: Number(match[2]) } : null;
+})();
 const TARGETS = set === 'approval-mode'
   ? (await import('./approval-mode-targets.mjs')).APPROVAL_TARGETS
   : PUBLISHED_TARGETS;
@@ -166,10 +173,10 @@ for (const target of TARGETS) {
   if (only && !target.file.includes(only)) continue;
   console.log(`\n${target.file}  <-  ${target.surface}`);
 
-  const viewport = viewportFor(target);
+  const viewport = parsedViewportOverride || viewportFor(target);
   const context = await browser.newContext({
     viewport,
-    deviceScaleFactor: 1,
+    deviceScaleFactor: dpr,
     reducedMotion: 'reduce',
     colorScheme: 'light',
   });
@@ -252,8 +259,9 @@ for (const target of TARGETS) {
     shows: target.shows,
     bytes: bytes.byteLength,
     sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
-    width: viewport.width,
-    height: viewport.height,
+    width: viewport.width * dpr,
+    height: viewport.height * dpr,
+    device_scale_factor: dpr,
   };
   results.push(entry);
   console.log(`  ${entry.bytes} bytes  ${entry.sha256}`);

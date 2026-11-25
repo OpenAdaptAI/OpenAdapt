@@ -36,12 +36,17 @@ export function ReplayMonitor({
   }
 
   return (
-    <div>
+    <div className="replay-monitor">
       <div className="monitor-head">
-        <span>
-          {workflowName}
-        </span>
-        <span className="tnum">
+        <div className="monitor-head-title">
+          <strong>{workflowName}</strong>
+          <div className="monitor-provenance">
+            <span className="prov-chip">compiled-plan</span>
+            <span className="prov-chip">deterministic</span>
+            <span className="prov-chip prov-chip-accent">Veto-4B-r6</span>
+          </div>
+        </div>
+        <span className="monitor-count tnum">
           {done}/{total} steps
         </span>
       </div>
@@ -54,22 +59,22 @@ export function ReplayMonitor({
 
       <div className="log">
         {steps.length === 0 && (
-          <div className="log-line">
+          <div className="log-line log-line-empty">
             <span className="step">—</span>
-            <span>waiting</span>
+            <span className="action-tag">waiting</span>
             <span className="target">no steps yet</span>
             <span />
             <span className="lat" />
           </div>
         )}
         {steps.map((s) => (
-          <div className="log-line" key={s.index}>
-            <span className="step">{s.index}</span>
-            <span>{s.action}</span>
+          <div className={`log-line log-line-${s.state}`} key={s.index}>
+            <span className="step tnum">{String(s.index + 1).padStart(2, "0")}</span>
+            <span className="action-tag">{s.action}</span>
             <span className="target">{s.target}</span>
             {effectChip(s)}
-            <span className="lat">
-              {s.latency_ms != null ? `${s.latency_ms}ms` : ""}
+            <span className="lat tnum">
+              {s.latency_ms != null ? `${s.latency_ms} ms` : "—"}
             </span>
           </div>
         ))}
