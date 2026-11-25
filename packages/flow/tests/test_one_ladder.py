@@ -71,7 +71,8 @@ def test_path_tables_are_derived_from_check_level() -> None:
 
 def test_each_basis_names_one_level() -> None:
     assert level_for_basis("separate_session") is CheckLevel.SEPARATE_SESSION
-    for basis in BASES[1:]:
+    assert level_for_basis("fresh_reload") is CheckLevel.SEPARATE_SESSION
+    for basis in BASES[2:]:
         assert level_for_basis(basis) is CheckLevel.SYSTEM_OF_RECORD
     with pytest.raises(ValueError):
         level_for_basis("screen")
@@ -85,6 +86,9 @@ def test_each_basis_names_one_level() -> None:
         (CheckLevel.SYSTEM_OF_RECORD, "system_api", True, False, "VERIFIED"),
         (CheckLevel.SYSTEM_OF_RECORD, "activity_log", True, False, "VERIFIED"),
         (CheckLevel.SEPARATE_SESSION, "separate_session", True, False, "VERIFIED"),
+        # A proven fresh reload (cache bypassed, request kept) is level 3.
+        (CheckLevel.SEPARATE_SESSION, "fresh_reload", True, False, "VERIFIED"),
+        (CheckLevel.SEPARATE_SESSION, "fresh_reload", False, False, "RECORDED"),
         # No basis: a level 3 or 4 read is never VERIFIED.
         (CheckLevel.SYSTEM_OF_RECORD, None, True, False, "RECORDED"),
         (CheckLevel.REOPENED, None, True, False, "SHOWN"),
@@ -412,3 +416,22 @@ def test_stopped_run_receipt_is_recorded() -> None:
     assert predicate["outcome"] == "STOPPED"
     assert predicate["evidence_scope"]["word"] == "RECORDED"
     assert "basis" not in predicate["evidence_scope"]
+
+
+def test_a_fresh_reload_is_never_level_2_or_4() -> None:
+    # A reopen without the reload proof has no basis and stays SHOWN; the
+    # reload basis can't be claimed for a reopen or a system-of-record read.
+    assert outcome_word(CheckLevel.REOPENED, None) == "SHOWN"
+    with pytest.raises(ValueError):
+        outcome_word(CheckLevel.REOPENED, "fresh_reload")
+    with pytest.raises(ValueError):
+        outcome_word(CheckLevel.SYSTEM_OF_RECORD, "fresh_reload")
+    # A run that requires a system-of-record read doesn't accept it.
+    assert (
+        outcome_word(
+            CheckLevel.SEPARATE_SESSION,
+            "fresh_reload",
+            minimum=CheckLevel.SYSTEM_OF_RECORD,
+        )
+        == "RECORDED"
+    )
