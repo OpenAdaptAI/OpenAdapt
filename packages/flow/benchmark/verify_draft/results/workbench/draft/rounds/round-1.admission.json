@@ -1,0 +1,429 @@
+{
+ "admitted": true,
+ "check_sha256": "sha256:0ef8a82f2a8c175a476243a1e165e2c1c2f1524d4b71c1cc5806bc63b63ad666",
+ "problems": [],
+ "masked": [],
+ "seconds": 50.89,
+ "cases": [
+  {
+   "group": "clean",
+   "name": "clean-1",
+   "detail": "the write with payload 1",
+   "expect": "confirmed",
+   "outcome": "CONFIRMED",
+   "recheck": "CONFIRMED",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [],
+   "moved": [],
+   "seconds": 4.12
+  },
+  {
+   "group": "clean",
+   "name": "clean-2",
+   "detail": "the write with payload 2",
+   "expect": "confirmed",
+   "outcome": "CONFIRMED",
+   "recheck": "CONFIRMED",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [],
+   "moved": [],
+   "seconds": 4.02
+  },
+  {
+   "group": "clean",
+   "name": "clean-3",
+   "detail": "the write with payload 3",
+   "expect": "confirmed",
+   "outcome": "CONFIRMED",
+   "recheck": "CONFIRMED",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [],
+   "moved": [],
+   "seconds": 4.26
+  },
+  {
+   "group": "clean",
+   "name": "clean-4",
+   "detail": "the write with payload 4",
+   "expect": "confirmed",
+   "outcome": "CONFIRMED",
+   "recheck": "CONFIRMED",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [],
+   "moved": [],
+   "seconds": 3.75
+  },
+  {
+   "group": "clean",
+   "name": "clean-5",
+   "detail": "the write with payload 5",
+   "expect": "confirmed",
+   "outcome": "CONFIRMED",
+   "recheck": "CONFIRMED",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [],
+   "moved": [],
+   "seconds": 3.97
+  },
+  {
+   "group": "fault",
+   "name": "wrong_value:email",
+   "detail": "patients.email holds another value",
+   "expect": "refuted",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [
+    "record_written was refuted: observed absent, 0 of 1 expected record(s)",
+    "1 record(s) outside the declared write moved (changed); 1 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": true,
+     "table": "patients",
+     "change": "changed",
+     "columns": [
+      "email",
+      "phone",
+      "updated_by",
+      "version"
+     ],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 6.23
+  },
+  {
+   "group": "fault",
+   "name": "wrong_value:phone",
+   "detail": "patients.phone holds another value",
+   "expect": "refuted",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [
+    "record_written was refuted: observed absent, 0 of 1 expected record(s)",
+    "1 record(s) outside the declared write moved (changed); 1 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": true,
+     "table": "patients",
+     "change": "changed",
+     "columns": [
+      "email",
+      "phone",
+      "updated_by",
+      "version"
+     ],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 6.21
+  },
+  {
+   "group": "fault",
+   "name": "wrong_row",
+   "detail": "the update landed on another patients row",
+   "expect": "refuted",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [
+    "record_written was refuted: observed absent, 0 of 1 expected record(s)",
+    "1 record(s) outside the declared write moved (changed); 1 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": true,
+     "table": "patients",
+     "change": "changed",
+     "columns": [
+      "email",
+      "phone",
+      "updated_by",
+      "version"
+     ],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 6.33
+  },
+  {
+   "group": "fault",
+   "name": "duplicate",
+   "detail": "a second copy of the patients record",
+   "expect": "refuted",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [
+    "1 record(s) outside the declared write moved (added); 1 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": true,
+     "table": "patients",
+     "change": "added",
+     "columns": [
+      "dob",
+      "email",
+      "first_name",
+      "id",
+      "last_name",
+      "mrn",
+      "phone",
+      "status",
+      "updated_by",
+      "version"
+     ],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 1.43
+  },
+  {
+   "group": "fault",
+   "name": "sibling_edit",
+   "detail": "another patients row's mrn edited beside the write",
+   "expect": "refuted",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [
+    "1 record(s) outside the declared write moved (changed); 1 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": true,
+     "table": "patients",
+     "change": "changed",
+     "columns": [
+      "mrn"
+     ],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 1.38
+  },
+  {
+   "group": "fault",
+   "name": "late_revert",
+   "detail": "the patients write undone after the check",
+   "expect": "refuted",
+   "outcome": "CONFIRMED",
+   "recheck": "REFUTED",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [
+    "1 record(s) moved after the verdict that nothing explains (changed); the earlier CONFIRMED no longer stands"
+   ],
+   "moved": [],
+   "seconds": 3.41
+  },
+  {
+   "group": "fault",
+   "name": "lost_update",
+   "detail": "the other user saves the record, then the agent's save overwrites it",
+   "expect": "refuted",
+   "outcome": "",
+   "recheck": "",
+   "passed": true,
+   "applicable": false,
+   "untestable": false,
+   "note": "the app refused the stale save: it prevents lost updates itself",
+   "reasons": [],
+   "moved": [],
+   "seconds": 0.05
+  },
+  {
+   "group": "probe",
+   "name": "attribution:agent:p1",
+   "detail": "the write by agent with payload 1",
+   "expect": "confirmed",
+   "outcome": "CONFIRMED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [],
+   "moved": [],
+   "seconds": 1.13
+  },
+  {
+   "group": "probe",
+   "name": "attribution:agent:p2",
+   "detail": "the write by agent with payload 2",
+   "expect": "confirmed",
+   "outcome": "CONFIRMED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [],
+   "moved": [],
+   "seconds": 1.22
+  },
+  {
+   "group": "probe",
+   "name": "attribution:other:p1",
+   "detail": "the write by other with payload 1",
+   "expect": "confirmed",
+   "outcome": "CONFIRMED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [],
+   "moved": [],
+   "seconds": 1.11
+  },
+  {
+   "group": "probe",
+   "name": "attribution:other:p2",
+   "detail": "the write by other with payload 2",
+   "expect": "confirmed",
+   "outcome": "CONFIRMED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [],
+   "moved": [],
+   "seconds": 1.13
+  },
+  {
+   "group": "probe",
+   "name": "attribution:agent:p1-again",
+   "detail": "the write by agent with payload 1",
+   "expect": "confirmed",
+   "outcome": "CONFIRMED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [],
+   "moved": [],
+   "seconds": 1.12
+  }
+ ],
+ "attribution": [
+  {
+   "table": "audit_log",
+   "column": "+",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "audit_log",
+   "column": "actor",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "audit_log",
+   "column": "event",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "audit_log",
+   "column": "id",
+   "cause": "fresh",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "audit_log",
+   "column": "record_id",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "audit_log",
+   "column": "table_name",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "patients",
+   "column": "email",
+   "cause": "payload",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "patients",
+   "column": "phone",
+   "cause": "payload",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "patients",
+   "column": "updated_by",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "patients",
+   "column": "version",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  }
+ ]
+}

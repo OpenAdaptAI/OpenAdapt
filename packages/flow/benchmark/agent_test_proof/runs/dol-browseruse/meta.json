@@ -1,0 +1,38 @@
+{
+ "run_id": "20261121T082035Z-a49559",
+ "app": "dolibarr",
+ "app_pack": {
+  "source": "dolibarr.yaml",
+  "digest": "sha256:cf974125c388d53409324e729b6ee26cf3053ba9a058bea195c14414ddcfd3f0"
+ },
+ "scenarios": {
+  "source": "dolibarr.yaml",
+  "digest": "sha256:42fbee78ee627674c7802b7ee88a2a93c8125ec6b7dcdf7320c94a30181c68a9",
+  "version": "1.0.0",
+  "count": 10
+ },
+ "images": [
+  "docker.io/dolibarr/dolibarr:20.0.2",
+  "docker.io/library/mariadb@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4"
+ ],
+ "agent": {
+  "id": "browser-use:packages/flow/openadapt_flow/agent_test/examples/cdp_agent.py",
+  "kind": "browser-use",
+  "model": ""
+ },
+ "instructions_digest": null,
+ "repetitions": 1,
+ "caps": {
+  "run_usd": 5.0,
+  "scenario_usd": 1.5,
+  "steps": 60,
+  "wall_s": 900.0
+ },
+ "openadapt_flow": "2.6.0",
+ "machine": {
+  "system": "Darwin",
+  "machine": "arm64",
+  "python": "3.12.7"
+ },
+ "started": "2026-11-21T08:20:35+00:00"
+}

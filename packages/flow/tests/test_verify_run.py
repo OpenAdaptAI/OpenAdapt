@@ -413,7 +413,14 @@ def _fake_cfg(kind: str, **extra) -> VerifyConfig:
     return VerifyConfig.model_validate(doc)
 
 
-def test_separate_session_read_is_screen_readback_and_never_verified(
+def _fake_baseline(cfg: VerifyConfig, tmp_path: Path) -> Path:
+    """A baseline from the fake verifier, so the frame is judged."""
+    path = tmp_path / "baseline.json"
+    capture_baseline(cfg, PARAMS, path)
+    return path
+
+
+def test_separate_session_read_is_level_3_and_verified_when_the_contract_allows(
     clean_registry, tmp_path
 ):
     register_verifier_factory(
@@ -426,16 +433,83 @@ def test_separate_session_read_is_screen_readback_and_never_verified(
         params=PARAMS,
         run_record=AGENT_RECORD,
         authorization_ref="ticket-0000-test",
-        private_dir=tmp_path,
+        baseline_path=_fake_baseline(cfg, tmp_path),
+        private_dir=tmp_path / "private",
     )
     receipt = result["receipt"]
     assert receipt["effect_verdict"] == "CONFIRMED"
-    # RFC-0002 decision 6: a separate UI session (Flow tier 2) is a screen
-    # read, so it can never be independent_readback.
+    # The wire labels are unchanged: a separate UI session (Flow tier 2) is
+    # still a screen read in the coarse RFC-0002 label, and oracle tier 1.
     assert receipt["verification_tier"] == "screen_readback"
-    assert receipt["outcome"] == "reconciliation_required"
     assert receipt["oracle_tier"] == 1
+    # On the one ladder it is level 3, VERIFIED with basis separate_session,
+    # because this contract's minimum is independent_session.
+    assert receipt["checked_how"] == "separate_session"
+    assert receipt["outcome"] == "verified"
+    scope = receipt["evidence_scope"]
+    assert (scope["check_level"], scope["word"], scope["basis"]) == (
+        "separate_session",
+        "VERIFIED",
+        "separate_session",
+    )
+    assert {"server_side_async_effects", "outbound_effects"} <= set(
+        scope["not_covered"]
+    )
     assert result["evidence"]["readback"]["effects"][0]["flow_verification_tier"] == 2
+    assert verify_run_mod.receipt_problem(receipt) is None
+
+
+def test_separate_session_read_below_a_system_of_record_minimum_is_not_verified(
+    clean_registry, tmp_path
+):
+    register_verifier_factory(
+        "fake-session",
+        lambda cfg, params: _FakeVerifier(VerificationTier.INDEPENDENT_SESSION),
+    )
+    cfg = _fake_cfg("fake-session")
+    result = verify_run(
+        cfg,
+        params=PARAMS,
+        run_record=AGENT_RECORD,
+        authorization_ref="ticket-0000-test",
+        baseline_path=_fake_baseline(cfg, tmp_path),
+        private_dir=tmp_path / "private",
+    )
+    receipt = result["receipt"]
+    assert receipt["outcome"] == "reconciliation_required"
+    scope = receipt["evidence_scope"]
+    assert (scope["check_level"], scope["word"]) == ("separate_session", "RECORDED")
+    assert "basis" not in scope
+
+
+def test_tier_1_receipt_cannot_borrow_the_separate_session_rule(
+    clean_registry, tmp_path
+):
+    register_verifier_factory(
+        "fake-session",
+        lambda cfg, params: _FakeVerifier(VerificationTier.INDEPENDENT_SESSION),
+    )
+    cfg = _fake_cfg("fake-session", minimum_effect_strength="independent_session")
+    receipt = verify_run(
+        cfg,
+        params=PARAMS,
+        run_record=AGENT_RECORD,
+        authorization_ref="ticket-0000-test",
+        baseline_path=_fake_baseline(cfg, tmp_path),
+        private_dir=tmp_path / "private",
+    )["receipt"]
+    # Without the block, a level 3 VERIFIED receipt is refused offline.
+    old_shape = {k: v for k, v in receipt.items() if k != "evidence_scope"}
+    assert (
+        verify_run_mod.receipt_problem(old_shape)
+        == "verified_without_independent_readback"
+    )
+    # A block whose word disagrees with the outcome is refused.
+    wrong = dict(
+        receipt, evidence_scope=dict(receipt["evidence_scope"], word="RECORDED")
+    )
+    wrong["evidence_scope"].pop("basis")
+    assert verify_run_mod.receipt_problem(wrong) == "evidence_scope"
 
 
 def test_untyped_verifier_is_refused(clean_registry, tmp_path):
@@ -465,6 +539,7 @@ def test_receipt_keeps_every_execute_v1_field(cfg, sor, tmp_path):
         "verification_tier",
         "checked",
         "checked_how",
+        "evidence_scope",
     }
     assert receipt["schema_version"] == EFFECT_RECEIPT_SCHEMA
     # A strict Execute consumer refuses it rather than mistaking it for a

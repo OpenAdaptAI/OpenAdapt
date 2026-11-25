@@ -60,6 +60,21 @@ ALLOWED = {
     ),
     ("apt-cache-seed.yml", '-m pip install --disable-pip-version-check -q "$spec"'),
     ("apt-install-selftest.yml", "-m pip install -q playwright==1.61.0"),
+    # The `openadapt test` Action is for other teams' CI: it installs
+    # openadapt-flow[agent-test] as their pip would (from the pinned ref's
+    # source, or from PyPI), and Playwright's browser for it.
+    (
+        "openadapt-test",
+        "python -m pip install --disable-pip-version-check --quiet --upgrade pip",
+    ),
+    (
+        "openadapt-test",
+        'python -m pip install --disable-pip-version-check --quiet "$ROOT/packages/types"',
+    ),
+    (
+        "openadapt-test",
+        'python -m pip install --disable-pip-version-check --quiet "openadapt-flow[agent-test]"',
+    ),
     # npm itself, at an exact version, for trusted publishing.
     ("release-program-graph.yml", "npm install --global npm@11.6.2"),
 }

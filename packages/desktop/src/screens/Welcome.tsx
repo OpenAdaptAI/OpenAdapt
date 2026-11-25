@@ -30,6 +30,11 @@ export function Welcome({
   return (
     <div className="content simple welcome">
       <section className="welcome-hero">
+        <div className="welcome-kicker">
+          <span className="prov-chip">compiled-plan</span>
+          <span className="prov-chip">$0.00 / replay</span>
+          <span className="prov-chip prov-chip-accent">Veto-4B-r6</span>
+        </div>
         <h1>Do a workflow once. OpenAdapt repeats it.</h1>
         <p className="welcome-lead">
           A person or an AI agent does a workflow once, in any app. OpenAdapt

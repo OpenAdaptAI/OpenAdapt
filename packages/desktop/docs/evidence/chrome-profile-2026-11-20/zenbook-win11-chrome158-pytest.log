@@ -1,0 +1,89 @@
+C:\oa\cpwt\packages\desktop\.venv\Lib\site-packages\pytest_asyncio\plugin.py:306: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to "function" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session". Set it to "fixture-scope" to keep the current behavior.
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+============================= test session starts =============================
+platform win32 -- Python 3.12.4, pytest-9.2.0, pluggy-1.6.0 -- C:\oa\cpwt\packages\desktop\.venv\Scripts\python.exe
+rootdir: C:\oa\cpwt\packages\desktop
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.5.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 43 items
+
+tests/test_e2e/test_chrome_profile_real.py::test_an_elevated_windows_desktop_refuses_real_chrome SKIPPED [  2%]
+tests/test_e2e/test_chrome_profile_real.py::test_sign_in_persists_and_desktop_closes_only_its_window PASSED [  4%]
+tests/test_engine/test_chrome_profile.py::test_notice_hash_is_stable_and_names_the_rules PASSED [  6%]
+tests/test_engine/test_chrome_profile.py::test_create_requires_the_current_notice_and_an_explicit_yes[0000000000000000000000000000000000000000000000000000000000000000-True] PASSED [  9%]
+tests/test_engine/test_chrome_profile.py::test_create_requires_the_current_notice_and_an_explicit_yes[None-True] PASSED [ 11%]
+tests/test_engine/test_chrome_profile.py::test_create_requires_the_current_notice_and_an_explicit_yes[current-False] PASSED [ 13%]
+tests/test_engine/test_chrome_profile.py::test_create_requires_the_current_notice_and_an_explicit_yes[current-None] PASSED [ 16%]
+tests/test_engine/test_chrome_profile.py::test_create_records_consent_and_a_private_empty_directory PASSED [ 18%]
+tests/test_engine/test_chrome_profile.py::test_a_changed_notice_refuses_open_until_agreed_again PASSED [ 20%]
+tests/test_engine/test_chrome_profile.py::test_unknown_profile_is_refused PASSED [ 23%]
+tests/test_engine/test_chrome_profile.py::test_open_launches_official_chrome_on_the_owned_directory PASSED [ 25%]
+tests/test_engine/test_chrome_profile.py::test_open_twice_reuses_the_owned_window PASSED [ 27%]
+tests/test_engine/test_chrome_profile.py::test_open_deletes_a_stale_devtools_file_before_launch PASSED [ 30%]
+tests/test_engine/test_chrome_profile.py::test_open_refuses_a_bad_url PASSED [ 32%]
+tests/test_engine/test_chrome_profile.py::test_profile_in_use_is_refused_before_launch_mac SKIPPED [ 34%]
+tests/test_engine/test_chrome_profile.py::test_a_stale_lock_from_a_dead_process_is_not_in_use SKIPPED [ 37%]
+tests/test_engine/test_chrome_profile.py::test_a_lock_from_another_host_counts_as_in_use SKIPPED [ 39%]
+tests/test_engine/test_chrome_profile.py::test_windows_lockfile_held_open_counts_as_in_use PASSED [ 41%]
+tests/test_engine/test_chrome_profile.py::test_windows_without_lockfile_is_free PASSED [ 44%]
+tests/test_engine/test_chrome_profile.py::test_chrome_exiting_after_launch_is_a_handoff_and_refused PASSED [ 46%]
+tests/test_engine/test_chrome_profile.py::test_an_endpoint_that_isnt_ours_is_refused_and_closed[version0] PASSED [ 48%]
+tests/test_engine/test_chrome_profile.py::test_an_endpoint_that_isnt_ours_is_refused_and_closed[version1] PASSED [ 51%]
+tests/test_engine/test_chrome_profile.py::test_an_endpoint_that_isnt_ours_is_refused_and_closed[version2] PASSED [ 53%]
+tests/test_engine/test_chrome_profile.py::test_an_endpoint_that_isnt_ours_is_refused_and_closed[version3] PASSED [ 55%]
+tests/test_engine/test_chrome_profile.py::test_an_endpoint_that_isnt_ours_is_refused_and_closed[version4] PASSED [ 58%]
+tests/test_engine/test_chrome_profile.py::test_unreachable_endpoint_is_refused PASSED [ 60%]
+tests/test_engine/test_chrome_profile.py::test_default_chrome_directories_are_refused PASSED [ 62%]
+tests/test_engine/test_chrome_profile.py::test_find_chrome_accepts_only_official_chrome PASSED [ 65%]
+tests/test_engine/test_chrome_profile.py::test_chrome_candidates_per_platform FAILED [ 67%]
+tests/test_engine/test_chrome_profile.py::test_default_dirs_per_platform PASSED [ 69%]
+tests/test_engine/test_chrome_profile.py::test_close_sends_browser_close_to_the_owned_endpoint_only PASSED [ 72%]
+tests/test_engine/test_chrome_profile.py::test_close_falls_back_to_the_handle_when_browser_close_fails PASSED [ 74%]
+tests/test_engine/test_chrome_profile.py::test_close_does_not_send_browser_close_when_the_endpoint_changed PASSED [ 76%]
+tests/test_engine/test_chrome_profile.py::test_close_of_a_profile_desktop_did_not_open_does_nothing PASSED [ 79%]
+tests/test_engine/test_chrome_profile.py::test_close_all_closes_every_owned_window PASSED [ 81%]
+tests/test_engine/test_chrome_profile.py::test_revoke_refuses_while_open_and_deletes_on_request PASSED [ 83%]
+tests/test_engine/test_chrome_profile.py::test_revoke_without_delete_keeps_the_folder PASSED [ 86%]
+tests/test_engine/test_chrome_profile.py::test_module_never_reads_cookies_passwords_or_the_keychain PASSED [ 88%]
+tests/test_engine/test_chrome_profile.py::test_devtools_file_parsing PASSED [ 90%]
+tests/test_engine/test_chrome_profile.py::test_browser_close_frame_is_a_masked_cdp_message_without_origin PASSED [ 93%]
+tests/test_engine/test_chrome_profile.py::test_commands_are_window_only PASSED [ 95%]
+tests/test_engine/test_chrome_profile.py::test_an_elevated_windows_desktop_refuses_before_launch PASSED [ 97%]
+tests/test_engine/test_chrome_profile.py::test_unknown_elevation_counts_as_elevated PASSED [100%]
+
+================================== FAILURES ===================================
+_____________________ test_chrome_candidates_per_platform _____________________
+
+    def test_chrome_candidates_per_platform() -> None:
+        win = cp.chrome_candidates(
+            "win32", {"PROGRAMFILES": r"C:\Program Files", "LOCALAPPDATA": r"C:\Users\u\AppData\Local"}
+        )
+        assert [str(p).replace("\\", "/") for p in win] == [
+            "C:/Program Files/Google/Chrome/Application/chrome.exe",
+            "C:/Users/u/AppData/Local/Google/Chrome/Application/chrome.exe",
+        ]
+        mac = cp.chrome_candidates("darwin", {})
+>       assert str(mac[0]) == "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+E       AssertionError: assert '\\Applicatio...Google Chrome' == '/Application...Google Chrome'
+E         
+E         - /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+E         ? ^            ^                 ^        ^     ^
+E         + \Applications\Google Chrome.app\Contents\MacOS\Google Chrome
+E         ? ^            ^                 ^        ^     ^
+
+tests\test_engine\test_chrome_profile.py:338: AssertionError
+============================== warnings summary ===============================
+.venv\Lib\site-packages\anyio\pytest_plugin.py:14
+  C:\oa\cpwt\packages\desktop\.venv\Lib\site-packages\anyio\pytest_plugin.py:14: PytestRemovedIn10Warning: _pytest.python.CallSpec2 has been renamed to CallSpec.
+  The CallSpec2 alias will be removed in pytest 10.
+  Update imports to use CallSpec instead.
+  See https://docs.pytest.org/en/stable/deprecations.html#callspec2-renamed
+    from _pytest.python import CallSpec2
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_engine/test_chrome_profile.py::test_chrome_candidates_per_platform
+============= 1 failed, 38 passed, 4 skipped, 1 warning in 12.51s =============

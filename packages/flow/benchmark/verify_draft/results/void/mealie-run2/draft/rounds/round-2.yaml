@@ -1,0 +1,81 @@
+schema_version: openadapt.verify/v1
+verifier:
+  kind: surfaces
+  surfaces:
+    record:
+      kind: sql
+      sql_query: SELECT CAST(r."id" AS TEXT) AS "id", CAST(r."slug" AS TEXT) AS "slug", CAST(r."name" AS TEXT) AS "name", CAST(r."description" AS TEXT) AS "description", CAST(r."description_normalized" AS TEXT) AS "description_normalized", CAST(CASE WHEN r."description_normalized" = LOWER(r."description") THEN 'yes' ELSE 'no' END AS TEXT) AS "normalized_ok", CAST(r."recipe_yield" AS TEXT) AS "recipe_yield" FROM "recipes" r
+    nutrition:
+      kind: sql
+      sql_query: SELECT CAST(n."id" AS TEXT) AS "id", CAST(r."slug" AS TEXT) AS "slug", CAST(n."recipe_id" AS TEXT) AS "recipe_id" FROM "recipe_nutrition" n JOIN "recipes" r ON r."id" = n."recipe_id"
+    settings:
+      kind: sql
+      sql_query: SELECT CAST(s."id" AS TEXT) AS "id", CAST(r."slug" AS TEXT) AS "slug", CAST(s."recipe_id" AS TEXT) AS "recipe_id" FROM "recipe_settings" s JOIN "recipes" r ON r."id" = s."recipe_id"
+    ingredients:
+      kind: sql
+      sql_query: SELECT CAST(i."id" AS TEXT) AS "id", CAST(r."slug" AS TEXT) AS "slug", CAST(i."recipe_id" AS TEXT) AS "recipe_id" FROM "recipes_ingredients" i JOIN "recipes" r ON r."id" = i."recipe_id"
+    instructions:
+      kind: sql
+      sql_query: SELECT CAST(x."id" AS TEXT) AS "id", CAST(r."slug" AS TEXT) AS "slug", CAST(x."recipe_id" AS TEXT) AS "recipe_id" FROM "recipe_instructions" x JOIN "recipes" r ON r."id" = x."recipe_id"
+effects:
+- kind: record_written
+  probe: surface=record|recipe named by slug carries the new description, its normalized form and the new yield
+  match:
+    slug: {param: slug}
+    description: {param: description}
+    normalized_ok: {literal: "yes"}
+    recipe_yield: {param: recipe_yield}
+  expected_count: 1
+- kind: record_written
+  probe: surface=nutrition|the save re-creates the recipe's nutrition row once
+  match:
+    slug: {param: slug}
+  expected_count: 1
+  count_new_only: true
+- kind: record_written
+  probe: surface=settings|the save re-creates the recipe's settings row once
+  match:
+    slug: {param: slug}
+  expected_count: 1
+  count_new_only: true
+- kind: record_written
+  probe: surface=ingredients|the save re-creates the recipe's ingredient rows
+  match:
+    slug: {param: slug}
+  expected_count: 1
+  count_new_only: true
+- kind: record_written
+  probe: surface=instructions|the save re-creates the recipe's instruction rows
+  match:
+    slug: {param: slug}
+  expected_count: 1
+  count_new_only: true
+frame:
+  identity_field: id
+  target_fields_by_surface:
+    record: [description, description_normalized, normalized_ok, recipe_yield]
+  database:
+    dialect: postgresql
+    ignore_columns:
+      recipes: [date_updated, update_at]
+    judged_by:
+      recipes: record
+      recipe_nutrition: nutrition
+      recipe_settings: settings
+      recipes_ingredients: ingredients
+      recipe_instructions: instructions
+    new_row_fields:
+      recipe_nutrition: [id, recipe_id, calories, carbohydrate_content, cholesterol_content, fat_content, fiber_content, protein_content, saturated_fat_content, sodium_content, sugar_content, trans_fat_content, unsaturated_fat_content, created_at, update_at]
+      recipe_settings: [id, recipe_id, disable_amount, disable_comments, landscape_view, locked, public, show_assets, show_nutrition, created_at, update_at]
+      recipes_ingredients: [id, recipe_id, food_id, unit_id, note, note_normalized, original_text, original_text_normalized, position, quantity, reference_id, title, created_at, update_at]
+      recipe_instructions: [id, recipe_id, position, summary, text, title, type, created_at, update_at]
+    settle_s: 1
+    settle_attempts: 3
+    recheck_after_s: 300
+  versions:
+    read: {kind: sql, sql_query: "SELECT CAST(r.\"id\" AS TEXT) AS \"id\", LPAD(CAST(n.\"id\" AS TEXT), 12, '0') AS \"ver\" FROM \"recipe_nutrition\" n JOIN \"recipes\" r ON r.\"id\" = n.\"recipe_id\""}
+    record_field: id
+    target_field: id
+    target_surface: record
+    version_field: ver
+    self: [{param: actor_id}]

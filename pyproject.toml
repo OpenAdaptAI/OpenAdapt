@@ -1,6 +1,6 @@
 [project]
 name = "openadapt"
-version = "1.23.0"
+version = "1.24.0"
 description = "Give your agent a program, not a mouse: the open-source, verified execution layer for computer-use agents. Compile one run into a program that makes no model calls, reads each save back from the system of record, and stops instead of guessing."
 # The package description is README.md with its lifecycle block swapped for a
 # link to the live record; see hatch_build.py.
@@ -72,18 +72,18 @@ dependencies = [
     # The quickstart's terminal view (MIT). Pure Python; the engine doesn't
     # depend on it. Gated like the engine: without it the quickstart can't run.
     "rich>=13.0.0; python_version < '3.13'",
-    # Every Flow floor is 3.3.0: the OpenEMR quickstart's referral program
-    # checks its date picker against the run's clock, which 3.3 reads; 3.2
-    # added public Seals and the at-rest key derived once per store
-    # (tests/test_flow_floor.py). Flow 3
-    # moved its vision stack to the `vision` extra; its `browser` and other
-    # surface extras include it, and the `flow` extra below names it.
-    "openadapt-flow[browser,hosted]>=3.3.0,<5.0.0; python_version < '3.13'",
+    # Every Flow floor is 4.0.0: Launcher 1.24 ships encryption at rest by
+    # default (#2423), receipts, agent-to-agent handoffs, `openadapt wrap`,
+    # `openadapt flight`, and the headless quickstart (tests/test_flow_floor.py).
+    # Flow 3 moved its vision stack to the `vision` extra; its `browser` and
+    # other surface extras include it, and the `flow` extra below names it.
+    "openadapt-flow[browser,hosted]>=4.0.0,<5.0.0; python_version < '3.13'",
+    # Shared portable receipt/contract models (openadapt_types.receipt).
+    "openadapt-types>=0.24.2,<0.25.0; python_version < '3.13'",
     # Day-1 partner kit: `pip install openadapt` must expose the
-    # `openadapt-agent` command without a second package. 2.1.0 adds Seal checks;
-    # `--bundles`; the bundle-free tutorial `serve --allow-run` needs a later
-    # agent release (see `_AGENT_TUTORIAL_SERVE_MINIMUM` in openadapt/cli.py).
-    "openadapt-agent>=2.1.0,<3; python_version < '3.13'",
+    # `openadapt-agent` command without a second package. 2.2.4 widens its
+    # openadapt-flow cap to <5 so it resolves cleanly alongside Flow 4.0.0.
+    "openadapt-agent>=2.2.4,<3; python_version < '3.13'",
 ]
 
 [project.optional-dependencies]
@@ -99,7 +99,7 @@ browser = [
     # launcher now selects this Flow contract because the bundled quickstart
     # uses the browser. OpenAdapt requests Chromium on first browser use after
     # the host dependency check passes.
-    "openadapt-flow[browser]>=3.3.0,<5.0.0; python_version < '3.13'",
+    "openadapt-flow[browser]>=4.0.0,<5.0.0; python_version < '3.13'",
 ]
 # Local human desktop recording. Flow owns the supported capture adapter
 # contract; the direct floor prevents an already-installed pre-1.0 Capture
@@ -107,22 +107,22 @@ browser = [
 # separately provisioned executable, not a Python-package dependency.
 capture = [
     "openadapt-capture>=1.2.0,<2.0.0",
-    "openadapt-flow[capture]>=3.3.0,<5.0.0; python_version < '3.13'",
+    "openadapt-flow[capture]>=4.0.0,<5.0.0; python_version < '3.13'",
 ]
 # Replay substrate dependencies stay separate from capture: recording observes
 # the human on the local interactive desktop, while replay may target a WAA
 # agent, a native app, or a remote framebuffer.
 windows = [
-    "openadapt-flow[windows]>=3.3.0,<5.0.0; python_version < '3.13'",
+    "openadapt-flow[windows]>=4.0.0,<5.0.0; python_version < '3.13'",
 ]
 macos = [
-    "openadapt-flow[macos]>=3.3.0,<5.0.0; sys_platform == 'darwin' and python_version < '3.13'",
+    "openadapt-flow[macos]>=4.0.0,<5.0.0; sys_platform == 'darwin' and python_version < '3.13'",
 ]
 linux = [
-    "openadapt-flow[linux]>=3.3.0,<5.0.0; sys_platform == 'linux' and python_version < '3.13'",
+    "openadapt-flow[linux]>=4.0.0,<5.0.0; sys_platform == 'linux' and python_version < '3.13'",
 ]
 rdp = [
-    "openadapt-flow[rdp]>=3.3.0,<5.0.0; python_version < '3.13'",
+    "openadapt-flow[rdp]>=4.0.0,<5.0.0; python_version < '3.13'",
 ]
 ml = [
     "openadapt-ml>=0.2.0",
@@ -140,18 +140,18 @@ retrieval = [
     "openadapt-retrieval>=0.1.0",
 ]
 privacy = [
-    "openadapt-flow[privacy]>=3.3.0,<5.0.0; python_version < '3.13'",
+    "openadapt-flow[privacy]>=4.0.0,<5.0.0; python_version < '3.13'",
 ]
 # `flow` now ships in the base install (see `dependencies` above). This
 # extra is kept for backward compatibility so `pip install openadapt[flow]`
 # and the `all` bundle still resolve.
 flow = [
-    "openadapt-flow[vision]>=3.3.0,<5.0.0; python_version < '3.13'",
+    "openadapt-flow[vision]>=4.0.0,<5.0.0; python_version < '3.13'",
 ]
 # `openadapt-agent` also ships in the base install. Keep the extra so
 # `pip install openadapt[agent]` still resolves.
 agent = [
-    "openadapt-agent>=2.1.0,<3; python_version < '3.13'",
+    "openadapt-agent>=2.2.4,<3; python_version < '3.13'",
 ]
 # Agent-to-agent handoffs over the A2A (Agent2Agent) protocol:
 # `openadapt agent serve --a2a`. Handoffs over MCP, HTTP and files need no extra.
@@ -175,6 +175,8 @@ all = [
 ]
 dev = [
     "build>=1.2.0",
+    "cbor2>=5.6,<6; python_version < '3.13'",
+    "cwt>=3.3,<4; python_version < '3.13'",
     "pytest>=8.0.0",
     "ruff>=0.1.0",
 ]
