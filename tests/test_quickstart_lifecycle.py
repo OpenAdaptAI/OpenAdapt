@@ -449,3 +449,57 @@ def test_write_run_receipts_respects_openadapt_receipt_off(tmp_path, monkeypatch
     assert written == 0
     assert not (run / "receipt.json").exists()
     assert not (run / "receipt.private.json").exists()
+
+
+def test_write_run_receipts_writes_receipt_for_sealed_run(tmp_path, monkeypatch):
+    """Encrypted quickstart runs store report.json as report.json.enc; receipts still write."""
+    pytest.importorskip("openadapt_flow.sealed_set")
+    pytest.importorskip("openadapt_types.receipt")
+    from openadapt_flow import at_rest, crypto, sealed_set
+
+    from openadapt.quickstart.engine import write_run_receipts
+
+    for name in (
+        at_rest.OPT_OUT_ENV,
+        at_rest.MODE_ENV,
+        at_rest.ENCRYPT_ENV,
+        crypto.ENV_KEY,
+        sealed_set.RECORDING_ENV_KEY,
+        "OPENADAPT_POLICY",
+        "OPENADAPT_RECEIPT",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(at_rest.HOME_ENV, str(tmp_path / "at-rest-home"))
+    monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal-home"))
+    monkeypatch.setenv("OPENADAPT_FLOW_KEY_STORE", "file")
+    at_rest._reset_for_tests()
+    try:
+        run_dir = tmp_path / "run-1"
+        payload = json.dumps(
+            {
+                "workflow_name": "local-quickstart",
+                "started_at": "2026-11-25T00:00:00Z",
+                "execution_outcome": "VERIFIED",
+                "transaction_outcome": "VERIFIED",
+                "results": [],
+            }
+        ).encode("utf-8")
+        with sealed_set.writing(run_dir, "run", crypto.resolve_key(None)):
+            sealed_set.write_bytes(run_dir / "report.json", payload)
+        assert not (run_dir / "report.json").exists()
+        assert (run_dir / "report.json.enc").is_file()
+
+        written = write_run_receipts([run_dir])
+        assert written == 1
+        assert (run_dir / "receipt.json").is_file()
+        assert sealed_set.is_file(run_dir / "receipt.private.json")
+
+        opened = sealed_set.open_set(run_dir)
+        opened.verify_all()
+        indexed = {
+            sealed_set._physical(rel, entry["codec"])
+            for rel, entry in opened._files.items()
+        }
+        assert set(sealed_set._disk_files(run_dir)) <= indexed
+    finally:
+        at_rest._reset_for_tests()

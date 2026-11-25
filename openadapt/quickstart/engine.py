@@ -905,7 +905,7 @@ def write_run_receipts(run_dirs: list[Path]) -> int:
         return 0
     written = 0
     for run_dir in run_dirs:
-        if not (Path(run_dir) / "report.json").is_file():
+        if not _artifact_is_file(Path(run_dir) / "report.json"):
             continue
         try:
             note = receipt_after_run(Path(run_dir))

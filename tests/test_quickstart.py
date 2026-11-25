@@ -1432,3 +1432,66 @@ def test_next_steps_bridge_uses_record_and_checked_write(root):
         "https://your-app.example --out my-task"
     )
     assert 'checked_write("verify.yaml", values)' in uvx_steps.verify_snippet
+
+
+def test_quickstart_yes_flag_disables_interactive_and_publish_offer(
+    tmp_path, monkeypatch
+):
+    """``openadapt quickstart --yes`` runs straight through without prompts."""
+    from click.testing import CliRunner
+
+    captured: dict[str, object] = {}
+
+    def fake_run_quickstart(root, **kwargs):
+        captured["interactive"] = kwargs.get("interactive")
+        captured["steps"] = kwargs["steps"](Outcome(root=root))
+        return Outcome(root=root)
+
+    monkeypatch.setattr(cli, "_flow_runs_quickstart", lambda: True)
+    monkeypatch.setattr(cli, "_quickstart_publish_offer", lambda: lambda *a, **k: False)
+    monkeypatch.setattr("openadapt.quickstart.run_quickstart", fake_run_quickstart)
+
+    result = CliRunner().invoke(
+        cli.main, ["quickstart", "--yes", "--out", str(tmp_path / "qs")]
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["interactive"] is False
+    assert captured["steps"].offer_publish is None
+
+
+def test_quickstart_defaults_non_interactive_under_ci_even_with_tty(
+    tmp_path, monkeypatch
+):
+    """A PTY in CI must not block on ``Press Enter``."""
+    import openadapt.quickstart as quickstart_mod
+    from openadapt.quickstart.scene import MOCKMED
+
+    seen: dict[str, object] = {}
+
+    class FakeEngine:
+        root = tmp_path / "qs"
+        visible = False
+        scene = MOCKMED
+
+        def __init__(self, root, *, visible, pace_s=0.0):
+            self.root = root
+            self.visible = visible
+
+    def fake_run_story(engine, view, **kwargs):
+        seen["interactive"] = kwargs["interactive"]
+        return Outcome(root=engine.root)
+
+    monkeypatch.setenv("CI", "true")
+    monkeypatch.setattr(sys, "stdin", _Terminal())
+    monkeypatch.setattr("openadapt.quickstart.engine.FlowEngine", FakeEngine)
+    monkeypatch.setattr(quickstart_mod, "run_story", fake_run_story)
+
+    quickstart_mod.run_quickstart(
+        tmp_path / "qs",
+        visible=False,
+        break_it=True,
+        verbose=False,
+        steps=lambda o: NextSteps(verify=None, record="r", agent="a"),
+        stream=_Terminal(),
+    )
+    assert seen["interactive"] is False

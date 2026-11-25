@@ -119,4 +119,5 @@ def test_quickstart_on_a_fresh_machine_seals_every_run(
         assert b'"execution_outcome":"VERIFIED"' in report.replace(b" ", b"")
         # The run sealed: this is the step that failed on Flow 4.0.0.
         assert (run_dir / "seal.json").is_file()
+        assert (run_dir / "receipt.json").is_file()
         assert sealed_set.open_set(run_dir).is_file("run-summary.json")
