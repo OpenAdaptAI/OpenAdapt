@@ -148,6 +148,7 @@ _OBSERVE_SCHEMA_JS = """() => {
         : String(el.value !== undefined ? el.value : (el.getAttribute('data-value') || el.innerText || '').trim()),
       options,
       in_shadow: inShadow,
+      disabled: Boolean(el.disabled || el.getAttribute('aria-disabled') === 'true'),
     });
     idx += 1;
   }
@@ -172,6 +173,7 @@ class ControlSchema:
     in_shadow: bool = False
     frame_index: int = -1
     control_index: int = -1
+    disabled: bool = False
 
 
 @dataclass
