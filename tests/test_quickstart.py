@@ -1212,7 +1212,7 @@ def test_real_quickstart(tmp_path, monkeypatch, capfd):
     # Only ciphertext screenshots, frames and typed values on disk. The
     # receipt files are plaintext by design; the receipt pages embed the
     # report (logged); the summary page leaves the screenshots out.
-    plain_ok = {"seal.html", "receipt.png"}
+    plain_ok = {"seal.html", "receipt.png", "run-summary.png"}
     for path in root.rglob("*"):
         if not path.is_file():
             continue
@@ -1225,6 +1225,14 @@ def test_real_quickstart(tmp_path, monkeypatch, capfd):
                 assert note not in data, path
     for folder in ("recording", "bundle", "run-1", "run-broken"):
         assert sealed_set.is_sealed(root / folder), folder
+        # Every file on disk is in the folder's index: a plaintext file
+        # outside it makes the next read of the folder refuse.
+        opened = sealed_set.open_set(root / folder)
+        indexed = {
+            sealed_set._physical(rel, entry["codec"])
+            for rel, entry in opened._files.items()
+        }
+        assert set(sealed_set._disk_files(root / folder)) <= indexed, folder
     assert "Created a local encryption key" in output
     # Neither the key notice nor a plaintext notice reached the terminal.
     err = capfd.readouterr().err

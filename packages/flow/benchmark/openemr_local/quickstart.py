@@ -666,8 +666,12 @@ class Session:
         }
 
     def screenshot(self, path: Path) -> Optional[Path]:
+        from openadapt_flow import sealed_set
+
         try:
-            self.backend.page.screenshot(path=str(path))
+            png = self.backend.page.screenshot()
+            # Through the run's sealed set, so an encrypted run stays sealable.
+            sealed_set.write_bytes(path, png)
         except Exception:  # noqa: BLE001 - the report still has the frame
             return None
         return path
