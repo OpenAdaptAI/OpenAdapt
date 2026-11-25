@@ -237,9 +237,11 @@ def _probe_baseline(
             f"local_state verifier unavailable in installed openadapt-flow: {exc}",
         )
 
+    from pydantic import ValidationError
+
     try:
         cfg = VerifyConfig.model_validate(verify_doc)
-    except Exception as exc:
+    except ValidationError as exc:
         return (
             None,
             f"local_state probe unsupported by installed openadapt-flow: {exc}",
