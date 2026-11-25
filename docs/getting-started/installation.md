@@ -19,7 +19,7 @@ To keep `openadapt` on your PATH, install it with uv:
 uv tool install --python 3.12 openadapt
 ```
 
-Or, on Python 3.10, 3.11, or 3.12, install it with pip in a virtual
+Or, on Python 3.11 or 3.12, install it with pip in a virtual
 environment:
 
 ```bash

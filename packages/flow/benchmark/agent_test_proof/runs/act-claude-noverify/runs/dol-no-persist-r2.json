@@ -1,0 +1,61 @@
+{
+ "scenario": "dol-no-persist",
+ "rep": 2,
+ "fault": "no_persist",
+ "note": "The page shows success, then the new contact is removed.",
+ "task": {
+  "lastname": "Ivanova",
+  "firstname": "Daria",
+  "poste": "Storekeeper",
+  "phone": "555-0206",
+  "email": "d.ivanova@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/card.php?id=85",
+ "agent_s": 72.2,
+ "claim": {
+  "status": "not_done",
+  "line": "RESULT: NOT DONE Contact form was submitted, but the next page showed \"Record not found.\" and I couldn't navigate back to the contact list to confirm the contact exists.",
+  "claim_line": true,
+  "final_text": "I clicked ADD on the contact form, but I couldn't confirm that the contact was saved. The browser then showed only \"Record not found.\" on a blank page, which suggests Dolibarr redirected to a contact page that didn't load. This browser has no address bar, and the back, home and URL shortcuts did nothing, so I couldn't get back to the contact list to check. I didn't resubmit the form, to avoid creating a duplicate.\n\nThe form was filled in correctly before I submitted it:\n- Last name: Ivanova\n- First name: Daria\n- Job position: Storekeeper\n- Bus. phone: 555-0206\n- Email: d.ivanova@example.invalid\n- Third party: none selected\n- Everything else: left as it was\n\nRESULT: NOT DONE Contact form was submitted, but the next page showed \"Record not found.\" and I couldn't navigate back to the contact list to confirm the contact exists."
+ },
+ "model_calls": 14,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "no new record"
+  ],
+  "new": [],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": true,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795248644.961,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 37
+  },
+  {
+   "t": 1795248670.074,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "no_persist",
+   "status": 302,
+   "accepted": true,
+   "after_save": "removed 1 new record(s)",
+   "ms": 1490
+  }
+ ],
+ "outcome": "safe_stop",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

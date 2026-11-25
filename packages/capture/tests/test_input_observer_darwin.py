@@ -218,9 +218,7 @@ def test_lifecycle_creates_listen_only_tap_and_releases_run_loop() -> None:
 
     assert quartz.callback is not None
     assert quartz.tap_enabled == [True, False]
-    assert quartz.added_sources == [
-        (quartz.loop, quartz.source, quartz.kCFRunLoopDefaultMode)
-    ]
+    assert quartz.added_sources == [(quartz.loop, quartz.source, quartz.kCFRunLoopDefaultMode)]
     assert quartz.removed_sources == quartz.added_sources
     assert quartz.invalidated_sources == [quartz.source]
     assert quartz.invalidated_ports == [quartz.tap]
@@ -866,3 +864,28 @@ def test_callback_failure_becomes_health_failure() -> None:
     assert observer._stop_requested.is_set()
     with pytest.raises(InputObserverError, match="callback boom"):
         observer.stop()
+
+
+@pytest.mark.parametrize(
+    "version, pane",
+    [
+        ("27.2", "Accessibility"),
+        ("27.3", "System & App Protection Override"),
+        ("27.10", "System & App Protection Override"),
+        ("28.0", "System & App Protection Override"),
+    ],
+)
+def test_active_barrier_permission_guidance_tracks_macos_without_bypassing_denial(
+    monkeypatch, version, pane
+):
+    monkeypatch.setattr(
+        "openadapt_capture.macos_permissions.platform.mac_ver", lambda: (version, (), "")
+    )
+    quartz = FakeQuartz()
+    observer = make_observer(
+        quartz, lambda _event: None, application_services=FakeApplicationServices(trusted=False)
+    )
+    with pytest.raises(InputObserverPermissionError) as error:
+        observer.start()
+    assert pane in str(error.value)
+    assert quartz.callback is None

@@ -44,7 +44,9 @@ from urllib.parse import urlsplit
 
 from loguru import logger
 
+from openadapt_desktop.chrome_profile import dispatch_handlers as chrome_profile_handlers
 from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.macos_permissions import control_permission_guidance
 from openadapt_desktop.private_fs import ensure_private_dir
 
 EmitFn = Callable[[str, dict], None]
@@ -422,8 +424,7 @@ class EngineDispatcher:
             "portal_devices": self.portal_devices,
             "portal_revoke_device": self.portal_revoke_device,
             "portal_notification": self.portal_notification,
-            # Shadow mode (local only, off by default). Turned on only from
-            # the Desktop window after the person acknowledges the notice.
+            # Shadow mode (local only, off by default; enabled from Desktop window).
             "shadow_status": self.shadow_status,
             "shadow_notice": self.shadow_notice,
             "shadow_enable": self.shadow_enable,
@@ -434,20 +435,17 @@ class EngineDispatcher:
             "shadow_set_work_domains": self.shadow_set_work_domains,
             "shadow_decide": self.shadow_decide,
             "shadow_scan": self.shadow_scan,
-            # Unencrypted patient data on this computer (Flow's ledger).
-            "at_rest_status": self.at_rest_status,
+            "at_rest_status": self.at_rest_status,  # Unencrypted patient data (Flow ledger)
+            **chrome_profile_handlers(self.config.data_dir),  # window wire only
         }
 
     # ------------------------------------------------------- shadow mode
-
     @property
     def shadow(self) -> Any:
         if self._shadow is None:
             from openadapt_desktop.shadow_mode import ShadowModeService
 
-            self._shadow = ShadowModeService(
-                self.config.data_dir, emit=lambda event, data: self.emit(event, data)
-            )
+            self._shadow = ShadowModeService(self.config.data_dir, emit=lambda *a: self.emit(*a))
         if not self._shadow_resumed:
             self._shadow_resumed = True
             self._shadow.resume()
@@ -6229,7 +6227,7 @@ class EngineDispatcher:
     def check_permissions(self, **params: Any) -> dict:
         """Return the prompt-free :class:`PermissionStatus`.
 
-        macOS capture needs Screen Recording, Accessibility, and Input
+        macOS capture needs Screen Recording, app-control trust, and Input
         Monitoring. This check never requests access. Input Monitoring fails
         closed if its preflight API is unavailable; non-mac platforms do not
         use these macOS permissions and report all three as granted.
@@ -6240,13 +6238,11 @@ class EngineDispatcher:
                 "accessibility": True,
                 "input_monitoring": True,
             }
-        screen = _mac_preflight_screen()
-        access = _mac_preflight_accessibility()
-        input_monitoring = _mac_preflight_input_monitoring()
         return {
-            "screen_recording": screen,
-            "accessibility": access,
-            "input_monitoring": input_monitoring,
+            "screen_recording": _mac_preflight_screen(),
+            "accessibility": _mac_preflight_accessibility(),
+            "input_monitoring": _mac_preflight_input_monitoring(),
+            "control_permission": control_permission_guidance(),
         }
 
     def request_input_monitoring(self, **params: Any) -> dict:
@@ -6484,22 +6480,22 @@ def _toml_value(value: Any) -> str:
     return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def _mac_preflight_screen() -> bool:  # pragma: no cover - platform-specific
+def _mac_preflight_screen() -> bool | None:  # pragma: no cover - platform-specific
     try:
         from Quartz import CGPreflightScreenCaptureAccess
 
         return bool(CGPreflightScreenCaptureAccess())
     except Exception:
-        return True
+        return None
 
 
-def _mac_preflight_accessibility() -> bool:  # pragma: no cover - platform-specific
+def _mac_preflight_accessibility() -> bool | None:  # pragma: no cover - platform-specific
     try:
         from ApplicationServices import AXIsProcessTrusted
 
         return bool(AXIsProcessTrusted())
     except Exception:
-        return True
+        return None
 
 
 def _mac_preflight_input_monitoring() -> bool:  # pragma: no cover - platform-specific

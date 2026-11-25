@@ -26,7 +26,7 @@ The scorer is [score.py](score.py); every number comes from the per-run rows.
 
 ## Run it
 
-You need Docker (about 3 GB for Medplum's images), Python 3.10 to 3.12 and
+You need Docker (about 3 GB for Medplum's images), Python 3.11 or 3.12 and
 Playwright's Chromium.
 
 ```bash

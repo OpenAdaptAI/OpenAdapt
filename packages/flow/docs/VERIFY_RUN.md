@@ -848,10 +848,13 @@ skipping a table when the table allows it.
 | The same, but the executor approved its own write | `CONFIRMED` | `rejected_policy` |
 | Nothing that matches, and nothing else in the read set moved | `REFUTED` | `halted_before_effect` |
 | A duplicate, a wrong value, only some of the effects, or a record outside the delta that was added, vanished or changed | `REFUTED` | `reconciliation_required` |
-| The store could not be read, no baseline, or a separate-session read | `INDETERMINATE` or `CONFIRMED` | `reconciliation_required` |
+| The same through a separate-session read, when the contract's `minimum_effect_strength` is `independent_session` | `CONFIRMED` | `verified` |
+| The store could not be read, no baseline, or a separate-session read under the default `independent_system_of_record` minimum | `INDETERMINATE` or `CONFIRMED` | `reconciliation_required` |
 
-Only a read through the system of record produces `verified`. A screen
-read-back (`onscreen`) is refused before anything runs.
+Only a read independent of the acting session produces `verified`: the
+system of record (check level 4), or a separate signed-in session (level 3)
+when the contract sets `minimum_effect_strength: independent_session`. A
+screen read-back (`onscreen`) is refused before anything runs.
 
 `verification_tier` on the receipt says how the effects were checked
 (RFC-0002, weakest effect wins):
@@ -862,7 +865,22 @@ read-back (`onscreen`) is refused before anything runs.
   including a separate signed-in session (Flow tier 2).
 - `unchecked`: at least one effect was not read.
 
-Only `independent_readback` can yield `verified`.
+`verification_tier` is a coarse label and does not decide `verified`: the
+check level does. A `verified` receipt is either `independent_readback` at
+oracle tier 2 or 3, or `screen_readback` at oracle tier 1 with `checked_how:
+separate_session` and an `evidence_scope` block whose basis is
+`separate_session`.
+
+`evidence_scope` (`openadapt.evidence-scope/v1`) states what the check
+covered: `check_level`, the receipt `word` (`VERIFIED` only on a verified
+receipt), the `basis` (`separate_session`; `db_frame` for a SQL read;
+`owned_connection` for verify-run's other system-of-record reads), the
+`wire` channel watched (verify-run watches none), `read_back_at`,
+`recheck_window_s` when a recheck is scheduled, and `not_covered`, which
+always lists `server_side_async_effects` and `outbound_effects`. `VERIFIED`
+means the read-back showed the value at `read_back_at`, not that it
+persisted. A receipt issued before the block existed has none and still
+checks.
 
 `checked_how` names the same read's check level
 ([`READBACK_LADDER.md`](READBACK_LADDER.md)): `system_of_record` (tier 1),

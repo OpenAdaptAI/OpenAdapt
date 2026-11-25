@@ -1,6 +1,57 @@
 # CHANGELOG
 
 
+## v0.33.1 (2026-11-24)
+
+### Bug Fixes
+
+- **desktop**: open() lands on the requested URL; skip real-Chrome test without Chrome (fix-forward #2358)
+
+
+
+## v0.33.0 (2026-11-23)
+
+### Features
+
+- **desktop**: open recordings and runs in an opted-in Chrome profile
+
+### Bug Fixes
+
+- **desktop**: wait for a slow Chrome debugging server before refusing
+- **desktop**: start Chrome without forking and keep dispatch.py small
+- **desktop**: refuse an elevated Windows launch and record lab evidence
+
+
+
+## v0.32.3 (2026-11-23)
+
+### Bug Fixes
+
+- **desktop**: keep permission guidance within the size budget
+- **macos**: guide 27.3 app-control permissions conservatively
+
+
+
+## Unreleased
+
+
+
+## v0.32.2 (2026-11-24)
+
+### Bug Fixes
+
+- **desktop**: launch authoring Chromium keychain-safe and close what it owns
+
+
+
+## v0.32.1 (2026-11-23)
+
+### Bug Fixes
+
+- **desktop**: sync control overlay contract pin to openadapt-types 0.24.2
+
+
+
 ## v0.32.0 (2026-11-22)
 
 ### Features
@@ -10,7 +61,6 @@
 ### Bug Fixes
 
 - **desktop**: preserve pinned theme bytes on checkout
-
 
 
 ## v0.31.3 (2026-11-22)

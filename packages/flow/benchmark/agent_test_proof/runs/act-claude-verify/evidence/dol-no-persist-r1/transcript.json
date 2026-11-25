@@ -1,0 +1,637 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost/contact/card.php?action=create\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      113,
+      28
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Let me first look at the existing contacts list.",
+   "actions": [
+    {
+     "coordinate": [
+      25,
+      398
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Three existing contacts, none is Daria. Now create.",
+   "actions": [
+    {
+     "coordinate": [
+      85,
+      372
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      665,
+      164
+     ]
+    },
+    {
+     "text": "Ivanova"
+    },
+    {
+     "coordinate": [
+      665,
+      198
+     ]
+    },
+    {
+     "text": "Daria"
+    },
+    {
+     "coordinate": [
+      665,
+      296
+     ]
+    },
+    {
+     "text": "Storekeeper"
+    },
+    {
+     "coordinate": [
+      685,
+      478
+     ]
+    },
+    {
+     "text": "555-0206"
+    },
+    {
+     "coordinate": [
+      685,
+      546
+     ]
+    },
+    {
+     "text": "d.ivanova@example.invalid"
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Layout shifted slightly but values look right. Scroll to find the Create button.",
+   "actions": [
+    {
+     "coordinate": [
+      770,
+      600
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 30
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      720,
+      756
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost/contact/list.php\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      400
+     ]
+    },
+    {
+     "text": "alt+Home"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      400
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "BackSpace"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+t"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "text": "localhost/contact/list.php\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I could not confirm that the contact exists. I filled in the new contact form with Last name Ivanova, First name Daria, Job position Storekeeper, Bus. phone 555-0206 and email d.ivanova@example.invalid. I left the third party and all other fields at their defaults, then clicked ADD.\n\nDolibarr then showed a blank page reading \"Record not found.\" That page has no menu or links, and I could not get back into the app. Keyboard shortcuts for back, reload and the address bar did nothing, and a right-click opened no menu. I can't tell whether the record was saved, so I could not check the contacts list for it or confirm the three existing contacts (Oskar Brandt, Samir Haddad, Elena Novak) were unchanged.\n\nRESULT: NOT DONE Clicked ADD but Dolibarr showed \"Record not found\" and I couldn't navigate back to the contacts list to confirm the contact was saved.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "chars": 41
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 113,
+   "y": 28,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 25,
+   "y": 398,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 85,
+   "y": 372,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 164,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 7
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 198,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 5
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 296,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 11
+  },
+  {
+   "a": "click",
+   "x": 685,
+   "y": 478,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 8
+  },
+  {
+   "a": "click",
+   "x": 685,
+   "y": 546,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 25
+  },
+  {
+   "a": "scroll",
+   "x": 770,
+   "y": 600,
+   "dx": 0,
+   "dy": 3600
+  },
+  {
+   "a": "click",
+   "x": 720,
+   "y": 756,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "chars": 27
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 640,
+   "y": 400,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Home"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 640,
+   "y": 400,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "t"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "type",
+   "chars": 27
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ]
+}

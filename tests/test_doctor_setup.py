@@ -186,6 +186,9 @@ def test_invalid_options_refuse_before_any_diagnostics(monkeypatch, options):
 
 
 def _mac_consent(monkeypatch, input_grant, capture_grant):
+    monkeypatch.setattr(
+        "openadapt.macos_permissions.platform.mac_ver", lambda: ("15.0", (), "")
+    )
     calls = []
 
     def check(name, value):
@@ -452,3 +455,21 @@ def test_recording_older_or_unknown_capture_offers_explicit_upgrade(
         "--upgrade",
         "openadapt-capture>=1.3.0,<2.0.0",
     ]
+
+
+@pytest.mark.parametrize("version", ["27.3", "27.10.0", "28.0"])
+@pytest.mark.parametrize("trusted", [True, False])
+def test_new_macos_does_not_treat_process_trust_as_target_grant(
+    monkeypatch, version, trusted
+):
+    _mac_consent(monkeypatch, trusted, True)
+    monkeypatch.setattr(
+        "openadapt.macos_permissions.platform.mac_ver", lambda: (version, (), "")
+    )
+    result = CliRunner().invoke(cli.main, ["doctor", "--backend", "macos"])
+    assert result.exit_code == (0 if trusted else 1), result.output
+    assert "System & App Protection Override" in result.output
+    assert "does not verify access to the selected app" in result.output
+    assert "Choose Apps" in result.output
+    assert "[OK] System & App Protection Override" not in result.output
+    assert "[MISSING] System & App Protection Override" not in result.output

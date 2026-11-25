@@ -26,9 +26,9 @@ except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10 CI
 ROOT = Path(__file__).resolve().parents[1]
 # Launcher 1.22 requires Flow 3.2 (public Seals, the at-rest key derived once
 # per store); 1.23 requires Flow 3.3 (the OpenEMR quickstart's clock-relative
-# date-picker check); 1.24 requires Flow 3.4 (headed-browser settle fallback,
-# receipts/handoffs, openadapt-privacy 1.1.4 floor). Keep every earlier
-# rejection case, including the former 2.7 floor.
+# date-picker check); 1.24 requires Flow 4.0 (encryption at rest by default,
+# receipts/handoffs, `openadapt wrap`, and `openadapt flight`). Keep every
+# earlier rejection case, including the former 2.7 and 3.4 floors.
 BELOW_FLOOR = [
     "1.29.0",
     "1.35.1",
@@ -45,8 +45,9 @@ BELOW_FLOOR = [
     "3.1.0",
     "3.2.0",
     "3.3.0",
+    "3.4.0",
 ]
-ACCEPTED = "3.4.0"
+ACCEPTED = "4.0.0"
 
 
 def _flow_requirements() -> list[Requirement]:
@@ -90,7 +91,7 @@ def test_doctor_and_deploy_accept_the_fixed_release() -> None:
     assert Requirement(f"openadapt-flow{_SUPPORTED_FLOW_RANGE}").specifier.contains(
         ACCEPTED
     )
-    # Later Flow 3 and Flow 4 releases are accepted; 5 is unknown.
-    assert _supported_flow_version("3.99.0")
-    assert _supported_flow_version("4.0.0")
+    # Later Flow 4 releases are accepted; 5 is unknown.
+    assert _supported_flow_version("4.1.0")
+    assert _supported_flow_version("4.99.0")
     assert not _supported_flow_version("5.0.0")

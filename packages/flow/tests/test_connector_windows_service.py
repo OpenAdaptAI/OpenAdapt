@@ -46,6 +46,9 @@ def _write_config(
         'org_id = "org_stub"',
         "poll_wait_s = 1",
     ]
+    profile = config_dir / "deployment.yaml"
+    profile.write_text("runtime: {profile: standard}\n", encoding="utf-8")
+    lines.append(f"profile = {json.dumps(str(profile))}")
     lines.append(f"storage_root = {json.dumps(str(config_dir / 'storage'))}")
     lines += [f"{k} = {json.dumps(v)}" for k, v in extra.items()]
     (config_dir / "connector.toml").write_text("\n".join(lines) + "\n", "utf-8")

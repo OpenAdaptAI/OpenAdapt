@@ -56,7 +56,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, Mapping, Optional, Sequence, cast
+from typing import Any, Callable, Literal, Mapping, Optional, Sequence, cast
 from uuid import uuid4
 
 from openadapt_types.approval import (
@@ -64,10 +64,32 @@ from openadapt_types.approval import (
     CHECKED_HOW_VALUES,
     checked_how_for_flow_tier,
 )
+
+from openadapt_flow.check_level import (
+    CONFIRMED_WORD,
+    VERIFIED_LEVELS,
+    VERIFIED_WORD,
+    CheckLevel,
+    from_effect_strength,
+    from_verification_tier,
+    to_effect_strength,
+)
+
+try:
+    from openadapt_types.evidence_scope import (
+        EVIDENCE_SCOPE_FIELD,
+        build_evidence_scope,
+        evidence_scope_problem,
+    )
+except ImportError:  # pragma: no cover - pre-0.24.3 published openadapt-types shim
+    EVIDENCE_SCOPE_FIELD = "evidence_scope"  # type: ignore[misc]
+    build_evidence_scope = None  # type: ignore[assignment]
+    evidence_scope_problem = None  # type: ignore[assignment]
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from openadapt_flow.complete_read import CompleteReadProvider
 from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
+from openadapt_flow.evidence_basis import level_and_basis
 from openadapt_flow.fault_gate import (
     AdmissionPolicy,
     CoverageRecord,
@@ -91,6 +113,8 @@ from openadapt_flow.runtime.effects.effect import (
     Verdict,
 )
 from openadapt_flow.runtime.effects.frame import FrameSpec, FrameVerdict, judge_frame
+from openadapt_flow.verdict import Obligations, Result, Status, Subject, settle
+from openadapt_flow.verdict_sites import verdict_site
 from openadapt_flow.verification import (
     EffectContractMutationError,
     VerificationTier,
@@ -144,17 +168,14 @@ _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _SALTED = re.compile(r"^hmac-sha256:[0-9a-f]{64}$")
 _ISO_SECONDS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
+# Both derived from the one ladder (openadapt_types.check_level): a strength's
+# rank is its check level.
 _STRENGTH_BY_TIER = {
-    VerificationTier.INDEPENDENT_SYSTEM: "independent_system_of_record",
-    VerificationTier.INDEPENDENT_SESSION: "independent_session",
-    VerificationTier.PERSISTED_STATE_REACQUISITION: "persisted_state_reacquisition",
-    VerificationTier.IMMEDIATE_SCREEN: "immediate_screen_confirmation",
+    tier: to_effect_strength(from_verification_tier(int(tier)))
+    for tier in VerificationTier
 }
 _STRENGTH_RANK = {
-    "immediate_screen_confirmation": 1,
-    "persisted_state_reacquisition": 2,
-    "independent_session": 3,
-    "independent_system_of_record": 4,
+    str(name): int(from_effect_strength(name)) for name in _STRENGTH_BY_TIER.values()
 }
 
 #: Where the baseline keeps the audit log read for frame attribution. Not a
@@ -236,6 +257,7 @@ _RECEIPT_VALIDATION_REASONS = frozenset(
         "baseline_window",
         "self_approved",
         "issued_before_read",
+        "evidence_scope",
     }
 )
 
@@ -335,6 +357,8 @@ QUALIFY_ONLY_SECTIONS: tuple[str, ...] = (
     "inputs",
     "campaign",
     "business_rules",
+    # Who drafted the check and how it was admitted (openadapt verify draft).
+    "provenance",
 )
 
 
@@ -660,7 +684,72 @@ def _judge_versions(
     spec = cfg.frame.versions if cfg.frame is not None else None
     if spec is None:
         return frame
-    field_name = spec.target_field or cfg.frame.identity_field or "id"  # type: ignore[union-attr]
+    targets = _version_targets(
+        cfg, before, effects, verdicts, spec.target_field, spec.target_surface
+    )
+    stored = (before.detail or {}).get(FRAME_VERSIONS_DETAIL)
+    if spec.target_surface is not None and not _surface_has_target(
+        effects, spec.target_surface
+    ):
+        # A surface no write target is read from (a typo in a hand-written
+        # contract, or a surface only a guard reads) would leave no target,
+        # and no target holds.
+        result = VersionVerdict(
+            "not_checked",
+            "unknown_surface",
+            reason="frame.versions.target_surface names a surface no write "
+            "target is read from, so no target's versions can be judged",
+        )
+    else:
+        result = judge_versions(
+            spec,
+            stored if isinstance(stored, Mapping) else {},
+            _read_versions(cfg, params),
+            targets,
+            _mac_key(salt),
+            params,
+        )
+    frame.versions = result
+    return _apply_version_result(frame, result)
+
+
+def _apply_version_result(frame: FrameVerdict, result: Any) -> FrameVerdict:
+    if result.status == "refuted":
+        frame.status = "refuted"
+        frame.reason = result.reason
+    elif result.status == "not_checked" and frame.status == "held":
+        frame.status = "not_checked"
+        frame.reason = result.reason
+    return frame
+
+
+def _writes_a_target(effect: Effect) -> bool:
+    """A write effect whose records can be targets. A guard ("nothing
+    here", ``record_written`` with ``expected_count`` 0) never is."""
+
+    if effect.kind not in (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS):
+        return False
+    return not (effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count == 0)
+
+
+def _surface_has_target(effects: Sequence[Effect], surface: str) -> bool:
+    from openadapt_flow.runtime.effects.surfaces import surface_of
+
+    return any(_writes_a_target(e) and surface_of(e) == surface for e in effects)
+
+
+def _version_targets(
+    cfg: VerifyConfig,
+    before: EffectState,
+    effects: Sequence[Effect],
+    verdicts: Sequence[EffectVerdict],
+    target_field: Optional[str],
+    target_surface: Optional[str],
+) -> list[tuple[Optional[str], bool, bool]]:
+    """Per record a confirmed write effect matched: its ``target_field``
+    value, whether it existed before the write, and whether it changed."""
+
+    field_name = target_field or cfg.frame.identity_field or "id"  # type: ignore[union-attr]
     # Whether a target existed is told by its identity, which a save doesn't
     # change, never by the target field's value after the write: a target
     # field the write changed would make an old record look created.
@@ -688,27 +777,14 @@ def _judge_versions(
             return index(rows) if isinstance(rows, list) else None
         return index(before.records) if before.reachable else None
 
-    def writes_a_target(effect: Effect) -> bool:
-        """A write effect whose records can be targets. A guard ("nothing
-        here", ``record_written`` with ``expected_count`` 0) never is."""
-
-        if effect.kind not in (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS):
-            return False
-        return not (
-            effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count == 0
-        )
-
     ignored = set(cfg.frame.ignore_fields)  # type: ignore[union-attr]
     targets: list[tuple[Optional[str], bool, bool]] = []
     for effect, verdict in zip(effects, verdicts):
-        if not writes_a_target(effect):
+        if not _writes_a_target(effect):
             continue
         if not verdict.confirmed:
             continue
-        if (
-            spec.target_surface is not None
-            and surface_of(effect) != spec.target_surface
-        ):
+        if target_surface is not None and surface_of(effect) != target_surface:
             continue  # a row beside the target, not the target
         old = before_rows(effect)
         for record in verdict.matched_records:
@@ -726,36 +802,77 @@ def _judge_versions(
                 or any(record.get(k) != v for k, v in was.items() if k not in ignored)
             )
             targets.append((text, existed, changed))
-    stored = (before.detail or {}).get(FRAME_VERSIONS_DETAIL)
-    if spec.target_surface is not None and not any(
-        writes_a_target(e) and surface_of(e) == spec.target_surface for e in effects
+    return targets
+
+
+def _hold_row_versions(cfg: VerifyConfig, execution_id: str) -> dict[str, Any]:
+    """Open ``frame.row_versions``' held read before the baseline records."""
+
+    from openadapt_flow.runtime.effects import row_versions as rv
+
+    spec = cfg.frame.row_versions  # type: ignore[union-attr]
+    try:
+        read = cfg.frame.database.read  # type: ignore[union-attr]
+        held = rv.open_held(spec, _db_connect(read))  # type: ignore[arg-type]
+    except Exception as exc:  # noqa: BLE001 - not held -> the judge stops
+        return rv.baseline_detail(None, type(exc).__name__)
+    rv.hold(execution_id, held)
+    return rv.baseline_detail(held, None)
+
+
+def _judge_row_versions(
+    cfg: VerifyConfig,
+    frame: FrameVerdict,
+    before: EffectState,
+    effects: Sequence[Effect],
+    verdicts: Sequence[EffectVerdict],
+    execution_id: str,
+) -> FrameVerdict:
+    """Add ``frame.row_versions``: two writers of a target in the window
+    refute the frame; a read that can't count them leaves it not checked."""
+
+    from openadapt_flow.runtime.effects import row_versions as rv
+    from openadapt_flow.runtime.effects.versions import VersionVerdict
+
+    spec = cfg.frame.row_versions if cfg.frame is not None else None
+    if spec is None:
+        return frame
+    held = rv.take(execution_id)
+    if not rv.stored_held((before.detail or {}).get(rv.DETAIL)):
+        if held is not None:
+            held.close()
+        held = None
+    if spec.target_surface is not None and not _surface_has_target(
+        effects, spec.target_surface
     ):
-        # A surface no write target is read from (a typo in a hand-written
-        # contract, or a surface only a guard reads) would leave no target,
-        # and no target holds.
+        if held is not None:
+            held.close()
         result = VersionVerdict(
             "not_checked",
             "unknown_surface",
-            reason="frame.versions.target_surface names a surface no write "
-            "target is read from, so no target's versions can be judged",
+            reason="frame.row_versions.target_surface names a surface no "
+            "write target is read from",
         )
-    else:
-        result = judge_versions(
+    elif (
+        unbound := rv.binding_problem(
             spec,
-            stored if isinstance(stored, Mapping) else {},
-            _read_versions(cfg, params),
-            targets,
-            _mac_key(salt),
-            params,
+            cfg.verifier.surfaces,
+            cfg.frame.database.read,  # type: ignore[union-attr]
+            cfg.frame.identity_field,  # type: ignore[union-attr]
         )
-    frame.versions = result
-    if result.status == "refuted":
-        frame.status = "refuted"
-        frame.reason = result.reason
-    elif result.status == "not_checked" and frame.status == "held":
-        frame.status = "not_checked"
-        frame.reason = result.reason
-    return frame
+    ) is not None:
+        if held is not None:
+            held.close()
+        result = VersionVerdict("not_checked", "unbound_source", reason=unbound)
+    else:
+        targets = _version_targets(
+            cfg, before, effects, verdicts, spec.target_field, spec.target_surface
+        )
+        read = cfg.frame.database.read  # type: ignore[union-attr]
+        result = rv.judge_row_versions(spec, held, _db_connect(read), targets)
+    if frame.versions is None or result.status != "held":
+        frame.versions = result
+    return _apply_version_result(frame, result)
 
 
 def _db_connect(read: Mapping[str, Any]) -> Any:
@@ -2483,6 +2600,11 @@ def capture_baseline(
             history_before, _history_rows = _read_history(cfg, params, _now(), salt)
         except Exception as exc:
             history_error = type(exc).__name__
+    row_versions_detail = (
+        _hold_row_versions(cfg, execution_id)
+        if cfg.frame is not None and cfg.frame.row_versions is not None
+        else None
+    )
     # The versions first: a save between this read and the record read is
     # then in the record baseline too, never hidden in the versions one.
     versions_rows = (
@@ -2538,6 +2660,10 @@ def capture_baseline(
             "reachable": entries is not None,
             "ids": _audit_ids(entries or [], salt),
         }
+    if row_versions_detail is not None:
+        from openadapt_flow.runtime.effects.row_versions import DETAIL as RV_DETAIL
+
+        detail[RV_DETAIL] = row_versions_detail
     if cfg.frame is not None and cfg.frame.versions is not None:
         from openadapt_flow.runtime.effects.versions import seal_versions
 
@@ -2955,37 +3081,106 @@ def _label(verdict: Verdict) -> EffectVerdictLabel:
     return labels[verdict]
 
 
-def _aggregate(verdicts: Sequence[EffectVerdict]) -> EffectVerdictLabel:
-    if any(v.verdict is Verdict.INDETERMINATE for v in verdicts):
-        return "INDETERMINATE"
-    if any(v.verdict is Verdict.REFUTED for v in verdicts):
-        return "REFUTED"
-    return "CONFIRMED"
+_AGGREGATE_LABELS: dict[Status, EffectVerdictLabel] = {
+    Status.HELD: "CONFIRMED",
+    Status.REFUTED: "REFUTED",
+    Status.NOT_CHECKED: "INDETERMINATE",
+}
 
 
-def _observed(verdicts: Sequence[EffectVerdict]) -> str:
+def _effect_results(
+    planned: Sequence[str],
+    verdicts: Sequence[EffectVerdict],
+    code: Callable[[EffectVerdict], object],
+    *,
+    held: frozenset[str],
+    refuted: frozenset[str],
+) -> tuple[Obligations, list[Result]]:
+    """One obligation per planned effect, fixed from the contract before any
+    read; the ``i``-th verdict answers the ``i``-th. A verdict past the plan
+    answers nothing (it is unexpected), and a planned effect with no verdict
+    is missing, so neither can pass."""
+
+    subjects = [Subject(key=key) for key in planned]
+    results = [
+        Result.from_code(
+            subjects[i] if i < len(subjects) else Subject(key=f"unplanned:{i}"),
+            code(v),
+            held=held,
+            refuted=refuted,
+        )
+        for i, v in enumerate(verdicts)
+    ]
+    return Obligations.fix(subjects, source="cfg.effects"), results
+
+
+@verdict_site("verify_run.aggregate", classes="C1 C2")
+def _aggregate(
+    planned: Sequence[str], verdicts: Sequence[EffectVerdict]
+) -> EffectVerdictLabel:
+    """CONFIRMED only when every planned effect is; any INDETERMINATE outranks
+    a REFUTED; no effects at all, a planned effect with no verdict or a
+    verdict nobody planned is INDETERMINATE (docs/FAIL_CLOSED.md)."""
+
+    obligations, results = _effect_results(
+        planned,
+        verdicts,
+        lambda v: v.verdict,
+        held=frozenset({Verdict.CONFIRMED.value}),
+        refuted=frozenset({Verdict.REFUTED.value}),
+    )
+    settled = settle(obligations, results)
+    return _AGGREGATE_LABELS[
+        settled.label(precedence=(Status.NOT_CHECKED, Status.REFUTED))
+    ]
+
+
+@verdict_site("verify_run.observed", classes="C1 C2")
+def _observed(planned: Sequence[str], verdicts: Sequence[EffectVerdict]) -> str:
+    """``present`` only when every planned effect was read as present.
+    ``unknown`` when one was not read, has no verdict, or was not planned;
+    ``conflicting`` for a wrong record or a mix of landed and not landed."""
+
+    obligations, results = _effect_results(
+        planned,
+        verdicts,
+        lambda v: v.observed_effect,
+        held=frozenset({"present"}),
+        refuted=frozenset({"absent", "conflicting"}),
+    )
+    settled = settle(obligations, results)
+    if settled.passes:
+        return "present"
+    if (
+        not settled.refuted
+        or settled.unexpected
+        or settled.total != len(settled.held) + len(settled.refuted)
+    ):
+        return "unknown"  # something planned was not read, or not planned
     seen = {v.observed_effect for v in verdicts}
-    if "unknown" in seen:
-        return "unknown"
     if "conflicting" in seen or seen == {"absent", "present"}:
         # A wrong record, or some effects landed and others did not.
         return "conflicting"
-    return "absent" if "absent" in seen else "present"
+    return "absent"
 
 
+@verdict_site("verify_run.readback_class", classes="C1 C2")
 def readback_class(
     verdicts: Sequence[EffectVerdict], tiers: Sequence[Optional[VerificationTier]]
 ) -> ReadbackClass:
     """RFC-0002 tier rule, weakest effect wins.
 
     ``unchecked`` when any effect was not read (no tier, store unreachable,
-    stale). ``independent_readback`` only when every effect was read from the
+    stale), when there are no effects, or when the tiers don't pair one to
+    one with the effects. ``independent_readback`` only when every effect was read from the
     system of record without the UI (Flow tier 1). Anything else, including a
     separate signed-in UI session (tier 2), is ``screen_readback``.
     """
 
     if (
-        any(t is None for t in tiers)
+        not verdicts
+        or len(tiers) != len(verdicts)
+        or any(t is None for t in tiers)
         or any(v.unavailable for v in verdicts)
         or any(v.stale for v in verdicts)
     ):
@@ -3198,6 +3393,10 @@ def verify_run(
     judged_effects: list[Effect] = []
     weakest: Optional[VerificationTier] = None
     tiers: list[Optional[VerificationTier]] = []
+    # The effects the contract plans, fixed before any read: each fold below
+    # settles the verdicts against these, so a verdict that goes missing
+    # can't leave a pass.
+    planned = [f"{i}:{e.kind.value}" for i, e in enumerate(cfg.effects)]
     for effect in cfg.effects:
         try:
             bound = effect.resolve(params)
@@ -3256,8 +3455,8 @@ def verify_run(
             }
         )
 
-    delta_verdict = _aggregate(verdicts)
-    observed_effect = _observed(verdicts)
+    delta_verdict = _aggregate(planned, verdicts)
+    observed_effect = _observed(planned, verdicts)
     # The frame: nothing outside the declared delta moved. Without a baseline
     # it can't be known, so it is not checked and the run is not verified.
     frame_spec = cfg.frame or FrameSpec()
@@ -3276,6 +3475,9 @@ def verify_run(
         frame = _judge_versions(
             cfg, frame, before, bound_effects, verdicts, params, salt
         )
+        frame = _judge_row_versions(
+            cfg, frame, before, bound_effects, verdicts, execution_id
+        )
     else:
         frame = FrameVerdict(
             status="not_checked",
@@ -3285,8 +3487,8 @@ def verify_run(
         _excuse_attributed_additions(
             cfg, verifier, before, judged_effects, verdicts, rows, frame
         )
-        delta_verdict = _aggregate(verdicts)
-        observed_effect = _observed(verdicts)
+        delta_verdict = _aggregate(planned, verdicts)
+        observed_effect = _observed(planned, verdicts)
     if history_spec is not None:
         if history_problem is not None and frame.status != "refuted":
             frame.status = "not_checked"
@@ -3362,11 +3564,19 @@ def verify_run(
         self_approved = approver_ref == executor_ref
 
     delivery_uncertain = False
+    # The one ladder decides: a separate-session read (level 3) or a
+    # system-of-record read (level 4), at or above the contract's minimum.
+    level, basis = level_and_basis(
+        None if unread or weakest is None else int(weakest),
+        confirmed=True,
+        kinds=_verifier_kinds(cfg),
+    )
+    minimum_level = from_effect_strength(cfg.minimum_effect_strength)
     read_proves_delta = (
         delta_verdict == "CONFIRMED"
-        and verification_tier == "independent_readback"
+        and level in VERIFIED_LEVELS
+        and level >= minimum_level
         and strong_enough
-        and oracle_tier in (2, 3)
     )
     attributed = (
         purpose == "owned_attempt"
@@ -3590,6 +3800,21 @@ def verify_run(
         receipt["correlation_id"] = correlation_id
     if recheck_due_at is not None:
         receipt[RECHECK_RECEIPT_FIELD] = recheck_due_at
+    if build_evidence_scope is not None:
+        receipt[EVIDENCE_SCOPE_FIELD] = build_evidence_scope(
+            level,
+            # Only a verified receipt names a basis, so only it reads VERIFIED.
+            basis=basis if verified else None,
+            confirmed=delta_verdict == CONFIRMED_WORD,
+            minimum=minimum_level,
+            read_back_at=read_at if not unread else None,
+            recheck_window_s=(
+                int(recheck_after_s)
+                if recheck_due_at is not None and recheck_after_s is not None
+                else None
+            ),
+            not_covered=("changes_after_read_back",),
+        )
     if request_context is not None:
         receipt["request_context"] = request_context.to_dict()
     problem = receipt_problem(receipt) or evidence_problem(evidence, receipt)
@@ -4059,6 +4284,7 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
             RECHECK_RECEIPT_FIELD,
             "request_context",
             _WRITE_ATTRIBUTION,
+            EVIDENCE_SCOPE_FIELD,
         }
     )
     if set(receipt) - allowed:
@@ -4167,10 +4393,11 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
             or (cover is not None and cover.get("policy") != "met")
         ):
             return "verified_without_every_part"
+    scope_problem = _evidence_scope_receipt_problem(receipt)
+    if scope_problem is not None:
+        return scope_problem
     if outcome in ("verified", "rolled_back_verified") and (
-        receipt["effect_verdict"] != "CONFIRMED"
-        or receipt["verification_tier"] != "independent_readback"
-        or receipt.get("oracle_tier") not in (2, 3)
+        receipt["effect_verdict"] != "CONFIRMED" or not _verified_read(receipt)
     ):
         return "verified_without_independent_readback"
     if (
@@ -4179,6 +4406,52 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
     ):
         return "delivery_uncertain"
     return None
+
+
+def _verified_read(receipt: Mapping[str, Any]) -> bool:
+    """Whether the receipt's read may back a verified outcome.
+
+    A system-of-record read (``independent_readback``, oracle tier 2 or 3)
+    always may. A separate-session read (check level 3, oracle tier 1) may
+    only with an evidence-scope block that names basis ``separate_session``
+    and the word ``VERIFIED``; a receipt issued before that block existed
+    keeps the tier-2 floor.
+    """
+
+    if receipt.get("verification_tier") == "independent_readback" and receipt.get(
+        "oracle_tier"
+    ) in (2, 3):
+        return True
+    scope = receipt.get(EVIDENCE_SCOPE_FIELD)
+    return (
+        receipt.get("verification_tier") == "screen_readback"
+        and receipt.get("oracle_tier") == 1
+        and receipt.get("checked_how") == CheckLevel.SEPARATE_SESSION.label
+        and isinstance(scope, Mapping)
+        and scope.get("basis") == "separate_session"
+        and scope.get("word") == VERIFIED_WORD
+    )
+
+
+def _evidence_scope_receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
+    """The optional evidence-scope block must agree with the receipt."""
+
+    if EVIDENCE_SCOPE_FIELD not in receipt:
+        return None  # Receipts issued before the block existed.
+    scope = receipt[EVIDENCE_SCOPE_FIELD]
+    if evidence_scope_problem is None or evidence_scope_problem(scope) is not None:
+        return "evidence_scope"
+    verified = receipt.get("outcome") in ("verified", "rolled_back_verified")
+    if (scope["word"] == VERIFIED_WORD) is not verified:
+        return "evidence_scope"
+    if "checked_how" in receipt and scope["check_level"] != receipt["checked_how"]:
+        return "evidence_scope"
+    return None
+
+
+def _verifier_kinds(cfg: "VerifyConfig") -> list[str]:
+    surfaces = cfg.verifier.surfaces or {}
+    return [s.kind for s in surfaces.values()] or [cfg.verifier.kind]
 
 
 def evidence_problem(

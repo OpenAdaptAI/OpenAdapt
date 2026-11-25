@@ -388,8 +388,11 @@ def test_unqualified_http_undo_never_relies_on_ignored_if_match(tmp_path):
                 intended_delta={"note": "new"},
             )
         )
+        # A version one past the before-image, read with caches bypassed, is
+        # a system_api read: CONFIRMED, but never an automatic undo.
         assert (
-            result.outcome == "UNCERTAIN"
+            result.outcome == "CONFIRMED"
+            and result.evidence_scope["basis"] == "system_api"
             and result.qualification_state == "unqualified"
         )
         assert not result.can_compensate and len(writes) == 1

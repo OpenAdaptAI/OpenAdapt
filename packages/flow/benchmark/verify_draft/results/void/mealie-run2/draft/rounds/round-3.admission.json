@@ -1,0 +1,1815 @@
+{
+ "admitted": false,
+ "check_sha256": "sha256:415b037e8e7e1e82767e528fb1fede8446f57bfe31b86bcdfdfb383b68e5fb8b",
+ "problems": [],
+ "masked": [],
+ "seconds": 242.79,
+ "cases": [
+  {
+   "group": "clean",
+   "name": "clean-1",
+   "detail": "the write with payload 1",
+   "expect": "confirmed",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the target's versions aren't whole numbers and no author is read, so the saves in the window can't be counted",
+    "8 record(s) outside the declared write moved (removed); 8 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": false,
+     "table": "nutrition",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "settings",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "ingredients",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "instructions",
+     "change": "removed"
+    },
+    {
+     "row": true,
+     "table": "recipe_instructions",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_nutrition",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_settings",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes_ingredients",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 10.18
+  },
+  {
+   "group": "clean",
+   "name": "clean-2",
+   "detail": "the write with payload 2",
+   "expect": "confirmed",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the target's versions aren't whole numbers and no author is read, so the saves in the window can't be counted",
+    "8 record(s) outside the declared write moved (removed); 8 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": false,
+     "table": "nutrition",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "settings",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "ingredients",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "instructions",
+     "change": "removed"
+    },
+    {
+     "row": true,
+     "table": "recipe_instructions",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_nutrition",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_settings",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes_ingredients",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 11.08
+  },
+  {
+   "group": "clean",
+   "name": "clean-3",
+   "detail": "the write with payload 3",
+   "expect": "confirmed",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the target's versions aren't whole numbers and no author is read, so the saves in the window can't be counted",
+    "8 record(s) outside the declared write moved (removed); 8 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": false,
+     "table": "nutrition",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "settings",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "ingredients",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "instructions",
+     "change": "removed"
+    },
+    {
+     "row": true,
+     "table": "recipe_instructions",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_nutrition",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_settings",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes_ingredients",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 11.3
+  },
+  {
+   "group": "clean",
+   "name": "clean-4",
+   "detail": "the write with payload 4",
+   "expect": "confirmed",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the target's versions aren't whole numbers and no author is read, so the saves in the window can't be counted",
+    "8 record(s) outside the declared write moved (removed); 8 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": false,
+     "table": "nutrition",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "settings",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "ingredients",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "instructions",
+     "change": "removed"
+    },
+    {
+     "row": true,
+     "table": "recipe_instructions",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_nutrition",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_settings",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes_ingredients",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 12.83
+  },
+  {
+   "group": "clean",
+   "name": "clean-5",
+   "detail": "the write with payload 5",
+   "expect": "confirmed",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the target's versions aren't whole numbers and no author is read, so the saves in the window can't be counted",
+    "8 record(s) outside the declared write moved (removed); 8 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": false,
+     "table": "nutrition",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "settings",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "ingredients",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "instructions",
+     "change": "removed"
+    },
+    {
+     "row": true,
+     "table": "recipe_instructions",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_nutrition",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_settings",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes_ingredients",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 10.84
+  },
+  {
+   "group": "fault",
+   "name": "wrong_value:description",
+   "detail": "recipes.description holds another value",
+   "expect": "refuted",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "record_written was refuted: observed absent, 0 of 1 expected record(s)",
+    "10 record(s) outside the declared write moved (changed, removed); 10 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": false,
+     "table": "record",
+     "change": "changed"
+    },
+    {
+     "row": false,
+     "table": "nutrition",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "settings",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "ingredients",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "instructions",
+     "change": "removed"
+    },
+    {
+     "row": true,
+     "table": "recipe_instructions",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_nutrition",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_settings",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes",
+     "change": "changed",
+     "columns": [
+      "description",
+      "description_normalized",
+      "recipe_yield"
+     ],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes_ingredients",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 18.17
+  },
+  {
+   "group": "fault",
+   "name": "wrong_value:description_normalized",
+   "detail": "recipes.description_normalized holds another value",
+   "expect": "refuted",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "record_written was refuted: observed absent, 0 of 1 expected record(s)",
+    "10 record(s) outside the declared write moved (changed, removed); 10 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": false,
+     "table": "record",
+     "change": "changed"
+    },
+    {
+     "row": false,
+     "table": "nutrition",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "settings",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "ingredients",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "instructions",
+     "change": "removed"
+    },
+    {
+     "row": true,
+     "table": "recipe_instructions",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_nutrition",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_settings",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes",
+     "change": "changed",
+     "columns": [
+      "description",
+      "description_normalized",
+      "recipe_yield"
+     ],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes_ingredients",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 17.77
+  },
+  {
+   "group": "fault",
+   "name": "wrong_value:recipe_yield",
+   "detail": "recipes.recipe_yield holds another value",
+   "expect": "refuted",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "record_written was refuted: observed absent, 0 of 1 expected record(s)",
+    "10 record(s) outside the declared write moved (changed, removed); 10 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": false,
+     "table": "record",
+     "change": "changed"
+    },
+    {
+     "row": false,
+     "table": "nutrition",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "settings",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "ingredients",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "instructions",
+     "change": "removed"
+    },
+    {
+     "row": true,
+     "table": "recipe_instructions",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_nutrition",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_settings",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes",
+     "change": "changed",
+     "columns": [
+      "description",
+      "description_normalized",
+      "recipe_yield"
+     ],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes_ingredients",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 17.17
+  },
+  {
+   "group": "fault",
+   "name": "wrong_row",
+   "detail": "the update landed on another recipes row",
+   "expect": "refuted",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "record_written was refuted: observed absent, 0 of 1 expected record(s)",
+    "10 record(s) outside the declared write moved (changed, removed); 10 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": false,
+     "table": "record",
+     "change": "changed"
+    },
+    {
+     "row": false,
+     "table": "nutrition",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "settings",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "ingredients",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "instructions",
+     "change": "removed"
+    },
+    {
+     "row": true,
+     "table": "recipe_instructions",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_nutrition",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_settings",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes",
+     "change": "changed",
+     "columns": [
+      "description",
+      "description_normalized",
+      "recipe_yield"
+     ],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes_ingredients",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 17.98
+  },
+  {
+   "group": "fault",
+   "name": "duplicate",
+   "detail": "a second copy of the recipes record",
+   "expect": "refuted",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the target's versions aren't whole numbers and no author is read, so the saves in the window can't be counted",
+    "10 record(s) outside the declared write moved (added, removed); 10 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": false,
+     "table": "record",
+     "change": "added"
+    },
+    {
+     "row": false,
+     "table": "nutrition",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "settings",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "ingredients",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "instructions",
+     "change": "removed"
+    },
+    {
+     "row": true,
+     "table": "recipe_instructions",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_nutrition",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_settings",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes",
+     "change": "added",
+     "columns": [
+      "created_at",
+      "date_added",
+      "description",
+      "description_normalized",
+      "group_id",
+      "id",
+      "is_ocr_recipe",
+      "name",
+      "name_normalized",
+      "recipe_servings",
+      "recipe_yield",
+      "recipe_yield_quantity",
+      "slug",
+      "user_id"
+     ],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes_ingredients",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 12.84
+  },
+  {
+   "group": "fault",
+   "name": "sibling_edit",
+   "detail": "another recipes row's created_at edited beside the write",
+   "expect": "refuted",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the target's versions aren't whole numbers and no author is read, so the saves in the window can't be counted",
+    "9 record(s) outside the declared write moved (changed, removed); 9 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": false,
+     "table": "nutrition",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "settings",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "ingredients",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "instructions",
+     "change": "removed"
+    },
+    {
+     "row": true,
+     "table": "recipe_instructions",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_nutrition",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_settings",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes",
+     "change": "changed",
+     "columns": [
+      "created_at"
+     ],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes_ingredients",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 14.91
+  },
+  {
+   "group": "fault",
+   "name": "late_revert",
+   "detail": "the recipes write undone after the check",
+   "expect": "refuted",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the target's versions aren't whole numbers and no author is read, so the saves in the window can't be counted",
+    "8 record(s) outside the declared write moved (removed); 8 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": false,
+     "table": "nutrition",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "settings",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "ingredients",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "instructions",
+     "change": "removed"
+    },
+    {
+     "row": true,
+     "table": "recipe_instructions",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_nutrition",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_settings",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes_ingredients",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 15.89
+  },
+  {
+   "group": "fault",
+   "name": "lost_update",
+   "detail": "the other user saves the record, then the agent's save overwrites it",
+   "expect": "refuted",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the target's versions aren't whole numbers and no author is read, so the saves in the window can't be counted",
+    "8 record(s) outside the declared write moved (removed); 8 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": false,
+     "table": "nutrition",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "settings",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "ingredients",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "instructions",
+     "change": "removed"
+    },
+    {
+     "row": true,
+     "table": "recipe_instructions",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_nutrition",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_settings",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes_ingredients",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 16.43
+  },
+  {
+   "group": "probe",
+   "name": "attribution:agent:p1",
+   "detail": "the write by agent with payload 1",
+   "expect": "confirmed",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the target's versions aren't whole numbers and no author is read, so the saves in the window can't be counted",
+    "8 record(s) outside the declared write moved (removed); 8 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": false,
+     "table": "nutrition",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "settings",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "ingredients",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "instructions",
+     "change": "removed"
+    },
+    {
+     "row": true,
+     "table": "recipe_instructions",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_nutrition",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_settings",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes_ingredients",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 13.16
+  },
+  {
+   "group": "probe",
+   "name": "attribution:agent:p2",
+   "detail": "the write by agent with payload 2",
+   "expect": "confirmed",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the target's versions aren't whole numbers and no author is read, so the saves in the window can't be counted",
+    "8 record(s) outside the declared write moved (removed); 8 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": false,
+     "table": "nutrition",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "settings",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "ingredients",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "instructions",
+     "change": "removed"
+    },
+    {
+     "row": true,
+     "table": "recipe_instructions",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_nutrition",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_settings",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes_ingredients",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 14.52
+  },
+  {
+   "group": "probe",
+   "name": "attribution:other:p1",
+   "detail": "the write by other with payload 1",
+   "expect": "confirmed",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the target's versions aren't whole numbers and no author is read, so the saves in the window can't be counted",
+    "8 record(s) outside the declared write moved (removed); 8 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": false,
+     "table": "nutrition",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "settings",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "ingredients",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "instructions",
+     "change": "removed"
+    },
+    {
+     "row": true,
+     "table": "recipe_instructions",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_nutrition",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_settings",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes_ingredients",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 13.0
+  },
+  {
+   "group": "probe",
+   "name": "attribution:other:p2",
+   "detail": "the write by other with payload 2",
+   "expect": "confirmed",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "the target's versions aren't whole numbers and no author is read, so the saves in the window can't be counted",
+    "8 record(s) outside the declared write moved (removed); 8 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": false,
+     "table": "nutrition",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "settings",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "ingredients",
+     "change": "removed"
+    },
+    {
+     "row": false,
+     "table": "instructions",
+     "change": "removed"
+    },
+    {
+     "row": true,
+     "table": "recipe_instructions",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_nutrition",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipe_settings",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    },
+    {
+     "row": true,
+     "table": "recipes_ingredients",
+     "change": "removed",
+     "columns": [],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 11.98
+  }
+ ],
+ "attribution": [
+  {
+   "table": "recipe_instructions",
+   "column": "+",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_instructions",
+   "column": "-",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_instructions",
+   "column": "created_at",
+   "cause": "clock",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_instructions",
+   "column": "id",
+   "cause": "payload",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_instructions",
+   "column": "position",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_instructions",
+   "column": "recipe_id",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_instructions",
+   "column": "summary",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_instructions",
+   "column": "text",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_instructions",
+   "column": "title",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_instructions",
+   "column": "type",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_instructions",
+   "column": "update_at",
+   "cause": "clock",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_nutrition",
+   "column": "+",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_nutrition",
+   "column": "-",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_nutrition",
+   "column": "calories",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_nutrition",
+   "column": "carbohydrate_content",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_nutrition",
+   "column": "cholesterol_content",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_nutrition",
+   "column": "created_at",
+   "cause": "clock",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_nutrition",
+   "column": "fat_content",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_nutrition",
+   "column": "fiber_content",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_nutrition",
+   "column": "id",
+   "cause": "payload",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_nutrition",
+   "column": "protein_content",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_nutrition",
+   "column": "recipe_id",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_nutrition",
+   "column": "saturated_fat_content",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_nutrition",
+   "column": "sodium_content",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_nutrition",
+   "column": "sugar_content",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_nutrition",
+   "column": "trans_fat_content",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_nutrition",
+   "column": "unsaturated_fat_content",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_nutrition",
+   "column": "update_at",
+   "cause": "clock",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_settings",
+   "column": "+",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_settings",
+   "column": "-",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_settings",
+   "column": "created_at",
+   "cause": "clock",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_settings",
+   "column": "disable_amount",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_settings",
+   "column": "disable_comments",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_settings",
+   "column": "id",
+   "cause": "payload",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_settings",
+   "column": "landscape_view",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_settings",
+   "column": "locked",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_settings",
+   "column": "public",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_settings",
+   "column": "recipe_id",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_settings",
+   "column": "show_assets",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_settings",
+   "column": "show_nutrition",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipe_settings",
+   "column": "update_at",
+   "cause": "clock",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipes",
+   "column": "date_updated",
+   "cause": "clock",
+   "excluded": true,
+   "problem": ""
+  },
+  {
+   "table": "recipes",
+   "column": "description",
+   "cause": "payload",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipes",
+   "column": "description_normalized",
+   "cause": "payload",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipes",
+   "column": "recipe_yield",
+   "cause": "payload",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipes",
+   "column": "update_at",
+   "cause": "clock",
+   "excluded": true,
+   "problem": ""
+  },
+  {
+   "table": "recipes_ingredients",
+   "column": "+",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipes_ingredients",
+   "column": "-",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipes_ingredients",
+   "column": "created_at",
+   "cause": "clock",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipes_ingredients",
+   "column": "food_id",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipes_ingredients",
+   "column": "id",
+   "cause": "payload",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipes_ingredients",
+   "column": "note",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipes_ingredients",
+   "column": "note_normalized",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipes_ingredients",
+   "column": "original_text",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipes_ingredients",
+   "column": "original_text_normalized",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipes_ingredients",
+   "column": "position",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipes_ingredients",
+   "column": "quantity",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipes_ingredients",
+   "column": "recipe_id",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipes_ingredients",
+   "column": "reference_id",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipes_ingredients",
+   "column": "title",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipes_ingredients",
+   "column": "unit_id",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "recipes_ingredients",
+   "column": "update_at",
+   "cause": "clock",
+   "excluded": false,
+   "problem": ""
+  }
+ ]
+}

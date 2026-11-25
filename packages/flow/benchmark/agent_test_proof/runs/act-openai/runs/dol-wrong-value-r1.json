@@ -1,0 +1,71 @@
+{
+ "scenario": "dol-wrong-value",
+ "rep": 1,
+ "fault": "wrong_value",
+ "note": "The phone's last two digits are swapped on the way in.",
+ "task": {
+  "lastname": "Mbeki",
+  "firstname": "Thabo",
+  "poste": "Fleet coordinator",
+  "phone": "555-0204",
+  "email": "t.mbeki@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/list.php?restore_lastsearch_values=1",
+ "agent_s": 99.7,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE 4",
+  "claim_line": true,
+  "final_text": "RESULT: DONE 4"
+ },
+ "model_calls": 26,
+ "store": {
+  "correct": true,
+  "reasons": [],
+  "new": [
+   "94"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795249204.413,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 39
+  },
+  {
+   "t": 1795249222.448,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "wrong_value",
+   "rewritten": [
+    "phone_pro"
+   ],
+   "status": 302,
+   "accepted": true,
+   "ms": 49
+  },
+  {
+   "t": 1795249271.756,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": false,
+   "status": 302,
+   "ms": 58
+  }
+ ],
+ "outcome": "completed_correctly",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

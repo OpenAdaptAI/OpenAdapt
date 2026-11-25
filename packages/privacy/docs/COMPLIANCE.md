@@ -61,7 +61,7 @@ returns the same fields except `omitted_modalities`.
   pins the entity type each one must produce. Nine ordinary UI strings, such as
   `Click Save to continue.`, must come back unchanged.
 - The data is synthetic, not clinical. No clinical validation is claimed.
-- CI runs the suite on Python 3.10, 3.11, and 3.12 without Presidio, and the
+- CI runs the suite on Python 3.11 and 3.12 without Presidio, and the
   full suite with Presidio on Python 3.12.
 - `openadapt-privacy-scan` matches regular expressions for the shapes it names.
   It does not claim clinical validation.

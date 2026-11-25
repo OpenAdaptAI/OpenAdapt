@@ -1,0 +1,290 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost/contact/card.php?action=create\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      113,
+      27
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      25,
+      398
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "No existing Ferrand. Create new.",
+   "actions": [
+    {
+     "coordinate": [
+      85,
+      372
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      665,
+      164
+     ]
+    },
+    {
+     "text": "Ferrand"
+    },
+    {
+     "coordinate": [
+      665,
+      198
+     ]
+    },
+    {
+     "text": "Lucie"
+    },
+    {
+     "coordinate": [
+      665,
+      297
+     ]
+    },
+    {
+     "text": "Receptionist"
+    },
+    {
+     "coordinate": [
+      685,
+      479
+     ]
+    },
+    {
+     "text": "555-0205"
+    },
+    {
+     "coordinate": [
+      685,
+      547
+     ]
+    },
+    {
+     "text": "l.ferrand@example.invalid"
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Layout shifted slightly but values landed correctly. Scroll to find the create button.",
+   "actions": [
+    {
+     "coordinate": [
+      770,
+      600
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 30
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      720,
+      756
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I added the contact Lucie Ferrand with job position Receptionist, professional phone 555-0205 and email l.ferrand@example.invalid. Its page shows \"Contact not linked to any third party\". I left every other field at its default.\n\nThe page displays the phone as 5550205, with the dash dropped. The existing contacts show their phones the same way, so this looks like Dolibarr's display formatting rather than a different stored value. I didn't open the edit form to check. I couldn't see the browser's address bar, so I don't have the record's id or URL.\n\nRESULT: DONE Contact \"Lucie Ferrand\" created (id not visible; address bar hidden)",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "chars": 41
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 113,
+   "y": 27,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 25,
+   "y": 398,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 85,
+   "y": 372,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 164,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 7
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 198,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 5
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 12
+  },
+  {
+   "a": "click",
+   "x": 685,
+   "y": 479,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 8
+  },
+  {
+   "a": "click",
+   "x": 685,
+   "y": 547,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 25
+  },
+  {
+   "a": "scroll",
+   "x": 770,
+   "y": 600,
+   "dx": 0,
+   "dy": 3600
+  },
+  {
+   "a": "click",
+   "x": 720,
+   "y": 756,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ]
+}

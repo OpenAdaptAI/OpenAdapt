@@ -318,13 +318,13 @@ def test_distribution_metadata_does_not_publish_a_static_lifecycle():
 def test_distribution_metadata_installs_the_launcher_on_newer_python():
     """An upper Requires-Python bound made pip on 3.13+ backtrack to 1.3.0.
 
-    The launcher installs on any Python >=3.10; the engine dependencies carry
+    The launcher installs on any Python >=3.11; the engine dependencies carry
     the version marker instead (tests/test_python_support.py).
     """
     from importlib.metadata import metadata
 
     actual = metadata("openadapt")["Requires-Python"]
-    assert {term.strip() for term in actual.split(",")} == {">=3.10"}
+    assert {term.strip() for term in actual.split(",")} == {">=3.11"}
 
 
 def test_doctor_lists_quickstart_dependencies_as_core_not_extras(monkeypatch):
@@ -391,29 +391,33 @@ def test_launcher_flow_and_substrate_extras_metadata():
 
     assert (
         metadata["dependencies"].count(
-            f"openadapt-flow[browser,hosted]>=3.4.0,<5.0.0; {supported}"
+            f"openadapt-flow[browser,hosted]>=4.0.0,<5.0.0; {supported}"
         )
         == 1
     )
     assert (
-        metadata["dependencies"].count(f"openadapt-agent>=2.1.0,<3; {supported}") == 1
+        metadata["dependencies"].count(f"openadapt-types>=0.24.2,<0.25.0; {supported}")
+        == 1
     )
-    assert extras["flow"] == [f"openadapt-flow[vision]>=3.4.0,<5.0.0; {supported}"]
-    assert extras["agent"] == [f"openadapt-agent>=2.1.0,<3; {supported}"]
-    assert extras["browser"] == [f"openadapt-flow[browser]>=3.4.0,<5.0.0; {supported}"]
-    assert extras["privacy"] == [f"openadapt-flow[privacy]>=3.4.0,<5.0.0; {supported}"]
+    assert (
+        metadata["dependencies"].count(f"openadapt-agent>=2.2.4,<3; {supported}") == 1
+    )
+    assert extras["flow"] == [f"openadapt-flow[vision]>=4.0.0,<5.0.0; {supported}"]
+    assert extras["agent"] == [f"openadapt-agent>=2.2.4,<3; {supported}"]
+    assert extras["browser"] == [f"openadapt-flow[browser]>=4.0.0,<5.0.0; {supported}"]
+    assert extras["privacy"] == [f"openadapt-flow[privacy]>=4.0.0,<5.0.0; {supported}"]
     assert extras["capture"] == [
         "openadapt-capture>=1.2.0,<2.0.0",
-        f"openadapt-flow[capture]>=3.4.0,<5.0.0; {supported}",
+        f"openadapt-flow[capture]>=4.0.0,<5.0.0; {supported}",
     ]
-    assert extras["windows"] == [f"openadapt-flow[windows]>=3.4.0,<5.0.0; {supported}"]
+    assert extras["windows"] == [f"openadapt-flow[windows]>=4.0.0,<5.0.0; {supported}"]
     assert extras["macos"] == [
-        f"openadapt-flow[macos]>=3.4.0,<5.0.0; sys_platform == 'darwin' and {supported}"
+        f"openadapt-flow[macos]>=4.0.0,<5.0.0; sys_platform == 'darwin' and {supported}"
     ]
     assert extras["linux"] == [
-        f"openadapt-flow[linux]>=3.4.0,<5.0.0; sys_platform == 'linux' and {supported}"
+        f"openadapt-flow[linux]>=4.0.0,<5.0.0; sys_platform == 'linux' and {supported}"
     ]
-    assert extras["rdp"] == [f"openadapt-flow[rdp]>=3.4.0,<5.0.0; {supported}"]
+    assert extras["rdp"] == [f"openadapt-flow[rdp]>=4.0.0,<5.0.0; {supported}"]
     assert extras["all"] == [
         "openadapt[browser,core,grounding,retrieval,privacy,flow,windows,rdp,agent]",
         "openadapt[macos]; sys_platform == 'darwin'",
@@ -444,14 +448,14 @@ def test_released_flow_x11_sonames_are_case_corrected(monkeypatch):
     )
 
 
-@pytest.mark.parametrize("version", ["3.4.0", "3.4.1", "3.99.0"])
+@pytest.mark.parametrize("version", ["4.0.0", "4.0.1", "4.99.0"])
 def test_launcher_accepts_flow_versions_in_the_supported_range(version):
     assert _supported_flow_version(version)
 
 
 @pytest.mark.parametrize(
     "version",
-    ["1.28.9", "1.35.1", "2.1.0", "2.7.1", "3.1.0", "3.2.1", "5.0.0", "invalid"],
+    ["1.28.9", "1.35.1", "2.1.0", "2.7.1", "3.1.0", "3.4.0", "5.0.0", "invalid"],
 )
 def test_launcher_rejects_flow_versions_outside_the_supported_range(version):
     assert not _supported_flow_version(version)
@@ -556,7 +560,7 @@ def test_deploy_native_backend_fails_without_its_platform_extra(
     monkeypatch, backend, host, modules, install
 ):
     _host(monkeypatch, host, {"openadapt_flow"})
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "3.4.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "4.0.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", backend])
 
@@ -573,7 +577,7 @@ def test_deploy_native_backend_passes_with_its_platform_extra(
     monkeypatch, backend, host, modules, install
 ):
     _host(monkeypatch, host, {"openadapt_flow"} | modules)
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "3.4.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "4.0.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", backend])
 
@@ -717,7 +721,7 @@ def test_deploy_preflight_composes_existing_flow_interfaces_without_secrets(
             else None
         ),
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "3.4.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "4.0.0")
     monkeypatch.setenv("BYOC_CONNECTOR_TOKEN", "connector-token-value")
     result = CliRunner().invoke(
         cli_main,
@@ -742,13 +746,13 @@ def test_deploy_base_hosted_install_gives_conditional_console_setup(monkeypatch)
         "importlib.util.find_spec",
         lambda name: object() if name in {"openadapt_flow", "aardwolf"} else None,
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "3.4.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "4.0.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", "rdp"])
 
     assert result.exit_code == 0, result.output
     assert "optional local operator console is not installed" in result.output
-    assert 'python -m pip install "openadapt-flow[console]==3.4.0"' in result.output
+    assert 'python -m pip install "openadapt-flow[console]==4.0.0"' in result.output
     assert "openadapt flow console --bundles" not in result.output
     assert "Re-run this preflight" in result.output
 
@@ -763,13 +767,13 @@ def test_deploy_console_requires_openadapt_types(monkeypatch):
             else None
         ),
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "3.4.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "4.0.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", "rdp"])
 
     assert result.exit_code == 0, result.output
     assert "optional local operator console is not installed" in result.output
-    assert 'python -m pip install "openadapt-flow[console]==3.4.0"' in result.output
+    assert 'python -m pip install "openadapt-flow[console]==4.0.0"' in result.output
     assert "openadapt flow console --bundles" not in result.output
 
 
@@ -794,7 +798,7 @@ def test_deploy_preflight_fails_without_web_runtime(monkeypatch):
         "importlib.util.find_spec",
         lambda name: object() if name == "openadapt_flow" else None,
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "3.4.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "4.0.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", "web"])
 
@@ -812,7 +816,7 @@ def test_deploy_preflight_fails_without_rdp_transport(monkeypatch):
         "importlib.util.find_spec",
         lambda name: object() if name == "openadapt_flow" else None,
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "3.4.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "4.0.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", "rdp"])
 
@@ -834,7 +838,7 @@ def test_deploy_preflight_fails_for_unsupported_flow(monkeypatch, flow_version):
 
     assert result.exit_code != 0
     assert "[UNSUPPORTED]" in result.output
-    assert ">=3.4.0,<5.0.0" in result.output
+    assert ">=4.0.0,<5.0.0" in result.output
     assert "Preflight passed" not in result.output
 
 
@@ -848,7 +852,7 @@ def test_top_level_help_lists_shared_tasks_and_native_wrap():
     ]
     names = [line.split()[0] for line in section.splitlines() if line.startswith("  ")]
     assert names == list(TASKS)
-    assert len(names) == 16
+    assert len(names) == 17
     assert "wrap" in names
     assert names[:2] == ["demo", "verify"]
 

@@ -26,6 +26,12 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 
+from openadapt_flow.check_level import Basis
+from openadapt_flow.tx.api_readback import (
+    CACHE_BYPASS_HEADERS,
+    api_readback_basis,
+    tx_evidence_scope,
+)
 from openadapt_flow.tx.receipt import (
     issue_tx_receipt,
     load_or_create_signing_key,
@@ -472,10 +478,16 @@ class LensHttpResponse:
     etag: Optional[str] = None
     extracted_entity_id: Optional[str] = None
     network_error: Optional[str] = None
+    #: The response's ``error_path`` value when the call failed inside a 2xx.
+    call_error: Optional[str] = None
 
     @property
     def ok(self) -> bool:
-        return self.status_code is not None and 200 <= self.status_code < 300
+        return (
+            self.status_code is not None
+            and 200 <= self.status_code < 300
+            and self.call_error is None
+        )
 
 
 def _render_template(
@@ -493,6 +505,67 @@ def _render_template(
         return urllib.parse.quote(text, safe="") if url_quote else text
 
     return _PLACEHOLDER_RE.sub(_replace, template)
+
+
+_INT_PLACEHOLDER_RE = re.compile(r"^\{([A-Za-z0-9_.-]+):int\}$")
+_WHOLE_PLACEHOLDER_RE = re.compile(r"^\{([A-Za-z0-9_.-]+)\}$")
+
+
+def render_body_template(
+    template: Any,
+    context: Mapping[str, Any],
+    payload: Optional[Mapping[str, Any]] = None,
+) -> Any:
+    """Fill an ``EndpointTemplate.body_template`` for one request.
+
+    Containers are copied; ``"{payload}"`` becomes the write payload object,
+    ``"{name:int}"`` an integer (or an error), a whole ``"{name}"`` keeps the
+    value's type, and other strings substitute text.
+    """
+    if isinstance(template, Mapping):
+        return {
+            str(k): render_body_template(v, context, payload)
+            for k, v in template.items()
+        }
+    if isinstance(template, list):
+        return [render_body_template(v, context, payload) for v in template]
+    if not isinstance(template, str):
+        return template
+    if template == "{payload}":
+        if payload is None:
+            raise ValueError("body template needs a payload")
+        return dict(payload)
+    as_int = _INT_PLACEHOLDER_RE.match(template)
+    if as_int:
+        found, val = _get_path(context, as_int.group(1))
+        if not found or isinstance(val, bool):
+            raise ValueError(f"missing integer template parameter '{as_int.group(1)}'")
+        try:
+            return int(str(val))
+        except ValueError as exc:
+            raise ValueError(
+                f"template parameter '{as_int.group(1)}' is not an integer"
+            ) from exc
+    whole = _WHOLE_PLACEHOLDER_RE.match(template)
+    if whole:
+        found, val = _get_path(context, whole.group(1))
+        if not found or val is None:
+            raise ValueError(f"missing template parameter '{whole.group(1)}'")
+        return val
+    return _render_template(template, context)
+
+
+def get_record_path(body: Any, path: str) -> tuple[bool, Any]:
+    """Follow a dotted path with list indexes (``result.0``) into JSON."""
+    cur = body
+    for part in path.split("."):
+        if isinstance(cur, Mapping) and part in cur:
+            cur = cur[part]
+        elif isinstance(cur, list) and part.isdigit() and int(part) < len(cur):
+            cur = cur[int(part)]
+        else:
+            return False, None
+    return True, cur
 
 
 class EntityLensClient:
@@ -554,7 +627,16 @@ class EntityLensClient:
             req_headers.update(extra_headers)
 
         body_bytes: Optional[bytes] = None
-        if json_payload is not None:
+        if endpoint.body_template is not None:
+            try:
+                rendered = render_body_template(
+                    endpoint.body_template, context, json_payload
+                )
+            except ValueError as exc:
+                return LensHttpResponse(status_code=None, network_error=str(exc))
+            body_bytes = json.dumps(rendered).encode("utf-8")
+            req_headers.setdefault("Content-Type", "application/json")
+        elif json_payload is not None:
             body_bytes = json.dumps(dict(json_payload)).encode("utf-8")
             req_headers.setdefault("Content-Type", "application/json")
 
@@ -593,12 +675,18 @@ class EntityLensClient:
 
         etag = self._extract_header(resp_headers, endpoint.etag_header or "ETag")
         extracted_id = self._extract_entity_id(endpoint, parsed_json, resp_headers)
+        call_error: Optional[str] = None
+        if endpoint.error_path:
+            found_err, err_val = get_record_path(parsed_json, endpoint.error_path)
+            if found_err and err_val is not None:
+                call_error = json.dumps(err_val, default=str)[:500]
         return LensHttpResponse(
             status_code=status_code,
             json_body=parsed_json,
             headers=resp_headers,
             etag=etag,
             extracted_entity_id=extracted_id,
+            call_error=call_error,
         )
 
     @staticmethod
@@ -618,6 +706,14 @@ class EntityLensClient:
         parsed_json: Any,
         headers: Mapping[str, str],
     ) -> Optional[str]:
+        if endpoint.record_path:
+            found_rec, rec = get_record_path(parsed_json, endpoint.record_path)
+            if found_rec and isinstance(rec, Mapping):
+                for id_key in (endpoint.id_field, self.lens.id_field):
+                    found, val = _get_path(rec, id_key)
+                    if found and val is not None and str(val).strip():
+                        return str(val)
+            return None
         if isinstance(parsed_json, Mapping):
             target_obj: Mapping[str, Any] = parsed_json
             if endpoint.records_key and isinstance(
@@ -643,6 +739,9 @@ class EntityLensClient:
         endpoint: EndpointTemplate,
         body: Any,
     ) -> Optional[dict[str, Any]]:
+        if endpoint.record_path:
+            found, rec = get_record_path(body, endpoint.record_path)
+            return dict(rec) if found and isinstance(rec, Mapping) else None
         if not isinstance(body, Mapping):
             return None
         if endpoint.records_key:
@@ -651,7 +750,7 @@ class EntityLensClient:
         return dict(body)
 
     def get_one(
-        self, entity_id: str
+        self, entity_id: str, extra_headers: Optional[Mapping[str, str]] = None
     ) -> tuple[LensHttpResponse, Optional[dict[str, Any]], int]:
         """Fetch a single entity by ID in O(1). Returns ``(response, record, rows_read)``."""
         endpoint = self.lens.get_one
@@ -661,7 +760,7 @@ class EntityLensClient:
             self.lens.id_field: entity_id,
             endpoint.id_field: entity_id,
         }
-        resp = self._request(endpoint, context=ctx)
+        resp = self._request(endpoint, context=ctx, extra_headers=extra_headers)
         if not resp.ok:
             return resp, None, 0
         record = self.unwrap_single_record(endpoint, resp.json_body)
@@ -924,7 +1023,7 @@ class TransactionalCommitEngine:
         self, entity_id: str
     ) -> tuple[LensHttpResponse, Optional[dict[str, Any]], int]:
         if self.atomic_authority is None:
-            return self.client.get_one(entity_id)
+            return self.client.get_one(entity_id, extra_headers=CACHE_BYPASS_HEADERS)
         try:
             record = self.atomic_authority.read(entity_id)
         except (OSError, ValueError, sqlite3.Error):
@@ -1501,6 +1600,20 @@ class TransactionalCommitEngine:
             if judge_reason not in reasons:
                 reasons.append(judge_reason)
 
+        basis = (
+            "owned_connection"
+            if atomic_postimage is not None
+            else api_readback_basis(
+                operation=task.operation,
+                r0=r0,
+                r1=r1,
+                headers=r1_resp.headers,
+                status=r1_resp.status_code,
+                version_field=v_field,
+                occ_status=occ_status,
+                cache_bypassed=self.atomic_authority is None,
+            )
+        )
         if unblocked_collateral:
             outcome = "REFUTED"
         elif occ_status == "CONCURRENT_MODIFICATION":
@@ -1509,7 +1622,7 @@ class TransactionalCommitEngine:
             outcome = "REFUTED"
         elif action_error is not None or incomplete_wire:
             outcome = "UNCERTAIN"
-        elif atomic_postimage is None:
+        elif basis is None:
             outcome = "UNCERTAIN"
         else:
             outcome = "CONFIRMED"
@@ -1560,6 +1673,7 @@ class TransactionalCommitEngine:
             t0=t0,
             atomic_enforced=atomic_postimage is not None
             and occ_status == "UNCONTESTED",
+            basis=basis,
         )
 
     def _finalize_result(
@@ -1578,7 +1692,16 @@ class TransactionalCommitEngine:
         rows_read: int,
         t0: float,
         atomic_enforced: bool = False,
+        basis: Optional[Basis] = None,
     ) -> TxCommitResult:
+        from openadapt_types.check_level import CONFIRMED_WORD
+
+        scope = tx_evidence_scope(
+            outcome=outcome,
+            basis=basis if outcome == CONFIRMED_WORD else None,
+            read_back=r1 is not None,
+            wire_observed=wire_summary is not None,
+        )
         rec_id, rec_path = issue_tx_receipt(
             self.workdir,
             task_id=task.task_id,
@@ -1596,6 +1719,7 @@ class TransactionalCommitEngine:
             qualification_state="atomic_row_enforced"
             if atomic_enforced
             else "unqualified",
+            evidence_scope=scope,
         )
         elapsed_ms = round((time.perf_counter() - t0) * 1000.0, 3)
         return TxCommitResult(
@@ -1614,6 +1738,7 @@ class TransactionalCommitEngine:
             receipt_id=rec_id,
             rows_read=rows_read,
             duration_ms=elapsed_ms,
+            evidence_scope=scope,
         )
 
     # -- public execution API -------------------------------------------------

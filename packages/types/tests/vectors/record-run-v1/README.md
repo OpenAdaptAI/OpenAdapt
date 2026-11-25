@@ -39,7 +39,15 @@ not secrets.
    Closed schema (see `openadapt_types/receipt.py`); the payload must equal its
    canonical form (sorted keys, no whitespace, no ASCII escaping), otherwise
    `malformed`. Contradictions (counts that disagree with `lines`, a VERIFIED
-   receipt with a refuted line) are `inconsistent`.
+   receipt with a refuted line) are `inconsistent`. The predicate may carry an
+   optional `evidence_scope` block (`openadapt.evidence-scope/v1`, closed; see
+   `openadapt_types/evidence_scope.py`); a receipt without it still verifies.
+   The block is never `null`, an optional field in it (`basis`,
+   `read_back_at`, `recheck_window_s`) is left out rather than set to `null`,
+   and `wire.protocols_parsed` is always present (`[]` when none): those
+   payloads are not canonical, so `malformed`. With it, a `VERIFIED` outcome needs the word `VERIFIED` (level 3 or 4, with
+   a basis) or `CONFIRMED`, and no other outcome may carry either; otherwise
+   `inconsistent`.
 4. **Commitments.** `sha256("openadapt.receipt-commitment/v1" 0x00 path 0x00
    salt(32 raw bytes) 0x00 canonical_json(value))`, as lower-case hex. Salts are
    64 lower-case hex characters.

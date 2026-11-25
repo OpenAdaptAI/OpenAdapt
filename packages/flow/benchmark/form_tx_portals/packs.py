@@ -477,6 +477,9 @@ def build_underwriting_wizard_pack() -> FormPack:
                 ),
             ),
         ),
+        # The quote is committed only by this endpoint; draft saves, the
+        # property re-render and the estimator call are not the commit.
+        commit_url_patterns=("/api/quotes/commit",),
         max_commit_mutations=1,
     )
 
@@ -647,6 +650,8 @@ def build_hospital_hms_pack() -> FormPack:
                 ),
             ),
         ),
+        # Registration is committed only by this endpoint.
+        commit_url_patterns=("/api/hms/register",),
         max_commit_mutations=2,
     )
 

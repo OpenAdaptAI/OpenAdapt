@@ -1,0 +1,34 @@
+[
+ {
+  "__key": "1",
+  "lastname": "Haddad",
+  "firstname": "Samir",
+  "poste": "Buyer",
+  "email": "s.haddad@example.invalid",
+  "phone": "555-0140"
+ },
+ {
+  "__key": "3",
+  "lastname": "Brandt",
+  "firstname": "Oskar",
+  "poste": "Site manager",
+  "email": "o.brandt@example.invalid",
+  "phone": "555-0142"
+ },
+ {
+  "__key": "40",
+  "lastname": "Novak",
+  "firstname": "Elena",
+  "poste": "Accounts payable",
+  "email": "e.novak@example.invalid",
+  "phone": "555-0141"
+ },
+ {
+  "__key": "46",
+  "lastname": "Lindgren",
+  "firstname": "Tove",
+  "poste": "Purchasing lead",
+  "email": "t.lindgren@example.invalid",
+  "phone": "555-0202"
+ }
+]

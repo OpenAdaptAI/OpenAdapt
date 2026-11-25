@@ -14,6 +14,7 @@ from openadapt_desktop.controller import RecordingState
 from openadapt_desktop.db import IndexDB
 from openadapt_desktop.dispatch import EngineDispatcher, EngineServices
 from openadapt_desktop.flow_bridge import FlowBridge
+from openadapt_desktop.macos_permissions import control_permission_guidance
 
 
 def _precise_report(
@@ -2686,6 +2687,7 @@ class TestMisc:
             "screen_recording": True,
             "accessibility": False,
             "input_monitoring": False,
+            "control_permission": control_permission_guidance(),
         }
 
     def test_non_mac_input_monitoring_request_returns_granted_shape(
@@ -2726,6 +2728,7 @@ class TestMisc:
             "screen_recording": True,
             "accessibility": True,
             "input_monitoring": True,
+            "control_permission": control_permission_guidance(),
         }
         assert requests == [True]
 
@@ -2745,6 +2748,7 @@ class TestMisc:
             "screen_recording": True,
             "accessibility": True,
             "input_monitoring": False,
+            "control_permission": control_permission_guidance(),
         }
 
     def test_mac_input_monitoring_request_skips_prompt_when_already_granted(
@@ -2766,6 +2770,7 @@ class TestMisc:
             "screen_recording": True,
             "accessibility": True,
             "input_monitoring": True,
+            "control_permission": control_permission_guidance(),
         }
 
     def test_unknown_command_raises(self, deps) -> None:
@@ -2847,6 +2852,13 @@ class TestMisc:
             "shadow_pause",
             "shadow_unpause",
             "at_rest_status",
+            "chrome_profile_notice",
+            "chrome_profile_list",
+            "chrome_profile_create",
+            "chrome_profile_acknowledge",
+            "chrome_profile_open",
+            "chrome_profile_close",
+            "chrome_profile_revoke",
         }
         assert expected.issubset(set(disp.commands))
 
@@ -2926,3 +2938,12 @@ class TestDryRunCommands:
             {"workflow_id": "anything"}, run=False, stop_before_effect=True
         )
         assert response["pre_action_refusal"] is True
+
+    def test_shadow_emit_follows_runtime_reassignment(self, deps):
+        disp, _db, _events = deps
+        disp._shadow_resumed = True
+        shadow = disp.shadow
+        reassigned: list[tuple[str, dict]] = []
+        disp.emit = lambda event, data: reassigned.append((event, data))
+        shadow._emit("shadow.test", {"ok": True})
+        assert reassigned == [("shadow.test", {"ok": True})]

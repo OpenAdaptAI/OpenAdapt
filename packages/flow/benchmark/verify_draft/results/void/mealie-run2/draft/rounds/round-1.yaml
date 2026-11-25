@@ -1,0 +1,33 @@
+schema_version: openadapt.verify/v1
+verifier:
+  kind: surfaces
+  surfaces:
+    record:
+      kind: sql
+      sql_query: SELECT CAST(r."id" AS TEXT) AS "id", CAST(r."slug" AS TEXT) AS "slug", CAST(r."name" AS TEXT) AS "name", CAST(r."description" AS TEXT) AS "description", CAST(r."description_normalized" AS TEXT) AS "description_normalized", CAST(r."recipe_yield" AS TEXT) AS "recipe_yield" FROM "recipes" r
+effects:
+- kind: record_written
+  probe: surface=record|recipe named by slug carries the new description and yield
+  match:
+    slug: {param: slug}
+    description: {param: description}
+    recipe_yield: {param: recipe_yield}
+  expected_count: 1
+frame:
+  identity_field: id
+  target_fields_by_surface:
+    record: [description, description_normalized, recipe_yield]
+  database:
+    dialect: postgresql
+    allow_tables:
+    - {table: recipe_instructions, mode: skip, reason: Mealie's recipe save deletes and re-inserts every instruction row of the recipe with new ids on each PATCH}
+    - {table: recipes_ingredients, mode: skip, reason: Mealie's recipe save deletes and re-inserts every ingredient row of the recipe with new ids on each PATCH}
+    - {table: recipe_nutrition, mode: skip, reason: Mealie's recipe save deletes and re-inserts the nutrition row with a new id on each PATCH}
+    - {table: recipe_settings, mode: skip, reason: Mealie's recipe save deletes and re-inserts the settings row with a new id on each PATCH}
+    ignore_columns:
+      recipes: [date_updated, update_at]
+    views:
+      recipes: record
+    settle_s: 1
+    settle_attempts: 3
+    recheck_after_s: 300

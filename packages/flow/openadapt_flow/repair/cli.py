@@ -36,6 +36,11 @@ from openadapt_flow.repair.registration import (
     load_detached_candidate,
     register_bundle_candidate,
 )
+from openadapt_flow.runtime.heal import (
+    has_heal_frame,
+    heal_frame_path,
+    read_heal_frame,
+)
 
 DEFAULT_STORE = "repair-store"
 
@@ -202,8 +207,8 @@ def _campaign_inputs(
         step = steps.get(step_id)
         if step is None or step.anchor is None:
             continue
-        frame_path = run_dir / "heals" / step_id / "screen.png"
-        if not frame_path.is_file():
+        frame_path = heal_frame_path(run_dir, step_id)
+        if not has_heal_frame(run_dir, step_id):
             raise RepairLifecycleError(
                 f"refused (fail closed): no evidence frame for changed step "
                 f"{step_id!r} at {frame_path}"
@@ -214,7 +219,9 @@ def _campaign_inputs(
         if template is None:
             template_path = bundle / step.anchor.template
             template = template_path.read_bytes() if template_path.is_file() else None
-        inputs.append((step_id, step.anchor, frame_path.read_bytes(), template))
+        inputs.append(
+            (step_id, step.anchor, read_heal_frame(run_dir, step_id), template)
+        )
     if not inputs:
         raise RepairLifecycleError(
             "refused (fail closed): the candidate has no changed anchored "
