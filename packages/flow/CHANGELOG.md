@@ -17,6 +17,17 @@
 
 ## Unreleased
 
+### Native Windows qualification
+
+- Native Windows qualification campaigns use the observed Windows environment
+  and opt-in, authenticated UIA/physical fault staging. Fault overlays are
+  bounded, have no application write handlers and are cleaned up after trials.
+  This keeps the existing machine/OS qualification binding; it does not make
+  admissions portable across fresh workers.
+- Qualification read-back checks complete before/after row multisets for
+  inserts and declared field updates. A changed sibling, extra or missing
+  row, duplicate row, undeclared field change or unavailable read refuses.
+
 ### Fixes
 
 - `openadapt quickstart` no longer exits 1 on a fresh machine with encryption

@@ -124,7 +124,7 @@ class _Host:
             self.app.wait(timeout=30)
         self.app = None
 
-    def start_agent(self):
+    def start_agent(self, *, allow_qualification_faults: bool = False):
         from openadapt_flow.backends.win_agent.tls import generate_self_signed_cert
         from openadapt_flow.backends.windows_backend import WindowsBackend
 
@@ -145,6 +145,11 @@ class _Host:
                 cert.certfile,
                 "--keyfile",
                 cert.keyfile,
+                *(
+                    ["--allow-qualification-faults"]
+                    if allow_qualification_faults
+                    else []
+                ),
             ],
             stdout=log,
             stderr=subprocess.STDOUT,

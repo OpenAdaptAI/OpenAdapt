@@ -3652,6 +3652,8 @@ class AgentConfig:
     certfile: Optional[str] = None
     keyfile: Optional[str] = None
     allow_legacy_exec: bool = False
+    #: Test-only native overlays; requires authentication and defaults off.
+    allow_qualification_faults: bool = False
 
     def authed(self) -> bool:
         """True when a bearer token is required."""
@@ -3663,6 +3665,8 @@ class AgentConfig:
 
     def __post_init__(self) -> None:
         """Reject a half-configured TLS pair (fail closed, never silent HTTP)."""
+        if self.allow_qualification_faults and not self.token:
+            raise ValueError("qualification faults require an authenticated agent")
         if bool(self.certfile) != bool(self.keyfile):
             raise ValueError(
                 "TLS needs BOTH certfile and keyfile (got only one) -- refusing "
@@ -4144,12 +4148,32 @@ def make_handler_class(
     uia_fn: UiaFn = _perform_uia,
     context_fn: ContextFn = _execution_context_identity,
     legacy_fn: LegacyFn = _perform_legacy_calls,
+    fault_controller: Any = None,
 ) -> type[BaseHTTPRequestHandler]:
     """Build the request-handler class bound to ``config`` and ``grab_fn``.
 
     ``grab_fn`` is injectable so tests drive the real HTTP roundtrip with a
     deterministic fake frame (no mss / no live desktop).
     """
+
+    faults = None
+    fault_error: tuple[type[Exception], ...] = ()
+    if config.allow_qualification_faults:
+        try:
+            from openadapt_flow.backends.win_agent.qualification_faults import (
+                FaultStagingError,
+                QualificationFaultController,
+                validate_identity_offset,
+            )
+        except ModuleNotFoundError:
+            # launch_agent deploys this script and its helper side by side.
+            from win_agent_qualification_faults import (  # type: ignore[no-redef,import-not-found]
+                FaultStagingError,
+                QualificationFaultController,
+                validate_identity_offset,
+            )
+        fault_error = (FaultStagingError,)
+        faults = fault_controller or QualificationFaultController(uia_fn, grab_fn)
 
     keyboards = None
     keyboard_errors: tuple[type[Exception], ...] = ()
@@ -4196,6 +4220,7 @@ def make_handler_class(
         )
 
     class AgentHandler(BaseHTTPRequestHandler):
+        qualification_fault_controller = faults
         server_version = "OAFlowWinAgent/1.0"
 
         def log_message(self, *args: object) -> None:  # noqa: D401 - silence
@@ -4257,6 +4282,11 @@ def make_handler_class(
                             "uia_authoring_tree_v1",
                             "native_focus_v1",
                             *(
+                                ["qualification_faults_v1"]
+                                if faults is not None
+                                else []
+                            ),
+                            *(
                                 ["legacy_waa_input_v1"]
                                 if config.allow_legacy_exec
                                 else []
@@ -4308,6 +4338,13 @@ def make_handler_class(
                 "/uia/read": ("uia", "read"),
                 "/uia/tree": ("uia", "tree"),
             }
+            if faults is not None:
+                typed_routes.update(
+                    {
+                        "/qualification/fault": ("qualification", "stage"),
+                        "/qualification/clear": ("qualification", "clear"),
+                    }
+                )
             if keyboards is not None:
                 typed_routes.update(
                     {
@@ -4373,6 +4410,58 @@ def make_handler_class(
             if self.path in typed_routes:
                 kind, operation = typed_routes[self.path]
                 try:
+                    if kind == "qualification":
+                        assert faults is not None
+                        if operation == "clear":
+                            data = _exact_object(
+                                data,
+                                required=frozenset({"mutation_id"}),
+                                label="qualification cleanup",
+                            )
+                            token = data["mutation_id"]
+                            if (
+                                not isinstance(token, str)
+                                or len(token) != 32
+                                or any(c not in "0123456789abcdef" for c in token)
+                            ):
+                                raise AgentRequestError(
+                                    400, "invalid_schema", "invalid mutation id"
+                                )
+                            result = faults.clear(token)
+                        else:
+                            data = _exact_object(
+                                data,
+                                required=frozenset({"kind", "locator"}),
+                                optional=frozenset({"identity_offset"}),
+                                label="qualification fault",
+                            )
+                            kind_value = data["kind"]
+                            if not isinstance(kind_value, str) or kind_value not in {
+                                "ambiguity",
+                                "wrong_identity",
+                                "stale_identity",
+                            }:
+                                raise AgentRequestError(
+                                    400, "invalid_schema", "unknown qualification fault"
+                                )
+                            try:
+                                offset = validate_identity_offset(
+                                    data.get("identity_offset"), kind_value
+                                )
+                            except ValueError as exc:
+                                raise AgentRequestError(
+                                    400, "invalid_schema", str(exc)
+                                ) from exc
+                            locator = _locator_payload(data["locator"])
+                            result = (
+                                faults.stage(
+                                    kind_value, locator, identity_offset=offset
+                                )
+                                if offset is not None
+                                else faults.stage(kind_value, locator)
+                            )
+                        self._send_json(200, result)
+                        return
                     if kind == "keyboard-lease":
                         assert keyboards is not None
                         if operation == "observe":
@@ -4523,6 +4612,16 @@ def make_handler_class(
                             if kind == "context"
                             else uia_fn(operation, data)
                         )
+                except fault_error as exc:
+                    self._send_json(
+                        409,
+                        {
+                            "status": "error",
+                            "code": str(exc),
+                            "error": "qualification mutation was refused",
+                        },
+                    )
+                    return
                 except keyboard_uncertain as exc:
                     self._send_json(500, exc.payload())  # type: ignore[attr-defined]
                     return
@@ -4627,6 +4726,7 @@ def create_server(
     uia_fn: UiaFn = _perform_uia,
     context_fn: ContextFn = _execution_context_identity,
     legacy_fn: LegacyFn = _perform_legacy_calls,
+    fault_controller: Any = None,
 ) -> HTTPServer:
     """Build (but do not start) the COM-affine agent HTTP server.
 
@@ -4643,15 +4743,25 @@ def create_server(
     """
     config = config or AgentConfig()
     handler = make_handler_class(
-        config, grab_fn, input_fn, uia_fn, context_fn, legacy_fn
+        config, grab_fn, input_fn, uia_fn, context_fn, legacy_fn, fault_controller
     )
+
     # UIAutomation controls and patterns are apartment/thread-affine. A
     # single-threaded HTTPServer keeps every request on the serve_forever
     # thread; _perform_uia initializes that thread's COM apartment per request.
-    server = HTTPServer((config.host, config.port), handler)
+    class AgentServer(HTTPServer):
+        def server_close(self) -> None:
+            try:
+                faults = getattr(handler, "qualification_fault_controller", None)
+                if faults is not None:
+                    faults.close()
+            finally:
+                super().server_close()
+
+    server = AgentServer((config.host, config.port), handler)
     if config.tls_enabled():
-        # Keep this deployed script genuinely self-contained: launch_agent()
-        # copies only server.py into the guest, not the openadapt_flow package.
+        # Normal runs deploy this script without the package. Qualification
+        # explicitly deploys its bounded helper beside it.
         # The control plane mints the cert; the guest needs stdlib ssl only.
         import ssl  # noqa: PLC0415
 
@@ -4710,6 +4820,11 @@ def main(argv: Optional[list[str]] = None) -> None:
             "--allow-legacy-exec is the deprecated spelling."
         ),
     )
+    parser.add_argument(
+        "--allow-qualification-faults",
+        action="store_true",
+        help="TEST ONLY: authenticated, bounded native qualification overlays",
+    )
     args = parser.parse_args(argv)
     config = AgentConfig(
         host=args.host,
@@ -4718,6 +4833,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         certfile=args.certfile,
         keyfile=args.keyfile,
         allow_legacy_exec=args.allow_legacy_exec,
+        allow_qualification_faults=args.allow_qualification_faults,
     )
     server = create_server(config)
     scheme = "https" if config.tls_enabled() else "http"
