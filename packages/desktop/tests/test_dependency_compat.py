@@ -9,6 +9,7 @@ as the Flow release it bundles.
 
 from __future__ import annotations
 
+import os
 import tomllib
 from importlib.metadata import PackageNotFoundError, distribution
 from pathlib import Path
@@ -47,12 +48,24 @@ def _locked_version(name: str) -> Version:
 
 def _bundled_flow_types_specifier() -> SpecifierSet:
     try:
-        requires = distribution(FLOW).requires or []
+        installed = distribution(FLOW)
     except PackageNotFoundError:
         pytest.skip(
             "the bundled openadapt-flow runtime is not installed; the "
             "qualification-contract job runs this file with --extra build"
         )
+    bundled = _locked_version(FLOW)
+    if Version(installed.version) != bundled:
+        # The unit job installs the in-tree Flow on purpose. Its range is not
+        # the one Desktop ships with, so only the bundled pin is comparable.
+        message = (
+            f"installed {FLOW} {installed.version} is not the bundled pin "
+            f"{bundled}; the qualification-contract job checks the bundled range"
+        )
+        if os.environ.get("OPENADAPT_DESKTOP_REQUIRE_BUNDLED_FLOW") == "1":
+            pytest.fail(message)
+        pytest.skip(message)
+    requires = installed.requires or []
     for raw in requires:
         requirement = Requirement(raw)
         if _canonical(requirement.name) == TYPES and requirement.marker is None:
