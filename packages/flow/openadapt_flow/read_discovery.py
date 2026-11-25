@@ -85,7 +85,7 @@ def is_local_origin(url: str) -> bool:
         if not infos:
             return False
         return all(
-            ipaddress.ip_address(info[4][0].split("%", 1)[0]).is_loopback
+            ipaddress.ip_address(str(info[4][0]).split("%", 1)[0]).is_loopback
             for info in infos
         )
     try:
