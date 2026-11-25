@@ -583,24 +583,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             "ran again. To run it again, pass a new --request-id",
             file=sys.stderr,
         )
-    if isinstance(result, dict):
-        if "agent_used" not in result:
-            from pathlib import Path
-
-            if (
-                replay_only
-                or result.get("source") == "compiled"
-                or (agent is not None and task.agent is not agent)
-            ):
-                sha = result.get("program_sha256")
-                result["agent_used"] = (
-                    f"compiled-plan@{str(sha)[:12]}" if sha else "compiled-plan"
-                )
-            elif command:
-                result["agent_used"] = Path(command[0]).name
-            else:
-                result["agent_used"] = args.model or args.provider
-        result.setdefault("verifier_adapter", "deterministic")
     print(json.dumps(result, sort_keys=True))
     exit_code = getattr(agent, "exit_code", None)
     if isinstance(exit_code, int) and exit_code != 0:
