@@ -474,7 +474,8 @@ class _ParamWritingBackend(FakeBackend):
 
 
 def test_parameterized_effect_confirmed_against_real_sor(tmp_path):
-    url, _db, stop = fault_serve()
+    url, db, stop = fault_serve()
+    db.register_patient("susan")
     url = url.rstrip("/")
     try:
         # The GUI writes the RUN's patient ("susan"); a param-bound effect must
@@ -529,6 +530,7 @@ def test_demo_literal_effect_refutes_when_run_writes_different_patient(tmp_path)
     # the effect was checking the demonstration's record, not the run's. With
     # param binding (test above) the same run CONFIRMS.
     url, db, stop = fault_serve()
+    db.register_patient("susan")
     url = url.rstrip("/")
     try:
         effects = [
