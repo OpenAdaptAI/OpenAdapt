@@ -8,6 +8,7 @@ from click.testing import CliRunner
 from openadapt import cli
 
 _COMMANDS = (
+    ("kernel", ("openadapt_kernel.cli",), []),
     ("wrap", ("openadapt_flow.wrap.cli",), []),
     ("test", ("openadapt_flow.agent_test.cli",), []),
     ("agent", ("openadapt_agent.cli",), []),

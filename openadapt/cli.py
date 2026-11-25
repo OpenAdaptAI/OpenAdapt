@@ -2360,6 +2360,28 @@ def _optional_engine_entrypoint(command_ctx: click.Context, modules: tuple[str, 
 
 
 @main.command(
+    "kernel",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def kernel(command_ctx: click.Context) -> None:
+    """Run the minimal commit-boundary and shadow-to-autopilot runtime."""
+    kernel_main = _optional_engine_entrypoint(command_ctx, ("openadapt_kernel.cli",))
+    if kernel_main is None:
+        click.echo(
+            "Error: openadapt-kernel is not installed. "
+            "Install from packages/kernel (e.g. `pip install -e packages/kernel`).",
+            err=True,
+        )
+        sys.exit(2)
+    sys.exit(int(kernel_main(list(command_ctx.args)) or 0))
+
+
+@main.command(
     "hooks",
     context_settings={
         "ignore_unknown_options": True,
@@ -2390,7 +2412,7 @@ def hooks(command_ctx: click.Context) -> None:
 )
 @click.pass_context
 def plan(command_ctx: click.Context) -> None:
-    """Dry-run a batch of writes to external systems, then apply, undo or release it."""
+    """Legacy (superseded by `openadapt kernel`): dry-run a batch of writes to external systems."""
     _require_supported_python()
     plan_main = _optional_engine_entrypoint(command_ctx, ("openadapt_flow.txplan.cli",))
     if plan_main is None:
@@ -2411,7 +2433,7 @@ def plan(command_ctx: click.Context) -> None:
 )
 @click.pass_context
 def proxy(command_ctx: click.Context) -> None:
-    """Hold the database credentials; give the agent tools that preview, apply once and undo."""
+    """Legacy (superseded by `openadapt kernel`): hold database credentials for preview/apply/undo."""
     _require_supported_python()
     proxy_main = _optional_engine_entrypoint(
         command_ctx, ("openadapt_flow.txplan.proxy_cli",)

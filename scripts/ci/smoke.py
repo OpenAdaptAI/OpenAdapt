@@ -44,6 +44,7 @@ SMOKES: dict[str, tuple[str, str, list[str]]] = {
         ["openadapt-flow", "--help"],
     ),
     "launcher": (".", "openadapt", ["openadapt", "--help"]),
+    "kernel": ("packages/kernel", "openadapt_kernel", ["openadapt-kernel", "--help"]),
     "types": ("packages/types", "openadapt_types", ["openadapt-vocab-lint", "--help"]),
     "flow": ("packages/flow", "openadapt_flow", ["openadapt-flow", "--help"]),
     "agent": ("packages/agent", "openadapt_agent", ["openadapt-agent", "--help"]),
