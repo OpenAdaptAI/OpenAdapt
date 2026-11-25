@@ -937,9 +937,9 @@ def _derive_commit_url_patterns(
         if not (200 <= status < 400):
             continue
         raw_url = str(req.get("url") or req.get("path") or "")
-        pat = _normalize_commit_path_pattern(raw_url)
-        if pat and pat not in patterns:
-            patterns.append(pat)
+        derived = _normalize_commit_path_pattern(raw_url)
+        if derived and derived not in patterns:
+            patterns.append(derived)
     return tuple(patterns)
 
 
