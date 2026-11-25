@@ -644,7 +644,7 @@ def run_openemr_benchmark(
                 f"{row['wall_s']:.1f}s err={row['error']}"
             )
 
-        consecutive_billing_errors = 0
+        consecutive_quota_errors = 0
         for i in range(n_agent):
             if not preflight_ok:
                 break
@@ -703,18 +703,18 @@ def run_openemr_benchmark(
                 f"err={row['error']}"
             )
             if row.get("error") and _looks_like_billing_error(row["error"]):
-                consecutive_billing_errors += 1
-                if consecutive_billing_errors >= BILLING_ABORT_AFTER:
+                consecutive_quota_errors += 1
+                if consecutive_quota_errors >= BILLING_ABORT_AFTER:
                     agent_arm_note = (
                         f"agent arm aborted after "
-                        f"{consecutive_billing_errors} consecutive "
+                        f"{consecutive_quota_errors} consecutive "
                         f"auth/billing errors ({i + 1} of {n_agent} runs "
                         f"attempted) — last error: {row['error']}"
                     )
                     log(f"AGENT ARM ABORTED: {agent_arm_note}")
                     break
             else:
-                consecutive_billing_errors = 0
+                consecutive_quota_errors = 0
 
     results = aggregate_openemr_results(
         compiled_rows,

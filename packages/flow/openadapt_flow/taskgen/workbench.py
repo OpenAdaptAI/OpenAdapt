@@ -425,15 +425,19 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
         for k, v in (headers or {}).items():
-            self.send_header(k, v)
+            safe_k = str(k).replace("\r", "").replace("\n", "")
+            safe_v = str(v).replace("\r", "").replace("\n", "")
+            self.send_header(safe_k, safe_v)
         self.end_headers()
         self.wfile.write(data)
 
     def _redirect(self, location: str, headers: Optional[dict] = None) -> None:
         self.send_response(303)
-        self.send_header("Location", location)
+        self.send_header("Location", location.replace("\r", "").replace("\n", ""))
         for k, v in (headers or {}).items():
-            self.send_header(k, v)
+            safe_k = str(k).replace("\r", "").replace("\n", "")
+            safe_v = str(v).replace("\r", "").replace("\n", "")
+            self.send_header(safe_k, safe_v)
         self.send_header("Content-Length", "0")
         self.end_headers()
 

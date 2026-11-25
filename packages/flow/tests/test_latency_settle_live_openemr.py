@@ -99,11 +99,13 @@ def _delaying_proxy(upstream: str, delay_s: float) -> tuple[str, Callable[[], No
             self.send_response(resp.status, resp.reason)
             here = f"http://{self.headers.get('Host')}"
             for k, v in resp.getheaders():
-                if k.lower() in _HOP_BY_HOP:
+                if "\r" in k or "\n" in k or k.lower() in _HOP_BY_HOP:
                     continue
                 if k.lower() == "location":
                     v = v.replace(f"http://{host}:{port}", here)
-                self.send_header(k, v)
+                safe_k = k.replace("\r", "").replace("\n", "")
+                safe_v = v.replace("\r", "").replace("\n", "")
+                self.send_header(safe_k, safe_v)
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             if self.command != "HEAD":

@@ -347,7 +347,8 @@ def configure_ec2_instance(
 
     key = paramiko.RSAKey.from_private_key_file(config.AWS_EC2_KEY_PATH)
     ssh_client = paramiko.SSHClient()
-    ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh_client.load_system_host_keys()
+    ssh_client.set_missing_host_key_policy(paramiko.RejectPolicy())
 
     ssh_retries = 0
     while ssh_retries < max_ssh_retries:
@@ -522,7 +523,8 @@ class Deploy:
             # Connect to instance and execute commands
             key = paramiko.RSAKey.from_private_key_file(config.AWS_EC2_KEY_PATH)
             ssh_client = paramiko.SSHClient()
-            ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            ssh_client.load_system_host_keys()
+            ssh_client.set_missing_host_key_policy(paramiko.RejectPolicy())
 
             try:
                 logger.info(f"Connecting to {instance_ip}...")
