@@ -1723,3 +1723,120 @@ def test_queue_requires_consistent_request_identity() -> None:
             pack_id="pack",
             dossier=_make_sample_dossier(request_id="request"),
         )
+
+
+def test_induce_form_pack_requires_commit_evidence_and_derives_commit_endpoint() -> (
+    None
+):
+    """Issue #2556: certified_ready requires commit evidence, and demo save requests derive commit_url_patterns."""
+    from openadapt_flow.form_tx.pack_compiler import (
+        CanonicalDomainSchema,
+        CanonicalFieldSpec,
+    )
+
+    domain = CanonicalDomainSchema(
+        schema_id="minimal_record",
+        fields=(
+            CanonicalFieldSpec(
+                dossier_key="first_name",
+                required=True,
+                synonyms=("first name",),
+            ),
+        ),
+    )
+    form_snap = FormSnapshot(
+        url_origin_and_path="https://portal.example/records/new",
+        screen_id="new_record",
+        controls=(
+            ObservedControl(
+                control_id="ctrl_first",
+                dom_selector="#first_name",
+                tag="input",
+                input_type="text",
+                id_attr="first_name",
+                name_attr="first_name",
+                label_text="First Name *",
+                required=True,
+            ),
+            ObservedControl(
+                control_id="btn_save",
+                dom_selector="#save_btn",
+                tag="button",
+                role="button",
+                id_attr="save_btn",
+                label_text="Submit Record",
+            ),
+        ),
+    )
+    summary_snap = FormSnapshot(
+        url_origin_and_path="https://portal.example/records/summary",
+        screen_id="summary",
+        controls=(
+            ObservedControl(
+                control_id="ro_first",
+                dom_selector="#ro_first_name",
+                tag="dd",
+                id_attr="ro_first_name",
+                label_text="First Name",
+                current_value="Ada",
+                readonly=True,
+            ),
+        ),
+    )
+
+    # Without commit_url_patterns or demo_commit_requests, certified_ready must be False.
+    report_no_evidence = induce_form_pack(
+        pack_id="minimal_no_commit_evidence",
+        ui_profile_id="standard_web_form",
+        domain=domain,
+        form_snapshots=(form_snap,),
+        summary_snapshot=summary_snap,
+        commit_button_pattern=r"submit record",
+    )
+    assert report_no_evidence.pack.commit_url_patterns == ()
+    assert report_no_evidence.certified_ready is False
+
+    # Failed or read-only demo requests do not count as commit evidence.
+    report_failed_demo = induce_form_pack(
+        pack_id="minimal_failed_demo",
+        ui_profile_id="standard_web_form",
+        domain=domain,
+        form_snapshots=(form_snap,),
+        summary_snapshot=summary_snap,
+        commit_button_pattern=r"submit record",
+        demo_commit_requests=(
+            {
+                "method": "GET",
+                "url": "https://portal.example/api/records",
+                "status": 200,
+            },
+            {
+                "method": "POST",
+                "url": "https://portal.example/api/records",
+                "status": 500,
+            },
+        ),
+    )
+    assert report_failed_demo.pack.commit_url_patterns == ()
+    assert report_failed_demo.certified_ready is False
+
+    # A successful write in demo_commit_requests derives commit_url_patterns (with dynamic IDs generalized)
+    # and satisfies certified_ready.
+    report_with_demo = induce_form_pack(
+        pack_id="minimal_with_demo_commit",
+        ui_profile_id="standard_web_form",
+        domain=domain,
+        form_snapshots=(form_snap,),
+        summary_snapshot=summary_snap,
+        commit_button_pattern=r"submit record",
+        demo_commit_requests=(
+            {"method": "GET", "url": "https://portal.example/api/draft", "status": 200},
+            {
+                "method": "POST",
+                "url": "https://portal.example/api/records/12345/submit?draft=0",
+                "status": 201,
+            },
+        ),
+    )
+    assert report_with_demo.pack.commit_url_patterns == ("/api/records/*/submit",)
+    assert report_with_demo.certified_ready is True

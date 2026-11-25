@@ -2806,25 +2806,36 @@ def variants(
     # Every demonstrated set first, then sets with fewer optional fields,
     # one field left out at a time across demonstrations, so the cap keeps
     # the sets closest to what was shown.
-    sets: list[frozenset[str]] = list(dict.fromkeys(base_sets))
-    drops = {base: [p for p in optional if p in base] for base in base_sets}
-    for n in range(1, max((len(v) for v in drops.values()), default=0) + 1):
-        for base in base_sets:
-            for combo in itertools.combinations(drops[base], n):
-                s = frozenset(base - set(combo))
-                if s not in seen:
-                    seen.add(s)
-                    sets.append(s)
+    sets: list[frozenset[str]] = list(dict.fromkeys(base_sets))[:MAX_VARIANTS]
+    if len(sets) < MAX_VARIANTS:
+        drops = {base: [p for p in optional if p in base] for base in base_sets}
+        for n in range(1, max((len(v) for v in drops.values()), default=0) + 1):
+            for base in base_sets:
+                for combo in itertools.combinations(drops[base], n):
+                    s = frozenset(base - set(combo))
+                    if s not in seen:
+                        seen.add(s)
+                        sets.append(s)
+                        if len(sets) == MAX_VARIANTS:
+                            break
+                if len(sets) == MAX_VARIANTS:
+                    break
+            if len(sets) == MAX_VARIANTS:
+                break
     # A field the examples leave out sometimes, and that one demonstration
     # gives, may be added to a set from another demonstration.
-    for s in list(sets):
-        for p in optional:
-            if p not in s:
-                t = frozenset(s | {p})
-                if t not in seen:
-                    seen.add(t)
-                    sets.append(t)
-    sets = sets[:MAX_VARIANTS]
+    if len(sets) < MAX_VARIANTS:
+        for s in list(sets):
+            for p in optional:
+                if p not in s:
+                    t = frozenset(s | {p})
+                    if t not in seen:
+                        seen.add(t)
+                        sets.append(t)
+                        if len(sets) == MAX_VARIANTS:
+                            break
+            if len(sets) == MAX_VARIANTS:
+                break
     for s in sets:
         if lists:
             for n in range(1, MAX_LIST + 1):

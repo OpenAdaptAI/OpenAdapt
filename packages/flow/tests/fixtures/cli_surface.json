@@ -1,7 +1,7 @@
 {
  "columns": 100,
  "help": {
-  "openadapt-flow": "usage: openadapt-flow [-h] [--version] {command} ...\n\nRecord a task and compile it into a program that runs on this computer. With a record check\nconfigured, a governed run confirms each save by reading the record back, and a run that can't\nconfirm a save stops and asks a person. When the screen changes, it finds the same field again or\nstops, and a lasting fix needs a person's approval.\n\noptions:\n  -h, --help  show this help message and exit\n  --version   Show the version and exit\n\ncommands:\n  {command}\n    demo      Try the demonstration and tutorial\n    verify    Check effects, receipts, and evidence\n    record    Record a task and its narration\n    teach     Teach a correction to a stopped workflow\n    compile   Compile and prepare workflow bundles\n    run       Run, resume, and route workflows\n    approve   Review and approve paused work\n    undo      Declare and run approved undo steps\n    qualify   Qualify a workflow for its intended use\n    repair    Review, test, and promote repairs\n    inspect   Inspect workflows, runs, and reports\n    workflow  Manage reusable workflow libraries\n    services  Run local services and connectors\n    setup     Configure connections, privacy, and access\n    research  Run benchmarks and research tools\n\nNew here? Run 'openadapt-flow demo' to see a checked run and a stopped run side by side on one\npage.\n\nLegacy commands (original spellings):\n  admit\n  api\n  approve\n  approve-sanitized\n  approver-grant\n  at-rest\n  attach-seal\n  bench\n  benchmark\n  bind-record-checks\n  browser-accessibility\n  business-decisions\n  certify\n  check\n  cleanup\n  compile\n  compile-agent\n  compose\n  confirm-surfaces\n  connect\n  connector\n  console\n  countersign\n  deferred\n  demo\n  demo-record\n  disambiguate\n  emit-mcp\n  emit-skill\n  encrypt\n  exceptions\n  explain\n  fleet\n  flight\n  for-each\n  guard\n  handoff\n  hooks\n  induce\n  intake\n  item-approval\n  jit\n  known-ids\n  learn\n  ledger\n  lint\n  local-seal\n  login\n  materialize-approved\n  narration\n  no-outbound\n  plan\n  process\n  propose-qualification\n  proxy\n  pull\n  push\n  qualify\n  readiness\n  receipt\n  reconcile\n  record\n  redact-report\n  repair\n  replay\n  report-break\n  report-run\n  resume\n  review-sanitized\n  rollback\n  route\n  run\n  sanitize\n  scaffold-verifier\n  sections\n  serve-execute\n  serve-reward\n  service\n  shadow\n  silent-saves\n  skill\n  teach\n  teach-authorization\n  teach-branch\n  triage\n  tutorial\n  undo\n  validate-hosted\n  variants\n  verify-run\n  visualize\n  wrap-dispatch\n",
+  "openadapt-flow": "usage: openadapt-flow [-h] [--version] {command} ...\n\nRecord a task and compile it into a program that runs on this computer. With a record check\nconfigured, a governed run confirms each save by reading the record back, and a run that can't\nconfirm a save stops and asks a person. When the screen changes, it finds the same field again or\nstops, and a lasting fix needs a person's approval.\n\noptions:\n  -h, --help  show this help message and exit\n  --version   Show the version and exit\n\ncommands:\n  {command}\n    demo      Try the demonstration and tutorial\n    verify    Check effects, receipts, and evidence\n    record    Record a task and its narration\n    teach     Teach a correction to a stopped workflow\n    compile   Compile and prepare workflow bundles\n    run       Run, resume, and route workflows\n    approve   Review and approve paused work\n    undo      Declare and run approved undo steps\n    qualify   Qualify a workflow for its intended use\n    repair    Review, test, and promote repairs\n    inspect   Inspect workflows, runs, and reports\n    workflow  Manage reusable workflow libraries\n    services  Run local services and connectors\n    setup     Configure connections, privacy, and access\n    research  Run benchmarks and research tools\n\nNew here? Run 'openadapt-flow demo' to see a checked run and a stopped run side by side on one\npage.\n\nLegacy commands (original spellings):\n  admit\n  api\n  approve\n  approve-sanitized\n  approver-grant\n  at-rest\n  attach-seal\n  bench\n  benchmark\n  bind-record-checks\n  browser-accessibility\n  business-decisions\n  certify\n  check\n  cleanup\n  compile\n  compile-agent\n  compose\n  confirm-surfaces\n  connect\n  connector\n  console\n  countersign\n  deferred\n  demo\n  demo-record\n  disambiguate\n  emit-mcp\n  emit-skill\n  encrypt\n  exceptions\n  explain\n  fleet\n  flight\n  for-each\n  guard\n  handoff\n  hooks\n  induce\n  intake\n  item-approval\n  jit\n  known-ids\n  learn\n  ledger\n  lint\n  local-seal\n  login\n  materialize-approved\n  narration\n  no-outbound\n  onboard\n  plan\n  process\n  propose-qualification\n  proxy\n  pull\n  push\n  qualify\n  readiness\n  receipt\n  reconcile\n  record\n  redact-report\n  repair\n  replay\n  report-break\n  report-run\n  resume\n  review-sanitized\n  rollback\n  route\n  run\n  sanitize\n  scaffold-verifier\n  sections\n  serve-execute\n  serve-reward\n  service\n  shadow\n  silent-saves\n  skill\n  teach\n  teach-authorization\n  teach-branch\n  triage\n  tutorial\n  undo\n  validate-hosted\n  variants\n  verify-run\n  visualize\n  wrap-dispatch\n",
   "openadapt-flow admit": "usage: openadapt-flow admit [-h] {run,decide,status} ...\n\npositional arguments:\n  {run,decide,status}\n    run                Compile, induce, propose checks, and stop once for a person's decision (the\n                       default form: `admit <recordings...>`)\n    decide             Show a stopped admission's summary and decide it (a person, at a terminal)\n    status             Print admitted vs not-admitted for Flow from the public ledger. Never mints\n                       a signature.\n\noptions:\n  -h, --help           show this help message and exit\n\nAlso available as: openadapt-flow run --task-admit\n",
   "openadapt-flow admit decide": "usage: openadapt-flow admit decide [-h] [--by BY] admission\n\npositional arguments:\n  admission   Admission directory from `admit`\n\noptions:\n  -h, --help  show this help message and exit\n  --by BY     Your name for the record\n\nAlso available as: openadapt-flow run --task-admit decide\n",
   "openadapt-flow admit run": "usage: openadapt-flow admit run [-h] [--candidate ID] [--candidates-root CANDIDATES_ROOT] --out\n                                OUT --name NAME [--policy-pack {community,cloud,regulated}]\n                                [--by BY]\n                                [recordings ...]\n\npositional arguments:\n  recordings            Recording directories (or compiled bundles) of the same task\n\noptions:\n  -h, --help            show this help message and exit\n  --candidate ID        A shadow candidate id under --candidates-root, or its folder. Its\n                        recordings/ folder is used when no recordings are given\n  --candidates-root CANDIDATES_ROOT\n                        Where shadow candidates are kept (default: ./shadow-candidates)\n  --out OUT             New admission directory\n  --name NAME           Workflow name\n  --policy-pack {community,cloud,regulated}\n  --by BY               Your name for the record (default: your login name)\n\nAlso available as: openadapt-flow run --task-admit run\n",
@@ -164,6 +164,7 @@
   "openadapt-flow no-outbound allow derive": "usage: openadapt-flow no-outbound allow derive [-h] profile\n\npositional arguments:\n  profile     FreeRDP session JSON or .rdp file\n\noptions:\n  -h, --help  show this help message and exit\n\nAlso available as: openadapt-flow setup no-outbound allow derive\n",
   "openadapt-flow no-outbound allow list": "usage: openadapt-flow no-outbound allow list [-h] [--json]\n\noptions:\n  -h, --help  show this help message and exit\n  --json\n\nAlso available as: openadapt-flow setup no-outbound allow list\n",
   "openadapt-flow no-outbound allow remove": "usage: openadapt-flow no-outbound allow remove [-h] network\n\npositional arguments:\n  network\n\noptions:\n  -h, --help  show this help message and exit\n\nAlso available as: openadapt-flow setup no-outbound allow remove\n",
+  "openadapt-flow onboard": "usage: openadapt-flow onboard [-h] --spec SPEC --out OUT [--clean-writes CLEAN_WRITES] [--json]\n                              [--dry-run]\n\noptions:\n  -h, --help            show this help message and exit\n  --spec SPEC           Path to declarative onboard spec (YAML or JSON)\n  --out OUT             Output directory for synthesized pack, contracts, and QUALIFICATION.json\n  --clean-writes CLEAN_WRITES\n                        Optional YAML/JSON list of clean write cases (with HTTP target) to verify\n                        and receipt\n  --json                Emit structured QualificationResult JSON to stdout\n  --dry-run             Synthesize the pack without running qualification (pack is not certified)\n\nAlso available as: openadapt-flow setup onboard\n",
   "openadapt-flow plan": "usage: openadapt-flow plan [-h] {create,show,apply,undo,release,cancel,approve,status} ...\n\n``openadapt plan``: dry-run, apply and undo a batch of writes to external systems.\n\n    openadapt plan create --tx openadapt.tx.yaml --task T-1 writes.json\n    openadapt plan show PLAN\n    openadapt plan approve PLAN           # a person, at a terminal\n    openadapt plan apply PLAN\n    openadapt plan undo PLAN\n    openadapt plan release PLAN           # irreversible writes after holdback\n    openadapt plan cancel PLAN            # drop held writes before release\n    openadapt plan status\n\n``create`` reads every record the batch touches, predicts the diff (a staged\ntransaction for a database, a computed shadow for a REST API, the holdback\nqueue for email) and prints what would change. ``approve`` binds to that exact\nplan digest, once. ``apply`` refuses a plan whose records moved since, and\neach write carries an idempotency key derived from the task and the record,\nnever from the payload: a retried or regenerated write with a different\npayload is refused. ``undo`` compensates each write and proves it by reading\nevery record and the whole frame back. See ``docs/TRANSACTIONS.md``.\n\npositional arguments:\n  {create,show,apply,undo,release,cancel,approve,status}\n    create              read the baseline and print the predicted diff\n    show                print a plan\n    apply               apply an approved plan\n    undo                undo an applied plan and prove it by read-back\n    release             release held irreversible writes whose holdback passed\n    cancel              cancel held writes before release\n    approve             approve one plan digest, once (a person at a terminal)\n    status              list held writes and ledger entries\n\noptions:\n  -h, --help            show this help message and exit\n\nAlso available as: openadapt-flow run --plan\n",
   "openadapt-flow plan apply": "usage: openadapt-flow plan apply [-h] [--tx TX] [--state STATE] [--json] plan\n\npositional arguments:\n  plan           a plan digest or its prefix\n\noptions:\n  -h, --help     show this help message and exit\n  --tx TX        the tx file (default: ./openadapt.tx.yaml)\n  --state STATE  the state folder (default: $OPENADAPT_TX_STATE or ~/.openadapt/tx)\n  --json         print JSON\n\nAlso available as: openadapt-flow run --plan apply\n",
   "openadapt-flow plan approve": "usage: openadapt-flow plan approve [-h] [--as APPROVER] [--automation] [--state STATE] [--json]\n                                   plan\n\npositional arguments:\n  plan\n\noptions:\n  -h, --help     show this help message and exit\n  --as APPROVER  who approves (default: $USER)\n  --automation   record the approval as automation (lab runs; the receipt then says agent)\n  --state STATE  the state folder (default: $OPENADAPT_TX_STATE or ~/.openadapt/tx)\n  --json         print JSON\n\nAlso available as: openadapt-flow run --plan approve\n",
@@ -292,7 +293,7 @@
   "openadapt-flow variants show": "usage: openadapt-flow variants show [-h] variant_set\n\npositional arguments:\n  variant_set  Variant-set directory\n\noptions:\n  -h, --help   show this help message and exit\n\nAlso available as: openadapt-flow compile --variants show\n",
   "openadapt-flow verify-run": "usage: openadapt-flow verify-run [-h] [--verify YAML] [--params JSON] [--run-record JSON]\n                                 [--authorization-ref AUTHORIZATION_REF] [--baseline JSON]\n                                 [--capture-baseline JSON] [--provenance JSON] [--source FILE]\n                                 [--out DIR] [--check JSON] [--keys JSON]\n                                 [--accept-outcome {halted_before_effect,reconciliation_required,rejected_policy,failed_platform}]\n                                 [--approver JSON] [--remediates RECEIPT_ID] [--correlation-id ID]\n\noptions:\n  -h, --help            show this help message and exit\n  --verify YAML         verify.yaml: verifier wiring and effect contract\n  --params JSON         The authorized task's values the contract binds\n  --run-record JSON     The executor's run record (needs executor_kind)\n  --authorization-ref AUTHORIZATION_REF\n                        Opaque id of the authorization in your own system\n  --baseline JSON       Baseline captured before the executor ran\n  --capture-baseline JSON\n                        Read the store now and write a private baseline, then exit\n  --provenance JSON     Where each parameter came from (openadapt.param-provenance/v1, as intake\n                        writes it). The saved record is then compared with the source document,\n                        not only with --params\n  --source FILE         A source document the provenance cites (repeatable)\n  --out DIR             Directory for effect-receipt.json\n  --check JSON          Check a signed effect receipt offline instead\n  --keys JSON           Pinned Seal key registry for --check\n  --accept-outcome {halted_before_effect,reconciliation_required,rejected_policy,failed_platform}\n                        With --check: also exit 0 for this outcome when the signature is genuine\n                        (repeatable; no value accepts every outcome)\n  --approver JSON       Who approved the write: {kind, id, policy_ref}; id is opaque\n  --remediates RECEIPT_ID\n                        receipt_id of an earlier effect receipt this run remediates\n  --correlation-id ID   Your own opaque id linking this receipt to a ticket or trace\n\nAlso available as: openadapt-flow verify effect\n",
   "openadapt-flow visualize": "usage: openadapt-flow visualize [-h] [--format {html,mermaid,json}] [-o OUT]\n                                [--profile {operator-local,remote-safe,public-synthetic,sanitized-derivative}]\n                                bundle\n\npositional arguments:\n  bundle                Workflow bundle directory, or a composed parent directory\n\noptions:\n  -h, --help            show this help message and exit\n  --format {html,mermaid,json}\n                        html: self-contained, offline-openable page (default); mermaid: flowchart\n                        source for Markdown/docs; json: the shared program-graph spec every\n                        surface renders\n  -o OUT, --out OUT     Write to this file instead of stdout (parent dirs are created)\n  --profile {operator-local,remote-safe,public-synthetic,sanitized-derivative}\n                        Data boundary for the rendered view. Non-local profiles remove recorded\n                        text, values, selectors, URLs, free-text predicates, and local provenance.\n                        Projection is not source sanitization.\n\nAlso available as: openadapt-flow inspect visualize\n",
-  "openadapt-flow wrap-dispatch": "usage: openadapt-flow wrap-dispatch [-h] [--task TASK] [--request-id REQUEST_ID]\n                                    [--param NAME=VALUE] [--runs-dir RUNS_DIR] [--key-dir KEY_DIR]\n                                    [--teach-authorization TEACH_AUTHORIZATION]\n                                    [--approver-root APPROVER_ROOT] [--fallback {none,agent}]\n                                    [--fallback-max-cost-usd FALLBACK_MAX_COST_USD]\n                                    [--fallback-request-id FALLBACK_REQUEST_ID]\n                                    [--fallback-gate {terminal,item-approval}]\n                                    [--fallback-approvals-dir FALLBACK_APPROVALS_DIR]\n                                    [--fallback-approval-wait-s FALLBACK_APPROVAL_WAIT_S]\n                                    [--fallback-approver-root FALLBACK_APPROVER_ROOT]\n                                    [--fallback-approvers-config FALLBACK_APPROVERS_CONFIG]\n                                    [--provider {claude,openai}] [--model MODEL]\n                                    [--price KIND=USD_PER_MTOK] [--price-model PRICE_MODEL]\n                                    [--pricing-source-url PRICING_SOURCE_URL]\n                                    [--pricing-verified-at PRICING_VERIFIED_AT]\n                                    [--max-turns MAX_TURNS] [--max-run-seconds MAX_RUN_SECONDS]\n                                    [--request-timeout-seconds REQUEST_TIMEOUT_SECONDS]\n                                    [--max-input-bytes MAX_INPUT_BYTES] [--result RESULT]\n                                    {status,release,evict} ...\n\npositional arguments:\n  {status,release,evict}\n    status              Show the task's hold and fallback runs\n    release             A person releases the task's hold (the evidence is kept)\n    evict               Set the task's program aside (kept as evidence)\n\noptions:\n  -h, --help            show this help message and exit\n  --task TASK           Generated task and read-back configuration\n  --request-id REQUEST_ID\n                        This request's ID (reused on a retry)\n  --param NAME=VALUE    A task input (a sign-in input may come from OPENADAPT_FLOW_SECRET_<NAME>)\n  --runs-dir RUNS_DIR\n  --key-dir KEY_DIR     Existing admission key directory\n  --teach-authorization TEACH_AUTHORIZATION\n                        Signed teaching authorization\n  --approver-root APPROVER_ROOT\n                        Pinned approver root for it\n  --fallback {none,agent}\n                        On a proved pre-effect drift: hold (none, the default) or hand the task to\n                        the agent behind a pre-commit gate (agent)\n  --fallback-max-cost-usd FALLBACK_MAX_COST_USD\n                        Model spend cap for the fallback run (required with --fallback agent)\n  --fallback-request-id FALLBACK_REQUEST_ID\n                        The fallback run's own ID (default: derived from --request-id)\n  --fallback-gate {terminal,item-approval}\n                        Who approves each fallback save: a person at this terminal (terminal, the\n                        default), or a person on a paired phone or with openadapt-flow item-\n                        approval approve, through a signed item approval (item-approval; no\n                        terminal needed)\n  --fallback-approvals-dir FALLBACK_APPROVALS_DIR\n                        With --fallback-gate item-approval: where each fallback's approval folder\n                        goes, such as the runs root the decision portal scans (default: inside the\n                        fallback run's directory)\n  --fallback-approval-wait-s FALLBACK_APPROVAL_WAIT_S\n                        With --fallback-gate item-approval: seconds to wait for each answer\n                        (default 60; less than --max-run-seconds)\n  --fallback-approver-root FALLBACK_APPROVER_ROOT\n                        With --fallback-gate item-approval: the pinned approver root (else\n                        OPENADAPT_APPROVER_ROOT or --fallback-approvers-config)\n  --fallback-approvers-config FALLBACK_APPROVERS_CONFIG\n                        With --fallback-gate item-approval: a deployment config whose approvers\n                        section pins the root; it is then the only pin counted\n  --provider {claude,openai}\n  --model MODEL\n  --price KIND=USD_PER_MTOK\n                        Explicit input, output, cache_write and cache_read model prices\n  --price-model PRICE_MODEL\n                        Exact model covered by supplied prices\n  --pricing-source-url PRICING_SOURCE_URL\n                        Primary source for model prices\n  --pricing-verified-at PRICING_VERIFIED_AT\n                        Date prices were verified\n  --max-turns MAX_TURNS\n  --max-run-seconds MAX_RUN_SECONDS\n  --request-timeout-seconds REQUEST_TIMEOUT_SECONDS\n  --max-input-bytes MAX_INPUT_BYTES\n  --result RESULT       Also write the result JSON to this file\n\nAlso available as: openadapt-flow run --dispatch\n",
+  "openadapt-flow wrap-dispatch": "usage: openadapt-flow wrap-dispatch [-h] [--task TASK] [--request-id REQUEST_ID]\n                                    [--param NAME=VALUE] [--runs-dir RUNS_DIR] [--key-dir KEY_DIR]\n                                    [--teach-authorization TEACH_AUTHORIZATION]\n                                    [--approver-root APPROVER_ROOT] [--fallback {none,agent}]\n                                    [--fallback-max-cost-usd FALLBACK_MAX_COST_USD]\n                                    [--fallback-request-id FALLBACK_REQUEST_ID]\n                                    [--fallback-gate {terminal,item-approval}]\n                                    [--fallback-approvals-dir FALLBACK_APPROVALS_DIR]\n                                    [--fallback-approval-wait-s FALLBACK_APPROVAL_WAIT_S]\n                                    [--fallback-approver-root FALLBACK_APPROVER_ROOT]\n                                    [--fallback-approvers-config FALLBACK_APPROVERS_CONFIG]\n                                    [--fallback-script FALLBACK_SCRIPT]\n                                    [--fallback-command FALLBACK_COMMAND]\n                                    [--provider {claude,openai}] [--model MODEL]\n                                    [--price KIND=USD_PER_MTOK] [--price-model PRICE_MODEL]\n                                    [--pricing-source-url PRICING_SOURCE_URL]\n                                    [--pricing-verified-at PRICING_VERIFIED_AT]\n                                    [--max-turns MAX_TURNS] [--max-run-seconds MAX_RUN_SECONDS]\n                                    [--request-timeout-seconds REQUEST_TIMEOUT_SECONDS]\n                                    [--max-input-bytes MAX_INPUT_BYTES] [--result RESULT]\n                                    {status,release,evict} ...\n\npositional arguments:\n  {status,release,evict}\n    status              Show the task's hold and fallback runs\n    release             A person releases the task's hold (the evidence is kept)\n    evict               Set the task's program aside (kept as evidence)\n\noptions:\n  -h, --help            show this help message and exit\n  --task TASK           Generated task and read-back configuration\n  --request-id REQUEST_ID\n                        This request's ID (reused on a retry)\n  --param NAME=VALUE    A task input (a sign-in input may come from OPENADAPT_FLOW_SECRET_<NAME>)\n  --runs-dir RUNS_DIR\n  --key-dir KEY_DIR     Existing admission key directory\n  --teach-authorization TEACH_AUTHORIZATION\n                        Signed teaching authorization\n  --approver-root APPROVER_ROOT\n                        Pinned approver root for it\n  --fallback {none,agent}\n                        On a proved pre-effect drift: hold (none, the default) or hand the task to\n                        the agent behind a pre-commit gate (agent)\n  --fallback-max-cost-usd FALLBACK_MAX_COST_USD\n                        Model spend cap for the fallback run (required with --fallback agent)\n  --fallback-request-id FALLBACK_REQUEST_ID\n                        The fallback run's own ID (default: derived from --request-id)\n  --fallback-gate {terminal,item-approval}\n                        Who approves each fallback save: a person at this terminal (terminal, the\n                        default), or a person on a paired phone or with openadapt-flow item-\n                        approval approve, through a signed item approval (item-approval; no\n                        terminal needed)\n  --fallback-approvals-dir FALLBACK_APPROVALS_DIR\n                        With --fallback-gate item-approval: where each fallback's approval folder\n                        goes, such as the runs root the decision portal scans (default: inside the\n                        fallback run's directory)\n  --fallback-approval-wait-s FALLBACK_APPROVAL_WAIT_S\n                        With --fallback-gate item-approval: seconds to wait for each answer\n                        (default 60; less than --max-run-seconds)\n  --fallback-approver-root FALLBACK_APPROVER_ROOT\n                        With --fallback-gate item-approval: the pinned approver root (else\n                        OPENADAPT_APPROVER_ROOT or --fallback-approvers-config)\n  --fallback-approvers-config FALLBACK_APPROVERS_CONFIG\n                        With --fallback-gate item-approval: a deployment config whose approvers\n                        section pins the root; it is then the only pin counted\n  --fallback-script FALLBACK_SCRIPT\n                        With --fallback agent: JSON file of scripted actions (zero model calls)\n                        used instead of a hosted model provider\n  --fallback-command FALLBACK_COMMAND\n                        With --fallback agent: local command that emits JSON actions on stdout\n                        (zero model calls) used instead of a hosted model provider\n  --provider {claude,openai}\n  --model MODEL\n  --price KIND=USD_PER_MTOK\n                        Explicit input, output, cache_write and cache_read model prices\n  --price-model PRICE_MODEL\n                        Exact model covered by supplied prices\n  --pricing-source-url PRICING_SOURCE_URL\n                        Primary source for model prices\n  --pricing-verified-at PRICING_VERIFIED_AT\n                        Date prices were verified\n  --max-turns MAX_TURNS\n  --max-run-seconds MAX_RUN_SECONDS\n  --request-timeout-seconds REQUEST_TIMEOUT_SECONDS\n  --max-input-bytes MAX_INPUT_BYTES\n  --result RESULT       Also write the result JSON to this file\n\nAlso available as: openadapt-flow run --dispatch\n",
   "openadapt-flow wrap-dispatch evict": "usage: openadapt-flow wrap-dispatch evict [-h] [--key-dir KEY_DIR] task\n\npositional arguments:\n  task               Generated task and read-back configuration\n\noptions:\n  -h, --help         show this help message and exit\n  --key-dir KEY_DIR  Existing admission key directory\n\nAlso available as: openadapt-flow run --dispatch evict\n",
   "openadapt-flow wrap-dispatch release": "usage: openadapt-flow wrap-dispatch release [-h] [--key-dir KEY_DIR] --person PERSON\n                                            [--after-reconciling]\n                                            task\n\npositional arguments:\n  task                 Generated task and read-back configuration\n\noptions:\n  -h, --help           show this help message and exit\n  --key-dir KEY_DIR    Existing admission key directory\n  --person PERSON      Who checked and releases it\n  --after-reconciling  Also release a hold or fallback that may have written, after the person\n                       checked the record\n\nAlso available as: openadapt-flow run --dispatch release\n",
   "openadapt-flow wrap-dispatch status": "usage: openadapt-flow wrap-dispatch status [-h] [--key-dir KEY_DIR] task\n\npositional arguments:\n  task               Generated task and read-back configuration\n\noptions:\n  -h, --help         show this help message and exit\n  --key-dir KEY_DIR  Existing admission key directory\n\nAlso available as: openadapt-flow run --dispatch status\n"
@@ -383,6 +384,7 @@
     "materialize-approved": [],
     "narration": [],
     "no-outbound": [],
+    "onboard": [],
     "plan": [],
     "process": [],
     "propose-qualification": [],
@@ -13868,6 +13870,97 @@
      "nargs": null,
      "options": [],
      "required": true,
+     "type": null
+    }
+   ],
+   "commands": {},
+   "exclusive": []
+  },
+  "openadapt-flow onboard": {
+   "arguments": [
+    {
+     "action": "_HelpAction",
+     "choices": null,
+     "default": "==SUPPRESS==",
+     "dest": "help",
+     "help": "show this help message and exit",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "-h",
+      "--help"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "spec",
+     "help": "Path to declarative onboard spec (YAML or JSON)",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--spec"
+     ],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "out",
+     "help": "Output directory for synthesized pack, contracts, and QUALIFICATION.json",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--out"
+     ],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "clean_writes",
+     "help": "Optional YAML/JSON list of clean write cases (with HTTP target) to verify and receipt",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--clean-writes"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreTrueAction",
+     "choices": null,
+     "default": false,
+     "dest": "json",
+     "help": "Emit structured QualificationResult JSON to stdout",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "--json"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreTrueAction",
+     "choices": null,
+     "default": false,
+     "dest": "dry_run",
+     "help": "Synthesize the pack without running qualification (pack is not certified)",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "--dry-run"
+     ],
+     "required": false,
      "type": null
     }
    ],
@@ -29002,6 +29095,34 @@
      "nargs": null,
      "options": [
       "--fallback-approvers-config"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "fallback_script",
+     "help": "With --fallback agent: JSON file of scripted actions (zero model calls) used instead of a hosted model provider",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--fallback-script"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "fallback_command",
+     "help": "With --fallback agent: local command that emits JSON actions on stdout (zero model calls) used instead of a hosted model provider",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--fallback-command"
      ],
      "required": false,
      "type": null

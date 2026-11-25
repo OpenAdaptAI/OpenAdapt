@@ -237,6 +237,28 @@ export async function verifyAnchor(seal, anchor, publicRaw, logKeys) {
     )
 }
 
+/** Check that `anchor` (receipt.anchor.json) anchors `envelope`'s payload bytes. */
+export async function verifyReceiptAnchor(envelope, anchor, publicRaw, logKeys) {
+    let payload
+    try {
+        if (typeof envelope?.payload !== 'string') throw new Error('payload')
+        payload = strictBase64(envelope.payload)
+    } catch {
+        return {
+            ok: false,
+            reason: 'anchor_malformed',
+            steps: [{ id: 'anchorEntry', result: 'fail' }],
+        }
+    }
+    const receipt_payload_sha256 = hexOf(await sha256(payload))
+    return verifyRecordAnchor(
+        { receipt_payload_sha256 },
+        anchor,
+        publicRaw,
+        logKeys
+    )
+}
+
 /**
  * Check that `anchor` anchors exactly the record whose digests are `fields`,
  * signed by the pinned key `publicRaw`, in a log whose key is in `logKeys`

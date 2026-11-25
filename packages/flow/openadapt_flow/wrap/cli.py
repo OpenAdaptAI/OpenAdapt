@@ -9,7 +9,7 @@ import math
 import signal
 import sys
 import threading
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
 from openadapt_flow.wrap import TaskArgumentsError, WrappedTask
@@ -114,7 +114,132 @@ def build_parser() -> argparse.ArgumentParser:
         default=600.0,
         help="With -- COMMAND: seconds before the command is stopped (default 600)",
     )
+    parser.add_argument(
+        "--cdp-url",
+        default=None,
+        help="Remote Chrome DevTools Protocol WebSocket URL (ws:// or wss://) "
+        "for cloud browser sandboxes (falls back to OPENADAPT_CDP_URL or "
+        "BROWSERBASE_CONNECT_URL)",
+    )
+    parser.add_argument(
+        "--upload",
+        action="store_true",
+        default=False,
+        help="Upload the signed receipt to app.openadapt.ai after the run "
+        "(uses OPENADAPT_CLOUD_KEY or OPENADAPT_API_KEY)",
+    )
     return parser
+
+
+def _resolve_cdp_url(
+    explicit: str | None, environ: Mapping[str, str] | None = None
+) -> str | None:
+    """Resolve remote CDP WebSocket URL with precedence: flag > OPENADAPT_CDP_URL > BROWSERBASE_CONNECT_URL."""
+    import os
+
+    env = os.environ if environ is None else environ
+    raw = (
+        explicit
+        if explicit is not None
+        else (env.get("OPENADAPT_CDP_URL") or env.get("BROWSERBASE_CONNECT_URL"))
+    )
+    if raw is None:
+        return None
+    url = raw.strip()
+    if not url:
+        return None
+    if not (url.startswith("ws://") or url.startswith("wss://")):
+        raise TaskArgumentsError("--cdp-url must start with ws:// or wss://")
+    return url
+
+
+@contextlib.contextmanager
+def _with_cdp_env(cdp_url: str | None) -> Iterator[None]:
+    """Expose OPENADAPT_CDP_URL for the duration of a wrapped run, restoring afterward."""
+    import os
+
+    if not cdp_url:
+        yield
+        return
+    previous = os.environ.get("OPENADAPT_CDP_URL")
+    os.environ["OPENADAPT_CDP_URL"] = cdp_url
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("OPENADAPT_CDP_URL", None)
+        else:
+            os.environ["OPENADAPT_CDP_URL"] = previous
+
+
+def _resolve_cloud_key(environ: Mapping[str, str] | None = None) -> str | None:
+    """Read the cloud receipt upload key from OPENADAPT_CLOUD_KEY or OPENADAPT_API_KEY."""
+    import os
+
+    env = os.environ if environ is None else environ
+    for name in ("OPENADAPT_CLOUD_KEY", "OPENADAPT_API_KEY"):
+        val = env.get(name, "").strip()
+        if val:
+            return val
+    return None
+
+
+def _upload_wrap_receipt(
+    result: Mapping[str, Any],
+    *,
+    cloud_key: str | None,
+    endpoint: str = "https://app.openadapt.ai",
+) -> bool:
+    """Upload the run's receipt JSON to OpenAdapt Cloud when requested via --upload."""
+    import urllib.error
+    import urllib.request
+    from pathlib import Path
+
+    receipt_path = result.get("receipt")
+    if not isinstance(receipt_path, str) or not receipt_path.strip():
+        print(
+            "openadapt wrap: --upload skipped (no receipt file was emitted for this run)",
+            file=sys.stderr,
+        )
+        return False
+    if not cloud_key:
+        print(
+            "openadapt wrap: --upload requires OPENADAPT_CLOUD_KEY (or OPENADAPT_API_KEY)",
+            file=sys.stderr,
+        )
+        return False
+    path = Path(receipt_path)
+    if not path.is_file():
+        print(
+            f"openadapt wrap: --upload skipped (receipt file not found: {path})",
+            file=sys.stderr,
+        )
+        return False
+    url = endpoint.rstrip("/") + "/api/v1/receipts"
+    req = urllib.request.Request(
+        url,
+        data=path.read_bytes(),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {cloud_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "openadapt-wrap",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15.0) as resp:
+            status = getattr(resp, "status", 200)
+            print(
+                f"openadapt wrap: uploaded receipt to {endpoint.rstrip('/')} (HTTP {status})",
+                file=sys.stderr,
+            )
+            return True
+    except (urllib.error.URLError, OSError) as exc:
+        print(
+            f"openadapt wrap: receipt upload failed ({type(exc).__name__}); local receipt kept at {path}",
+            file=sys.stderr,
+        )
+        return False
 
 
 def _params(rows: Sequence[str]) -> dict[str, str]:
@@ -494,6 +619,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     agent = None
     derived_id = False
     try:
+        cdp_url = _resolve_cdp_url(args.cdp_url)
         values = _params(args.param)
         derived_id = not args.serve and not args.request_id
         if derived_id:
@@ -504,7 +630,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if command is not None:
             from openadapt_flow.wrap.process import ProcessAgent
 
-            agent = ProcessAgent(command, timeout_s=args.command_timeout)
+            agent = ProcessAgent(
+                command, timeout_s=args.command_timeout, cdp_url=cdp_url
+            )
         if agent is None and not replay_only:
             task = _task(args, parser)
         else:
@@ -520,7 +648,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             serve(task)
             return 0
-        with _commands_stopped_on_signal(agent is not None):
+        with _commands_stopped_on_signal(agent is not None), _with_cdp_env(cdp_url):
             result = task.call(
                 args.request_id, _with_secret_env(values, task.parameters)
             )
@@ -582,6 +710,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             "task, command and inputs; this is its earlier result and nothing "
             "ran again. To run it again, pass a new --request-id",
             file=sys.stderr,
+        )
+    if args.upload and isinstance(result, dict):
+        import os
+
+        _upload_wrap_receipt(
+            result,
+            cloud_key=_resolve_cloud_key(),
+            endpoint=os.environ.get(
+                "OPENADAPT_SEAL_ENDPOINT", "https://app.openadapt.ai"
+            ),
         )
     print(json.dumps(result, sort_keys=True))
     exit_code = getattr(agent, "exit_code", None)

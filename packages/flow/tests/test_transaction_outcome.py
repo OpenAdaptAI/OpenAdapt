@@ -1588,3 +1588,37 @@ def test_effect_verdict_observed_effect_mapping():
         ).observed_effect
         == "unknown"
     )
+
+
+def test_idempotency_ledger_claims_directory_succeeds_without_o_directory(
+    tmp_path, monkeypatch
+):
+    """Windows lacks O_DIRECTORY and rejects os.open on directories (#2254)."""
+    import os
+
+    from openadapt_flow import transaction as tx_mod
+
+    real_open_binary = tx_mod.open_binary
+
+    def _win_open_binary(path, flags, mode=0o777, *, dir_fd=None):
+        if dir_fd is None and os.path.isdir(path):
+            raise PermissionError(13, "Permission denied", str(path))
+        return real_open_binary(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(tx_mod, "open_binary", _win_open_binary)
+    monkeypatch.delattr(os, "O_DIRECTORY", raising=False)
+    monkeypatch.setattr(
+        IdempotencyLedger, "_open_parent_directory_descriptor", lambda self: None
+    )
+
+    ledger = IdempotencyLedger(tmp_path / "ledger.sqlite")
+    try:
+        ledger.reserve("key-1", run_id="run-1")
+        ledger.record_outcome("key-1", run_id="run-1", outcome="VERIFIED")
+        ledger.reserve("key-2", run_id="run-2")
+        assert ledger.lookup("key-1")["outcome"] == "VERIFIED"
+        assert ledger.lookup("key-2")["run_id"] == "run-2"
+        with pytest.raises(tx_mod.DuplicateActuation):
+            ledger.reserve("key-1", run_id="run-3")
+    finally:
+        ledger.close()

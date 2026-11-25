@@ -208,7 +208,15 @@ def default_send(
     if op == "create":
         body: Any = {**scoped.create_body, **fields}
         if marker and scoped.marker:
-            body.update(fill_json(scoped.marker, {"marker": marker}))
+            filled = fill_json(scoped.marker, {"marker": marker})
+            if isinstance(filled, Mapping):
+                for mk, mv in filled.items():
+                    if isinstance(body.get(mk), list) and isinstance(mv, list):
+                        body[mk] = [*body[mk], *mv]
+                    else:
+                        body[mk] = mv
+            else:
+                body.update(filled)
         if marker and scoped.condition_header:
             headers.update(
                 {
@@ -572,6 +580,7 @@ def scoped_write(
     path: Optional[Mapping[str, Any]] = None,
     send: Optional[Send] = None,
     sleep: Callable[[float], None] = time.sleep,
+    require_audit: bool = False,
 ) -> dict[str, Any]:
     """Make one write to an API system and verify it on the resource and the log.
 
@@ -601,6 +610,8 @@ def scoped_write(
     fields = dict(fields or {})
     where = {str(k): v for k, v in (path or {}).items()}
     adapter: RestAdapter = ctx.adapter(system)
+    if require_audit and spec_system.audit is None:
+        raise TxSpecError(f"{system} declares no audit log, and require_audit is set")
     reader = AuditReader(spec_system.audit, adapter.http) if spec_system.audit else None
     state = ctx.state
     # An update or delete is keyed on its record; ``slot`` names a second,
@@ -636,6 +647,7 @@ def scoped_write(
         "collection": collection,
         "op": op,
         "key": key,
+        "audit_checked": reader is not None,
         "audit_pattern": spec_system.audit.pattern if spec_system.audit else None,
     }
 

@@ -552,3 +552,51 @@ def test_action_screenshot_falls_back_for_legacy_events():
     assert stub.exact_calls == []
     assert stub.lenient_calls == [42.0]
     assert image is not None
+
+
+def test_get_frame_at_returns_closest_screenshot_for_image_only_capture(tmp_path):
+    """Image-only captures without video.mp4 still resolve frames via get_frame_at (#2250)."""
+    capture_dir = tmp_path / "image_only_capture"
+    capture_dir.mkdir()
+    engine, session_factory = create_db(str(capture_dir / "recording.db"))
+    session = session_factory()
+    recording = crud.insert_recording(
+        session,
+        {
+            "timestamp": 1.0,
+            "monitor_width": 2,
+            "monitor_height": 1,
+            "double_click_interval_seconds": 0.5,
+            "double_click_distance_pixels": 5,
+            "platform": "test",
+            "task_description": "image-only capture",
+        },
+    )
+    crud.insert_screenshot(
+        session,
+        recording,
+        5.0,
+        {"source_ordinal": 1, "png_data": _png_bytes("red")},
+    )
+    crud.insert_screenshot(
+        session,
+        recording,
+        10.0,
+        {"source_ordinal": 2, "png_data": _png_bytes("blue")},
+    )
+    session.commit()
+    session.close()
+    engine.dispose()
+
+    with CaptureSession.load(capture_dir) as capture:
+        assert capture.video_path is None
+        near_first = capture.get_frame_at(5.2, tolerance=0.5)
+        assert near_first is not None
+        assert near_first.getpixel((0, 0)) == (255, 0, 0)
+
+        near_second = capture.get_frame_at(9.7, tolerance=0.5)
+        assert near_second is not None
+        assert near_second.getpixel((0, 0)) == (0, 0, 255)
+
+        out_of_tolerance = capture.get_frame_at(7.5, tolerance=0.5)
+        assert out_of_tolerance is None

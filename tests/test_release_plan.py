@@ -123,6 +123,34 @@ def test_a_package_waits_until_pypi_serves_its_dependency_floors() -> None:
     assert _decide(unmet=[]) == "release"
 
 
+def test_a_package_waits_for_unmet_sibling_floors_in_optional_extras() -> None:
+    floors = PLAN.dependency_floors(
+        ["openadapt-types>=0.24.0"],
+        {
+            "privacy": ["openadapt-privacy[presidio]>=1.1.4"],
+            "capture": ["openadapt-capture>=1.2.0", "openadapt-flow[vision]"],
+            "all": ["openadapt-privacy>=1.1.2"],
+        },
+        exclude="openadapt-flow",
+    )
+    assert floors == {
+        "openadapt-types": "0.24.0",
+        "openadapt-privacy": "1.1.4",
+        "openadapt-capture": "1.2.0",
+    }
+    served = {
+        "openadapt-types": ["0.24.2"],
+        "openadapt-privacy": ["1.1.3"],
+        "openadapt-capture": ["1.4.0"],
+    }
+    unmet = PLAN.unmet_floors(floors, served)
+    assert unmet == ["openadapt-privacy>=1.1.4"]
+    assert _decide(unmet=unmet) == "wait"
+    served["openadapt-privacy"].append("1.1.4")
+    assert PLAN.unmet_floors(floors, served) == []
+    assert _decide(unmet=[]) == "release"
+
+
 def test_every_package_the_plan_releases_is_a_dispatch_choice() -> None:
     inputs = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))[True][
         "workflow_dispatch"
