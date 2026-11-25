@@ -1,0 +1,182 @@
+name: Chrome Extension Release
+
+on:
+  push:
+    tags:
+      - "chrome-ext-v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Validate and build zip artifact only without uploading to Chrome Web Store"
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Validate manifest and build clean runtime zip
+        id: build
+        run: |
+          set -euo pipefail
+          python3 scripts/package_chrome_extension.py --out dist/openadapt-copilot-cws.zip
+          VERSION="$(python3 -c 'import json; print(json.load(open("packages/flow/chrome_extension/manifest.json"))["version"])')"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Built dist/openadapt-copilot-cws.zip for manifest version $VERSION"
+
+      - name: Upload Chrome Web Store zip artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: openadapt-copilot-cws-${{ steps.build.outputs.version }}
+          path: dist/openadapt-copilot-cws.zip
+          if-no-files-found: error
+
+      - name: Upload and publish to Chrome Web Store
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run != true }}
+        env:
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+          CWS_EXTENSION_ID: ${{ vars.CWS_EXTENSION_ID || 'bcpliibliddclnibacbjbmbpgffkjefd' }}
+          ZIP_PATH: dist/openadapt-copilot-cws.zip
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from pathlib import Path
+
+          required_secrets = (
+              "CWS_CLIENT_ID",
+              "CWS_CLIENT_SECRET",
+              "CWS_REFRESH_TOKEN",
+          )
+          missing = [name for name in required_secrets if not os.environ.get(name, "").strip()]
+          if missing:
+              print(
+                  "ERROR: Missing required Chrome Web Store secret(s): "
+                  + ", ".join(missing)
+                  + ". Configure all 3 required repository secrets: "
+                  + ", ".join(required_secrets)
+                  + ".",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          ext_id = os.environ["CWS_EXTENSION_ID"].strip()
+          zip_path = Path(os.environ["ZIP_PATH"])
+          if not zip_path.is_file():
+              print(f"ERROR: Extension archive not found: {zip_path}", file=sys.stderr)
+              sys.exit(1)
+
+          # 1. Exchange refresh token for an OAuth2 access token.
+          token_body = urllib.parse.urlencode(
+              {
+                  "client_id": os.environ["CWS_CLIENT_ID"].strip(),
+                  "client_secret": os.environ["CWS_CLIENT_SECRET"].strip(),
+                  "refresh_token": os.environ["CWS_REFRESH_TOKEN"].strip(),
+                  "grant_type": "refresh_token",
+              }
+          ).encode("utf-8")
+          token_req = urllib.request.Request(
+              "https://oauth2.googleapis.com/token",
+              data=token_body,
+              headers={"Content-Type": "application/x-www-form-urlencoded"},
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(token_req, timeout=30) as resp:
+                  token_data = json.loads(resp.read().decode("utf-8"))
+          except urllib.error.HTTPError as exc:
+              body = exc.read().decode("utf-8", errors="replace")
+              print(f"ERROR: OAuth2 token exchange failed ({exc.code}): {body}", file=sys.stderr)
+              sys.exit(1)
+
+          access_token = token_data.get("access_token", "")
+          if not access_token:
+              print("ERROR: OAuth2 response did not include access_token.", file=sys.stderr)
+              sys.exit(1)
+          print(f"::add-mask::{access_token}")
+
+          # 2. Upload zip package via Chrome Web Store API v1.1.
+          upload_url = f"https://www.googleapis.com/upload/chromewebstore/v1.1/items/{ext_id}"
+          upload_req = urllib.request.Request(
+              upload_url,
+              data=zip_path.read_bytes(),
+              headers={
+                  "Authorization": f"Bearer {access_token}",
+                  "x-goog-api-version": "2",
+                  "Content-Type": "application/zip",
+              },
+              method="PUT",
+          )
+          try:
+              with urllib.request.urlopen(upload_req, timeout=120) as resp:
+                  upload_data = json.loads(resp.read().decode("utf-8"))
+          except urllib.error.HTTPError as exc:
+              body = exc.read().decode("utf-8", errors="replace")
+              print(f"ERROR: Chrome Web Store upload failed ({exc.code}): {body}", file=sys.stderr)
+              sys.exit(1)
+
+          print("Upload response:", json.dumps(upload_data))
+          if upload_data.get("uploadState") != "SUCCESS":
+              print(
+                  f"ERROR: Chrome Web Store upload did not succeed: {upload_data}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          # 3. Publish uploaded package via Chrome Web Store API v1.1.
+          publish_url = f"https://www.googleapis.com/chromewebstore/v1.1/items/{ext_id}/publish"
+          publish_req = urllib.request.Request(
+              publish_url,
+              data=b"",
+              headers={
+                  "Authorization": f"Bearer {access_token}",
+                  "x-goog-api-version": "2",
+                  "Content-Length": "0",
+              },
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(publish_req, timeout=60) as resp:
+                  publish_data = json.loads(resp.read().decode("utf-8"))
+          except urllib.error.HTTPError as exc:
+              body = exc.read().decode("utf-8", errors="replace")
+              print(f"ERROR: Chrome Web Store publish failed ({exc.code}): {body}", file=sys.stderr)
+              sys.exit(1)
+
+          print("Publish response:", json.dumps(publish_data))
+          statuses = publish_data.get("status") or []
+          if "OK" not in statuses:
+              print(
+                  f"ERROR: Chrome Web Store publish did not return OK: {publish_data}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          print(f"Published Chrome Web Store item {ext_id} successfully.")
+          PY

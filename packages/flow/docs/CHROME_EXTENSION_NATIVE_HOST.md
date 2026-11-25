@@ -9,17 +9,22 @@ allow the calling extension's origin.
 
 ## Register (macOS and Linux)
 
-Load the unpacked extension first (`chrome://extensions` → Developer mode →
-Load unpacked → `packages/flow/chrome_extension`) and copy its id. Then:
+Install [OpenAdapt Co-Pilot from the Chrome Web Store](https://chromewebstore.google.com/detail/openadapt-co-pilot/bcpliibliddclnibacbjbmbpgffkjefd)
+(published extension ID `bcpliibliddclnibacbjbmbpgffkjefd`), then register the
+native host. `--extension-id` defaults to `bcpliibliddclnibacbjbmbpgffkjefd`:
 
 ```bash
 cd packages/flow
-# For your everyday browser (per user):
+# For your everyday browser (uses published Chrome Web Store ID by default):
 python chrome_extension/native_host/install_host.py \
-  --browser chrome --extension-id <id> --recording /path/to/recording
+  --browser chrome --recording /path/to/recording
+# For a local unpacked developer build (chrome://extensions -> Developer mode ->
+# Load unpacked -> packages/flow/chrome_extension), override --extension-id:
+python chrome_extension/native_host/install_host.py \
+  --browser chrome --extension-id <dev-id> --recording /path/to/recording
 # Or for one Chromium profile directory (what the tests do):
 python chrome_extension/native_host/install_host.py \
-  --user-data-dir /path/to/profile --extension-id <id> --recording /path/to/recording
+  --user-data-dir /path/to/profile --extension-id <dev-id> --recording /path/to/recording
 # Remove:
 python chrome_extension/native_host/install_host.py --browser chrome --uninstall
 ```
@@ -78,8 +83,10 @@ macOS:
   manual until a Windows installer lands.
 - **Desktop app integration.** OpenAdapt Desktop does not register the host
   or set the recording directory yet.
-- **Store listing.** Not started. The extension id here is the unpacked id,
-  which depends on the load path.
+- **Store listing.** Published on the Chrome Web Store as
+  [OpenAdapt Co-Pilot](https://chromewebstore.google.com/detail/openadapt-co-pilot/bcpliibliddclnibacbjbmbpgffkjefd)
+  (`bcpliibliddclnibacbjbmbpgffkjefd`). `install_host.py` defaults to this ID;
+  pass `--extension-id <dev-id>` for unpacked developer builds.
 - **Network saves.** `network_save` evidence arrives with
   [#2014](https://github.com/OpenAdaptAI/OpenAdapt/pull/2014). Once that
   merges, the same installed-host test should also cover a real save.
