@@ -265,7 +265,10 @@ def test_compile_agent_then_replay_with_no_model_calls(
         confirm_checks="dana.reviewer",
         drop_fields=["key", "source"],
         admitter=admitter,
-        canary_params=[{"note": "Canary test note"}],
+        canary_params=[
+            {"note": "Canary test note 1"},
+            {"note": "Canary test note 2"},
+        ],
         **_common(tmp_path, mockmed),
     )
     assert result.status == "admitted", result.detail
