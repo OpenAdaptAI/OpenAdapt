@@ -1,0 +1,81 @@
+# Drafted by a model and admitted by OpenAdapt qualification (openadapt verify draft). Runs make no model calls.
+schema_version: openadapt.verify/v1
+verifier:
+  kind: surfaces
+  surfaces:
+    record:
+      kind: sql
+      sql_query: SELECT CAST(t."id" AS TEXT) AS "id", CAST(t."loan_id" AS TEXT) AS
+        "loan_id", CAST(t."product" AS TEXT) AS "product", CAST(t."amount" AS TEXT)
+        AS "amount", CAST(t."memo" AS TEXT) AS "memo", CAST(t."source" AS TEXT) AS
+        "source", CAST(t."record_key" AS TEXT) AS "record_key", CAST(t."surface" AS
+        TEXT) AS "surface" FROM "records" t
+      sqlite_database: /var/folders/35/pqjnmmwx24d2mtf4frt5dhcc0000gn/T/openadapt-mockloan-snz8cvz_/ledger.sqlite3
+effects:
+- kind: record_written
+  probe: surface=record|one new disbursement on the named loan with the requested
+    amount and memo
+  match:
+    loan_id:
+      param: loan_id
+    product:
+      param: product
+    amount:
+      param: amount
+    memo:
+      param: memo
+    surface:
+      literal: disbursements
+  expected_count: 1
+  count_new_only: true
+frame:
+  identity_field: id
+  target_fields_by_surface:
+    record: []
+  database:
+    dialect: sqlite
+    views:
+      records: record
+    new_row_fields:
+      records:
+      - id
+      - source
+      - record_key
+    settle_s: 1
+    settle_attempts: 3
+    recheck_after_s: 300
+    read:
+      sqlite_database: /var/folders/35/pqjnmmwx24d2mtf4frt5dhcc0000gn/T/openadapt-mockloan-snz8cvz_/ledger.sqlite3
+provenance:
+  drafted_by:
+    model: claude-opus-5-5
+    response_model: claude-opus-5-5
+    effort: medium
+    prompt_version: verify-draft-prompt/1
+    prompt_sha256: sha256:738a1230c4d9449f3f23487d338fce9fc8f35779f3511bf2093fc4f7c6252840
+  inputs:
+    description:
+      kind: database
+      file_sha256: null
+      text_sha256: sha256:c7f7799fc546b02f8effe2dcdbdb61cc87ab763ffbd609cb1fad04e215d670ac
+    trace_sha256: sha256:65c477b28f41af6b8bc2d380f412b5091179d329de8c25c9f9610faecf55b822
+    task_sha256: sha256:5138e45fc7e532b1fb3abe9d915118eadf1e98e1e659cf6a7abb27bc179e01d9
+  admission:
+    suite: openadapt.verify-draft-admission/v1
+    check_sha256: sha256:be5df3f76f12199b68f6c0dfbaeb044d131940b11cb9fa13d08e7c5a242c9d47
+    rounds: 1
+    admitted_at: '2026-11-21T07:55:36Z'
+    recheck_window_tested_s: 2.0
+    faults:
+      wrong_value:amount: refuted
+      wrong_value:loan_id: refuted
+      wrong_value:memo: refuted
+      wrong_value:product: refuted
+      wrong_row: refuted
+      duplicate: refuted
+      sibling_edit: refuted
+      late_revert: refuted
+      lost_update: 'not applicable: the write creates a record; nothing can be overwritten'
+    clean_writes_confirmed: 5
+    attribution_probe_writes: 5
+    bookkeeping_confirmed_by_person: []

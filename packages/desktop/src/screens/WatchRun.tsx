@@ -517,95 +517,58 @@ export function WatchRun({
         </Card>
       )}
 
-      <Card>
-        <CardHead
-          title={
-            firstWorkflow
-              ? "Recorded application target"
-              : "Where should this workflow run?"
-          }
-          sub={
-            firstWorkflow
-              ? "The supervised run uses the same application target as the recording."
-              : "Pick the app it runs in. The steps and checks are the same everywhere."
-          }
-        />
-        <ExecutionTargetForm
-          target={target}
-          onChange={(next) => {
-            setTarget(next);
-            setRuntime(null);
-            setReviewedAuthority(null);
-          }}
-          idPrefix={fieldPrefix}
-          disabled={executionBusy || firstWorkflow}
-        />
-
-        {!firstWorkflow && <details className="advanced-target">
-          <summary>Settings for the person who sets this up</summary>
-          <div className="advanced-target-body">
-            <Field
-              label="Deployment config"
-              hint="Optional local YAML/JSON file for policy, effect verification, credentials, and other advanced Flow settings."
-              htmlFor={`${fieldPrefix}-deployment-config`}
-              hintId={`${fieldPrefix}-deployment-config-hint`}
-            >
-              <input
-                id={`${fieldPrefix}-deployment-config`}
-                className="input mono"
-                value={deploymentConfig}
-                disabled={executionBusy}
-                aria-describedby={`${fieldPrefix}-deployment-config-hint ${fieldPrefix}-deployment-config-note`}
-                onChange={(event) => setDeploymentConfig(event.target.value)}
-                placeholder="/path/to/deployment.yaml"
-                spellCheck={false}
-              />
-            </Field>
-            <p
-              className="page-sub"
-              id={`${fieldPrefix}-deployment-config-note`}
-            >
-              Desktop merges target details into a short-lived private config.
-              Secret and selector values stay off the process command line and
-              out of Desktop logs.
-            </p>
-          </div>
-        </details>}
-        {firstWorkflow && !completedFirstRun && !firstRunLocked && firstReplaySafe && (
-          <div style={{ marginTop: "var(--space-5)" }}>
-            <p className="page-sub">
-              Keep the target app visible and watch each step.
-            </p>
-            <Button
-              variant="primary"
-              disabled={executionBusy || !reviewed}
-              onClick={() => execute("replay")}
-            >
-              {executionBusy ? "Running…" : "Run once while I watch"}
-            </Button>
-          </div>
-        )}
-        {firstWorkflow && firstRunLocked && (
-          <Callout tone="warn" title="Check the target before another attempt">
-            The prior run might have reached the application. Check the target
-            and restore the test state if it changed. Desktop won't dispatch
-            this workflow again until you confirm that check.
-            <div style={{ marginTop: "var(--space-3)" }}>
+      {firstWorkflow && (
+        <Card>
+          <CardHead
+            title="Recorded application target"
+            sub="The supervised run uses the same application target as the recording."
+          />
+          <ExecutionTargetForm
+            target={target}
+            onChange={(next) => {
+              setTarget(next);
+              setRuntime(null);
+              setReviewedAuthority(null);
+            }}
+            idPrefix={fieldPrefix}
+            disabled={executionBusy || firstWorkflow}
+          />
+          {!completedFirstRun && !firstRunLocked && firstReplaySafe && (
+            <div style={{ marginTop: "var(--space-5)" }}>
+              <p className="page-sub">
+                Keep the target app visible and watch each step.
+              </p>
               <Button
-                size="sm"
-                onClick={() => {
-                  setReviewedAuthority(null);
-                  onReconcile?.(workflowId);
-                }}
+                variant="primary"
+                disabled={executionBusy || !reviewed}
+                onClick={() => execute("replay")}
               >
-                I checked the target. Review again
+                {executionBusy ? "Running…" : "Run once while I watch"}
               </Button>
             </div>
-          </Callout>
-        )}
-      </Card>
+          )}
+          {firstRunLocked && (
+            <Callout tone="warn" title="Check the target before another attempt">
+              The prior run might have reached the application. Check the target
+              and restore the test state if it changed. Desktop won't dispatch
+              this workflow again until you confirm that check.
+              <div style={{ marginTop: "var(--space-3)" }}>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setReviewedAuthority(null);
+                    onReconcile?.(workflowId);
+                  }}
+                >
+                  I checked the target. Review again
+                </Button>
+              </div>
+            </Callout>
+          )}
+        </Card>
+      )}
 
-      <Card>
+      <Card className="monitor-card">
         {target.backend === "web" && runtime && runtime.state !== "ready" && (
           <Callout
             tone={runtime.state === "error" ? "warn" : "info"}
@@ -663,7 +626,7 @@ export function WatchRun({
       </Card>
 
       {report?.halt && (
-        <Card>
+        <Card className="halt-card">
           <CardHead
             title="Where it stopped"
             sub={resultCopy(plainResultForReport(report)).label}
@@ -689,11 +652,18 @@ export function WatchRun({
       )}
 
       {report?.outcome_details && (
-        <Card>
-          <CardHead
-            title="What was checked"
-            sub="What this run had to prove, what passed, and anything it reached outside this computer."
-          />
+        <Card className="evidence-card">
+          <div className="evidence-head">
+            <CardHead
+              title="What was checked"
+              sub="Signed receipt · What this run had to prove, what passed, and anything it reached outside this computer."
+            />
+            {report.run_id && (
+              <span className="receipt-id mono" title="Signed receipt ID">
+                {report.run_id}
+              </span>
+            )}
+          </div>
           <div className="row">
             <Pill tone={report.outcome === "VERIFIED" ? "ok" : "warn"}>
               {resultCopy(plainResultForReport(report)).label}
@@ -789,6 +759,63 @@ export function WatchRun({
             )}
           </div>
         </Card>
+      )}
+
+      {!firstWorkflow && (
+        <details className="card target-drawer" open={!report}>
+          <summary className="target-drawer-summary">
+            <div>
+              <strong>Where should this workflow run?</strong>
+              <span className="page-sub">
+                Target: <span className="mono">{target.backend}</span>
+                {target.url ? ` · ${target.url}` : ""}
+              </span>
+            </div>
+            <span className="target-drawer-hint">Configure target</span>
+          </summary>
+          <div className="target-drawer-body">
+            <ExecutionTargetForm
+              target={target}
+              onChange={(next) => {
+                setTarget(next);
+                setRuntime(null);
+                setReviewedAuthority(null);
+              }}
+              idPrefix={fieldPrefix}
+              disabled={executionBusy}
+            />
+            <details className="advanced-target">
+              <summary>Settings for the person who sets this up</summary>
+              <div className="advanced-target-body">
+                <Field
+                  label="Deployment config"
+                  hint="Optional local YAML/JSON file for policy, effect verification, credentials, and other advanced Flow settings."
+                  htmlFor={`${fieldPrefix}-deployment-config`}
+                  hintId={`${fieldPrefix}-deployment-config-hint`}
+                >
+                  <input
+                    id={`${fieldPrefix}-deployment-config`}
+                    className="input mono"
+                    value={deploymentConfig}
+                    disabled={executionBusy}
+                    aria-describedby={`${fieldPrefix}-deployment-config-hint ${fieldPrefix}-deployment-config-note`}
+                    onChange={(event) => setDeploymentConfig(event.target.value)}
+                    placeholder="/path/to/deployment.yaml"
+                    spellCheck={false}
+                  />
+                </Field>
+                <p
+                  className="page-sub"
+                  id={`${fieldPrefix}-deployment-config-note`}
+                >
+                  Desktop merges target details into a short-lived private config.
+                  Secret and selector values stay off the process command line and
+                  out of Desktop logs.
+                </p>
+              </div>
+            </details>
+          </div>
+        </details>
       )}
 
       {firstRunFinished && (

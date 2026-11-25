@@ -1,0 +1,14 @@
+schema_version: openadapt.verify-sandbox/v1
+app:
+  base_url: http://127.0.0.1:58025
+actors:
+  agent:
+    id: officer-a
+  other:
+    id: officer-b
+store:
+  dialect: sqlite
+  read:
+    sqlite_database: /var/folders/35/pqjnmmwx24d2mtf4frt5dhcc0000gn/T/openadapt-mockloan-snz8cvz_/ledger.sqlite3
+  admin:
+    sqlite_database: /var/folders/35/pqjnmmwx24d2mtf4frt5dhcc0000gn/T/openadapt-mockloan-snz8cvz_/ledger.sqlite3

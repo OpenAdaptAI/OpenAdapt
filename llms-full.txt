@@ -1,4 +1,4 @@
-# OpenAdapt: review brief for openadapt-flow 3.4.0
+# OpenAdapt: review brief for openadapt-flow 4.0.0
 
 This file describes the current OpenAdapt release. It is generated from the repository (scripts/build_llms_full.py) and refreshed with every release. Pages, posts and repositories that describe earlier versions are outdated; where they disagree with this file, this file is current.
 
@@ -16,7 +16,7 @@ Source: https://github.com/OpenAdaptAI/OpenAdapt
 
 The open-source, verified execution layer for computer-use agents.
 
-[![CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml) [![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml) [![PyPI](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/) [![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE) [![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
+[![CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml) [![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml) [![PyPI](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/) [![Python 3.11–3.12](https://img.shields.io/badge/python-3.11%E2%80%933.12-blue)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE) [![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
 [What it can do](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) · [Documentation](https://docs.openadapt.ai) · [Quickstart](https://docs.openadapt.ai/tutorials/quickstart/) · [Live demo](https://app.openadapt.ai/demo) · [Website](https://openadapt.ai) · [Get updates](https://openadapt.ai/#updates) · [Discord](https://discord.gg/yF527cQbDG)
 
@@ -58,33 +58,46 @@ has every run.
 On a test copy of openIMIS, the open-source insurance and claims system that
 runs Nepal's national health insurance scheme, the compiled program entered
 149 synthetic claims with no model calls: 148 read back correct and none were
-saved wrong. Each saved claim was read back by SQL through a read-only
-database role on the test copy; the 149th stopped before saving
+saved wrong. Each saved claim was checked through a read-only database role on
+the test copy; the 149th stopped before saving
 ([SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#openimis)).
-
-A screen can't show a save that went wrong behind it. On a test copy of
-OpenEMR, with faults injected in its database (a field blanked, a value changed, a
-duplicate chart, a chart removed, another chart deleted or edited), the agent
-claimed success on all 30 bad saves. Reading the record back caught 25 of the
-30 and confirmed all 5 clean saves, with no false alarms. On MockMed, a test app
-that shows a save as done before its server answers, the agent also claimed
-all 30 bad saves, and the read-back caught all 30
-([details below](#why-the-read-back-matters)).
 
 ## One harness, three modes
 
 | Mode | What happens | Model calls |
 |---|---|---|
-| **Explore** | A person records the task (once, or several times with `openadapt compile --induce` for variations), or an AI agent runs it once while OpenAdapt records every action, ideally on test data. The save is read back before anything compiles. | Your agent's, on your own key |
-| **Run** | The compiled program repeats the task with new inputs. It checks the record before each save and reads it back after. | None |
+| **Explore** | A person records the task (once, or several times with `openadapt compile --induce` for variations), or an AI agent runs it once while OpenAdapt records every action, ideally on test data. The save is checked before anything compiles. | Your agent's, on your own key |
+| **Run** | The compiled program repeats the task with new inputs. It checks the record before each save and reads the result back after. | None |
 | **Repair** | When the app changes, the run stops before saving. An agent shows the fix, the program tries it up to the save without saving, and a person approves it. | Only when something changed, on your own key |
 
-## Why the read-back matters
+## The 3-level verification ladder
 
-A success screen is not proof of a save. We injected 8 kinds of bad save into
-a test app (a save that never landed, landed partly, landed twice, went to the
-wrong record, or changed another record), 9 runs each, alongside clean runs.
-Each check below was asked whether those 72 bad saves had succeeded:
+Most enterprise deployments do not give an automation tool direct SQL access,
+and OpenAdapt does not require it. OpenAdapt picks the strongest layer the app
+supports:
+
+- **Promote to API or MCP when an endpoint exists:** Record the task in the
+  GUI, compile it into direct form/RPC calls and MCP tools (`openadapt-agent serve`)
+  whenever the app exposes an endpoint, and avoid replaying pixels where a
+  compiled API step is ~7x faster (3.3 s vs. 22.5 s on OpenEMR above).
+- **Level 1 (Before-click local guard: 100% of apps, 0 DB needed):** Checks
+  the active record and entity identity across tabs, enforces policy and
+  consent gates before consequential writes, and checks screenshots locally for
+  UI drift or prompt injection. If anything looks wrong, it stops and asks a
+  person instead of guessing.
+- **Level 2 (Post-action UI and confirmation read-back: ~90% of portals, 0 DB needed):**
+  Reads back submitted fields, server confirmation IDs, or generated PDFs in a
+  separate session to confirm what the portal actually recorded.
+- **Level 3 (Direct API or DB read-back: optional upgrade):** When you own the
+  system or have read-only FHIR, REST, or SQL access, reads the system of
+  record directly and mints a signed `VERIFIED` receipt.
+
+### Why independent checks beat a "Saved" screen
+
+In controlled fault tests, a success banner on screen is not enough to prove a
+write landed. We injected 8 kinds of bad save into a test app (a save that
+never landed, landed partly, landed twice, went to the wrong record, or changed
+another record), 9 runs each, alongside clean runs:
 
 | How the save was checked | Bad saves reported as saved |
 |---|---|
@@ -94,26 +107,17 @@ Each check below was asked whether those 72 bad saves had succeeded:
 
 The test app's database is SQLite with two record tables, so "every table"
 there is two tables; a real system has many more. Separately, 9 of the 18
-correct saves stopped in every arm: the server committed the save but its
-answer timed out, so the write step halted before any read-back ran. Most
-deployments give no database access at all. Where the app's own screens are
-the only independent read, the check covers at most the target record, read
-in a separate session, and the same user's changes in the app's activity log
-within a stated window, where the app shows one and the program is set up to
-read it.
-
+correct saves stopped in every arm because the server committed the save after
+its response timed out, so the write step halted before any read-back ran.
 [EFFECT_E2E.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/effect_e2e/EFFECT_E2E.md)
 has the fault set, the method and the raw results.
 
-An agent working alone can't see these faults either. Claude Sonnet 5.5, using
-computer use, did a task on a test app whose server broke the save in 6 ways,
-5 times each. The agent reported all 30 bad saves as done. Given the agent's
-run, `openadapt-flow verify-run` read each record back: it flagged all 30 and
-confirmed all 10 clean saves, with no false alarms. The test app shows "saved"
-before the server answers, so the screen gave the agent nothing to notice. That
-gap is what the read-back closes.
-[SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back)
-has the method, the raw runs and the cost.
+An agent working alone misses the same faults. In controlled runs on OpenEMR
+and MockMed with 30 injected bad saves each, Claude Sonnet 5.5 computer use
+reported all 30 bad saves as done. Running `openadapt-flow verify-run` caught
+25 of 30 on OpenEMR and 30 of 30 on MockMed, while confirming all clean saves
+with zero false alarms
+([SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back)).
 
 ## Try it in one command
 
@@ -123,7 +127,7 @@ uvx --python 3.12 openadapt@latest quickstart --break-it
 
 No account or API key. [uv](https://docs.astral.sh/uv/getting-started/installation/)
 fetches Python 3.12 if you need it, and `@latest` runs the newest release. With
-Python 3.10 to 3.12 already installed, `python -m pip install --upgrade openadapt`
+Python 3.11 or 3.12 already installed, `python -m pip install --upgrade openadapt`
 then `openadapt quickstart --break-it` does the same. The browser runs hidden
 and progress shows in the terminal; add `--watch` to see the browser window.
 
@@ -388,13 +392,19 @@ it. [Run outcomes](https://docs.openadapt.ai/reference/outcomes/) lists every va
 
 ## When to use something else
 
-- **The app has an API for the task.** Call the API.
-- **Every task is new.** Use a computer-use agent. OpenAdapt pays off when the
-  same entry repeats.
-- **There's no way to read the record back.** The record check needs read
-  access to the system of record: an API, the database, FHIR, or a separate
-  signed-in session. Without one, a run can only end as finished but not
-  checked.
+- **You already have a clean, documented API client for the task.** Call the
+  API directly. (If the app only exposes an internal form or RPC endpoint,
+  OpenAdapt can record it in the GUI and compile it into a direct API/MCP
+  step instead of replaying pixels.)
+- **Every task is one-off.** Use a computer-use agent. OpenAdapt pays off when
+  the same entry repeats or needs repeatable verification.
+- **You need a `VERIFIED` receipt with zero read-back path at all.** Level 1
+  before-click guards work on 100% of apps with no database access, and Level 2
+  UI confirmation read-back covers ~90% of portals with no database access.
+  Level 3 direct API/FHIR/SQL read-back is an optional upgrade when you own the
+  system. If a target exposes neither a UI read-back nor an API/DB read-back, a
+  run finishes as checked-before-click (`COMPLETED_UNVERIFIED`) rather than
+  `VERIFIED`.
 
 
 ## Packages
@@ -647,6 +657,7 @@ improvising or retrying when something is off.
 | Fill a multi-step browser form or quote wizard from an intake record, stop for an operator on a prefill that disagrees with the intake or a question the intake does not answer (decided in a Chrome side panel), submit once, and give every typed, selected or kept field a read-back verdict: `passed`, `failed` or `not_checked`. A field it cannot read back is `not_checked`, never passed; such a submit ends `readback_incomplete` with no receipt | On main, prototype; not on PyPI until Flow 3.4.0 ([#2308](https://github.com/OpenAdaptAI/OpenAdapt/pull/2308)) | Synthetic only. Four quote portals built separately from the layer, 32 scored cases, pre-registered: 6 correct submissions, 0 wrong values submitted, 0 verified (every field on the one workable portal is `not_checked`, because its summary is plain text). The surface cannot see iframe or shadow-DOM forms or fill type-aheads, so 3 of 4 portals submitted nothing. Estimator, session-timeout and type-ahead traps were never reached. Rule proposals from repeated operator answers (`form_tx/learning.py`) had no measured effect: none qualified ([RESULTS](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/form_tx_heldout_run/RESULTS.md)) | `openadapt_flow/form_tx/`, [FORM_TX.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/FORM_TX.md) |
 | Never retry an uncertain save (`RECONCILIATION_REQUIRED`) | Released | Synthetic (fault server) | [VERIFICATION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFICATION.md) |
 | One check-level scale, 0 to 5, from "unchecked" to "counterparty confirmed" | Released | Unit tests | `openadapt_flow/check_level.py` |
+| One receipt word per check, the same on every path: `VERIFIED` only at level 3 (a separate session) or 4 (the system of record), always with the basis that produced the evidence (`separate_session`, `system_api`, `activity_log`, `db_frame` or `owned_connection`); `SHOWN` for an acting-screen re-read, `CONFIRMED` for the counterparty, `ATTESTED` for an operator and `RECORDED` for the rest. `VERIFIED` means "as of the read-back time the read-back showed this value", not "persisted". Run receipts (`record/run/v1`, an additive optional field), `verify-run` receipts and `tx` receipts carry an evidence-scope block: level, basis, word, the wire channel watched, the read-back time, the recheck window, and what it did not cover (always server-side async and outbound effects; a run receipt says it has no per-read time). A run receipt never says `VERIFIED` below level 3. Receipts without the block still verify. A `verify-run` contract with `minimum_effect_strength: independent_session` now verifies on a separate-session read | On main | Unit tests (parity across the runtime report, `verify-run`, `tx` and Execute v1; fake verifiers) | `openadapt_types/check_level.py`, `openadapt_types/evidence_scope.py`, `openadapt_flow/evidence_basis.py` |
 | Grade a file, PDF or email check by who produced it: a file the acting session wrote or downloaded, or one with no declared producer, is at most `same_screen`; one a separate session fetched is at most `separate_session`; only a declared `system_of_record` producer reaches `system_of_record`. A store that overlaps the acting session's folders (named ones, the user's Downloads, a Playwright download folder) is graded as the acting session's whatever is declared. Under a strong declared producer, a scan that reads a file in a browser download folder beneath the store, or a symlink out of it, is refused as INDETERMINATE. The verdict's `read_evidence.provenance` names the producer and whether it was declared or observed | On main | Unit tests through each of the four readers (mixed store, symlink, system-owned positive case); a PDF downloaded by headless Chromium from a loopback app, the same bytes from a separate browser context and from the app's store, and a headless download landing beneath a broader store | `runtime/effects/artifact_provenance.py`, `effects.artifact_producer`, `packages/flow/tests/test_effect_artifact_provenance.py` |
 | Check a value where a careful person would look again: an effect location (`openadapt.effect-location/v1`) is pack data for one place an intended value shows (path and start condition, locator, expected value, codec, expected count, optional baseline). One summary row can cover two values ("Name (DOB)"), and a date can be split over three fields. Every planned value is `held`, `refuted` or `not_checked`; a place that can't be reached, found or read is `not_checked`. The check level follows the start condition (a new session is level 3), and the engine holds no application words | PR [#2500](https://github.com/OpenAdaptAI/OpenAdapt/pull/2500), not yet used by a runner | Unit tests and the fail-open harness (synthetic readings only) | `openadapt_flow/effect_location/`, [EFFECT_LOCATION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/EFFECT_LOCATION.md) |
 | Judge any executor's write, including an agent's or a script's, from the system of record | Released | Synthetic | `openadapt-flow verify-run`, [VERIFY_RUN.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFY_RUN.md) |
@@ -655,6 +666,7 @@ improvising or retrying when something is off.
 | A stop card for a stopped write: the exact record difference and who else wrote, with Undo or Fix that reads back, or Open in the app; cost modelled from published operators and timed machine steps, as pre-registered | Released ([#1653](https://github.com/OpenAdaptAI/OpenAdapt/pull/1653)) | Real app (Medplum 5.2.8, blind suite: 16 stops, 14 one-tap with no failed read-back; modelled 42 s per caught harm against 420; one wrong category on a false stop, gone in the re-measure with `void`: 24/24, 15 stops, no wrong category, no failed read-back) | `benchmark/stop_card/`, [PREREG_REVIEW.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/stop_card/PREREG_REVIEW.md) |
 | Generate `openadapt.verify/v1` contracts from a MySQL, MariaDB or PostgreSQL schema, the kinds of write with their parameter names, and one demonstration write per example: one contract per field set (an update gets one for each set of fields it may change), and `choose` builds any other set of the kind's fields the same way from the same pinned inputs, list parameters by length, a `found` twin for a record already in place, the whole-database frame on every dialect (it compares the contract's own tables too, so an excused column holds only on the rows the write declares, and the recheck sees a late change to a look-alike row), rows the app adds on its own declared by count, a recheck window the person confirms, and `frame.versions` (a lost update) from a version column or the app's audit trail of saves. Equal ids are never taken for a join (a row's own key, the column a path arrived by), a join only equal ids support is a question when a supported place also fits, and a pin needs two rows that agree. Every undecided point is one numbered question; every contract is loaded and dry-read against the live store before it is written; a needed `TRIGGER` grant or view is applied with a flag or the kind is refused. A field no demonstration gives is placed at the main table's column of its name, or at the one text column whose name holds its words (never a key column); a create may leave out a text field whose column can't hold NULL and has an empty default, and the contract checks it empty; the `found` twin checks only the task's values, a soft-delete column and yes/no flags, so a record a person entered with other values is found, and a row the write would log beside it is not required; `choose` turns a list of plain values into the demonstrated one-key items, treats an empty list as nothing given, and reads an update's only changes given as null as emptying those fields ([#2418](https://github.com/OpenAdaptAI/OpenAdapt/pull/2418)). Not yet: OpenAPI metadata; a value the app defaults sent explicitly (a currency equal to an app-level default) is still refuted | [#1672](https://github.com/OpenAdaptAI/OpenAdapt/pull/1672) | Real app (first study, instance copies; questions for a person: Dolibarr 4, Redmine 2, EspoCRM 3, against 11 hand decisions each; every in-scope planted fault stopped (22/22, 19/19, 21/21); correct writes confirmed 32/43, 32/38, 27/40; evidence in the private study repository) | `python -m openadapt_flow.generate.verify_contract`, [GENERATE_CONTRACTS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/GENERATE_CONTRACTS.md) |
 | Set up generated contracts with no person answers: answer the generator's questions by fixed rules (its own bookkeeping proposal with time stamps checked against the clock, nothing added), validate them in a sandbox copy of the store beside the app's own (a database or schema the setup makes and drops) by replaying held-out correct writes and planting faults built from each write's recorded diff, never from the contract (missing, wrong value, wrong or look-alike record, duplicate, unrelated edit, a row in another table, a delayed change, a changed bookkeeping cell), and admit a kind only when every held-out write is confirmed and every fault stopped; a kind not admitted has no contract and is listed in `EXCEPTIONS.md`. Not yet: log tables, counters and derived columns, learned excuses, value maps | (this PR) | Unit (real PostgreSQL: one kind admitted with every planted fault stopped, one listed as an exception; a control without the clock check lets the time-stamp fault through). Development apps pending | `python -m openadapt_flow.generate.zero_touch`, [ZERO_TOUCH_DESIGN.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/research/ZERO_TOUCH_DESIGN.md) |
+| Draft a system's write contract with a model at setup, admit it only by qualification: `openadapt verify draft` gives the pinned model (`claude-opus-5-5`, prompt digest recorded in the contract's `provenance`) the system's description (OpenAPI, GraphQL, FHIR CapabilityStatement, the introspected database schema, or none), one HAR trace with sign-in and secret fields masked, what that write moved in a sandbox, and the task. The draft is admitted only if, on the sandbox, it refutes planted faults (a wrong value in each written column, the wrong row, a duplicate, a sibling record edited, the write reverted after the check, and for an update another user's save overwritten through the app), confirms 5 clean writes and their rechecks, and confirms a two-users-by-two-payloads probe whose attribution of every moved column (values, user, clock, nothing) agrees with its bookkeeping exclusions. Failures go back to the model, at most 3 rounds; a person is asked at most once, only when a planted fault could go only into excluded columns. An admitted contract runs with no model calls. Its admission record is signed with the local key, and `--check` refuses an edited check, an edited or unsigned record, or one no pinned key signed. Needs an SQL store the command can read and a privileged connection to plant faults | PR ([#2438](https://github.com/OpenAdaptAI/OpenAdapt/pull/2438)) | Real app, lab, synthetic data: Directus 11.5.1, never set up before: admitted in round 2 after 6.0 minutes with 0 person decisions (round 1 was lost because a sign-in fell inside the measured window; fixed after the run, not rerun), 7/7 planted faults refuted in admission and 8/8 held out (a lost update through the app among them), 0 false stops on 10 clean writes, 2 model calls. Mealie 2.8.0, never set up before: refused after 3 rounds in 9.2 minutes, since its store keeps no version, author or save history that could show a lost update. Synthetic MockLoan and workbench: admitted in round 1 in 1.3 to 1.4 minutes, 16/16 held-out faults. The pre-stated 5-minute limit on the untuned app was not met | `openadapt verify draft`, `openadapt_flow/verify_draft/`, [VERIFY_DRAFT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFY_DRAFT.md), [results](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/verify_draft/RESULTS.md) |
 | `void` in an ensure-record contract: values that make a record assert nothing (`status="entered-in-error"`). A record holding one is never the person, is not a duplicate, and a created one needs review; it names values to leave out, never values to keep, and can't name an identity field | Released ([#1657](https://github.com/OpenAdaptAI/OpenAdapt/pull/1657)) | Real app (Medplum 5.2.8: 8 live cases written in advance, 8/8 with the line, 5/8 and one silent pass without it; frozen blind Immunization suite 24/24); adversarial review recorded | `openadapt_flow/ensure_record.py`, [RESULTS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/fhir_medplum/void/results/RESULTS.md), [REVIEW_VOID.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/fhir_medplum/void/REVIEW_VOID.md) |
 | Check a patient registration on a commercial EHR through its public FHIR sandbox: Epic (open.epic, R4), read through FHIR search and read with SMART backend auth; the frame is the search set, since the sandbox has no AuditEvent or `_history` | Released ([#1656](https://github.com/OpenAdaptAI/OpenAdapt/pull/1656)) | Real app (Epic public sandbox, August 2026 release; blind round 12/13 with none passed as verified, the miss a false refusal fixed in the contract; caught Epic dropping the phone on a 201 create) | `benchmark/commercial_ehr/`, [FINDINGS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/commercial_ehr/FINDINGS.md) |
 | A public benchmark a vendor reruns with their own agent: `openadapt bench medplum --agent <scripted|claude|cmd:...|py:...>` runs 37 written-for-it cases (Patient, AllergyIntolerance, Appointment) against a local Medplum through a fault proxy, and scores the agent's claim, a read-back and OpenAdapt's verifier against an end-state oracle | On main ([#1652](https://github.com/OpenAdaptAI/OpenAdapt/pull/1652)) | Real app (Medplum 5.2.8; Claude Sonnet 5.5: OpenAdapt missed 1 of 9 harms with 4 false stops, all corrections that changed the record's identity, against 8 missed by the claim and the read-back; cold run from clone to scorecard 5 min) | [README](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/fhir_medplum/public/README.md), [RESULTS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/fhir_medplum/public/RESULTS.md) |
@@ -666,9 +678,14 @@ improvising or retrying when something is off.
 | Check that the saved record matches its source document, not only the parameters: intake keeps each value's line, a second reading must agree before a guarded save, and a round trip compares the read-back with the document | Released | Synthetic (MockMed, text referral) | `openadapt_flow/provenance.py`, `intake`, `verify-run --provenance`, guarded save |
 | Check one write from Python, without the CLI: one API (`openadapt_flow.verifier`: `begin_write`, `verify_write`; 2.4.1's `capture` form still works, deprecated) with one outcome (`CONFIRMED`, `REFUTED`, `UNCERTAIN`), the receipt, which parts were checked, and the result's scope (read path, stores read, time window, what it doesn't cover) | Released | Synthetic (SQLite; MockMed's fault server over real HTTP) | `openadapt_flow/verifier.py`, [VERIFIER_API.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFIER_API.md) |
 | Install the write checker alone: `pip install openadapt-verify` (21 distributions, about 41 MB, no vision, OCR, browser, GUI or NumPy stack; Flow 3 moved those to its `vision` extra) runs Flow's own verifier, ledger, journal, SQL guards and receipts. `openadapt-verify quickstart` checks three scripted agent writes (correct, wrong value, claimed but not saved) against REST, SQLite, FHIR, PostgreSQL and MySQL, each `CONFIRMED`, `REFUTED` or `UNCERTAIN` with a checked signed receipt; `@verified` and `checked_write` wrap a plain Python write in one line | On main | Synthetic (disposable local stores and PostgreSQL and MySQL containers; a clean-venv CI job enforces the install budget and an import test refuses the vision modules) | [packages/verify](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/verify/README.md), `openadapt_verify/quickstart.py`, `openadapt_verify/guard.py` |
+| Fail closed by construction: one verdict kernel (`openadapt_flow.verdict`: obligations fixed from the plan, `settle`, allow-list codes, run binding, trust labels) that never passes an empty set, a short read, a raised probe, another run's result or an unknown code; a fail-open harness that runs 15 generic mutations against every registered `@verdict_site` and checks the verdict at three levels (refuted, not checked, held); and a CI ratchet that fails when the repository-wide count of a hand-written fold kind rises, including swallowed exceptions and "nothing else changed" tests over a possibly partial read | On main | Synthetic: the harness flags 14 fail-open bugs rebuilt from this repository's history (pinned pre-fix copies) plus one live connector site, and passes every fix; 8 registered sites (the hard-invariant layer, the version check, `verify-run`'s folds and the receipt's line judge and tally among them) and 2 owned; 12 of 12 kernel mutants killed | [FAIL_CLOSED.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/FAIL_CLOSED.md), `packages/flow/tests/failopen`, `packages/flow/scripts/check_verdict_folds.py` |
+| Steps drawn as links, tabs or menu items, and the commit point learned from the demonstration: a step's role (commit, navigate, in place) comes from the writes the backend counted, never its words; a commit holds only on exactly the demonstrated writes, and a backend that cannot count writes never attempts one | On main ([#2499](https://github.com/OpenAdaptAI/OpenAdapt/pull/2499)) | Synthetic: a web form, an EMR-like chart, a SaaS settings page (headless Chromium) and a spreadsheet-like grid with no browser | `openadapt_flow.gui.steps`, `packages/flow/tests/gui` |
+| Checkbox attestations declared in pack data: a declared box is ticked only on a person's grant for its pinned statement digest, never through an intake value or derived fact; an undeclared box, changed wording, a missing grant or an attestation bound to a field stops the run before anything is ticked | On main ([#2501](https://github.com/OpenAdaptAI/OpenAdapt/pull/2501)) | Synthetic: a web form, an EMR-like chart dialog, a SaaS switch (headless Chromium) and a spreadsheet-like grid dialog with no browser | `openadapt_flow.gui.attestations`, `packages/flow/tests/gui` |
+| Hub pages whose sections open in dialogs: a dialog holding any editable control is a form, never a confirmation; each section's completion is read from its card on the hub after save, with the demonstrated writes, never assumed from the click | On main ([#2502](https://github.com/OpenAdaptAI/OpenAdapt/pull/2502)) | Synthetic: an EMR-like chart hub, a SaaS onboarding checklist (headless Chromium) and a desktop preferences window read as an accessibility tree | `openadapt_flow.gui.hub`, `packages/flow/tests/gui` |
 | Audit your own automation's success check: `openadapt-verify audit` puts an HTTP proxy in front of the app, runs your command through it N times, changes the save (the first write whose body carries a declared value, or that matches `--write-path`) once per run (not saved with a replayed success reply, rejected, a value blanked or changed, saved twice, an extra changed copy, the reply lost after the save, and a rewritten record field when given one), and counts the runs where the command reported success but the contract's independent read path shows a wrong or missing save, plus false alarms; table and JSON report. HTTP/1.x only, no app code, no WebSocket or server-sent events; a stale overwrite and a change outside the read path are not run | On main | Synthetic (two scripted HTTP clients against the quickstart's REST store: a script that trusts the 2xx reply reported success on 10 of 12 bad saves and failure on 2 saves that landed, one that reads its record back through the app on 4 of 12, missing the duplicate and extra writes) | `openadapt-verify audit`, [packages/verify](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/verify/README.md#audit-your-automations-success-check), `openadapt_verify/audit.py` |
+| Repeating structures ("add another traveller", a table row, a line item) learned from one demonstration: instances are added to match the intake, filled in order and each read back by the container it was written into; a prefilled instance, more instances than items, or an add that did not add exactly one blank instance stops the run before writing | On main ([#2512](https://github.com/OpenAdaptAI/OpenAdapt/pull/2512)) | Synthetic: a web form, an EMR-like medication table, a SaaS invoice (headless Chromium) and a spreadsheet-like grid with no browser | `openadapt_flow.gui.repeating`, `packages/flow/tests/gui` |
 | Never send a write twice while its outcome is unknown: an append-only ledger on local disk (pluggable backend), keyed by the write's identity, that every adapter, the MCP tools and the CLI consult before sending; a read-back against the attempt's own baseline resolves it, and a refuted write waits for a person (`openadapt verify ledger list`, `reconcile`, `release`) | Released | Synthetic (MockMed's fault server: a worker killed between the send and the read-back, killed during a timed-out send, killed before the send, a late write, and two worker processes started together on one write) | `openadapt_flow/write_ledger.py`, [VERIFIER_API.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFIER_API.md#the-uncertain-write-ledger) |
-| Commit one record update through a transaction lens: `openadapt-verify tx-run` (or `tx_verified` in Python) reads the target record, sends the update, reads it back and judges the intended fields and every other field (frame) with one comparison policy, and signs a receipt. Without a separately supplied SQLite row authority every HTTP write is refused; `--prototype-unqualified` runs it with an `UNCERTAIN` result at best and no automatic undo. `tx-induce` proposes a lens from a HAR trace and can probe a declared sandbox, but its probe report never authorizes execution, and an observed mismatch never becomes an accepted value mapping. Induction takes route roles from what each request did, so a create sent as `PUT` and an update sent as `POST` are recognized, and the sandbox probe checks an update route of any method for replace semantics. A field that only looks like a timestamp stays in the frame unless the probe sees the server change it. Induction refuses a trace that shows no write it can attribute to a record (an update at the record's URL, or a create whose record is then read there) instead of guessing a route; the CLI allows a guessed item route only when it certifies the lens on a sandbox. When the probe cannot create its own record, an update lens is left in replace mode (whole-record writes), and a certification fault the server refuses is reported as not delivered, never as a pass. Undo refuses to overwrite a change made after the write. The wire tap hands a redirect that stays on the tapped origin back to the client and refuses one that leaves it; it never follows a redirect itself. A field the server is seen rewriting between `NULL` and `""` gets a `null_empty` codec, learned per field by the probe or from the trace, so that change alone is not a clobber; any other change on the field still is. The wire tap counts a GraphQL query (on `/graphql` or `/$graphql`) and a batch of `GET`s as reads. Another `POST` counts as a read only when it matches a read route declared as data; `probe_read_routes` learns those by replaying a trace on a sandbox reset to its pre-trace state and requiring that a whole-store digest not change. Not checked: server-side effects outside the target record, such as triggers or background jobs | On main ([#2293](https://github.com/OpenAdaptAI/OpenAdapt/pull/2293)) | Synthetic (local SQLite and HTTP fixture servers), plus induction and the replace probe on one open-source task app (recorded trace in CI, live tests in the lab) | `openadapt-verify tx-induce`, `tx-run`, `openadapt_flow/tx/`, `openadapt_verify/tx.py` |
+| Commit one record update through a transaction lens: `openadapt-verify tx-run` (or `tx_verified` in Python) reads the target record, sends the update, reads it back and judges the intended fields and every other field (frame) with one comparison policy, and signs a receipt. Without a separately supplied SQLite row authority every HTTP write is refused; `--prototype-unqualified` runs it with no automatic undo, and its result is `UNCERTAIN` unless the read-back is a cache-bypassed API read whose record version is exactly one past the before-image's, which is `CONFIRMED` with basis `system_api`. `tx-induce` proposes a lens from a HAR trace and can probe a declared sandbox, but its probe report never authorizes execution, and an observed mismatch never becomes an accepted value mapping. Induction takes route roles from what each request did, so a create sent as `PUT` and an update sent as `POST` are recognized, and the sandbox probe checks an update route of any method for replace semantics. A field that only looks like a timestamp stays in the frame unless the probe sees the server change it. Induction refuses a trace that shows no write it can attribute to a record (an update at the record's URL, or a create whose record is then read there) instead of guessing a route; the CLI allows a guessed item route only when it certifies the lens on a sandbox. When the probe cannot create its own record, an update lens is left in replace mode (whole-record writes), and a certification fault the server refuses is reported as not delivered, never as a pass. Undo refuses to overwrite a change made after the write. The wire tap hands a redirect that stays on the tapped origin back to the client and refuses one that leaves it; it never follows a redirect itself. A field the server is seen rewriting between `NULL` and `""` gets a `null_empty` codec, learned per field by the probe or from the trace, so that change alone is not a clobber; any other change on the field still is. The wire tap counts a GraphQL query (on `/graphql` or `/$graphql`) and a batch of `GET`s as reads. Another `POST` counts as a read only when it matches a read route declared as data; `probe_read_routes` learns those by replaying a trace on a sandbox reset to its pre-trace state and requiring that a whole-store digest not change. An app whose calls all go to one RPC endpoint gets a lens whose read and write carry their arguments in the body (`body_template`), whose record is found at a path such as `result.0`, and whose 2xx answer with an `error` member counts as a failed call; induction learns it from a read that returns the named records and a write that a later read confirms, and reads back the fields the trace itself read. Not checked: server-side effects outside the target record, such as triggers or background jobs | On main ([#2293](https://github.com/OpenAdaptAI/OpenAdapt/pull/2293)) | Synthetic (local SQLite and HTTP fixture servers), plus induction and the replace probe on one open-source task app (recorded trace in CI, live tests in the lab) | `openadapt-verify tx-induce`, `tx-run`, `openadapt_flow/tx/`, `openadapt_verify/tx.py` |
 | Verify a write to an API or SaaS system with no database to diff: `openadapt proxy --api systems.tx.yaml` serves `api_read` and `api_write` beside the SQL tools on the same MCP endpoint and keeps the API credentials out of the agent's environment. Each write is sent once under a key derived from the task and the record, never the payload. A retry returns the first result, a regenerated payload is refused, and a crash between the send and the ledger is recovered by finding the write. The key goes out as `Idempotency-Key` where the API honors one, or as a FHIR conditional create. The record is then read back and judged with the tx codecs, including `null_empty`. The system's own event or audit log is read from an id-placed cursor, and the write's own event must appear with no other resource changed by the same credentials. A FHIR `AuditEvent` search, an event stream and a REST activity feed are all declared as data in the tx file. Every outcome gets a `record/run/v1` receipt. Scope is the resource and the actor: changes by other callers, and changes the log doesn't record, aren't checked. A whole-record (`replace`) update or a delete over another caller's edit is refused by the server when the route declares a `precondition` (`If-Match` from the read's `ETag` or a version field) with enforcement evidence: a probe recorded in the pack, or one the adapter runs once per route. Without a precondition it is never `VERIFIED`, only `COMPLETED_UNVERIFIED` (`unconditional_write`; `precondition_unproven` without evidence), and `api_write` reports it as an error. A retry that returns a stored result is capped the same way | [#2437](https://github.com/OpenAdaptAI/OpenAdapt/pull/2437), stacked on [#2428](https://github.com/OpenAdaptAI/OpenAdapt/pull/2428) | Real apps (Medplum 5.2.8 `AuditEvent`, Gitea 1.24.6 activity feed, synthetic data): 0 of 400 clean writes stopped on each; Medplum rerun with its `If-Match` probe recorded in the pack, 400 of 400 `VERIFIED`. Every planted fault the log exposes was stopped: wrong value, duplicate, partial write and same-actor collateral change, 50 of 50 per class, except that on Medplum a duplicate update no longer lands (the server refused all 50 second PUTs with 412). Known misses: a collateral title edit on Gitea, which its feed doesn't record (0 of 50 stopped), and another caller's change on either system (0 of 50). 50 of 50 regenerated-payload retries were refused on each. Stripe not run (no test-mode key) | [API_VERIFICATION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/API_VERIFICATION.md), [benchmark/api_scoped](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/api_scoped/RESULTS.md), `openadapt_flow/txplan/scoped.py`, `openadapt_flow/txplan/audit.py` |
 | Reconcile one prior authorization or claim across the EHR (FHIR), the clearinghouse (X12 278 and 277 files) and the payer (Da Vinci PAS): each leg is a verifier contract judged by the same record checks, and the result names each break (`not_received`, `mismatch`, `not_written_back`, `duplicate`, `not_accepted`) with `CONFIRMED`/`REFUTED`/`UNCERTAIN` and a Scope; absence before a deadline is `UNCERTAIN`, an unreadable store is never agreement, a rejected or returned 277 is never agreement, and a judged record or value with two distinct candidates in the read (repeated segments, list elements, join targets, a group's latest) is never `CONFIRMED` | On main | HL7 Da Vinci PAS reference implementation and Medplum run locally, synthetic X12: 36 of 36 planted breaks found, 0 of 27 faulty units `CONFIRMED`, 17 of 17 clean units `CONFIRMED` (units 1 to 47; the 3 status-category units added later are covered by unit tests); a Hypothesis property test over generated multi-candidate reads; Epic's public sandbox read-only as the EHR leg | `openadapt-flow reconcile`, [RECONCILE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/RECONCILE.md), [results](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/reconcile/RESULTS.md) |
 | Catch a write that lands after the verdict (a background job, a trigger, a delayed side record): a `CONFIRMED` with a recheck due is provisional (`provisional`, `recheck_due_at`); the recheck reads the whole database again and refutes the earlier result when a change since the post-save read has no explanation, and a recheck that doesn't confirm holds the write in the ledger. Run it from Python (`verifier.recheck`) or MCP (`verify_recheck`). A write after the recheck's read is not seen (`frame.database.recheck_after_s`, no default window) | Released ([#1639](https://github.com/OpenAdaptAI/OpenAdapt/pull/1639)); provisional result, MCP tool and ledger hold ([#1669](https://github.com/OpenAdaptAI/OpenAdapt/pull/1669)) | Real app (Dolibarr 21 and EspoCRM 10 on MariaDB 11.4, 180 s window: 4 of 4 planted late writes at 125 to 130 s refuted at the recheck, correct writes confirmed; EspoCRM's cron daemon needs its job tables declared; Redmine 6.1 on PostgreSQL 17, 180 s window: the first-contact study's late writes F19 and F20 refuted at the recheck, correct writes confirmed); synthetic (SQLite); opt-in live OpenEMR test | `openadapt_flow/verifier.py`, `runtime/effects/late_write.py`, [VERIFY_RUN.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFY_RUN.md#writes-that-land-later) |
@@ -734,6 +751,7 @@ improvising or retrying when something is off.
 | Surface | Status | Evidence | Where |
 | --- | --- | --- | --- |
 | Web (Playwright, Chromium) | Released | Real apps on local test copies (OpenEMR, Odoo, Frappe Lending, openIMIS) and Medplum; CI runs in-tree apps on every build | [SURFACES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SURFACES.md) |
+| Web in a signed-in Chrome profile (Desktop): after the person agrees to a notice, Desktop opens the installed Google Chrome on a separate profile it manages; they sign in once (SSO or two-factor), and recordings and runs attach to that window already signed in. Refuses a changed notice, Chrome's own profile folders, a profile open elsewhere, an elevated Windows Desktop, and an endpoint that doesn't name the process Desktop started; closes only that process; never reads cookies or passwords and never calls the keychain | In [#2358](https://github.com/OpenAdaptAI/OpenAdapt/pull/2358) | Unit tests with fakes; real Google Chrome 158 on a Windows 11 laptop without admin rights against a synthetic sign-in page (sign-in kept across close and reopen, open profile refused, another Chrome window left open); the same test on GitHub-hosted macOS, and the elevated refusal on GitHub-hosted Windows | [CHROME_PROFILE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/docs/CHROME_PROFILE.md), `packages/desktop/openadapt_desktop/chrome_profile.py` |
 | Native Windows (UI Automation) | Released | Synthetic (a WinForms test app in a Windows 11 VM, 3 of 3 trials); CI on a GitHub-hosted Windows runner on every change to the Windows path and nightly: record, compile and replay of the WinForms Patient Notes app through the real win_agent, judged from its SQLite record, with a near-identical sibling roster that must not be written, and a non-gating governed run of the same workflow under the Standard profile with a person's signed approval, a hold and a resume, whose resume currently stops before the save on a false form change (fail-closed, nothing written; [#2189](https://github.com/OpenAdaptAI/OpenAdapt/issues/2189)), followed by a gating check that fails the job on any sibling, held or unverified write ([desktop-replay.yml](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/.github/workflows/desktop-replay.yml)); on a real Windows 11 ARM machine, record, compile and replay of the same kind of WinForms test form with an owned confirm dialog, 3 of 3 trials, each also refusing a target covered by another app's window and one blocked by a modal dialog before any input | [SURFACES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SURFACES.md) |
 | Native macOS (Accessibility) | Released | Synthetic (TextEdit, 3 of 3 file effects, driving the backend directly); a real third-party app, calibre (Qt, SQLite library): record, compile (certified under `clinical-write`) and a `standard` run checked against the library's database, `VERIFIED` with only the target book changed; a same-title book by another author stopped at the identity check and two identical books were refused as ambiguous, each with nothing written ([benchmark/macos_native](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/macos_native/README.md)) | [SURFACES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SURFACES.md) |
 | Native Linux (AT-SPI, X11) | Released | Real AT-SPI in CI (`flow-linux-atspi`, Xvfb with a window manager): a GTK3 fixture (3 verified effects, 3 ambiguous and 3 stale targets refused) and a GTK3 chart app with SQLite: record, compile (certified under `clinical-write`), a `standard` run `VERIFIED` against the database, another patient's chart and a look-alike chart stopped before the save, and a repaired notice admitted on its AT-SPI element identity ([benchmark/repair_every_backend](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/repair_every_backend/README.md)) | [LINUX_NATIVE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/desktop/LINUX_NATIVE.md) |
@@ -749,6 +767,7 @@ improvising or retrying when something is off.
 | Lift look-alike identity stops with a complete known-ID list | Released | Synthetic (rendered record list) | `openadapt-flow known-ids` |
 | Take extra looks before stopping on a look-alike record ID: fresh frames, the known-ID list, and a select-and-copy of the ID where the surface allows it | Released ([#1333](https://github.com/OpenAdaptAI/OpenAdapt/pull/1333)) | Synthetic (dense record list in a browser) | `runtime.identity_copy_look` in deployment.yaml; [IDENTITY_LOOKS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/identity_looks/IDENTITY_LOOKS.md) |
 | Check an icon-only click target's hover response (highlight, tooltip) before clicking on a pixel surface, and re-check the target and identity regions on a fresh frame right before every pixel click | Released ([#1334](https://github.com/OpenAdaptAI/OpenAdapt/pull/1334)) | Synthetic (in-process kiosk) | `Recorder(capture_hover=True)`; [hover_identity](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/hover_identity/README.md) |
+| Chrome MV3 Co-Pilot Extension (`sidePanel` live run/conflict/receipt UI, run-scoped child pop-up / estimator window tracking & focus return, zero-credential-capture sign-in / MFA pause & resume with native-host ack, and Chrome Web Store submission package) | Experimental, PR [#2575](https://github.com/OpenAdaptAI/OpenAdapt/pull/2575) | Real native-host pause/resume handler tests + Node VM extension tests + CWS packager validation (`packages/flow/tests/test_chrome_extension_cws.py`); headless Chrome E2E pending | [chrome_extension](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/chrome_extension/), [STORE_LISTING.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/chrome_extension/STORE_LISTING.md), [package_chrome_extension.py](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/scripts/package_chrome_extension.py) |
 
 ## The fastest layer the app allows
 
@@ -757,6 +776,7 @@ improvising or retrying when something is off.
 | Page structure (DOM, UI Automation, Accessibility) first, then template, OCR and geometry | Released | Real apps on the web; synthetic on Windows and macOS | [RESOLUTION_LADDER.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/RESOLUTION_LADDER.md) |
 | Run a step as a direct API call (`ApiActuator`, `ApiBinding`) | Released, hand-authored bindings | Synthetic benchmarks | `runtime/actuators/api.py` |
 | Capture a recording's network traffic and compile a clean save into an API step, with the same record check | Released ([#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269)) | Synthetic patients on a local OpenEMR test copy | network capture, `ApiBinding` |
+| Keep captured bodies off disk: `network.jsonl` and saved wire-tap HARs keep only declared field values (a recording's `--param` and `--identifier` fields; a wire policy's id and version fields) and a per-capture keyed hash of everything else, including URL query values; HTML, text and binary bodies keep only size and hash, taken from the bytes as sent (only a body labelled JSON, or with no content type, is parsed as JSON); the recording's `app_url` query and URL-valued HAR headers are minimized too, and a HAR marked minimized that carries a raw body is refused on load. Raw bodies (`--capture-network-bodies raw`, `save_har(raw_bodies=True)`), which API step proposals need, are refused unless sealed at rest or plaintext is explicitly allowed (`OPENADAPT_FLOW_PLAINTEXT_AT_REST`, warned and logged). Not covered: URL path segments and header values beyond credential redaction | On main (this PR) | Synthetic PHI in request and response bodies, absent from every file after decryption in raw, percent, JSON-escaped, base64 and gzip forms; positive controls with raw | `openadapt_flow/capture_privacy.py`, [NETWORK_CAPTURE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/NETWORK_CAPTURE.md#bodies-minimized-by-default) |
 | Fall back from the API step to page structure when the API is unavailable, before anything is sent | Released ([#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269)) | Synthetic | [#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269) |
 | Run a form's own script before an API save instead of refusing the form: field handlers, `onsubmit`, submit listeners and custom validate.js rules (OpenEMR's `pastDate`) run on the run's values in a scratch copy of the session with every write blocked, and the save is sent only when the page lets the submit through and would send the same body | On main | Synthetic (headless Chromium against a local test page) | [API_TIER.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/API_TIER.md#what-happens-at-run-time), `runtime/actuators/form_eval.py` |
 | Compare paired GUI/API database changes with `api admit --footprint`: changed rows retain their identity and before/after values, and unexplained field differences refuse. Variation alone does not establish server ownership. | This PR | Synthetic headless Chromium and SQLite; generated insert ID/time differences conservatively refuse | `openadapt_flow/api_footprint.py` |
@@ -809,6 +829,7 @@ improvising or retrying when something is off.
 
 | Capability | Status | Evidence | Where |
 | --- | --- | --- | --- |
+| Test any agent on real apps with planted faults, in CI: `openadapt test run --app APP --agent AGENT` (apps: OpenEMR, Dolibarr, EspoCRM; agents: `scripted`, `scripted-readback`, `claude-cu`, `openai-cu`, `claude-code-mcp`, `mcp:CMD`, `browser-use:SCRIPT`, or `--agent-cmd`) runs the agent through stateful scenarios in local containers, plants one fault per save at a front-door proxy (partial, wrong value, duplicate, no_persist, collateral loss or edit, late revert, lost response, refused), grades the app's database before and after, and reports completed correctly, silent corruption, collateral edits, false success and safe stops as `results.json`, `report.html` and a digest-bound receipt (optionally Ed25519-signed). `baseline` and `gate` fail a build when silent corruption or false success rises; a composite GitHub Action (`.github/actions/openadapt-test`) wraps it. Apps and 24 scenarios are YAML data; app images are pulled by reference | In PR [#2419](https://github.com/OpenAdaptAI/OpenAdapt/pull/2419) | Real apps (Dolibarr 20.0.2, OpenEMR 8.0.0.3, EspoCRM 8.4 in Docker, synthetic records): all 20 faulted scenarios delivered their fault with the model-free agents; through the Action on Dolibarr, Claude Sonnet 5.5 with a read-back instruction scored 10% false success (2/20), and the gate failed both the same agent without the instruction (39%, 7/18) and GPT-6.1-sol (42%, 8/19), mostly collateral changes and duplicates said done; the late revert was said done by every agent that saved; 0 of 130 runs disagreed with an independent re-read of the raw tables (by the building agent, not a person); hosted-runner self-test 5 min 18 s cold. Not yet: a Medplum or openIMIS pack, significance testing in the gate, OpenEMR and EspoCRM with model agents | `openadapt test`, [AGENT_TEST.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/AGENT_TEST.md), `openadapt_flow/agent_test/`, [proof runs](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/agent_test_proof/README.md), `packages/flow/tests/test_agent_test.py` |
 | Compile a computer-use agent's successful run into a program (JIT); later runs make no model calls | Released | Synthetic (a recorded Claude run on MockMed) | `openadapt_flow.jit`, [JIT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/JIT.md) |
 | Reuse a compiled program only for the record check and app environment it was admitted under (a changed record check or a new app version at the same origin is refused) | Released ([#1360](https://github.com/OpenAdaptAI/OpenAdapt/pull/1360)) | Unit tests | `TaskSignature(record_check=, environment=)`, `WebApp(environment_id=)`, [JIT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/JIT.md) |
 | Code as action is the default run-1 agent (compile-agent, and `teach_run` in the MCP teach tools): one terminal tool (structure first, actions by role and name, a sandboxed read-only shell, screenshots on request); every action is a structured step checked against the compiled program, and every save the gate detects is read back from the system of record | Released ([#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)) | Real app (local OpenEMR) and synthetic | `ClaudeAgent(vision="code")`, `CODE_AS_ACTION.md` ([#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)) |
@@ -826,6 +847,7 @@ improvising or retrying when something is off.
 | Try `openadapt wrap` with one command: `uvx --python 3.12 'openadapt[wrap]@latest' wrap --example` (the `wrap` extra brings the agent SDK; the base launcher leaves it out) starts a bundled synthetic clinic app (MockMed) on 127.0.0.1, has OpenAdapt's built-in Claude agent save one note in a headless browser, reads the save back, compiles the run, runs a canary, and admits it with a throwaway key made in the example's own folder (the proposed checks are confirmed automatically, which only a synthetic app allows). Then a new note runs the compiled program over its emitted MCP server with no model calls, and it prints the app's record and the cost of both runs. It needs `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY` with `--provider openai`, `--model` and reviewed `--price` values); the task is packaged data (`openadapt_flow/wrap/examples/`). Because the data is synthetic, screenshots go to the model unscrubbed under the recorded opt-out. Emitted MCP tools now run the program off the server's event loop, so a compiled browser program runs when called over MCP (it failed with Playwright's "Sync API inside the asyncio loop" error before) | In PR | Synthetic (the bundled app, headless Chromium and the real `build_agent` Claude loop with its token-count reservation and spend cap; CI uses a scripted model client in place of the Anthropic SDK). One real run (Claude Opus 5.5, macOS, before release): run 1 made 5 model calls for $0.15 and was admitted; run 2 made none and was read back `VERIFIED` ([benchmark/wrap_example](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/wrap_example/real-run-2026-11-21.json)) | [WRAP.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/WRAP.md), `openadapt_flow.wrap.example`, `openadapt_flow.compile_agent.run_compiled_tool`, `packages/flow/tests/e2e/test_wrap_example_e2e.py` |
 | Wrapped tasks that sign in: during `openadapt wrap`'s first run the recorder finds a password field (`type=password`, or `autocomplete` `current-password`/`new-password`) and the username field paired with it (`autocomplete=username`, or a unique text, email or phone candidate paired across all password controls in the composed form; ambiguous or unreadable controls refuse declared inputs) from the page's markup alone. Automatic withholding requires that observation seam; a missing or noncallable seam refuses before capture or actor entry. Screen-only native backends use the existing explicit person-secret handoff instead of this automatic path. Their inputs become secret parameters: the recording, program, run records, receipts and publish upload keep the name and never the value, the observed field regions are blacked out in recording frames (arbitrary field movement or echoes are not proven redacted), a credential field given text that matches no declared input is refused before typing, a form with exactly a username and current password is classified as sign-in without lowering independent keyword risk, and replay run screenshots contain black frames while checks use the original pixels in memory, and no compiled pixel check covers a withheld field's black box (it is clipped clear of it or dropped). Secret environment/vault aliases must be unambiguous, and managed params files cannot supply secret values. The canary and cached runs type them from `OPENADAPT_FLOW_SECRET_<NAME>`, set from memory for one run; `publish` lists them as `secret_parameters`, outside the call's inputs | On main ([#2294](https://github.com/OpenAdaptAI/OpenAdapt/pull/2294), merged 2026-11-20) | Synthetic (a sign-in notes app in headless Chromium through the real wrap path: first run, canary, admission, publish staging, and a cached run under mcp 2, with a byte scan for the values in every file; unit tests with a fake backend for detection, frame redaction, refusals and the sign-in submit rule). Genuine RDP/Citrix backends refuse automatic withholding before input; explicit person-secret handoff remains tested. Hosted runs need an endpoint vault set (openadapt-cloud) | `openadapt_flow.recorder` (`withhold_credentials`), `openadapt_flow.secret_inputs`, [WRAP_PUBLISH.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/WRAP_PUBLISH.md#tasks-that-sign-in), `packages/flow/tests/test_wrap_sign_in.py`, `packages/flow/tests/e2e/test_wrap_sign_in_e2e.py` |
 | Sign-ins with a second factor: a `second_factor` step (`code` for a text-message, email or authenticator code, `approval` for a push approval) waits for a person when it runs, through the runner's control plane, a local command, or the run's own terminal when it has one (on a POSIX terminal or the Windows console; the code is never echoed, and normal input comes back however the read ends). Before anyone is asked, the focused field must be an empty `autocomplete="one-time-code"` input and the page draws it as dots; after the answer the same field must still have focus and be empty. The code is filled once into that element (a field split into one box per character is refused), never retried, and never stored, logged, shown to a model or drawn on screen. No source, a late or malformed answer, a decline, a field that changed, or a backend that can't bind the field stops the step before typing with a closed `second_factor_*` code; an older runtime refuses the bundle. Over the control plane the code is sealed in the person's browser to a one-step key the control plane can't open. The wrap recorder finds a code field from `autocomplete="one-time-code"` alone; it doesn't detect push approvals, and only the local browser backend can take a code | In PR | Synthetic (a notes app with an authenticator page in headless Chromium through the real wrap path: first run, canary, admission, publish staging, a cached run and a declined run, with a byte scan for the TOTP secret and recent codes; headless-browser tests that two codes render the same pixels and that a focus change, a prefilled field or an auto-submitting page are handled; unit tests for every source, late answers, the step shape and every refusal; pty tests that a terminal prompt hides the code, restores echo after a timeout and answers the next prompt; the Windows console reader's deadline and discard logic on a fake keyboard). The hosted dashboard answer is in openadapt-cloud | `openadapt_flow.second_factor`, `openadapt_flow.runtime.second_factor_step`, [SECOND_FACTOR.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SECOND_FACTOR.md), `packages/flow/tests/test_second_factor.py`, `packages/flow/tests/test_second_factor_browser.py`, `packages/flow/tests/test_second_factor_terminal.py`, `packages/flow/tests/test_second_factor_console.py`, `packages/flow/tests/e2e/test_wrap_second_factor_e2e.py` |
+| Wrap any agent process: `openadapt wrap --task TASK --param ... -- COMMAND` starts the command for the first run with `OPENADAPT_MCP_URL` (a streamable-HTTP MCP endpoint on 127.0.0.1), `OPENADAPT_MCP_TOKEN` (a random per-run bearer token, compared in constant time, never printed) and `OPENADAPT_TASK`. The endpoint's tools (`observe`, `click`, `type_text`, `press_key`, `scroll`, `finish`) go through compile-agent's harness: the save gate, the read-back after every save, the task's origin limits and the recorder. The command gets no browser handle (no DevTools endpoint), so the draft carries the signed capture admission requires; the endpoint closes when the command exits, a nonzero exit makes no program and is passed through as wrap's exit status, and the command's process group is stopped after `--command-timeout`. Run 1's cost is reported as unknown (the command's model calls are its own). `openadapt wrap run --task TASK` runs only the admitted program, never an agent | In PR | Synthetic (an outside Python process with the `mcp` client SDK and no model does the bundled clinic task through the endpoint in headless Chromium: save gate, read-back, canary, admission by a registered admitter key under a signed teach authorization, then the emitted tool with no model calls; a failing command and a request without the token make no program) | [WRAP.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/WRAP.md#wrap-your-own-agent), `openadapt_flow.wrap.process`, `packages/flow/examples/wrap_command/agent.py`, `packages/flow/tests/e2e/test_wrap_command_e2e.py` |
 | Verified write tools for agent frameworks: `verified(tool, contract=...)` wraps a Claude Agent SDK, OpenAI Agents SDK, LangGraph or CrewAI write tool in one line. The contract and any values the operator pins come from the operator, never the agent's arguments; the store is read before and after; the agent gets a receipt or a refusal, and a refused write is held instead of retried | Released | Synthetic (each framework's own agent loop with a scripted model, writing through the example app's order form over real HTTP: verified save, a save the app drops, a save it keeps twice); one real-model run per framework, opt-in | `openadapt_flow.integrations.agents`, extras `claude-agent-sdk`, `openai-agents`, `langgraph` (CrewAI: install `crewai` beside it); [AGENT_FRAMEWORKS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/AGENT_FRAMEWORKS.md) |
 | Teach a browser write as a verified tool: with write contracts and a person's signed teach authorization (`serve --teach-browser --contracts DIR --teach-authorization STATEMENT`), the agent teaches a save once. Run 1 starts only when the statement covers the write (origin, contract, write adapter, the record's fields and values) and runs under it; it is verified in the system of record before the `taught_<name>` tool exists. Every call checks the statement and the tool's signature again, makes the write and returns a verified receipt or a refusal. Sign-in values come from the server's environment and never reach the agent or the program. Controls in named iframes are found through their frame | On main ([#1589](https://github.com/OpenAdaptAI/OpenAdapt/pull/1589), [#1763](https://github.com/OpenAdaptAI/OpenAdapt/pull/1763)) | Synthetic (the example app's sign-in and order form in headless Chromium over MCP: verified save, a save the app drops, a save it keeps twice, a page that swaps the record during run 1; refusals for a missing, uncovering, expired, edited or wrongly signed statement) | `openadapt-agent serve --teach-browser --contracts --teach-authorization`, [VERIFY_WRITES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFY_WRITES.md#teach-a-write-as-a-tool) |
 | Guard an agent you already run: attach to its own Chromium over CDP (one added line), hold each save until the record on screen is the one the task names, block it and tell the agent why when it isn't, read the save back; a run that reads back correctly becomes a draft program with a record check from scaffold-verifier, which a person confirms and admits, then a `taught_*` tool with no model calls. `--observe-only` never blocks. The approval card shows each field's value now, the value the held save sends (read by the app's `write_adapter`; without one the card says the values were not read and not checked before saving, and shows a screenshot and the form's values on screen taken when the save is held; with neither a value nor a readable screenshot no approval is offered and the run ends `ESCALATED` `values_unread`), the task's value beside it and its source; each save gets a ledger row with no values whose outcome follows the guard's own verdict, and a 0600 diff; the read-back goes through a `ReadbackProvider` where only an independent read can verify | Released ([#1357](https://github.com/OpenAdaptAI/OpenAdapt/pull/1357), stacked on [#1335](https://github.com/OpenAdaptAI/OpenAdapt/pull/1335)); card values, ledger row and `ReadbackProvider` in PR [#2492](https://github.com/OpenAdaptAI/OpenAdapt/pull/2492) | Synthetic (MockMed, scripted Playwright agent, `effect_e2e` faults; the approval card in headless Chromium with and without MockMed's write adapter) | `openadapt-flow guard`, [GUARD_AN_AGENT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/GUARD_AN_AGENT.md) |
@@ -2539,161 +2561,234 @@ automation into an independently certified transaction system.
 
 ---
 
-<!-- Changelog: openadapt-flow 3.4.0 -->
+<!-- Changelog: openadapt-flow 4.0.0 -->
 
-## What changed in openadapt-flow 3.4.0
+## What changed in openadapt-flow 4.0.0
+
+### Breaking Changes
+
+- **Encryption at rest is now enabled by default** (`#2423`): recordings,
+  compiled bundles, and run directories are written as sealed-set v3
+  encrypted containers unless `OPENADAPT_ENCRYPT_AT_REST=0` or `--no-encrypt`
+  is set. Released `openadapt` launcher `1.23.0` (`openadapt-flow<4`) reads
+  run files via plain paths, so this major bump keeps `1.23.0` on Flow 3.4.0
+  while pairing Flow 4.0.0 with `openadapt 1.24.0` (`>=4.0.0,<5.0.0`).
+- **Requires `openadapt-types>=0.24.2,<0.25.0`.** Flow 4.0.0 imports
+  modules and names that first ship in types 0.24.2 (`evidence_scope`,
+  `run_ledger`, `receipt`, `exception_card`, and new `check_level` names). The old `>=0.24.0` floor let an install resolve
+  types 0.24.0 and fail on import.
+
+### Encryption at rest by default
+
+- Recordings (web, the quickstart and tutorial, and desktop once converted),
+  compiled bundles and every run directory (report, step screenshots, crops,
+  frames, evidence, `REPORT.md`) are now encrypted at rest by default, with
+  no setup, as sealed-set version 3: a data key per set, wrapped with HPKE
+  (P-256, HKDF-SHA256, AES-256-GCM) to a per-set bucket key, and files as
+  Tink AES-256-GCM-HKDF 1 MiB streams. The bucket key is wrapped to the
+  device runtime key (only while the set is written; bundles keep it), the
+  device viewer key, organization keys and a recovery key.
+- Organization mode, from a machine policy (MDM profile, Group Policy, a
+  root-owned `/etc/openadapt/policy.json`): organization recipients (P-256
+  or RSA-OAEP-3072) and a key archive are required, and recording stops
+  without them. Solo users can make a recovery key
+  (`openadapt-flow at-rest recovery create`).
+- `openadapt-flow at-rest status` shows the keys and policy;
+  `at-rest shred` destroys a set's tracked bucket-key copies.
+- The device key is a software P-256 key in the OS keychain through
+  `keyring` (a 0600 file with a warning where there is none). Secure
+  Enclave, TPM, Touch ID and Windows Hello providers are interfaces with test
+  doubles, not built yet.
+- A configured `OPENADAPT_BUNDLE_KEY` or `OPENADAPT_RECORDING_KEY` still wins
+  outside organization mode (deprecated), and `~/.openadapt/keys/at-rest.key`
+  keeps working. Version 1 and 2 sets and plaintext folders still read.
+- `OPENADAPT_ENCRYPT_AT_REST=0`, or `--no-encrypt` on `record`, `compile`,
+  `run` and `replay`, turns it off with a one-line warning and a ledger line.
+- Receipts (`seal.json`, `receipt.*`, `public-seal.json`) stay plaintext and
+  are now written for encrypted runs too; their digests are over the
+  plaintext `report.json`. `seal verify`, `inspect report-run`, the receipt
+  page and the quickstart read encrypted runs. The receipt page embeds the
+  report, so beside an encrypted run it is logged as a plaintext copy.
+- Core dependency: `cryptography>=50` (HPKE). The keychain store uses `keyring`, which `pip install openadapt` includes; a bare `openadapt-flow` install needs the `keychain` extra, and otherwise keeps the device key in a 0600 file with a warning.
+- Fail-closed key lifecycle: an organization key archive counts as
+  reachable only with its `.openadapt-key-archive` marker, each record and
+  header names the archive it went to, and shredding authenticates the
+  header first and reports complete only once every tracked copy and store
+  file is gone. Organization mode requires `records: archive`. Durable
+  checkpoints in an encrypted run are keyed from the run's own data key.
+  `--no-encrypt` lasts for one command, and the Python recorders follow the
+  at-rest policy by default. A solo set opens silently only with the device
+  key that wrote it; a backup that only the recovery code opens needs
+  `openadapt-flow at-rest restore DIR --yes`. Rollback records in an
+  encrypted run stay inside its sealed set.
+
 
 ### Features
 
-- Agent-to-agent handoffs. `openadapt-flow handoff send` attaches a run's
-  `record/run/v1` receipt to what one agent hands another: inline, detached
-  beside a file (`FILE.handoff.json`), or POSTed to a webhook.
-  `openadapt-flow handoff verify` checks one against the receiver's pinned
-  keys and returns a verdict (`openadapt.handoff-verdict/v1`). The verdict
-  gives the signer role, integrity, the checks passed and not checked, and
-  counterparty confirmation lines. It always says that a valid signature
-  proves who signed, not that the claim is true. `send` binds the payload as
-  the receipt's `payload` subject, re-signed by the run's own key, so a
-  receiver refuses other bytes (`payload_mismatch`) or a receipt that names
-  no payload (`payload_not_bound`). The private openings file never
-  travels (docs/HANDOFFS.md, docs/HANDOFF_RECEIPTS.md).
-- `openadapt-agent serve --handoffs` adds the MCP tools `get_handoff` and
-  `verify_handoff`. `serve --a2a` serves the same workflows over the A2A
-  (Agent2Agent) protocol 1.0 with the official `a2a-sdk` (new `a2a` extra):
-  - an Agent Card at `/.well-known/agent-card.json`;
-  - JSON-RPC and HTTP+JSON bindings;
-  - one skill per workflow plus `verify_handoff`;
-  - the draft extension `https://openadapt.ai/extensions/handoff-receipt/v1`.
+- One verification ladder on every path. `openadapt_types.check_level` is
+  the only source of check levels; `verify-run`, the runtime's report and
+  the `tx` engine derive their tables from it and name each check with one
+  receipt word: `VERIFIED` (levels 3 and 4 only, always with a basis:
+  `separate_session`, `system_api`, `activity_log`, `db_frame` or
+  `owned_connection`), `SHOWN`, `CONFIRMED`, `ATTESTED` or `RECORDED`.
+  Run receipts (`record/run/v1`), `verify-run` and `tx` receipts carry an
+  additive `evidence_scope` block
+  (`openadapt.evidence-scope/v1`) that states the level, basis, wire scope,
+  read-back time, recheck window and what the check did not cover. Receipts
+  without the block still verify. A run receipt whose report shows a save
+  checked below level 3 is `UNKNOWN` (`below_verified_level`), never
+  `VERIFIED`; no built-in profile produces such a run.
+- Links, tabs and menu items can be steps (`openadapt_flow.gui.steps`). Each
+  demonstrated click gets its role from what the backend counted: a commit
+  when it wrote, a navigation when the screen changed with no write. A live
+  commit holds only on exactly the demonstrated writes. `openadapt_flow.gui`
+  is a neutral view of a screen (role, name, state, containers) with adapters
+  for a browser page, an accessibility tree and a `form_tx` snapshot.
+- One verdict kernel, `openadapt_flow.verdict`, for every check that turns
+  evidence into held, refuted or not checked. It fixes the obligations from
+  the plan first, settles results against them, and never passes an empty
+  set, a truncated or short read, a probe that raised, a result bound to
+  another run, two results that disagree, or a code nobody listed.
+  `Result.nothing_else` holds a "nothing else changed" claim only on a
+  complete read. Functions marked `@verdict_site` are run by a fail-open
+  harness (`tests/failopen`) with 15 generic mutations, which checks the
+  verdict at three levels (refuted, not checked, held), not as one bit. It
+  flags 14 fail-open bugs rebuilt from this repository's history (pinned
+  pre-fix copies) and one live connector site, and passes their fixes.
+  `scripts/check_verdict_folds.py` fails CI when the repository-wide count of
+  a hand-written fold kind rises, including a broad `except` that logs and
+  falls through and a "nothing else changed" test over a set that may be a
+  partial read. See `docs/FAIL_CLOSED.md`.
+- The hard-invariant layer, the frame's version check, `verify-run`'s effect
+  folds and the receipt's line judge and tally are built on the kernel.
+- A sign-in that asks for a second factor (a code by text message or email,
+  an authenticator code, or a push approval) no longer has to stop the
+  program. A `second_factor` step (`one_time` is `code` or `approval`) waits
+  for a person through the configured source (`OPENADAPT_SECOND_FACTOR_URL`
+  for a hosted or customer-run runner's control plane, or a local
+  `OPENADAPT_SECOND_FACTOR_COMMAND`). Before anyone is asked, the focused
+  field must be an empty `autocomplete="one-time-code"` input, and the page
+  is made to draw it as dots. After the answer the same field must still have
+  focus and be empty. The code is then filled once into that element, never
+  retried, and kept nowhere: not in a model's page listing, a screenshot, a
+  log, a receipt or the recording. No source, an answer after the deadline, a
+  decline, a multi-line or malformed answer, a field that changed while the
+  person answered, an API binding on the step, or a backend that can't bind
+  the field stops the step before typing, with a closed `second_factor_*`
+  code. The action is new, so an older runtime refuses the bundle instead of
+  skipping an approval. Over the control plane the code is sealed in the
+  person's browser to a one-step P-256 key, and a cached run's child process
+  gets the run token only with the control-plane URL. The wrap recorder turns
+  a field marked `autocomplete="one-time-code"` into such a step. A code-only
+  form's submit counts as a sign-in only once, right after a
+  username-and-password sign-in. A field split into one box per character
+  is refused. See docs/SECOND_FACTOR.md.
+- An interactive run (a terminal on stdin and stderr) asks for a sign-in's
+  second factor at that terminal when no control plane or command is set. A
+  code is read without echo, under the step's deadline, in the calling
+  thread; echo comes back on when the read ends, including on a timeout, and
+  input typed before the prompt is discarded. On Windows the console is read
+  one key at a time with `msvcrt.getwch`, which never echoes, under the same
+  deadline and discard rules. A run without a terminal never
+  prompts and still stops before typing. `OPENADAPT_SECOND_FACTOR_PROMPT=off`
+  turns the prompt off.
+- Effect locations (`openadapt.effect-location/v1`,
+  `openadapt_flow/effect_location/`): the place a careful person would look
+  again to see an intended value, stored as pack data. Each record holds the
+  demonstration path and start condition (`same_screen`, `fresh_navigation`,
+  `new_session`, `other_channel`), a locator (label, row key or region), the
+  expected value, a codec (including a `template` codec that reads one
+  summary row as two values and a `split_date` codec), the expected count
+  and an optional baseline. `evaluate_all` judges every planned value as
+  `held`, `refuted` or `not_checked`. A location that can't be reached,
+  found or read is `not_checked`, never a pass. The check level comes from
+  the start condition; the receipt word comes from
+  `check_level.outcome_word` when it is available. The engine holds no
+  application vocabulary: month names, yes and no words, currency signs and
+  tables come from the pack. See docs/EFFECT_LOCATION.md.
 
-  It listens on 127.0.0.1 by default, needs a bearer token on any other
-  address, and refuses browser `Origin` and unknown `Host` headers. Every A2A
-  call goes through the MCP server's gate (`agent/contract_call.py`). Person
-  confirmations are not served, and only `done` is `TASK_STATE_COMPLETED`
-  (docs/A2A.md).
+### Changes
 
-- Dropdowns, searchable selects, type-aheads and native selects are recorded,
-  compiled and run as one model, a choice (`OptionChoice` on a
-  `SELECT_OPTION` step, docs/CHOICES.md). A click on an option of a list the
-  previous action opened is a choice when the control showed the option
-  afterwards; recording judges this from behaviour (an option role, or
-  same-shaped siblings that appeared after the previous press), never from a
-  widget library. Replay opens the control, types the wanted value when the
-  person searched, waits for the options to settle, clicks the one enabled
-  option whose label or value matches, and reads the control back against an
-  independent named field and an
-  exact expected committed value. A new label with no observable code mapping
-  stops before selection. Search folding requires causal opener/input-session
-  evidence and preserves the opening control's identity guards. A
-  missing, duplicate or disabled option, or a control that does not show the
-  choice, halts before the next step (`choice_missing`, `choice_ambiguous`,
-  `choice_disabled`, `choice_changed`, `choice_unverified`). The option is
-  resolved again by label or value before actuation, so a reordered list cannot
-  redirect a saved position. Native selection revalidates the semantic
-  option atomically before emitting change events and selects that exact
-  option even when different labels share a value. It avoids extra focus
-  callbacks and revalidates after `input` before emitting `change`. Native and
-  listed read-back require one stable shown/committed state inside a fixed
-  deadline. Failures after any backend-owned mutation retain uncertain
-  delivery, including opening, search and final confirmation. Native selects respect
-  disabled option groups and fieldsets. A choice on a field passed to
-  `--param` becomes that parameter. Interactive and attached recording no
-  longer refuse a native `<select>`, and lists that choose on press or on
-  release (where the browser sends no click to the option) are no longer
-  silently missing from the recording.
-- Browser `alert`/`confirm` answers are recorded in interactive and attached
-  recording, from the value the page received, and attached to the click
-  that raised them in the same producer document. The compiled answer also
-  requires the recorded dialog kind; a matching message on a different kind
-  is dismissed. A dialog from a different document stops recording.
-  A headed recording leaves the dialog for the person instead of letting
-  Playwright dismiss it. A program recorded this way stops on a dialog no
-  step expects (`dialog_unexpected`), including a before-unload warning
-  that would otherwise discard unsaved edits.
-- `openadapt wrap publish` refuses, before anything is uploaded, a program
-  admitted in a mode a hosted run cannot verify (`ADMISSION_MODE_UNSUPPORTED`).
-  Hosted runs verify a person's admission or one made with a CI admitter key.
-- For an admitter-key admission, publish checks that the organization has
-  registered that admitter key (`GET /api/v1/org/{org}/admitter-keys`) and
-  otherwise refuses with `ADMITTER_KEY_UNREGISTERED`, naming the principal id
-  and public key an owner or admin must register.
-- `openadapt login` with no token signs in through the browser: a PKCE
-  loopback grant on `127.0.0.1` that stores the same credential `push` and
-  `report-run` use. `--token`, `OPENADAPT_INGEST_TOKEN` and a stored token keep
-  the old path (#2379).
-
+- Network captures no longer write raw bodies by default. `record
+  --capture-network` keeps only the `--param` and `--identifier` values of
+  each request and response body, plus a per-capture keyed hash of every
+  other value and of each HTML, text or binary body; undeclared URL query
+  values are hashed too. `dump_har` and `save_har` do the same with the wire
+  policy's id and version fields. `--capture-network-bodies raw` (and
+  `raw_bodies=True`) keeps the redacted bodies, which API step and undo
+  proposals need, and is refused unless the recording is encrypted or
+  `OPENADAPT_FLOW_PLAINTEXT_AT_REST` explicitly allows plaintext. Binary
+  bodies, files and non-text responses are sized and hashed from their
+  bytes as sent; the recording's `app_url` query is minimized too; an
+  explicit `application/octet-stream` body is never parsed as JSON (a
+  missing content type still is); and `load_har` refuses a HAR marked
+  minimized that carries a raw body.
 ### Fixes
 
-- A headed browser window that draws no frames (on macOS, one covered by a
-  full-size terminal window) no longer halts a run at its first step. The
-  page settle waited for two animation frames after the last change, which
-  such a window never draws, so the readiness gate timed out after 10 s with
-  "starting state not ready". When every other page signal is quiet and the
-  page has drawn no frame for a second, or the page is hidden, the settle now
-  falls back to two identical screenshots.
-- Choice labels, values, shape metadata and browser-dialog messages are
-  checked against declared secrets before capture. A matching or opaque
-  secret boundary stops recording before that text reaches its artifacts.
-- A screenshot interrupted by a navigation inside an iframe or by an open
-  browser dialog is retried instead of failing the recording or run.
-- A click on a `<label>` and the click the browser forwards to its control
-  record as one action.
-- Managed runs of an admitted program carry verification for that exact
-  dispatch through the CLI, public `Replayer` and deployment API. The proof
-  binds the admission, bundle, inputs, policy, run, dispatch session and
-  current trust registry. It is used once; resume verifies a fresh proof.
-  Missing or changed authority refuses before input.
-- Managed input requires a signed v3 permit with an exclusive input-start
-  deadline. The receiver checks it after preparation, immediately before each
-  desktop input or API request. Each API request retains its acknowledgment
-  before another request starts. A delayed permit, expired deadline or missing
-  receipt halts the run. Late completion evidence is retained as a separate
-  nonauthorizing uncertainty observation and cannot produce VERIFIED.
-- A governed MCP tool call no longer accepts an old or copied run report as a
-  new successful run. Each call binds its report to a fresh challenge and the
-  deployment that actually ran, and a missing or invalid completion after
-  launch is reported as uncertain, never as success (#2335).
-- Passphrase-derived keys, attended run keys and opened sealed sets are no
-  longer cached for the whole process. Each independent operation
-  authenticates again; caller-owned handles still reuse their key (#2341).
-  A durable checkpoint store counts as such a handle: it keeps the keys it
-  derived from its explicit key for its own lifetime. Without that, each
-  checkpoint read ran scrypt again, and the MockMed quickstart run took 28 s
-  instead of 3.5 s (131 derivations, now 1).
-- In reverse-proxy mode the wire tap relays a redirect to a path on the
-  upstream origin, rebuilt on the tap's own origin, instead of answering 502,
-  so it can front a form app that answers a save with Post/Redirect/Get. The
-  client's next request comes back through the tap. Browser route mode still
-  refuses every redirect, and the tap never follows one itself (#2392).
-- Guarded native keyboard delivery on a Windows agent that advertises
-  `native_keyboard_lease_v1` uses a one-shot focus lease over the authorized
-  control and frame. #2313 describes when it applies and what it checks.
-- A repair candidate id that would leave the repair store is refused (#2369).
-- `wrap publish` no longer refuses programs whose identity templates carry
-  `punctuation_body_keys`. These values are salted token hashes, the same
-  generated shape as the `c` and `r` keys, but the sanitizer sent them to
-  the PHI recognizer. It sometimes read one as an organization or a group
-  name and rewrote it, so publish stopped with `SANITIZATION_CHANGED_PROGRAM`.
-  Only an index key with a hex hash of 16 or more characters is kept. Free
-  text in that slot is still scrubbed.
-- An admitted managed run, and its resume, keep the policy the local Standard
-  gate chose when neither the CLI nor the deployment names one, instead of
-  exiting with code 2 (#2401).
-- Lens route induction can use a trace's observed effects, not only HTTP
-  methods, to assign route roles (#2393).
-- Generated verify contracts stop fewer correct writes: five generator causes
-  of false stops are fixed, each by one schema-independent rule (#2418).
-- `import openadapt_flow` loads its `ir` re-exports on first use, and the
-  qualification models and several replayer helpers moved into their own
-  modules. Names still import explicitly from their old modules;
-  `from openadapt_flow.qualification import *` no longer includes
-  `AUTOMATED_GUI_ACTUATIONS` or `build_outcome_envelope` (#2439, #2451, #2454,
-  #2455, #2456, #2459).
-
-### Requirements
-
-- The `privacy` extra needs `openadapt-privacy[presidio]>=1.1.4`, the first
-  release with `sanitization_config()`, which sanitized reuse and approval bind
-  to.
-- On Python 3.11 and newer, the lock moves Pillow, filelock and other
-  dependencies to a release that fixes an open security advisory. The
-  Python 3.10 lock keeps Pillow 12.3.0 and filelock 3.29.7 (#2383).
+- `verify-run` with `minimum_effect_strength: independent_session` now
+  verifies on a separate-session read (check level 3), as the runtime
+  already did. Before, the two disagreed and verify-run never verified on
+  it. The default minimum is unchanged (`independent_system_of_record`).
+- The `tx` engine no longer caps every verdict at `UNCERTAIN` without a
+  SQLite row authority. A post-commit API read sent with cache-bypass
+  headers, showing no cache in its response, and whose record version is
+  exactly one past the before-image's is `CONFIRMED` with basis
+  `system_api`. Anything else stays `UNCERTAIN`.
+- `verify-run`: an effect list that is empty, or tiers that don't pair one to
+  one with the effects, is `INDETERMINATE`, `unknown` and `unchecked`, not
+  `CONFIRMED`, `present` and `independent_readback`. The receipt model already
+  refuses an empty list, so no run changes outcome today.
+- `verify-run`: the effect folds settle against the planned effects, so a
+  planned effect with no verdict is `INDETERMINATE`, and an observed-effect
+  code nobody listed is `unknown` rather than `present`.
+- The frame's version check: a duplicate version row, a version history
+  that lost a row, or a changed target with no new version no longer hides a
+  version saved by another user. The frame is refuted instead of not checked.
+- Receipts: a line check nobody listed keeps the run from `VERIFIED` and is
+  counted as not checked, so the three line counts add up to the lines.
+- The form transaction layer (`form_tx`, an unreleased prototype until this
+  release) reads back every field it typed, selected or kept. Each one gets
+  a `passed`, `failed` or `not_checked` verdict; a field it cannot read back
+  (no read-back declared, the summary control missing or ambiguous, a failed
+  lookup, a value entered only in a popup) is `not_checked` and never
+  passed. A submit with any `not_checked` field ends `readback_incomplete`,
+  never `verified_done`, and gets no receipt. Before, fields typed in a popup
+  estimator had no verdict at all and such a run could end verified.
+  Popup inputs are also re-read just before the popup's apply button, and a
+  mismatch stops the run before apply. The side panel shows refuted and
+  incomplete runs as needing action. Measured on four held-out synthetic
+  quote portals: `benchmark/form_tx_heldout_run/RESULTS.md`.
+- A wrapped sign-in no longer compiles a pixel check that freezes a withheld
+  credential field. The recorder blacks out a withheld field in every frame
+  that still shows it, so a `REGION_STABLE` crop that overlapped one held a
+  black rectangle that never matched the unredacted screenshot at replay
+  time, failing a step whose region overlapped a credential box during the
+  run, for example the click into the password field. Such a check is now
+  clipped to the part of its region clear of the box and re-cropped from the
+  same frame. When no usable part is left, it is dropped and recorded in
+  `param_hygiene.json`. This applies to mined checks and to the
+  focused-field pass.
+- A FHIR searchset Bundle's `OperationOutcome` entry (`search.mode:
+  outcome`) is no longer read as a marker match. Packs can declare
+  `search_match` on the entry parent (Medplum uses `path: search.mode`,
+  `equals: match`). A non-informational outcome is an error, not a
+  found id, so recovery cannot adopt a write that never landed and an
+  outcome id does not count toward `duplicate_write`.
+- File, document, document-hash and email checks no longer claim
+  `system_of_record` (tier 1) for every file. Their strength now follows who
+  produced the artifact, set by the new `effects.artifact_producer`:
+  `acting_session` and the default, `unknown`, are at most `same_screen`;
+  `separate_session` is at most `separate_session`; `system_of_record` keeps
+  tier 1. A store that overlaps `effects.acting_roots`, the user's Downloads
+  folder or a Playwright download folder is graded as the acting session's.
+  Under a declared `separate_session` or `system_of_record` producer, a scan
+  that lists a file in a Playwright download folder beneath the store, or a
+  file whose real path leaves the store, is refused:
+  the verdict is INDETERMINATE and names why. Each verdict records the
+  producer, and whether it was declared or observed, in
+  `read_evidence.provenance`. Breaking: a deployment that relied on the old
+  tier 1 for these kinds must now declare `artifact_producer:
+  system_of_record` (one line in its `effects:` or `verifier:` section,
+  including a `record --verify` file); until it does, runs that need a
+  separate-session or system-of-record check are not `VERIFIED`. Verifier
+  identities of configs that leave both new fields unset are unchanged.

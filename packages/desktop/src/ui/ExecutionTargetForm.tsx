@@ -7,6 +7,7 @@ import type {
   SurfaceCapability,
   TargetBackend,
 } from "../lib/types";
+import { ChromeProfilePicker } from "./ChromeProfilePicker";
 import { Callout, Field, Pill } from "./primitives";
 
 export const TARGETS: Record<
@@ -263,6 +264,13 @@ function TargetFields({
               spellCheck={false}
             />
           </Field>
+          <ChromeProfilePicker
+            url={target.url}
+            endpoint={target.browser_cdp_endpoint}
+            disabled={disabled}
+            idPrefix={idPrefix}
+            onEndpoint={(value) => setField("browser_cdp_endpoint", value)}
+          />
         </>
       );
     case "windows":

@@ -106,6 +106,8 @@ class TxReceiptPayload(BaseModel):
     verification_scope: Literal["target_record"] = "target_record"
     collateral_effects_verified: Literal[False] = False
     qualification_state: Literal["unqualified", "atomic_row_enforced"] = "unqualified"
+    #: Additive and optional: receipts issued before it existed still verify.
+    evidence_scope: Optional[dict[str, Any]] = None
 
     @field_validator("issued_at")
     @classmethod
@@ -131,6 +133,16 @@ class TxReceiptPayload(BaseModel):
             value is None for value in fields
         ):
             raise ValueError("wire_commitment_and_counts_must_be_present_together")
+        if self.evidence_scope is not None:
+            from openadapt_types.check_level import CONFIRMED_WORD, VERIFIED_WORD
+            from openadapt_types.evidence_scope import evidence_scope_problem
+
+            if evidence_scope_problem(self.evidence_scope) is not None:
+                raise ValueError("evidence_scope_invalid")
+            word = self.evidence_scope["word"]
+            if (word == VERIFIED_WORD) is not (self.outcome == CONFIRMED_WORD):
+                # A CONFIRMED commit without a basis is UNCERTAIN, never here.
+                raise ValueError("evidence_scope_word_disagrees_with_outcome")
         return self
 
 
@@ -335,6 +347,7 @@ def issue_tx_receipt(
     task_key: Optional[str] = None,
     issued_at: Optional[str] = None,
     qualification_state: Literal["unqualified", "atomic_row_enforced"] = "unqualified",
+    evidence_scope: Optional[Mapping[str, Any]] = None,
 ) -> tuple[str, Path]:
     """Issue a signed COSE_Sign1 + SCITT Merkle-logged ``tx-receipt.cose``.
 
@@ -403,6 +416,8 @@ def issue_tx_receipt(
         )
         statement_dict["wire_mutations_allowed"] = wire_summary.mutations_allowed
         statement_dict["wire_collateral_mutations"] = wire_summary.collateral_mutations
+    if evidence_scope is not None:
+        statement_dict["evidence_scope"] = dict(evidence_scope)
 
     validated = TxReceiptPayload.model_validate(statement_dict)
     payload_bytes = _canonical_json_bytes(validated.model_dump(exclude_none=True))

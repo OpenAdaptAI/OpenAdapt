@@ -98,8 +98,12 @@ def _valid_reload_proof(**overrides: object) -> ReloadProof:
 
 
 class TestFreshReloadSummaryOracle:
-    def test_happy_path_verified_with_normalization(self) -> None:
+    def test_happy_path_verified_with_normalization(self, tmp_path: Path) -> None:
         oracle = FreshReloadSummaryOracle()
+        store = tmp_path / "store"
+        store.mkdir()
+        dom_path = store / "summary.html"
+        dom_path.write_bytes(_SAMPLE_DOM_BYTES)
         proof = _valid_reload_proof()
         expected = {
             "insured_name": "Jordan Rivera",
@@ -120,9 +124,7 @@ class TestFreshReloadSummaryOracle:
             "quote_id": "MRN-88041",
         }
 
-        res = oracle.verify(
-            expected, observed, proof, summary_dom_bytes=_SAMPLE_DOM_BYTES
-        )
+        res = oracle.verify(expected, observed, proof, summary_dom_path=dom_path)
 
         assert res.verdict == "VERIFIED"
         assert res.receipt_verdict == "CONFIRMED"
@@ -158,9 +160,11 @@ class TestFreshReloadSummaryOracle:
             proof,
             summary_dom_bytes=_SAMPLE_DOM_BYTES,
         )
+        # The page binds "Insured Name" to "Jordan Rivera", so the expected
+        # value is contradicted by what the page shows.
         assert res_not_in_dom.verdict == "HALT"
-        assert res_not_in_dom.receipt_verdict == "UNCERTAIN"
-        assert res_not_in_dom.reason == "observed_value_not_in_dom_bytes"
+        assert res_not_in_dom.receipt_verdict == "REFUTED"
+        assert res_not_in_dom.reason == "field_mismatch"
 
     def test_untrusted_producer_and_missing_url_or_digest_halt(self) -> None:
         oracle = FreshReloadSummaryOracle()
@@ -649,3 +653,289 @@ def test_pdf_float_render_mode_3_0_tr_stays_invisible(tmp_path: Path) -> None:
     )
     assert res.verdict == "HALT"
     assert res.receipt_verdict != "CONFIRMED"
+
+
+# --- Reload oracle: value binding, visibility, strict tokens, producer trust ---
+
+
+def _inline_reload(
+    dom: bytes, expected: dict[str, object], observed: dict[str, object] | None = None
+):
+    """Run the reload oracle on inline bytes with a declared separate_session producer."""
+    proof = _valid_reload_proof(summary_dom_sha256=hashlib.sha256(dom).hexdigest())
+    return FreshReloadSummaryOracle().verify(
+        expected,
+        expected if observed is None else observed,
+        proof,
+        summary_dom_bytes=dom,
+    )
+
+
+def _check_status(res: object, field_name: str) -> str:
+    checks = {c.field: c for c in res.checks}  # type: ignore[attr-defined]
+    assert field_name in checks, f"no check recorded for {field_name}: {res}"
+    return checks[field_name].status
+
+
+def test_fresh_reload_rejects_value_only_in_html_comment() -> None:
+    dom = b"<html><body><!-- Premium: $500 --><div>Premium: $900</div></body></html>"
+    res = _inline_reload(dom, {"premium": "$500"})
+    assert res.verdict == "HALT"
+    assert res.receipt_verdict == "REFUTED"
+    assert _check_status(res, "premium") == "REFUTED"
+
+
+def test_fresh_reload_rejects_negative_amount_for_positive_expected() -> None:
+    res = _inline_reload(b"<div>Premium: -$500</div>", {"premium": "$500"})
+    assert res.verdict == "HALT"
+    assert res.receipt_verdict == "REFUTED"
+    assert _check_status(res, "premium") == "REFUTED"
+
+
+def test_fresh_reload_rejects_thousands_separator_superset() -> None:
+    res = _inline_reload(b"<div>Premium: 1,500</div>", {"premium": "500"})
+    assert res.verdict == "HALT"
+    assert res.receipt_verdict == "REFUTED"
+    assert _check_status(res, "premium") == "REFUTED"
+
+
+def test_fresh_reload_rejects_decimal_superset() -> None:
+    res = _inline_reload(b"<div>Premium: 500.5</div>", {"premium": "500"})
+    assert res.verdict == "HALT"
+    assert _check_status(res, "premium") == "REFUTED"
+
+
+def test_fresh_reload_rejects_value_with_extra_content() -> None:
+    res = _inline_reload(b"<div>Premium: was $500, now $900</div>", {"premium": "$500"})
+    assert res.verdict == "HALT"
+    assert _check_status(res, "premium") != "CONFIRMED"
+
+
+def test_fresh_reload_compares_identifiers_as_whole_tokens() -> None:
+    for shown in (b"12345-B", b"9-12345"):
+        dom = b"<div>Policy Number: " + shown + b"</div>"
+        res = _inline_reload(dom, {"policy_number": "12345"})
+        assert res.verdict == "HALT", shown
+        assert res.receipt_verdict == "REFUTED", shown
+        assert _check_status(res, "policy_number") == "REFUTED", shown
+
+
+def test_fresh_reload_ignores_display_none_and_hidden_subtrees() -> None:
+    for dom in (
+        b'<div style="display: none">Premium: $500</div><div>Error: not saved</div>',
+        b'<div style="VISIBILITY:hidden"><span>Premium: $500</span></div>',
+        b"<div hidden>Premium: $500</div><div>Error: not saved</div>",
+        b'<section aria-hidden="true"><p>Premium: $500</p></section>',
+        b'<div style="display:none"><br><input type="text"><p>Premium</p>'
+        b"<p>$500</p></div>",
+    ):
+        res = _inline_reload(dom, {"premium": "$500"})
+        assert res.verdict == "HALT", dom
+        assert _check_status(res, "premium") == "ABSTAIN", dom
+        assert res.reason != "ok", dom
+
+
+def test_fresh_reload_ignores_unbound_textarea_and_select_text() -> None:
+    for dom in (
+        b"<textarea>Premium: $500</textarea>",
+        b"<select><option>Premium: $500</option></select>",
+    ):
+        res = _inline_reload(dom, {"premium": "$500"})
+        assert res.verdict == "HALT", dom
+        assert _check_status(res, "premium") == "ABSTAIN", dom
+
+
+def test_fresh_reload_void_element_does_not_hide_rest_of_page(tmp_path: Path) -> None:
+    dom = b'<div><input type="hidden" value="x"><br>Premium: $500</div>'
+    res = _stored_reload(tmp_path, dom, {"premium": "$500"})
+    assert res.verdict == "VERIFIED", res
+
+
+def test_fresh_reload_uses_dom_value_not_caller_observed_value() -> None:
+    """The caller cannot supply the compared value; only the DOM-bound one counts."""
+    res = _inline_reload(
+        b"<div>Premium: $900</div>", {"premium": "$500"}, {"premium": "$500"}
+    )
+    assert res.verdict == "HALT"
+    assert res.receipt_verdict == "REFUTED"
+    assert _check_status(res, "premium") == "REFUTED"
+
+
+def test_fresh_reload_rejects_invalid_utf8_dom() -> None:
+    res = _inline_reload(b"<div>Premium: $500 \xff\xfe</div>", {"premium": "$500"})
+    assert res.verdict == "HALT"
+    assert res.receipt_verdict == "UNCERTAIN"
+
+
+def test_fresh_reload_declared_producer_alone_cannot_verify() -> None:
+    """Probe P1-a: caller-made bytes, their own digest and a declared producer."""
+    res = _inline_reload(b"<div>Premium: $500</div>", {"premium": "$500"})
+    assert res.verdict == "HALT"
+    assert res.receipt_verdict == "UNCERTAIN"
+    assert res.reason.startswith("unverified_producer_provenance")
+    assert res.provenance_evidence["declared_producer"] == "separate_session"
+    assert res.provenance_evidence["producer_source"] == "declared"
+    assert res.provenance_evidence["check_level"] == "same_screen"
+    # The field itself was read and matched; only the producer caps the verdict.
+    assert _check_status(res, "premium") == "CONFIRMED"
+
+
+def _stored_reload(
+    tmp_path: Path,
+    dom: bytes,
+    expected: dict[str, object],
+    *,
+    store_name: str = "store",
+    acting_roots: list[Path] | None = None,
+    **kwargs: object,
+):
+    store = tmp_path / store_name
+    store.mkdir(parents=True, exist_ok=True)
+    path = store / "summary.html"
+    path.write_bytes(dom)
+    proof = _valid_reload_proof(summary_dom_sha256=hashlib.sha256(dom).hexdigest())
+    return FreshReloadSummaryOracle().verify(
+        expected,
+        {},
+        proof,
+        summary_dom_path=path,
+        acting_roots=acting_roots,
+        **kwargs,  # type: ignore[arg-type]
+    )
+
+
+def test_fresh_reload_stored_dom_in_acting_folder_cannot_verify(
+    tmp_path: Path,
+) -> None:
+    dom = b"<div>Premium: $500</div>"
+    res = _stored_reload(
+        tmp_path, dom, {"premium": "$500"}, acting_roots=[tmp_path / "store"]
+    )
+    assert res.verdict == "HALT"
+    assert res.receipt_verdict == "UNCERTAIN"
+    assert res.reason.startswith("unverified_producer_provenance")
+    assert res.provenance_evidence["producer_source"] == "observed"
+
+    res_pw = _stored_reload(
+        tmp_path, dom, {"premium": "$500"}, store_name="playwright-artifacts-1"
+    )
+    assert res_pw.verdict == "HALT"
+    assert res_pw.reason.startswith("unverified_producer_provenance")
+
+
+def test_fresh_reload_positive_control_bound_visible_value_verifies(
+    tmp_path: Path,
+) -> None:
+    dom = (
+        b"<html><head><title>Premium: $1</title></head><body>"
+        b'<div style="display:none">Premium: $999</div>'
+        b"<!-- Premium: $888 -->"
+        b"<dl><dt>Premium</dt><dd>$500.00</dd>"
+        b"<dt>Deductible</dt><dd>$1,000</dd>"
+        b"<dt>Policy Number</dt><dd>12345</dd></dl>"
+        b"<div>Premium: $500</div>"
+        b'<label for="roof">Roof Year</label><input id="roof" value="2018">'
+        b"</body></html>"
+    )
+    res = _stored_reload(
+        tmp_path,
+        dom,
+        {
+            "premium": "$500",
+            "deductible": 1000,
+            "policy_number": "12345",
+            "roof_year": 2018,
+        },
+    )
+    assert res.verdict == "VERIFIED", res
+    assert res.receipt_verdict == "CONFIRMED"
+    assert res.confirmed_count == 4
+    assert res.provenance_evidence["check_level"] == "separate_session"
+    assert res.provenance_evidence["producer_source"] == "declared"
+
+
+def test_fresh_reload_label_bound_input_must_be_visible(tmp_path: Path) -> None:
+    for dom in (
+        b'<label for="p">Premium</label><input id="p" type="hidden" value="$500">',
+        b'<label for="p">Premium</label><div hidden><input id="p" value="$500"></div>',
+    ):
+        res = _stored_reload(tmp_path, dom, {"premium": "$500"})
+        assert res.verdict == "HALT", dom
+        assert _check_status(res, "premium") == "ABSTAIN", dom
+
+
+def test_fresh_reload_stored_dom_must_match_proof_digest(tmp_path: Path) -> None:
+    store = tmp_path / "store"
+    store.mkdir()
+    path = store / "summary.html"
+    path.write_bytes(b"<div>Premium: $500</div>")
+    res = FreshReloadSummaryOracle().verify(
+        {"premium": "$500"},
+        {},
+        _valid_reload_proof(summary_dom_sha256="0" * 64),
+        summary_dom_path=path,
+    )
+    assert res.verdict == "HALT"
+    assert res.receipt_verdict == "REFUTED"
+    assert res.reason == "summary_dom_digest_mismatch"
+
+
+def test_fresh_reload_value_split_by_inline_tags_is_read_whole(
+    tmp_path: Path,
+) -> None:
+    for dom in (
+        b"<dl><dt>Premium</dt><dd>$500<span>,000</span></dd></dl>",
+        b"<dl><dt>Premium</dt><dd>$500<sup>.99</sup></dd></dl>",
+        b"<div>Premium: <del>$500</del> $900</div>",
+    ):
+        res = _stored_reload(tmp_path, dom, {"premium": "$500"})
+        assert res.verdict == "HALT", dom
+        assert _check_status(res, "premium") == "REFUTED", dom
+
+    res_ok = _stored_reload(
+        tmp_path, b"<div><b>Premium</b>: <span>$500</span></div>", {"premium": "$500"}
+    )
+    assert res_ok.verdict == "VERIFIED", res_ok
+
+
+def test_fresh_reload_header_row_label_does_not_bind_next_row(
+    tmp_path: Path,
+) -> None:
+    dom = (
+        b"<table><tr><th>Premium</th><th>Deductible</th></tr>"
+        b"<tr><td>$600</td><td>$500</td></tr></table>"
+    )
+    res = _stored_reload(tmp_path, dom, {"deductible": "$600"})
+    assert res.verdict == "HALT"
+    assert _check_status(res, "deductible") == "ABSTAIN"
+
+    res_row = _stored_reload(
+        tmp_path,
+        b"<table><tr><th>Deductible</th><td>$600</td></tr></table>",
+        {"deductible": "$600"},
+    )
+    assert res_row.verdict == "VERIFIED", res_row
+
+
+def test_fresh_reload_field_locators_and_labels(tmp_path: Path) -> None:
+    dom = (
+        b'<div><input id="prem" name="premium_amt" value="$500">'
+        b'<div hidden><input id="ghost" value="$500"></div>'
+        b"<p>Total due: $500</p></div>"
+    )
+    for locator in ("#prem", "id=prem", "name=premium_amt", '[name="premium_amt"]'):
+        res = _stored_reload(
+            tmp_path, dom, {"premium": "$500"}, field_locators={"premium": locator}
+        )
+        assert res.verdict == "VERIFIED", (locator, res)
+    for locator in ("#ghost", "div > input.premium", "#missing"):
+        res = _stored_reload(
+            tmp_path, dom, {"premium": "$500"}, field_locators={"premium": locator}
+        )
+        assert res.verdict == "HALT", locator
+        assert _check_status(res, "premium") == "ABSTAIN", locator
+
+    res_label = _stored_reload(
+        tmp_path, dom, {"premium": "$500"}, field_labels={"premium": ["Total due"]}
+    )
+    assert res_label.verdict == "VERIFIED", res_label

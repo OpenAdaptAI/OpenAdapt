@@ -9,8 +9,10 @@ from openadapt import cli
 
 _COMMANDS = (
     ("wrap", ("openadapt_flow.wrap.cli",), []),
+    ("test", ("openadapt_flow.agent_test.cli",), []),
     ("agent", ("openadapt_agent.cli",), []),
     ("seal", ("openadapt_agent.seal_cli", "openadapt_agent.cli"), ["seal"]),
+    ("verify draft", ("openadapt_flow.verify_draft.draft",), []),
 )
 
 
@@ -31,7 +33,7 @@ def test_pure_help_for_exact_missing_command(
         raise ModuleNotFoundError(name=missing)
 
     monkeypatch.setattr(cli, "import_module", load)
-    result = CliRunner().invoke(cli.main, [command, help_flag])
+    result = CliRunner().invoke(cli.main, [*command.split(), help_flag])
     assert result.exit_code == 0, result.output
     assert f"Usage: main {command}" in result.output
 
@@ -45,7 +47,7 @@ def test_absent_command_does_not_accept_mixed_arguments(
         raise ModuleNotFoundError(name=modules[0])
 
     monkeypatch.setattr(cli, "import_module", load)
-    result = CliRunner().invoke(cli.main, [command, *arguments])
+    result = CliRunner().invoke(cli.main, [*command.split(), *arguments])
     assert result.exit_code != 0
     assert result.stdout == ""
 
@@ -66,7 +68,7 @@ def test_installed_command_owns_original_arguments(
         return SimpleNamespace(main=main)
 
     monkeypatch.setattr(cli, "import_module", load)
-    result = CliRunner().invoke(cli.main, [command, *arguments])
+    result = CliRunner().invoke(cli.main, [*command.split(), *arguments])
     assert result.exit_code == 3
     assert imports == list(modules)
     assert calls == [[*prefix, *arguments]]
@@ -84,7 +86,7 @@ def test_installed_command_import_failure_is_not_missing_command_help(
         raise error
 
     monkeypatch.setattr(cli, "import_module", load)
-    result = CliRunner().invoke(cli.main, [command, "--help"])
+    result = CliRunner().invoke(cli.main, [*command.split(), "--help"])
     assert result.exit_code != 0
     assert result.exception is error
     assert result.stdout == ""

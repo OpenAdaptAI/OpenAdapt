@@ -1,0 +1,520 @@
+{
+ "admitted": true,
+ "check_sha256": "sha256:7edf764a8c51bf3c4b211d2fb47c10923d2eea0c92cdbca2deaa66d27fdaa33e",
+ "problems": [],
+ "masked": [],
+ "seconds": 129.09,
+ "cases": [
+  {
+   "group": "clean",
+   "name": "clean-1",
+   "detail": "the write with payload 1",
+   "expect": "confirmed",
+   "outcome": "CONFIRMED",
+   "recheck": "CONFIRMED",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [],
+   "moved": [],
+   "seconds": 7.83
+  },
+  {
+   "group": "clean",
+   "name": "clean-2",
+   "detail": "the write with payload 2",
+   "expect": "confirmed",
+   "outcome": "CONFIRMED",
+   "recheck": "CONFIRMED",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [],
+   "moved": [],
+   "seconds": 8.96
+  },
+  {
+   "group": "clean",
+   "name": "clean-3",
+   "detail": "the write with payload 3",
+   "expect": "confirmed",
+   "outcome": "CONFIRMED",
+   "recheck": "CONFIRMED",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [],
+   "moved": [],
+   "seconds": 9.66
+  },
+  {
+   "group": "clean",
+   "name": "clean-4",
+   "detail": "the write with payload 4",
+   "expect": "confirmed",
+   "outcome": "CONFIRMED",
+   "recheck": "CONFIRMED",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [],
+   "moved": [],
+   "seconds": 8.22
+  },
+  {
+   "group": "clean",
+   "name": "clean-5",
+   "detail": "the write with payload 5",
+   "expect": "confirmed",
+   "outcome": "CONFIRMED",
+   "recheck": "CONFIRMED",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [],
+   "moved": [],
+   "seconds": 7.9
+  },
+  {
+   "group": "fault",
+   "name": "wrong_value:priority",
+   "detail": "tickets.priority holds another value",
+   "expect": "refuted",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [
+    "record_written was refuted: observed absent, 0 of 1 expected record(s)",
+    "1 record(s) outside the declared write moved (changed); 1 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": true,
+     "table": "tickets",
+     "change": "changed",
+     "columns": [
+      "priority",
+      "status"
+     ],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 11.54
+  },
+  {
+   "group": "fault",
+   "name": "wrong_value:status",
+   "detail": "tickets.status holds another value",
+   "expect": "refuted",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [
+    "record_written was refuted: observed absent, 0 of 1 expected record(s)",
+    "1 record(s) outside the declared write moved (changed); 1 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": true,
+     "table": "tickets",
+     "change": "changed",
+     "columns": [
+      "priority",
+      "status"
+     ],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 11.05
+  },
+  {
+   "group": "fault",
+   "name": "wrong_row",
+   "detail": "the update landed on another tickets row",
+   "expect": "refuted",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [
+    "record_written was refuted: observed absent, 0 of 1 expected record(s)",
+    "1 record(s) outside the declared write moved (changed); 1 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": true,
+     "table": "tickets",
+     "change": "changed",
+     "columns": [
+      "priority",
+      "status"
+     ],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 10.98
+  },
+  {
+   "group": "fault",
+   "name": "duplicate",
+   "detail": "a second copy of the tickets record",
+   "expect": "refuted",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [
+    "1 record(s) outside the declared write moved (added); 1 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": true,
+     "table": "tickets",
+     "change": "added",
+     "columns": [
+      "id",
+      "note",
+      "priority",
+      "status",
+      "title"
+     ],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 6.03
+  },
+  {
+   "group": "fault",
+   "name": "sibling_edit",
+   "detail": "another tickets row's title edited beside the write",
+   "expect": "refuted",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [
+    "1 record(s) outside the declared write moved (changed); 1 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": true,
+     "table": "tickets",
+     "change": "changed",
+     "columns": [
+      "title"
+     ],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 5.52
+  },
+  {
+   "group": "fault",
+   "name": "late_revert",
+   "detail": "the tickets write undone after the check",
+   "expect": "refuted",
+   "outcome": "CONFIRMED",
+   "recheck": "REFUTED",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [
+    "1 record(s) moved after the verdict that nothing explains (changed); the earlier CONFIRMED no longer stands"
+   ],
+   "moved": [],
+   "seconds": 8.19
+  },
+  {
+   "group": "fault",
+   "name": "lost_update",
+   "detail": "the other user saves the record, then the agent's save overwrites it",
+   "expect": "refuted",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [
+    "lost update: another user saved a version of the target inside the window, so the agent's save may have overwritten it",
+    "2 record(s) outside the declared write moved (added); 2 of them no actor explains"
+   ],
+   "moved": [
+    {
+     "row": false,
+     "table": "revision",
+     "change": "added"
+    },
+    {
+     "row": true,
+     "table": "directus_revisions",
+     "change": "added",
+     "columns": [
+      "activity",
+      "collection",
+      "data",
+      "delta",
+      "id",
+      "item"
+     ],
+     "target": false,
+     "attribution": "unattributed",
+     "actor_columns": []
+    }
+   ],
+   "seconds": 5.03
+  },
+  {
+   "group": "probe",
+   "name": "attribution:agent:p1",
+   "detail": "the write by agent with payload 1",
+   "expect": "confirmed",
+   "outcome": "CONFIRMED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [],
+   "moved": [],
+   "seconds": 5.54
+  },
+  {
+   "group": "probe",
+   "name": "attribution:agent:p2",
+   "detail": "the write by agent with payload 2",
+   "expect": "confirmed",
+   "outcome": "CONFIRMED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [],
+   "moved": [],
+   "seconds": 5.69
+  },
+  {
+   "group": "probe",
+   "name": "attribution:other:p1",
+   "detail": "the write by other with payload 1",
+   "expect": "confirmed",
+   "outcome": "CONFIRMED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [],
+   "moved": [],
+   "seconds": 5.28
+  },
+  {
+   "group": "probe",
+   "name": "attribution:other:p2",
+   "detail": "the write by other with payload 2",
+   "expect": "confirmed",
+   "outcome": "CONFIRMED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [],
+   "moved": [],
+   "seconds": 5.54
+  },
+  {
+   "group": "probe",
+   "name": "attribution:agent:p1-again",
+   "detail": "the write by agent with payload 1",
+   "expect": "confirmed",
+   "outcome": "CONFIRMED",
+   "recheck": "",
+   "passed": true,
+   "applicable": true,
+   "untestable": false,
+   "note": "",
+   "reasons": [],
+   "moved": [],
+   "seconds": 5.33
+  }
+ ],
+ "attribution": [
+  {
+   "table": "directus_activity",
+   "column": "+",
+   "cause": "constant",
+   "excluded": true,
+   "problem": ""
+  },
+  {
+   "table": "directus_activity",
+   "column": "action",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "directus_activity",
+   "column": "collection",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "directus_activity",
+   "column": "id",
+   "cause": "fresh",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "directus_activity",
+   "column": "ip",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "directus_activity",
+   "column": "item",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "directus_activity",
+   "column": "origin",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "directus_activity",
+   "column": "timestamp",
+   "cause": "clock",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "directus_activity",
+   "column": "user",
+   "cause": "actor",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "directus_activity",
+   "column": "user_agent",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "directus_revisions",
+   "column": "+",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "directus_revisions",
+   "column": "activity",
+   "cause": "fresh",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "directus_revisions",
+   "column": "collection",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "directus_revisions",
+   "column": "data",
+   "cause": "payload",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "directus_revisions",
+   "column": "delta",
+   "cause": "payload",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "directus_revisions",
+   "column": "id",
+   "cause": "fresh",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "directus_revisions",
+   "column": "item",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "directus_revisions",
+   "column": "parent",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "directus_revisions",
+   "column": "version",
+   "cause": "constant",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "tickets",
+   "column": "priority",
+   "cause": "payload",
+   "excluded": false,
+   "problem": ""
+  },
+  {
+   "table": "tickets",
+   "column": "status",
+   "cause": "payload",
+   "excluded": false,
+   "problem": ""
+  }
+ ]
+}

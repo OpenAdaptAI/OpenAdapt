@@ -8,8 +8,11 @@ API read-back is unavailable:
    Requires an independent producer (``separate_session`` or ``system_of_record``),
    valid same-origin ``submit_url`` / ``summary_url``, ISO-8601 ``reloaded_at_utc``,
    a 64-hex ``summary_dom_sha256`` digest, and distinct non-empty DOM tokens
-   proving a fresh navigation/reload distinct from the submit DOM, then diffs
-   extracted summary fields against the expected intake record.
+   proving a fresh navigation/reload distinct from the submit DOM. It then
+   reads each field from the reloaded page itself: the visible value bound to
+   the field's label (or locator), compared as a whole normalized value. A
+   repeated label with different values is UNCERTAIN. Inline DOM bytes with a
+   declared producer cannot reach VERIFIED; a DOM file in a graded store can.
 
 2. ``ConfirmationPdfOracle``:
    Enforces artifact provenance via
@@ -56,8 +59,10 @@ _CURRENCY_SYMBOL_TO_CODE = {
     "€": "€",
     "£": "£",
 }
+# Groups: a sign before the symbol, the symbol, then the amount (which may carry
+# its own sign). ``-$500`` and ``$-500`` both normalize to ``$:-500.00``.
 _CURRENCY_RE = re.compile(
-    r"^\s*([$€£])?\s*([+-]?\d{1,3}(?:,\d{3})*(?:\.\d+)?|[+-]?\d+(?:\.\d+)?)\s*$"
+    r"^\s*([+-])?\s*([$€£])?\s*([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*$"
 )
 _DATE_FORMATS = (
     "%Y-%m-%d",
@@ -232,13 +237,20 @@ def normalize_field_value(value: Any, *, field_type: str | None = None) -> str:
                 continue
 
     m_cur = _CURRENCY_RE.match(text)
-    if m_cur and (
-        field_type == "currency" or m_cur.group(1) is not None or "," in m_cur.group(2)
+    lead_sign = m_cur.group(1) if m_cur else None
+    if (
+        m_cur
+        and not (lead_sign and m_cur.group(3)[0] in "+-")
+        and (
+            field_type == "currency"
+            or m_cur.group(2) is not None
+            or "," in m_cur.group(3)
+        )
     ):
-        raw_num = m_cur.group(2).replace(",", "")
+        raw_num = (lead_sign or "") + m_cur.group(3).replace(",", "")
         try:
             dec = Decimal(raw_num).quantize(Decimal("0.01"))
-            sym = m_cur.group(1)
+            sym = m_cur.group(2)
             if sym is not None:
                 code = _CURRENCY_SYMBOL_TO_CODE.get(sym, sym)
                 return f"{code}:{dec}"
@@ -367,31 +379,225 @@ def _compare_fields(
     return tuple(checks), confirmed, refuted, abstained
 
 
-class _VisibleTextExtractor(HTMLParser):
-    """Extract ordered visible text nodes from HTML, ignoring attributes and non-rendered elements."""
+_VOID_TAGS = frozenset(
+    {
+        "area",
+        "base",
+        "br",
+        "col",
+        "embed",
+        "hr",
+        "img",
+        "input",
+        "link",
+        "meta",
+        "param",
+        "source",
+        "track",
+        "wbr",
+    }
+)
+# Elements whose text is never rendered page text.
+_NEVER_RENDERED_TAGS = frozenset(
+    {"script", "style", "noscript", "template", "head", "title"}
+)
+# Form controls: their text is editable state, not a persisted summary. It counts
+# only when the control is the field being checked (see ``_bound_values``).
+_FORM_CONTROL_TEXT_TAGS = frozenset({"textarea", "select", "option", "datalist"})
+_HIDDEN_STYLE_DECLS = frozenset(
+    {"display:none", "visibility:hidden", "visibility:collapse"}
+)
+# Input types whose ``value`` is a field value a person reads on the page.
+_VALUE_INPUT_TYPES = frozenset(
+    {"", "text", "number", "email", "tel", "url", "search", "date", "month", "week"}
+)
 
-    _SKIP_TAGS = frozenset({"script", "style", "noscript", "template", "head", "title"})
+
+# Inline elements: text inside them joins the surrounding text into one node, so
+# ``$500<span>,000</span>`` reads as ``$500,000``, never as ``$500``.
+_INLINE_TAGS = frozenset(
+    {
+        "a",
+        "abbr",
+        "b",
+        "bdi",
+        "bdo",
+        "cite",
+        "code",
+        "data",
+        "del",
+        "dfn",
+        "em",
+        "font",
+        "i",
+        "ins",
+        "kbd",
+        "mark",
+        "nobr",
+        "q",
+        "s",
+        "samp",
+        "small",
+        "span",
+        "strike",
+        "strong",
+        "sub",
+        "sup",
+        "time",
+        "tt",
+        "u",
+        "var",
+        "wbr",
+    }
+)
+
+
+def _attrs_hide_element(tag: str, attrs: Mapping[str, str | None]) -> bool:
+    """Whether inline markup alone hides this element and its subtree."""
+    if "hidden" in attrs:
+        return True
+    if (attrs.get("aria-hidden") or "").strip().lower() == "true":
+        return True
+    if tag == "input" and (attrs.get("type") or "").strip().lower() == "hidden":
+        return True
+    style = re.sub(r"\s+", "", (attrs.get("style") or "").lower())
+    for decl in style.split(";"):
+        if decl.replace("!important", "") in _HIDDEN_STYLE_DECLS:
+            return True
+    return False
+
+
+@dataclass(frozen=True)
+class _TextNode:
+    """One run of visible text, and the element its block sits in.
+
+    ``scope`` is the parent of the nearest non-inline element around the text.
+    A label in one node binds the next node only when both share a scope: two
+    cells of one table row, a ``dt``/``dd`` pair in one ``dl``, or two blocks in
+    one container. A header row never binds the next row's cells.
+    """
+
+    text: str
+    scope: int
+
+
+class _VisibleDomExtractor(HTMLParser):
+    """Collect what a reloaded page shows, using inline markup only.
+
+    - ``nodes``: visible text runs in document order. Text split only by inline
+      elements (``span``, ``b``, ``sup``, ``del`` ...) is one run. Comments,
+      attributes, ``script``/``style``/``template``/``head``, form-control text,
+      and subtrees hidden by ``hidden``, ``aria-hidden="true"`` or an inline
+      ``display:none`` / ``visibility:hidden`` style are left out.
+    - ``controls_by_id`` / ``controls_by_name``: values of visible, text-like
+      ``input`` and ``textarea`` controls. They are read only when a check binds
+      a field to that control by ``<label for>`` or by an explicit locator.
+    - ``label_for``: ``(label text, control id)`` for each ``<label for=...>``.
+
+    Limits: hiding by stylesheet rules, classes or script cannot be evaluated
+    by a standard-library parser, so the bytes are expected to be the rendered
+    page; a value hidden only by a stylesheet still reads as shown. Elements
+    are closed only by an explicit end tag, as written; mis-nested markup can
+    be read differently from a browser.
+    """
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
-        self._skip_depth = 0
-        self.nodes: list[str] = []
+        self._stack: list[tuple[str, bool, int]] = []
+        self._next_eid = 0
+        self.nodes: list[_TextNode] = []
+        self.controls_by_id: dict[str, list[str]] = {}
+        self.controls_by_name: dict[str, list[str]] = {}
+        self.label_for: list[tuple[str, str]] = []
+        self._label: tuple[str, list[str]] | None = None
+        self._textarea: tuple[str, str, list[str]] | None = None
+        self._buf: list[str] = []
+        self._buf_scope = -1
+
+    def _hidden(self) -> bool:
+        return bool(self._stack) and self._stack[-1][1]
+
+    def _scope(self) -> int:
+        for idx in range(len(self._stack) - 1, -1, -1):
+            if self._stack[idx][0] not in _INLINE_TAGS:
+                return self._stack[idx - 1][2] if idx > 0 else -1
+        return -1
+
+    def _flush(self) -> None:
+        text = " ".join("".join(self._buf).split())
+        self._buf = []
+        if not text:
+            return
+        if self._label is not None:
+            self._label[1].append(text)
+        else:
+            self.nodes.append(_TextNode(text, self._buf_scope))
+
+    def _add_control(self, ctrl_id: str, name: str, value: str) -> None:
+        compact = " ".join(value.split())
+        if ctrl_id:
+            self.controls_by_id.setdefault(ctrl_id, []).append(compact)
+        if name:
+            self.controls_by_name.setdefault(name, []).append(compact)
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        del attrs
-        if tag.lower() in self._SKIP_TAGS:
-            self._skip_depth += 1
+        tag = tag.lower()
+        if tag not in _INLINE_TAGS:
+            self._flush()
+        amap = {k.lower(): v for k, v in attrs}
+        hidden = (
+            self._hidden()
+            or _attrs_hide_element(tag, amap)
+            or tag in _NEVER_RENDERED_TAGS
+        )
+        ctrl_id = (amap.get("id") or "").strip()
+        name = (amap.get("name") or "").strip()
+        if tag == "input":
+            itype = (amap.get("type") or "").strip().lower()
+            if not hidden and itype in _VALUE_INPUT_TYPES:
+                self._add_control(ctrl_id, name, amap.get("value") or "")
+        if tag in _VOID_TAGS:
+            return
+        if tag == "label" and not hidden and (amap.get("for") or "").strip():
+            self._label = ((amap.get("for") or "").strip(), [])
+        if tag == "textarea" and not hidden:
+            self._textarea = (ctrl_id, name, [])
+        self._next_eid += 1
+        self._stack.append(
+            (tag, hidden or tag in _FORM_CONTROL_TEXT_TAGS, self._next_eid)
+        )
 
     def handle_endtag(self, tag: str) -> None:
-        if tag.lower() in self._SKIP_TAGS and self._skip_depth > 0:
-            self._skip_depth -= 1
+        tag = tag.lower()
+        if tag not in _INLINE_TAGS:
+            self._flush()
+        if tag == "label" and self._label is not None:
+            for_id, parts = self._label
+            self.label_for.append((" ".join(" ".join(parts).split()), for_id))
+            self._label = None
+        if tag == "textarea" and self._textarea is not None:
+            ctrl_id, name, parts = self._textarea
+            self._add_control(ctrl_id, name, "".join(parts))
+            self._textarea = None
+        for idx in range(len(self._stack) - 1, -1, -1):
+            if self._stack[idx][0] == tag:
+                del self._stack[idx:]
+                return
+        # An end tag with no open element is ignored.
 
     def handle_data(self, data: str) -> None:
-        if self._skip_depth > 0:
+        if self._textarea is not None:
+            self._textarea[2].append(data)
             return
-        compact = " ".join(data.split())
-        if compact:
-            self.nodes.append(compact)
+        if self._hidden():
+            return
+        if not self._buf:
+            self._buf_scope = self._scope()
+        self._buf.append(data)
+
+    def close(self) -> None:
+        super().close()
+        self._flush()
 
 
 def _normalize_dom_label(text: str) -> str:
@@ -399,11 +605,14 @@ def _normalize_dom_label(text: str) -> str:
     return cleaned
 
 
-def _dom_bound_values_for_label(nodes: Sequence[str], field_name: str) -> list[str]:
-    """Collect every visible DOM text value bound to ``field_name``."""
-    target_label = _normalize_dom_label(field_name)
-    if not target_label:
-        return []
+def _node_values_for_label(nodes: Sequence[_TextNode], target_label: str) -> list[str]:
+    """Visible text values bound to ``target_label`` (already normalized).
+
+    A value is bound when the label is its own text run and the value is the
+    next run in the same scope (``<dt>Label</dt><dd>value</dd>``, two cells of
+    one row), or when one run reads ``Label: value`` or ``Label value``. The
+    whole rest of the run is the value.
+    """
     label_words = target_label.split()
     prefix_re = re.compile(
         r"^\s*" + r"[\s_-]+".join(re.escape(w) for w in label_words) + r"\s+(.+)$",
@@ -411,211 +620,281 @@ def _dom_bound_values_for_label(nodes: Sequence[str], field_name: str) -> list[s
     )
     bound_values: list[str] = []
     for idx, node in enumerate(nodes):
-        # Case 1: Node is the exact label (with optional trailing colon), value is the next node.
-        if _normalize_dom_label(node.rstrip(":")) == target_label:
-            if idx + 1 < len(nodes):
-                bound_values.append(nodes[idx + 1].strip())
+        text = node.text
+        if _normalize_dom_label(text.rstrip(":")) == target_label:
+            if idx + 1 < len(nodes) and nodes[idx + 1].scope == node.scope:
+                bound_values.append(nodes[idx + 1].text.strip())
             continue
-        # Case 2: Same text node "Label: value" or "Label value".
-        if ":" in node:
-            left, right = node.split(":", 1)
+        if ":" in text:
+            left, right = text.split(":", 1)
             if _normalize_dom_label(left) == target_label:
                 bound_values.append(right.strip())
         else:
-            m = prefix_re.match(node)
+            m = prefix_re.match(text)
             if m:
                 bound_values.append(m.group(1).strip())
     return bound_values
 
 
-def _dom_label_binding_status(
-    nodes: Sequence[str], field_name: str, expected_val: str
-) -> str:
-    """Classify visible DOM bindings for ``field_name`` against ``expected_val``.
+def _locator_values(dom: _VisibleDomExtractor, locator: str) -> list[str] | None:
+    """Values of the visible control a locator names, or ``None`` if unsupported.
 
-    Returns:
-      - ``"matched"`` iff at least one visible binding matches ``expected_val`` on
-        token boundaries and no duplicate binding for the same label conflicts.
-      - ``"conflict"`` iff the same label appears multiple times with conflicting values.
-      - ``"missing"`` otherwise.
+    Supported locators: ``#id``, ``id=x``, ``name=x`` and ``[name="x"]``.
     """
-    if not expected_val:
-        return "missing"
-    bound_values = _dom_bound_values_for_label(nodes, field_name)
-    if not bound_values:
-        return "missing"
-    val_re = re.compile(
-        r"(?<![A-Za-z0-9_.])" + re.escape(expected_val) + r"(?![A-Za-z0-9_.])"
-    )
-    matches = [bool(val_re.search(val)) for val in bound_values]
-    if any(matches):
-        if all(matches):
-            return "matched"
-        return "conflict"
-    return "missing"
+    loc = locator.strip()
+    m = re.fullmatch(r"\[\s*(id|name)\s*=\s*['\"]?([^'\"\]]+)['\"]?\s*\]", loc)
+    if m:
+        kind, key = m.group(1), m.group(2).strip()
+    elif loc.startswith("#") and len(loc) > 1:
+        kind, key = "id", loc[1:]
+    elif re.fullmatch(r"(id|name)=\S+", loc):
+        kind, key = loc.split("=", 1)
+    else:
+        return None
+    table = dom.controls_by_id if kind == "id" else dom.controls_by_name
+    return list(table.get(key, []))
 
 
-def _dom_value_matches_bound_label(
-    nodes: Sequence[str], field_name: str, expected_val: str
-) -> bool:
-    """Return True iff ``expected_val`` appears in visible DOM text bound to ``field_name``
-    on token boundaries with no conflicting duplicate label values."""
-    return _dom_label_binding_status(nodes, field_name, expected_val) == "matched"
+def _bound_values(
+    dom: _VisibleDomExtractor,
+    field_name: str,
+    labels: Sequence[str],
+    locator: str | None,
+) -> tuple[list[str], str]:
+    """Every visible value bound to ``field_name``, and how it was bound."""
+    if locator is not None:
+        located = _locator_values(dom, locator)
+        if located is None:
+            return [], "unsupported_locator"
+        return located, f"locator={locator!r}"
+    targets: list[str] = []
+    for lbl in labels:
+        norm = _normalize_dom_label(lbl)
+        if norm and norm not in targets:
+            targets.append(norm)
+    values: list[str] = []
+    for target in targets:
+        values.extend(_node_values_for_label(dom.nodes, target))
+        for label_text, for_id in dom.label_for:
+            if _normalize_dom_label(label_text.rstrip(":")) == target:
+                values.extend(dom.controls_by_id.get(for_id, []))
+    return values, f"label={labels[0]!r}" if labels else "label=None"
 
 
 class FreshReloadSummaryOracle:
-    """Verify persisted portal summary fields against freshly reloaded DOM bytes."""
+    """Verify persisted portal summary fields against freshly reloaded DOM bytes.
+
+    Each expected field is located in the reloaded page by its label (or an
+    explicit locator), and only the visible value bound to it is compared, as
+    a whole value after normalization. Caller-supplied observed values are not
+    trusted: they are cross-checked against the page and never stand in for it.
+
+    The producer: inline ``summary_dom_bytes`` carry nothing the oracle can
+    observe about who fetched them, so a declared ``separate_session`` producer
+    alone is capped at HALT/UNCERTAIN (``producer_source: declared``,
+    ``check_level: same_screen``). Pass ``summary_dom_path`` (a file in the
+    store a separate read-only session writes to) to have the store graded the
+    same way the confirmation PDF channel grades its store; only that route can
+    return VERIFIED.
+    """
 
     def verify(
         self,
         expected_fields: Mapping[str, Any],
-        observed_summary_fields: Mapping[str, Any],
+        observed_summary_fields: Mapping[str, Any] | None,
         reload_proof: ReloadProof,
         *,
         summary_dom_bytes: bytes | None = None,
+        summary_dom_path: str | Path | None = None,
+        acting_roots: Sequence[str | Path] | None = None,
         field_types: Mapping[str, str] | None = None,
+        field_labels: Mapping[str, Sequence[str]] | None = None,
+        field_locators: Mapping[str, str] | None = None,
     ) -> PortalReadbackResult:
-        if not expected_fields:
+        channel = "fresh_reload_summary"
+
+        def halt(
+            reason: str,
+            receipt: ReceiptVerdict = "UNCERTAIN",
+            **extra: Any,
+        ) -> PortalReadbackResult:
             return PortalReadbackResult(
                 verdict="HALT",
-                receipt_verdict="UNCERTAIN",
-                channel="fresh_reload_summary",
-                reason="empty_expected_fields",
-                checks=(),
-                confirmed_count=0,
-                refuted_count=0,
-                abstained_count=0,
+                receipt_verdict=receipt,
+                channel=channel,
+                reason=reason,
+                checks=extra.pop("checks", ()),
+                confirmed_count=extra.pop("confirmed_count", 0),
+                refuted_count=extra.pop("refuted_count", 0),
+                abstained_count=extra.pop("abstained_count", len(expected_fields)),
+                **extra,
             )
+
+        if not expected_fields:
+            return halt("empty_expected_fields", abstained_count=0)
 
         ok_reload, reload_reason = reload_proof.validate()
         if not ok_reload:
-            return PortalReadbackResult(
-                verdict="HALT",
-                receipt_verdict="UNCERTAIN",
-                channel="fresh_reload_summary",
-                reason=reload_reason,
-                checks=(),
-                confirmed_count=0,
-                refuted_count=0,
-                abstained_count=len(expected_fields),
-            )
+            return halt(reload_reason)
 
-        if (
-            not isinstance(summary_dom_bytes, (bytes, bytearray))
-            or not summary_dom_bytes
-        ):
-            return PortalReadbackResult(
-                verdict="HALT",
-                receipt_verdict="UNCERTAIN",
-                channel="fresh_reload_summary",
-                reason="missing_summary_dom_bytes: oracle must compute digest over reloaded DOM bytes",
-                checks=(),
-                confirmed_count=0,
-                refuted_count=0,
-                abstained_count=len(expected_fields),
-            )
+        declared = parse_producer(reload_proof.producer)
+        prov_evidence: dict[str, Any]
+        producer_proven = False
+        if summary_dom_path is not None:
+            if summary_dom_bytes is not None:
+                return halt(
+                    "ambiguous_dom_source: pass summary_dom_path or "
+                    "summary_dom_bytes, not both"
+                )
+            p = Path(summary_dom_path)
+            if not p.is_file():
+                return halt("missing_summary_dom_bytes: summary_dom_path is not a file")
+            try:
+                grade = grade_artifact(
+                    declared, root=p.parent, acting_roots=acting_roots
+                )
+            except ValueError as exc:
+                return halt(f"unverified_producer_provenance: {exc}")
+            prov_evidence = grade.evidence()
+            if not grade.independent:
+                return halt(
+                    f"unverified_producer_provenance: producer={grade.producer.value!r} "
+                    f"(check_level={grade.check_level.label}) cannot issue VERIFIED",
+                    provenance_evidence=prov_evidence,
+                )
+            acting_reason = grade.acting_artifact([p])
+            if acting_reason:
+                return halt(
+                    f"unverified_producer_provenance: {acting_reason}",
+                    provenance_evidence=prov_evidence,
+                )
+            try:
+                dom_bytes = p.read_bytes()
+            except OSError as exc:
+                return halt(f"missing_summary_dom_bytes: {exc}")
+            producer_proven = True
+        else:
+            if not isinstance(summary_dom_bytes, (bytes, bytearray)):
+                return halt(
+                    "missing_summary_dom_bytes: oracle must compute digest over "
+                    "reloaded DOM bytes"
+                )
+            dom_bytes = bytes(summary_dom_bytes)
+            prov_evidence = {
+                "producer": ArtifactProducer.UNKNOWN.value,
+                "declared_producer": declared.value,
+                "check_level": "same_screen",
+                "producer_source": "declared",
+                "not_proven_because": (
+                    "inline DOM bytes: nothing observed shows who fetched them"
+                ),
+            }
+        prov_evidence["navigation_type"] = reload_proof.navigation_type
+        prov_evidence["reloaded_at_utc"] = reload_proof.reloaded_at_utc
 
-        computed_dom_sha = hashlib.sha256(bytes(summary_dom_bytes)).hexdigest()
+        if not dom_bytes:
+            return halt("missing_summary_dom_bytes: empty DOM bytes")
+
+        computed_dom_sha = hashlib.sha256(dom_bytes).hexdigest()
+        prov_evidence["summary_dom_sha256"] = computed_dom_sha
         claimed_dom_sha = reload_proof.summary_dom_sha256.strip().lower()
         if not hmac.compare_digest(computed_dom_sha, claimed_dom_sha):
-            return PortalReadbackResult(
-                verdict="HALT",
-                receipt_verdict="REFUTED",
-                channel="fresh_reload_summary",
-                reason="summary_dom_digest_mismatch",
-                checks=(),
-                confirmed_count=0,
-                refuted_count=0,
-                abstained_count=len(expected_fields),
+            return halt(
+                "summary_dom_digest_mismatch",
+                "REFUTED",
                 artifact_sha256=computed_dom_sha,
             )
 
-        dom_text = bytes(summary_dom_bytes).decode("utf-8", errors="replace")
-        extractor = _VisibleTextExtractor()
-        extractor.feed(dom_text)
-        extractor.close()
-        dom_nodes = extractor.nodes
-        verified_observed: dict[str, Any] = {}
-        missing_in_dom: dict[str, str] = {}
-        for fname in expected_fields:
-            val = observed_summary_fields.get(fname)
-            if val is None or (isinstance(val, str) and not val.strip()):
-                continue
-            compact_val = " ".join(str(val).strip().split())
-            binding_status = _dom_label_binding_status(dom_nodes, fname, compact_val)
-            if binding_status == "matched":
-                verified_observed[fname] = val
-            elif binding_status == "conflict":
-                missing_in_dom[fname] = (
-                    "conflicting_duplicate_label_values_in_summary_dom_bytes"
-                )
-            else:
-                missing_in_dom[fname] = (
-                    "observed_value_not_bound_to_label_in_summary_dom_bytes"
-                )
+        try:
+            dom_text = dom_bytes.decode("utf-8")
+            dom = _VisibleDomExtractor()
+            dom.feed(dom_text)
+            dom.close()
+        except (UnicodeDecodeError, ValueError, AssertionError) as exc:
+            return halt(
+                f"unparseable_summary_dom: {type(exc).__name__}",
+                artifact_sha256=computed_dom_sha,
+                provenance_evidence=prov_evidence,
+            )
 
-        parsed_producer = parse_producer(reload_proof.producer)
-        prov = f"fresh_reload:{parsed_producer.value}:{reload_proof.navigation_type}:{reload_proof.summary_url}"
+        ftypes = field_types or {}
+        labels_cfg = field_labels or {}
+        locators = field_locators or {}
+        caller_observed = observed_summary_fields or {}
+        observed: dict[str, Any] = {}
+        provenance: dict[str, str] = {}
+        ambiguous_fields: list[str] = []
+        disagreeing_fields: list[str] = []
+        base = f"fresh_reload:{computed_dom_sha[:12]}"
+        for fname in expected_fields:
+            labels = tuple(labels_cfg.get(fname) or _default_labels_for_field(fname))
+            values, how = _bound_values(dom, fname, labels, locators.get(fname))
+            values = [v for v in values if v.strip()]
+            if not values:
+                provenance[fname] = f"{base}:not_bound:{how}"
+                continue
+            norms = {
+                normalize_field_value(v, field_type=ftypes.get(fname)) for v in values
+            }
+            if len(norms) > 1:
+                ambiguous_fields.append(fname)
+                provenance[fname] = f"{base}:ambiguous:{how}"
+                continue
+            observed[fname] = values[0]
+            provenance[fname] = f"{base}:{how}"
+            claimed = caller_observed.get(fname)
+            if claimed is not None and not (
+                isinstance(claimed, str) and not claimed.strip()
+            ):
+                _, agree, _, _ = _compare_fields(
+                    {fname: claimed}, {fname: values[0]}, field_types=ftypes
+                )
+                if agree != 1:
+                    disagreeing_fields.append(fname)
+
         checks, confirmed, refuted, abstained = _compare_fields(
             expected_fields,
-            verified_observed,
+            observed,
             field_types=field_types,
-            provenance_map=missing_in_dom,
-            default_provenance=prov,
+            provenance_map=provenance,
         )
-        prov_evidence = {
-            "producer": parsed_producer.value,
-            "navigation_type": reload_proof.navigation_type,
-            "reloaded_at_utc": reload_proof.reloaded_at_utc,
-            "summary_dom_sha256": computed_dom_sha,
+        counts: dict[str, Any] = {
+            "checks": checks,
+            "confirmed_count": confirmed,
+            "refuted_count": refuted,
+            "abstained_count": abstained,
+            "artifact_sha256": computed_dom_sha,
+            "provenance_evidence": prov_evidence,
         }
 
         if refuted > 0:
-            return PortalReadbackResult(
-                verdict="HALT",
-                receipt_verdict="REFUTED",
-                channel="fresh_reload_summary",
-                reason="field_mismatch",
-                checks=checks,
-                confirmed_count=confirmed,
-                refuted_count=refuted,
-                abstained_count=abstained,
-                artifact_sha256=computed_dom_sha,
-                provenance_evidence=prov_evidence,
+            return halt("field_mismatch", "REFUTED", **counts)
+        if ambiguous_fields:
+            return halt(
+                "conflicting_duplicate_label_values_in_dom_bytes: "
+                + ", ".join(ambiguous_fields),
+                **counts,
             )
         if abstained > 0:
-            if any(
-                v == "conflicting_duplicate_label_values_in_summary_dom_bytes"
-                for v in missing_in_dom.values()
-            ):
-                reason = "conflicting_duplicate_label_values_in_dom_bytes"
-            elif missing_in_dom:
-                reason = "observed_value_not_in_dom_bytes"
-            else:
-                reason = "missing_required_fields"
-            return PortalReadbackResult(
-                verdict="HALT",
-                receipt_verdict="UNCERTAIN",
-                channel="fresh_reload_summary",
-                reason=reason,
-                checks=checks,
-                confirmed_count=confirmed,
-                refuted_count=refuted,
-                abstained_count=abstained,
-                artifact_sha256=computed_dom_sha,
-                provenance_evidence=prov_evidence,
+            return halt("missing_required_fields", **counts)
+        if disagreeing_fields:
+            return halt(
+                "caller_observed_value_disagrees_with_dom: "
+                + ", ".join(disagreeing_fields),
+                **counts,
+            )
+        if not producer_proven:
+            return halt(
+                f"unverified_producer_provenance: producer={declared.value!r} was "
+                "declared, not proven (inline DOM bytes); cannot issue VERIFIED",
+                **counts,
             )
         return PortalReadbackResult(
             verdict="VERIFIED",
             receipt_verdict="CONFIRMED",
-            channel="fresh_reload_summary",
+            channel=channel,
             reason="ok",
-            checks=checks,
-            confirmed_count=confirmed,
-            refuted_count=0,
-            abstained_count=0,
-            artifact_sha256=computed_dom_sha,
-            provenance_evidence=prov_evidence,
+            **counts,
         )
 
 

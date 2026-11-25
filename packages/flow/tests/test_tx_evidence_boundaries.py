@@ -209,7 +209,7 @@ def test_undo_refuses_to_overwrite_an_intervening_human_edit(live_app, tmp_path:
             intended_delta={"phone": "555-2222"},
         )
     )
-    assert result.outcome == "UNCERTAIN" and not result.can_compensate
+    assert result.outcome == "CONFIRMED" and not result.can_compensate
     store.direct_concurrent_touch(
         "rec-0001", notes_override="human edit after operation"
     )
@@ -232,7 +232,7 @@ def test_same_task_id_cannot_authorize_a_second_target(live_app, tmp_path: Path)
         entity_id="rec-0001",
         intended_delta={"phone": "555-2222"},
     )
-    assert engine.execute(first).outcome == "UNCERTAIN"
+    assert engine.execute(first).outcome == "CONFIRMED"
     writes_before = store.sql_writes_executed
     assert (
         engine.execute(first.model_copy(update={"entity_id": "rec-0002"})).outcome
@@ -323,7 +323,7 @@ def test_saved_har_and_undo_preimage_are_encrypted(live_app, tmp_path):
             intended_delta={"phone": "555-2222"},
         )
     )
-    assert result.outcome == "UNCERTAIN"
+    assert result.outcome == "CONFIRMED"
     preimage = (
         tmp_path
         / "encrypted-state"
@@ -355,7 +355,7 @@ def test_default_state_keeps_idempotency_across_engine_instances(live_app):
         entity_id="rec-0001",
         intended_delta={"phone": "555-2222"},
     )
-    assert first.execute(task).outcome == "UNCERTAIN"
+    assert first.execute(task).outcome == "CONFIRMED"
     writes_before = store.sql_writes_executed
     second = TransactionalCommitEngine(
         lens,

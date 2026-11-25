@@ -1,0 +1,383 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02df5ad39a8e8bd6016b0155e306c887d1baf5fa3baf61ad73",
+     "call_id": "call_mL9m3XkHk5UPZeRRbJiYLzpX",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02df5ad39a8e8bd6016b0155e6e9d487d1bb400da51d77fb1c",
+     "call_id": "call_ZmgmENQwTOXmILBKTEROoGR9",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 110,
+       "y": 26
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02df5ad39a8e8bd6016b0155e978a087d18c86c7c283aaf265",
+     "call_id": "call_2xy3ai0QZGC8tzYihz6zVAzp",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 107,
+       "y": 371
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02df5ad39a8e8bd6016b0155ec2b9087d1ae79fc175041a379",
+     "call_id": "call_e2Zvn1Lr6WICL9pEcfuHFOGl",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Varga",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 652,
+       "y": 199
+      },
+      {
+       "text": "Zsofia",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 650,
+       "y": 296
+      },
+      {
+       "text": "Clerk",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 681,
+       "y": 477
+      },
+      {
+       "text": "555-0210",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 674,
+       "y": 546
+      },
+      {
+       "text": "z.varga@example.invalid",
+       "type": "type"
+      },
+      {
+       "scroll_x": 0,
+       "scroll_y": 482,
+       "type": "scroll",
+       "x": 1186,
+       "y": 650
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02df5ad39a8e8bd6016b0155f1687c87d1b2032d512303d2ba",
+     "call_id": "call_MDCvMjrHxIirKiQ5XpKnLrUa",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 684,
+       "y": 460
+      },
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "z.varga@example.invalid",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 718,
+       "y": 759
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02df5ad39a8e8bd6016b0155f4910487d19ed2b7d2971f55f4",
+     "call_id": "call_eA7OzuU6WUJOTezLOSPn2vnD",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02df5ad39a8e8bd6016b0155f72bf487d19963c5b146d51891",
+     "call_id": "call_40gACuQ9jXbYCioIvssV1saj",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02df5ad39a8e8bd6016b0155fab36887d1bef18904ca2d292a",
+     "call_id": "call_0Idcy5CefJFleGBkZCjcGZ3j",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      },
+      {
+       "keys": [
+        "CTRL",
+        "l"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02df5ad39a8e8bd6016b0155ff1be887d1ae07a5e0a80ea083",
+     "call_id": "call_LekCYBsq3miRHM4yGQX01nfT",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02df5ad39a8e8bd6016b015602cde087d19867abab43dd4e64",
+     "call_id": "call_x2ZfxoLtVeC6ohAyAap7ku8E",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ALT",
+        "LEFT"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE The app displayed a blank page after submission, so I could not verify that the contact was created.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 110,
+   "y": 26,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 107,
+   "y": 371,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 5
+  },
+  {
+   "a": "click",
+   "x": 652,
+   "y": 199,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 6
+  },
+  {
+   "a": "click",
+   "x": 650,
+   "y": 296,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 5
+  },
+  {
+   "a": "click",
+   "x": 681,
+   "y": 477,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 8
+  },
+  {
+   "a": "click",
+   "x": 674,
+   "y": 546,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 23
+  },
+  {
+   "a": "scroll",
+   "x": 1186,
+   "y": 650,
+   "dx": 0,
+   "dy": 482
+  },
+  {
+   "a": "click",
+   "x": 684,
+   "y": 460,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "chars": 23
+  },
+  {
+   "a": "click",
+   "x": 718,
+   "y": 759,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "l"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ALT",
+    "LEFT"
+   ]
+  }
+ ]
+}
