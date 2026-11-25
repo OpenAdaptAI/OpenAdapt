@@ -1,0 +1,44 @@
+name: Kernel Package CI
+
+on:
+  pull_request:
+    paths:
+      - "packages/kernel/**"
+      - ".github/workflows/kernel.yml"
+  push:
+    branches: [main]
+    paths:
+      - "packages/kernel/**"
+      - ".github/workflows/kernel.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kernel-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  kernel-test:
+    name: openadapt-kernel (py3.12 + Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          python-version: "3.12"
+      - name: Install package and test dependencies
+        working-directory: packages/kernel
+        run: |
+          uv sync --locked --extra browser --extra dev
+          uv run --no-sync python -m playwright install chromium
+      - name: Lint with ruff
+        working-directory: packages/kernel
+        run: uv run --no-sync ruff check .
+      - name: Run unit, boundary, CLI, and headless Chromium tests
+        working-directory: packages/kernel
+        run: uv run --no-sync pytest -v tests
