@@ -381,6 +381,39 @@ class FrameDatabase(BaseModel):
     #: right wait depends on the app's own jobs, so the contract's author
     #: picks it.
     recheck_after_s: Optional[float] = Field(default=None, gt=0)
+    #: The business-entity tables (``docs/VERDICT_TIERS.md``): the main
+    #: tables the setup's kinds write, their child tables, the tables a
+    #: field's location reads through, and the acting user's table. Set: a
+    #: row added or changed in any *other* table (a scheduler heartbeat, a
+    #: task queue, a cache the app recomputes, a notification fan-out) is a
+    #: logged side effect, not a stop. It is listed in the verdict, by table,
+    #: change and columns, and offered to the learner. A removed row, a row
+    #: of an entity table, a change to a declared row and anything no row
+    #: comparison explains still refute. The tables the frame itself names
+    #: (``views``, ``judged_by``, ``new_row_fields``, side records, learned
+    #: excuses, owner tables) always count as entity tables. Unset: every
+    #: table is judged as before.
+    entity_tables: Optional[list[str]] = None
+
+    def entity_scope(self, spec: Optional["FrameSpec"] = None) -> Optional[set[str]]:
+        """The entity tables (as :func:`table_name` names them), or None
+        when ``entity_tables`` is unset (every table judged)."""
+
+        if self.entity_tables is None:
+            return None
+        names = set(self.entity_tables)
+        names |= set(self.views) | set(self.judged_by) | set(self.new_row_fields)
+        if spec is not None:
+            names |= {s.surface for s in spec.side_records}
+            names |= {s.of_surface for s in spec.side_records}
+            if spec.learned is not None:
+                names |= {e.table for e in spec.learned.excuses}
+            if spec.attribution is not None:
+                names |= set(spec.attribution.owners)
+        profile = self.loaded_profile()
+        if profile is not None:
+            names |= {r.table for r in profile.rules}
+        return {table_name(n) for n in names if n}
 
     @model_serializer(mode="wrap")
     def _compact(self, handler: Any) -> dict[str, Any]:
@@ -396,6 +429,8 @@ class FrameDatabase(BaseModel):
             data.pop("read_row_budget", None)
         if not data.get("judged_by"):
             data.pop("judged_by", None)
+        if data.get("entity_tables") is None:
+            data.pop("entity_tables", None)
         return data
 
     @model_validator(mode="after")
@@ -735,6 +770,12 @@ class FrameVerdict:
     #: In memory only: rows whose source, physical key and unambiguous audit
     #: identity the database snapshot witnessed for a surface.
     added_row_witnesses: dict[str, list[AddedRowWitness]] = field(default_factory=dict)
+    #: ``frame.database.entity_tables`` only: rows that moved outside the
+    #: entity tables. They don't refute; they are logged (names only) and
+    #: offered to the learner as candidate excuses.
+    side_effects: list[FrameChange] = field(default_factory=list)
+    #: The side effects in ``moves`` form, for ``openadapt-flow learn``.
+    side_effect_moves: Optional[list[dict[str, Any]]] = None
 
     @property
     def held(self) -> bool:
@@ -772,6 +813,14 @@ class FrameVerdict:
             **({"moves": self.moves} if self.moves else {}),
             **(
                 {
+                    "side_effects": side_effect_summary(self.side_effects),
+                    "side_effect_moves": self.side_effect_moves or [],
+                }
+                if self.side_effects
+                else {}
+            ),
+            **(
+                {
                     "learned": {
                         "proposal_sha256": spec.learned.proposal_sha256,
                         "excuses": len(spec.learned.excuses),
@@ -783,6 +832,31 @@ class FrameVerdict:
                 else {}
             ),
         }
+
+
+#: Column prefixes of a generated contract's own check columns
+#: (``generate.verify_contract``): ``pin__x`` and ``empty__x`` are 1 or 0,
+#: computed by the read from stored columns (and, for a copied or clock pin,
+#: from another row or the clock). They are checks, not stored values: one
+#: can flip on an untouched row as the clock moves. With ``frame.database``
+#: the stored columns they are computed from are compared themselves, so an
+#: undeclared row's check columns are not compared.
+DERIVED_CHECK_PREFIXES: tuple[str, ...] = ("pin__", "empty__")
+
+
+def side_effect_summary(changes: Sequence[FrameChange]) -> list[dict[str, Any]]:
+    """Logged side effects by table and change: counts and column names,
+    never keys or values."""
+
+    groups: dict[tuple[str, str], dict[str, Any]] = {}
+    for c in changes:
+        g = groups.setdefault(
+            (c.surface, c.change),
+            {"table": c.surface, "change": c.change, "rows": 0, "columns": set()},
+        )
+        g["rows"] += 1
+        g["columns"].update(c.fields)
+    return [{**g, "columns": sorted(g["columns"])} for _k, g in sorted(groups.items())]
 
 
 def _not_checked(reason: str, attribution: str = "none") -> FrameVerdict:
@@ -1054,6 +1128,14 @@ def judge_frame(
             return set(cols) | {KEY}
         return surface_ignore
 
+    def derived(name: str, fields: Sequence[str]) -> list[str]:
+        """``fields`` without the contract's own check columns, on a surface
+        (not a database table) of a frame that diffs the whole database."""
+
+        if database is None or name in hashers:
+            return list(fields)
+        return [f for f in fields if not str(f).startswith(DERIVED_CHECK_PREFIXES)]
+
     def identity_of(name: str) -> Optional[str]:
         if identities is not None and name in identities:
             return identities[name]
@@ -1079,7 +1161,7 @@ def judge_frame(
         ignore = ignore_for(name)
         hasher = hashers.get(name)
         if hasher is None:
-            return _changed_fields(before, after, ignore)
+            return derived(name, _changed_fields(before, after, ignore))
         fields = sorted(
             k
             for k in before
@@ -2173,6 +2255,23 @@ def judge_frame(
                     )
                 )
 
+    side_effects: list[FrameChange] = []
+    scope = database.entity_scope(spec) if database is not None else None
+    if scope is not None:
+        hard: list[FrameChange] = []
+        for c in collateral:
+            if (
+                c.surface in hashers
+                and (c.surface, str(c.key)) in rows_seen
+                and c.change in ("added", "changed")
+                and not (c.on_target or c.other_on_target or c.audit_only)
+                and table_name(c.surface) not in scope
+            ):
+                side_effects.append(c)
+            else:
+                hard.append(c)
+        collateral = hard
+
     verdict = FrameVerdict(
         status="refuted" if collateral else "held",
         reason="",
@@ -2188,6 +2287,10 @@ def judge_frame(
         else None,
         learned_used=learned_used,
         unverified_columns=unverified_columns,
+        side_effects=side_effects,
+        side_effect_moves=_moves(side_effects, rows_seen, hashers, actor, added_columns)
+        if side_effects
+        else None,
     )
     verdict.reason = _reason(verdict)
     if (
@@ -2312,6 +2415,15 @@ def _reason(verdict: FrameVerdict) -> str:
         parts.append(
             f"nothing outside the declared delta changed across "
             f"{verdict.records_compared} record(s)"
+        )
+    if verdict.side_effects:
+        tables = sorted({c.surface for c in verdict.side_effects})
+        sample_tables = [t for idx, t in enumerate(tables) if idx < _SAMPLE_LIMIT]
+        parts.append(
+            f"{len(verdict.side_effects)} row(s) moved outside the entity tables "
+            f"({', '.join(sample_tables)}"
+            f"{'' if len(tables) <= _SAMPLE_LIMIT else ', ...'}): logged as side "
+            "effects, not counted against this save"
         )
     if verdict.concurrent:
         parts.append(

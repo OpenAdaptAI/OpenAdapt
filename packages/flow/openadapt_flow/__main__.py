@@ -13177,6 +13177,7 @@ def build_parser() -> argparse.ArgumentParser:
     for _name in (
         "cli_rollback",
         "cli_shadow",
+        "cli_gate",
         "readiness.cli",
         "onboard.cli",
         "cli_receipt",
@@ -13630,6 +13631,7 @@ _STRICT_SAFE_COMMANDS: frozenset[str] = frozenset(
         "openadapt_flow.cli_no_outbound:_cmd_list",
         "openadapt_flow.cli_no_outbound:_cmd_remove",
         "openadapt_flow.cli_local_seal:_guarded",
+        "openadapt_flow.cli_gate:cmd_gate",
         "openadapt_flow.cli_receipt:cmd_anchor",
         "openadapt_flow.cli_receipt:cmd_keys_export",
         "openadapt_flow.cli_receipt:cmd_verify",

@@ -1,7 +1,7 @@
 {
  "columns": 100,
  "help": {
-  "openadapt-flow": "usage: openadapt-flow [-h] [--version] {command} ...\n\nRecord a task and compile it into a program that runs on this computer. With a record check\nconfigured, a governed run confirms each save by reading the record back, and a run that can't\nconfirm a save stops and asks a person. When the screen changes, it finds the same field again or\nstops, and a lasting fix needs a person's approval.\n\noptions:\n  -h, --help  show this help message and exit\n  --version   Show the version and exit\n\ncommands:\n  {command}\n    demo      Try the demonstration and tutorial\n    verify    Check effects, receipts, and evidence\n    record    Record a task and its narration\n    teach     Teach a correction to a stopped workflow\n    compile   Compile and prepare workflow bundles\n    run       Run, resume, and route workflows\n    approve   Review and approve paused work\n    undo      Declare and run approved undo steps\n    qualify   Qualify a workflow for its intended use\n    repair    Review, test, and promote repairs\n    inspect   Inspect workflows, runs, and reports\n    workflow  Manage reusable workflow libraries\n    services  Run local services and connectors\n    setup     Configure connections, privacy, and access\n    research  Run benchmarks and research tools\n\nNew here? Run 'openadapt-flow demo' to see a checked run and a stopped run side by side on one\npage.\n\nLegacy commands (original spellings):\n  admit\n  api\n  approve\n  approve-sanitized\n  approver-grant\n  at-rest\n  attach-seal\n  bench\n  benchmark\n  bind-record-checks\n  browser-accessibility\n  business-decisions\n  certify\n  check\n  cleanup\n  compile\n  compile-agent\n  compose\n  confirm-surfaces\n  connect\n  connector\n  console\n  countersign\n  deferred\n  demo\n  demo-record\n  disambiguate\n  emit-mcp\n  emit-skill\n  encrypt\n  exceptions\n  explain\n  fleet\n  flight\n  for-each\n  guard\n  handoff\n  hooks\n  induce\n  intake\n  item-approval\n  jit\n  known-ids\n  learn\n  ledger\n  lint\n  local-seal\n  login\n  materialize-approved\n  narration\n  no-outbound\n  onboard\n  plan\n  process\n  propose-qualification\n  proxy\n  pull\n  push\n  qualify\n  readiness\n  receipt\n  reconcile\n  record\n  redact-report\n  repair\n  replay\n  report-break\n  report-run\n  resume\n  review-sanitized\n  rollback\n  route\n  run\n  sanitize\n  scaffold-verifier\n  sections\n  serve-execute\n  serve-reward\n  service\n  shadow\n  silent-saves\n  skill\n  teach\n  teach-authorization\n  teach-branch\n  triage\n  tutorial\n  undo\n  validate-hosted\n  variants\n  verify-run\n  visualize\n  wrap-dispatch\n",
+  "openadapt-flow": "usage: openadapt-flow [-h] [--version] {command} ...\n\nRecord a task and compile it into a program that runs on this computer. With a record check\nconfigured, a governed run confirms each save by reading the record back, and a run that can't\nconfirm a save stops and asks a person. When the screen changes, it finds the same field again or\nstops, and a lasting fix needs a person's approval.\n\noptions:\n  -h, --help  show this help message and exit\n  --version   Show the version and exit\n\ncommands:\n  {command}\n    demo      Try the demonstration and tutorial\n    verify    Check effects, receipts, and evidence\n    record    Record a task and its narration\n    teach     Teach a correction to a stopped workflow\n    compile   Compile and prepare workflow bundles\n    run       Run, resume, and route workflows\n    approve   Review and approve paused work\n    undo      Declare and run approved undo steps\n    qualify   Qualify a workflow for its intended use\n    repair    Review, test, and promote repairs\n    inspect   Inspect workflows, runs, and reports\n    workflow  Manage reusable workflow libraries\n    services  Run local services and connectors\n    setup     Configure connections, privacy, and access\n    research  Run benchmarks and research tools\n\nNew here? Run 'openadapt-flow demo' to see a checked run and a stopped run side by side on one\npage.\n\nLegacy commands (original spellings):\n  admit\n  api\n  approve\n  approve-sanitized\n  approver-grant\n  at-rest\n  attach-seal\n  bench\n  benchmark\n  bind-record-checks\n  browser-accessibility\n  business-decisions\n  certify\n  check\n  cleanup\n  compile\n  compile-agent\n  compose\n  confirm-surfaces\n  connect\n  connector\n  console\n  countersign\n  deferred\n  demo\n  demo-record\n  disambiguate\n  emit-mcp\n  emit-skill\n  encrypt\n  exceptions\n  explain\n  fleet\n  flight\n  for-each\n  gate\n  guard\n  handoff\n  hooks\n  induce\n  intake\n  item-approval\n  jit\n  known-ids\n  learn\n  ledger\n  lint\n  local-seal\n  login\n  materialize-approved\n  narration\n  no-outbound\n  onboard\n  plan\n  process\n  propose-qualification\n  proxy\n  pull\n  push\n  qualify\n  readiness\n  receipt\n  reconcile\n  record\n  redact-report\n  repair\n  replay\n  report-break\n  report-run\n  resume\n  review-sanitized\n  rollback\n  route\n  run\n  sanitize\n  scaffold-verifier\n  sections\n  serve-execute\n  serve-reward\n  service\n  shadow\n  silent-saves\n  skill\n  teach\n  teach-authorization\n  teach-branch\n  triage\n  tutorial\n  undo\n  validate-hosted\n  variants\n  verify-run\n  visualize\n  wrap-dispatch\n",
   "openadapt-flow admit": "usage: openadapt-flow admit [-h] {run,decide,status} ...\n\npositional arguments:\n  {run,decide,status}\n    run                Compile, induce, propose checks, and stop once for a person's decision (the\n                       default form: `admit <recordings...>`)\n    decide             Show a stopped admission's summary and decide it (a person, at a terminal)\n    status             Print admitted vs not-admitted for Flow from the public ledger. Never mints\n                       a signature.\n\noptions:\n  -h, --help           show this help message and exit\n\nAlso available as: openadapt-flow run --task-admit\n",
   "openadapt-flow admit decide": "usage: openadapt-flow admit decide [-h] [--by BY] admission\n\npositional arguments:\n  admission   Admission directory from `admit`\n\noptions:\n  -h, --help  show this help message and exit\n  --by BY     Your name for the record\n\nAlso available as: openadapt-flow run --task-admit decide\n",
   "openadapt-flow admit run": "usage: openadapt-flow admit run [-h] [--candidate ID] [--candidates-root CANDIDATES_ROOT] --out\n                                OUT --name NAME [--policy-pack {community,cloud,regulated}]\n                                [--by BY]\n                                [recordings ...]\n\npositional arguments:\n  recordings            Recording directories (or compiled bundles) of the same task\n\noptions:\n  -h, --help            show this help message and exit\n  --candidate ID        A shadow candidate id under --candidates-root, or its folder. Its\n                        recordings/ folder is used when no recordings are given\n  --candidates-root CANDIDATES_ROOT\n                        Where shadow candidates are kept (default: ./shadow-candidates)\n  --out OUT             New admission directory\n  --name NAME           Workflow name\n  --policy-pack {community,cloud,regulated}\n  --by BY               Your name for the record (default: your login name)\n\nAlso available as: openadapt-flow run --task-admit run\n",
@@ -85,6 +85,11 @@
   "openadapt-flow fleet status": "usage: openadapt-flow fleet status [-h] [--json]\n\noptions:\n  -h, --help  show this help message and exit\n  --json\n\nAlso available as: openadapt-flow services fleet status\n",
   "openadapt-flow flight": "usage: openadapt-flow flight [-h] [--task-id TASK_ID] [--out OUT] [--label LABEL]\n                             [--gate {terminal,file,refuse}] [--approval-timeout APPROVAL_TIMEOUT]\n                             [--cdp CDP] [--guard-config GUARD_CONFIG] [--guard-task GUARD_TASK]\n                             [--max-cost-usd MAX_COST_USD] [--no-scrub] [--i-accept-unscrubbed]\n                             [--safe-label LABEL] [--allow-unenforced-egress] [--no-egress-block]\n                             [--json]\n                             ...\n\n``openadapt-flow flight``: record any agent's run, gate its commits.\n\n    openadapt-flow flight [--task-id ID] [--cdp URL] [--max-cost-usd N] -- CMD ...\n\nStarts a loopback proxy in front of the model API and runs CMD with\nANTHROPIC_BASE_URL and OPENAI_BASE_URL pointing at it, so every model call\nis metered and priced, and the request's text and its screenshots in PNG,\nJPEG, GIF, BMP, TIFF or WEBP are scrubbed of personal data on this machine\nbefore it is sent (other image formats, and data an agent re-encodes on\npurpose, are not covered; see \"What the scrubber does not cover\" in\nFLIGHT_RECORDER.md). The provider the agent\nalready targets (its own *_BASE_URL, else the provider's API) is the only\nplace anything is sent; the agent's key passes through untouched and is\nnever logged.\n\nCMD also gets OPENADAPT_FLIGHT_GATE_URL: an executor wrapped with\nGatedComputer or GatedComputerCall (one line, see FLIGHT_RECORDER.md) logs\nits actions here and holds each click that is not known to be safe (only\nfocus/view roles and a short list such as Cancel, Close, Back, Search, Open\npass; --safe-label adds to it) for a person: --gate terminal asks y/N on\nthis terminal, --gate file writes an item-approval request Desktop or a\npaired phone answers, --gate refuse holds every one.\n\nCMD runs under an OS egress block (openadapt_flow.flight.egress): on macOS,\nsandbox-exec denies every outbound connection except to loopback, so a\ndirect connection from CMD or anything it starts (a browser included)\nfails; work handed to a process outside that tree is not covered. Where the block isn't available\n(any other system) the run refuses to start unless --allow-unenforced-egress\nis given; --no-egress-block turns it off on macOS too. Either is recorded in\nflight.json and egress.json.\n\nThe run is marked refused (exit 3, flight.json details.egress.refused) when\nmodel calls went around the proxy: CMD's usage.json (OPENADAPT_USAGE_PATH,\nopenadapt.agent-usage/v1) reports more calls than the proxy saw, or a direct\nconnection through the proxy variables was trapped.\n\nWith --cdp (or when CMD starts Chromium with --remote-debugging-port), the\nexisting `openadapt-flow guard` also attaches to the browser, given\n--guard-config and --guard-task.\n\nWrites flight.json (openadapt.flight-run/v1), egress.json, timeline.jsonl,\nscrubbed frame thumbnails and timeline.html in the run directory, and prints\nits path. Exit status: CMD's own; 3 when the run is refused for egress\noutside the proxy; 2 when the run could not start (no scrubber, no egress\nblock, a bad option, CMD not found).\n\npositional arguments:\n  command               -- CMD ...\n\noptions:\n  -h, --help            show this help message and exit\n  --task-id TASK_ID     the task this run does (default: generated)\n  --out OUT             the run directory (default: flight-runs/<time>-<task>)\n  --label LABEL         names the agent or worker in flight.json (default: CMD's name)\n  --gate {terminal,file,refuse}\n                        who decides a held action: y/N on this terminal (refuses with no\n                        terminal), an item-approval request for Desktop or a phone, or nobody\n  --approval-timeout APPROVAL_TIMEOUT\n                        seconds --gate file waits for a person before the action stays held\n  --cdp CDP             the agent's Chromium DevTools URL, to run the guard\n  --guard-config GUARD_CONFIG\n                        guard.yaml for the guard\n  --guard-task GUARD_TASK\n                        the guard's task file (openadapt.guard-task/v1)\n  --max-cost-usd MAX_COST_USD\n                        refuse model calls (HTTP 429) once this much is spent; an unpriced model\n                        is refused too, since the cap can't be enforced\n  --no-scrub            send screenshots and text unscrubbed (needs --i-accept-unscrubbed)\n  --i-accept-unscrubbed\n                        confirm --no-scrub; recorded in flight.json and the local ledger\n  --safe-label LABEL    a control label a click may pass on without a person, besides the built-in\n                        Cancel, Close, Back, Search, Open, View... (repeatable; a label with Save,\n                        Submit, Send... is refused); recorded in flight.json\n  --allow-unenforced-egress\n                        run even where the OS egress block is not available (any system but\n                        macOS); a call that skips the proxy is then not blocked. Recorded\n  --no-egress-block     don't put CMD under the OS egress block even where it is available (the\n                        behaviour before the block); recorded\n  --json                print flight.json\n\nAlso available as: openadapt-flow run --flight\n",
   "openadapt-flow for-each": "usage: openadapt-flow for-each [-h] --records RECORDS --out OUT [--map COLUMN=PARAM]\n                               [--relation RELATION] [--max-iterations MAX_ITERATIONS]\n                               [--loop-var LOOP_VAR] [--name NAME]\n                               bundle\n\npositional arguments:\n  bundle                Existing single-demonstration bundle directory (the linear body)\n\noptions:\n  -h, --help            show this help message and exit\n  --records RECORDS     Worklist file (.csv header names columns, or .json list of row objects);\n                        one record = one loop iteration\n  --out OUT             Output program-bundle directory\n  --map COLUMN=PARAM    Map a worklist COLUMN to a workflow PARAM (repeatable). Omit to map each\n                        column to the parameter of the same name. Every column must map to a known\n                        non-secret parameter or authoring FAILS LOUDLY.\n  --relation RELATION   Name of the emitted loop relation (default: 'worklist')\n  --max-iterations MAX_ITERATIONS\n                        Hard fail-safe bound on iterations (default 1000); a worklist longer than\n                        this is refused at authoring time and HALTs at run time\n  --loop-var LOOP_VAR   Optional human label for the loop variable (reports only)\n  --name NAME           Name for the looped workflow (default: '<body>-for-each')\n\nAlso available as: openadapt-flow run --for-each\n",
+  "openadapt-flow gate": "usage: openadapt-flow gate [-h] {status,label,enable,disable} ...\n\npositional arguments:\n  {status,label,enable,disable}\n    status              mode, clean checks in a row, whether gating is offered\n    label               label one stop: caught (a real harm) or false_stop\n    enable              turn gating on (only once it is offered)\n    disable             go back to shadow\n\noptions:\n  -h, --help            show this help message and exit\n\nAlso available as: openadapt-flow verify gate\n",
+  "openadapt-flow gate disable": "usage: openadapt-flow gate disable [-h] --by BY contract\n\npositional arguments:\n  contract\n\noptions:\n  -h, --help  show this help message and exit\n  --by BY     who decided\n\nAlso available as: openadapt-flow verify gate disable\n",
+  "openadapt-flow gate enable": "usage: openadapt-flow gate enable [-h] --by BY contract\n\npositional arguments:\n  contract\n\noptions:\n  -h, --help  show this help message and exit\n  --by BY     who decided\n\nAlso available as: openadapt-flow verify gate enable\n",
+  "openadapt-flow gate label": "usage: openadapt-flow gate label [-h] contract write_id {caught,false_stop}\n\npositional arguments:\n  contract\n  write_id\n  {caught,false_stop}\n\noptions:\n  -h, --help           show this help message and exit\n\nAlso available as: openadapt-flow verify gate label\n",
+  "openadapt-flow gate status": "usage: openadapt-flow gate status [-h] [--json] contract\n\npositional arguments:\n  contract\n\noptions:\n  -h, --help  show this help message and exit\n  --json\n\nAlso available as: openadapt-flow verify gate status\n",
   "openadapt-flow guard": "usage: openadapt-flow guard [-h] --cdp CDP --config CONFIG --task TASK --out OUT\n                            [--page-url PAGE_URL] [--observe-only]\n                            [--approval {not_gated,each_item}] [--timeout TIMEOUT]\n                            [--attach-wait ATTACH_WAIT] [--secret FIELD] [--no-teach]\n                            [--ledger-row | --no-ledger-row] [--json]\n\n``openadapt-flow guard``: guard an agent you already run.\n\nStart your agent's Chromium with a DevTools port (the one line you add), then\nstart the guard for the task before the agent starts it::\n\n    openadapt-flow guard --cdp http://127.0.0.1:9222 \\\n        --config guard.yaml --task task.json --out runs/task-0001\n\nThe guard attaches to the agent's tab, holds every save until the record on\nscreen is the one ``task.json`` names, reads the save back, and records the\nrun. With a ``teach:`` section, a run that reads back correctly becomes a\ndraft program a person confirms and admits (``compile-agent admit``).\n\nExit status: 0 the save was read back VERIFIED; 3 a save was blocked and none\nwent through; 4 the save went through and was not verified (REFUTED or\nRECONCILIATION_REQUIRED: a person checks the record); 5 no save was seen;\n2 the config, the task or the browser could not be used.\n\noptions:\n  -h, --help            show this help message and exit\n  --cdp CDP             the agent's Chromium DevTools endpoint on this computer\n                        (http://127.0.0.1:9222)\n  --config CONFIG       guard.yaml\n  --task TASK           the task file (openadapt.guard-task/v1) from whoever assigned it\n  --out OUT             new folder for this task's run\n  --page-url PAGE_URL   the tab's exact URL, when more than one tab is open on the app\n  --observe-only        never block: log what the guard would block, still read back\n  --approval {not_gated,each_item}\n                        override guard.yaml: each_item holds every save for a person\n  --timeout TIMEOUT     seconds before the guard stops\n  --attach-wait ATTACH_WAIT\n                        seconds to wait for the agent's tab on the app\n  --secret FIELD        a field name or id whose value is never recorded (repeatable)\n  --no-teach            don't hand a verified run to the teach dir\n  --ledger-row, --no-ledger-row\n                        write guard_ledger_row.json and guard_diff.private.json (default on)\n  --json                print the result as JSON\n\nAlso available as: openadapt-flow run --guard\n",
   "openadapt-flow handoff": "usage: openadapt-flow handoff [-h] {send,verify,key,trust,list} ...\n\npositional arguments:\n  {send,verify,key,trust,list}\n    send                Attach a run's receipt to a payload (inline, detached, or POSTed)\n    verify              Verify a handoff's receipt against your pinned keys\n    key                 Print this computer's receipt key, for another agent to trust\n    trust               Add another party's key (from `handoff key`) to your key registry\n    list                Open handoffs by state, with who still needs to follow up\n\noptions:\n  -h, --help            show this help message and exit\n\nAlso available as: openadapt-flow verify handoff\n",
   "openadapt-flow handoff key": "usage: openadapt-flow handoff key [-h]\n\noptions:\n  -h, --help  show this help message and exit\n\nAlso available as: openadapt-flow verify handoff key\n",
@@ -120,9 +125,13 @@
   "openadapt-flow known-ids": "usage: openadapt-flow known-ids [-h] {confirm,status} ...\n\npositional arguments:\n  {confirm,status}\n    confirm         Confirm the export's source and completeness (recorded)\n    status          Would replay accept this list now?\n\noptions:\n  -h, --help        show this help message and exit\n\nAlso available as: openadapt-flow verify known-ids\n",
   "openadapt-flow known-ids confirm": "usage: openadapt-flow known-ids confirm [-h] [--column COLUMN] [--confirmation CONFIRMATION]\n                                        --source SOURCE [--by BY] [--exported-at EXPORTED_AT]\n                                        [--yes]\n                                        export\n\npositional arguments:\n  export                Export file (CSV/TSV, JSON, or one ID per line)\n\noptions:\n  -h, --help            show this help message and exit\n  --column COLUMN       Identifier column (CSV/TSV)\n  --confirmation CONFIRMATION\n                        Confirmation record (default: EXPORT.confirmation.json)\n  --source SOURCE       Which system and export this is\n  --by BY               Who confirms (default: your user name)\n  --exported-at EXPORTED_AT\n                        When the export was taken (default: file time)\n  --yes                 Skip the interactive prompt\n\nAlso available as: openadapt-flow verify known-ids confirm\n",
   "openadapt-flow known-ids status": "usage: openadapt-flow known-ids status [-h] [--column COLUMN] [--confirmation CONFIRMATION]\n                                       [--max-age-hours MAX_AGE_HOURS]\n                                       export\n\npositional arguments:\n  export                Export file (CSV/TSV, JSON, or one ID per line)\n\noptions:\n  -h, --help            show this help message and exit\n  --column COLUMN       Identifier column (CSV/TSV)\n  --confirmation CONFIRMATION\n                        Confirmation record (default: EXPORT.confirmation.json)\n  --max-age-hours MAX_AGE_HOURS\n\nAlso available as: openadapt-flow verify known-ids status\n",
-  "openadapt-flow learn": "usage: openadapt-flow learn [-h] {collect,propose,approve,probe} ...\n\npositional arguments:\n  {collect,propose,approve,probe}\n    collect             run a shadow and record each check\n    propose             write a proposal a person can read\n    approve             write the approved excuses into contracts\n    probe               learn per-request bookkeeping from read-only requests (no approval)\n\noptions:\n  -h, --help            show this help message and exit\n\nAlso available as: openadapt-flow teach --learn\n",
+  "openadapt-flow learn": "usage: openadapt-flow learn [-h] {collect,propose,approve,probe,entities} ...\n\npositional arguments:\n  {collect,propose,approve,probe,entities}\n    collect             run a shadow and record each check\n    propose             write a proposal a person can read\n    approve             write the approved excuses into contracts\n    probe               learn per-request bookkeeping from read-only requests (no approval)\n    entities            scope the whole-database frame to the setup's business entities\n\noptions:\n  -h, --help            show this help message and exit\n\nAlso available as: openadapt-flow teach --learn\n",
   "openadapt-flow learn approve": "usage: openadapt-flow learn approve [-h] --by BY [--config CONFIG] [--manifest MANIFEST]\n                                    [--contract KIND=PATH] [--kind KIND] [--reject ID]\n                                    proposal\n\npositional arguments:\n  proposal\n\noptions:\n  -h, --help            show this help message and exit\n  --by BY               who approves (recorded)\n  --config CONFIG       the shadow config's routes\n  --manifest MANIFEST   a generator manifest.yaml\n  --contract KIND=PATH  a contract file for a kind (repeatable)\n  --kind KIND           approve only these\n  --reject ID           leave out E<n>\n\nAlso available as: openadapt-flow teach --learn approve\n",
   "openadapt-flow learn collect": "usage: openadapt-flow learn collect [-h] --config CONFIG [--out OUT] [--actor ACTOR]\n                                    [--listen LISTEN] [--until-idle SECONDS]\n\noptions:\n  -h, --help            show this help message and exit\n  --config CONFIG       openadapt.shadow/v1 YAML (sql)\n  --out OUT             folder for episodes.jsonl\n  --actor ACTOR         the agent's user id in the app\n  --listen LISTEN\n  --until-idle SECONDS\n\nAlso available as: openadapt-flow teach --learn collect\n",
+  "openadapt-flow learn entities": "usage: openadapt-flow learn entities [-h] {propose,stage,apply} ...\n\npositional arguments:\n  {propose,stage,apply}\n    propose             derive the entity tables from the setup\n    stage               a scoped copy of the setup, for the faults\n    apply               write the scope in, if the faults were all caught\n\noptions:\n  -h, --help            show this help message and exit\n\nAlso available as: openadapt-flow teach --learn entities\n",
+  "openadapt-flow learn entities apply": "usage: openadapt-flow learn entities apply [-h] --faults FAULTS --by BY proposal\n\npositional arguments:\n  proposal\n\noptions:\n  -h, --help       show this help message and exit\n  --faults FAULTS  openadapt.relaxation-faults/v1 JSON\n  --by BY\n\nAlso available as: openadapt-flow teach --learn entities apply\n",
+  "openadapt-flow learn entities propose": "usage: openadapt-flow learn entities propose [-h] --manifest MANIFEST [--read READ]\n                                             [--schema SCHEMA] [--out OUT]\n\noptions:\n  -h, --help           show this help message and exit\n  --manifest MANIFEST\n  --read READ          read.yaml (the read-only account)\n  --schema SCHEMA      schema.json from `generate schema`\n  --out OUT\n\nAlso available as: openadapt-flow teach --learn entities propose\n",
+  "openadapt-flow learn entities stage": "usage: openadapt-flow learn entities stage [-h] --out OUT proposal\n\npositional arguments:\n  proposal\n\noptions:\n  -h, --help  show this help message and exit\n  --out OUT\n\nAlso available as: openadapt-flow teach --learn entities stage\n",
   "openadapt-flow learn probe": "usage: openadapt-flow learn probe [-h] --manifest MANIFEST --kind KIND --values VALUES\n                                  [--extra EXTRA] --actor ACTOR --base-url BASE_URL\n                                  [--headers-env HEADERS_ENV] [--get PATH] [--head PATH]\n                                  [--rounds ROUNDS] [--users USERS] [--user-column TABLE.COLUMN]\n                                  [--schema SCHEMA] [--read READ] [--out OUT] [--apply]\n\noptions:\n  -h, --help            show this help message and exit\n  --manifest MANIFEST   the generator's manifest.yaml\n  --kind KIND           the kind whose contract frames the probe\n  --values VALUES       YAML: one task's values for that kind\n  --extra EXTRA         YAML: extra parameters (actor ids)\n  --actor ACTOR         the agent's user id in the app\n  --base-url BASE_URL\n  --headers-env HEADERS_ENV\n                        environment variable holding the agent's request headers as JSON\n  --get PATH\n  --head PATH\n  --rounds ROUNDS\n  --users USERS         TABLE or TABLE.KEY (default: derived)\n  --user-column TABLE.COLUMN\n  --schema SCHEMA\n  --read READ\n  --out OUT\n  --apply               write the excuses into every contract the manifest lists\n\nAlso available as: openadapt-flow teach --learn probe\n",
   "openadapt-flow learn propose": "usage: openadapt-flow learn propose [-h] --episodes EPISODES [--users USERS]\n                                    [--user-column TABLE.COLUMN] [--schema SCHEMA] [--read READ]\n                                    [--k K] [--n N] [--out OUT]\n\noptions:\n  -h, --help            show this help message and exit\n  --episodes EPISODES   episodes.jsonl\n  --users USERS         the users table, as TABLE or TABLE.KEY (without it only the write's own\n                        rows can be excused)\n  --user-column TABLE.COLUMN\n                        a column holding a user id, confirmed by you (repeatable)\n  --schema SCHEMA       schema.json from `generate schema`\n  --read READ           read.yaml: read the schema's foreign keys live\n  --k K\n  --n N\n  --out OUT\n\nAlso available as: openadapt-flow teach --learn propose\n",
   "openadapt-flow ledger": "usage: openadapt-flow ledger [-h] [--home HOME] {add,list,show,summary,export,push} ...\n\npositional arguments:\n  {add,list,show,summary,export,push}\n    add                 Read a run's files and append its row\n    list                List rows\n    show                Show one row\n    summary             Counts per outcome, minutes, cost, duration\n    export              Write value-free rows as JSONL\n    push                Send value-free run summaries to OpenAdapt Cloud (OPENADAPT_API_KEY)\n\noptions:\n  -h, --help            show this help message and exit\n  --home HOME           OpenAdapt home (default: $OPENADAPT_HOME, else ~/.openadapt)\n\nAlso available as: openadapt-flow inspect ledger\n",
@@ -368,6 +377,7 @@
     "fleet": [],
     "flight": [],
     "for-each": [],
+    "gate": [],
     "guard": [],
     "handoff": [],
     "hooks": [],
@@ -7608,6 +7618,233 @@
    "commands": {},
    "exclusive": []
   },
+  "openadapt-flow gate": {
+   "arguments": [
+    {
+     "action": "_HelpAction",
+     "choices": null,
+     "default": "==SUPPRESS==",
+     "dest": "help",
+     "help": "show this help message and exit",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "-h",
+      "--help"
+     ],
+     "required": false,
+     "type": null
+    }
+   ],
+   "commands": {
+    "disable": [],
+    "enable": [],
+    "label": [],
+    "status": []
+   },
+   "exclusive": []
+  },
+  "openadapt-flow gate disable": {
+   "arguments": [
+    {
+     "action": "_HelpAction",
+     "choices": null,
+     "default": "==SUPPRESS==",
+     "dest": "help",
+     "help": "show this help message and exit",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "-h",
+      "--help"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "contract",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "by",
+     "help": "who decided",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--by"
+     ],
+     "required": true,
+     "type": null
+    }
+   ],
+   "commands": {},
+   "exclusive": []
+  },
+  "openadapt-flow gate enable": {
+   "arguments": [
+    {
+     "action": "_HelpAction",
+     "choices": null,
+     "default": "==SUPPRESS==",
+     "dest": "help",
+     "help": "show this help message and exit",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "-h",
+      "--help"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "contract",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "by",
+     "help": "who decided",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--by"
+     ],
+     "required": true,
+     "type": null
+    }
+   ],
+   "commands": {},
+   "exclusive": []
+  },
+  "openadapt-flow gate label": {
+   "arguments": [
+    {
+     "action": "_HelpAction",
+     "choices": null,
+     "default": "==SUPPRESS==",
+     "dest": "help",
+     "help": "show this help message and exit",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "-h",
+      "--help"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "contract",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "write_id",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": [
+      "caught",
+      "false_stop"
+     ],
+     "default": null,
+     "dest": "verdict",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [],
+     "required": true,
+     "type": null
+    }
+   ],
+   "commands": {},
+   "exclusive": []
+  },
+  "openadapt-flow gate status": {
+   "arguments": [
+    {
+     "action": "_HelpAction",
+     "choices": null,
+     "default": "==SUPPRESS==",
+     "dest": "help",
+     "help": "show this help message and exit",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "-h",
+      "--help"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "contract",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreTrueAction",
+     "choices": null,
+     "default": false,
+     "dest": "json",
+     "help": null,
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "--json"
+     ],
+     "required": false,
+     "type": null
+    }
+   ],
+   "commands": {},
+   "exclusive": []
+  },
   "openadapt-flow guard": {
    "arguments": [
     {
@@ -10742,6 +10979,7 @@
    "commands": {
     "approve": [],
     "collect": [],
+    "entities": [],
     "probe": [],
     "propose": []
    },
@@ -10950,6 +11188,216 @@
      ],
      "required": false,
      "type": "float"
+    }
+   ],
+   "commands": {},
+   "exclusive": []
+  },
+  "openadapt-flow learn entities": {
+   "arguments": [
+    {
+     "action": "_HelpAction",
+     "choices": null,
+     "default": "==SUPPRESS==",
+     "dest": "help",
+     "help": "show this help message and exit",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "-h",
+      "--help"
+     ],
+     "required": false,
+     "type": null
+    }
+   ],
+   "commands": {
+    "apply": [],
+    "propose": [],
+    "stage": []
+   },
+   "exclusive": []
+  },
+  "openadapt-flow learn entities apply": {
+   "arguments": [
+    {
+     "action": "_HelpAction",
+     "choices": null,
+     "default": "==SUPPRESS==",
+     "dest": "help",
+     "help": "show this help message and exit",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "-h",
+      "--help"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "proposal",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "faults",
+     "help": "openadapt.relaxation-faults/v1 JSON",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--faults"
+     ],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "by",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--by"
+     ],
+     "required": true,
+     "type": null
+    }
+   ],
+   "commands": {},
+   "exclusive": []
+  },
+  "openadapt-flow learn entities propose": {
+   "arguments": [
+    {
+     "action": "_HelpAction",
+     "choices": null,
+     "default": "==SUPPRESS==",
+     "dest": "help",
+     "help": "show this help message and exit",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "-h",
+      "--help"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "manifest",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--manifest"
+     ],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "read",
+     "help": "read.yaml (the read-only account)",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--read"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "schema",
+     "help": "schema.json from `generate schema`",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--schema"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": "entity_scope.json",
+     "dest": "out",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--out"
+     ],
+     "required": false,
+     "type": null
+    }
+   ],
+   "commands": {},
+   "exclusive": []
+  },
+  "openadapt-flow learn entities stage": {
+   "arguments": [
+    {
+     "action": "_HelpAction",
+     "choices": null,
+     "default": "==SUPPRESS==",
+     "dest": "help",
+     "help": "show this help message and exit",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "-h",
+      "--help"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "proposal",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "out",
+     "help": null,
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--out"
+     ],
+     "required": true,
+     "type": null
     }
    ],
    "commands": {},
