@@ -2382,6 +2382,29 @@ def kernel(command_ctx: click.Context) -> None:
 
 
 @main.command(
+    "mcpify",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        # openadapt_verify.mcpify owns its argparse help.
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def mcpify(command_ctx: click.Context) -> None:
+    """Serve compiled workflow packs or JIT plans as a local MCP server."""
+    mcpify_main = _optional_engine_entrypoint(command_ctx, ("openadapt_verify.mcpify",))
+    if mcpify_main is None:
+        click.echo(
+            "Error: openadapt-verify is not installed. "
+            "Install from packages/verify (e.g. `pip install -e packages/verify`).",
+            err=True,
+        )
+        sys.exit(2)
+    sys.exit(int(mcpify_main(list(command_ctx.args)) or 0))
+
+
+@main.command(
     "hooks",
     context_settings={
         "ignore_unknown_options": True,

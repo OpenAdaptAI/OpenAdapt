@@ -1338,8 +1338,10 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     serve_source.add_argument(
         "--from-compiled",
+        nargs="?",
+        const=".openadapt/compiled",
         default=None,
-        help="Directory of JIT CompiledPlan JSON files (.openadapt/compiled) to expose as MCP tools.",
+        help="Directory of JIT CompiledPlan JSON files (default: .openadapt/compiled) to expose as MCP tools.",
     )
     serve_cmd.add_argument(
         "--server-name",
@@ -1364,8 +1366,10 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     config_source.add_argument(
         "--from-compiled",
+        nargs="?",
+        const=".openadapt/compiled",
         default=None,
-        help="Directory of JIT CompiledPlan JSON files (.openadapt/compiled).",
+        help="Directory of JIT CompiledPlan JSON files (default: .openadapt/compiled).",
     )
     config_cmd.add_argument(
         "--client",
@@ -1397,9 +1401,18 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _normalize_argv(argv: Sequence[str]) -> list[str]:
+    """Default bare ``--from-compiled`` / ``--spec`` invocations to ``serve``."""
+    tokens = list(argv)
+    if tokens and tokens[0].startswith(("--from-compiled", "--spec")):
+        return ["serve", *tokens]
+    return tokens
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = _build_parser()
-    args = parser.parse_args(argv)
+    raw_argv = list(sys.argv[1:]) if argv is None else list(argv)
+    args = parser.parse_args(_normalize_argv(raw_argv))
 
     if args.command == "serve":
         specs = (
