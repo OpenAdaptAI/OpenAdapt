@@ -1,0 +1,493 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0909af11afb88fdf016b015508ec5c87d191dfbacd8136ccbf",
+     "call_id": "call_ikEMTPe1vi49DVVS5q9PAwJV",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0909af11afb88fdf016b01550cc32087d1a4ca270d6bbf9564",
+     "call_id": "call_onB7buXuI9uW2Yi3MZspdH4T",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 111,
+       "y": 26
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0909af11afb88fdf016b01550f8ec887d18cd14d02faa22c5a",
+     "call_id": "call_QmkmeHvwzp19aFfLwlULF8qQ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 97,
+       "y": 371
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0909af11afb88fdf016b015512ac4c87d1ace5b2dbf847d1e1",
+     "call_id": "call_1TwDtCuqMDQFnrEswwePE8Ns",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Costa",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 642,
+       "y": 199
+      },
+      {
+       "text": "Joao",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 643,
+       "y": 296
+      },
+      {
+       "text": "Sales assistant",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 674,
+       "y": 478
+      },
+      {
+       "text": "555-0207",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 672,
+       "y": 546
+      },
+      {
+       "text": "j.costa@example.invalid",
+       "type": "type"
+      },
+      {
+       "scroll_x": 0,
+       "scroll_y": 505,
+       "type": "scroll",
+       "x": 1190,
+       "y": 665
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0909af11afb88fdf016b015517222487d1a05c85d45d86bad0",
+     "call_id": "call_NIjDm5tRcF8uRfynDzUo8w7v",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 720,
+       "y": 761
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0909af11afb88fdf016b01551bd08487d19a7d818e52901c5e",
+     "call_id": "call_5i670QBoQHcT9AricLLNToG8",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0909af11afb88fdf016b01551f424487d189a289f2a289a181",
+     "call_id": "call_MvXRJDOps973Sq4GI3eMGcPK",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "F11"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0909af11afb88fdf016b0155232e7887d1af39c1d494b87588",
+     "call_id": "call_FUlnmv0tYFVx3rbdvh3IKKHD",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 482,
+       "y": 158
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0909af11afb88fdf016b01552790cc87d1b5e8a041c48818a5",
+     "call_id": "call_nZdxUF5qKZaCBJEos8QKOnoZ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 553,
+       "y": 158
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0909af11afb88fdf016b01552b2c3087d192c996fdcc5c6f0b",
+     "call_id": "call_phYByDL1BAIFWdC4qew7y4v5",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 553,
+       "y": 158
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0909af11afb88fdf016b01552ee09487d194eee91608416a83",
+     "call_id": "call_KVIy2LBm9QANzYitVJuO6BjR",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 553,
+       "y": 158
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0909af11afb88fdf016b015533677087d187f2a35fe45f25a4",
+     "call_id": "call_SvRsLYSNn3MLHVjI7zk1UaLR",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 544,
+       "y": 99
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0909af11afb88fdf016b015537700487d19f263cf91b57c15e",
+     "call_id": "call_iQQ9wVzGpuNyN5JM2Gtl0pEG",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 25,
+       "y": 398
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0909af11afb88fdf016b01553b787487d1984d1658aa990925",
+     "call_id": "call_HQ5mO8IIoFVKvnaTmZXDqoyi",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 450,
+       "y": 312
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0909af11afb88fdf016b0155402fc087d1930b4b7eceea9b5f",
+     "call_id": "call_VFzw4po37lLuAl4FrM6ODkzB",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 447,
+       "y": 311
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE Joao Costa",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 111,
+   "y": 26,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 97,
+   "y": 371,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 5
+  },
+  {
+   "a": "click",
+   "x": 642,
+   "y": 199,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 4
+  },
+  {
+   "a": "click",
+   "x": 643,
+   "y": 296,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 15
+  },
+  {
+   "a": "click",
+   "x": 674,
+   "y": 478,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 8
+  },
+  {
+   "a": "click",
+   "x": 672,
+   "y": 546,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 23
+  },
+  {
+   "a": "scroll",
+   "x": 1190,
+   "y": 665,
+   "dx": 0,
+   "dy": 505
+  },
+  {
+   "a": "click",
+   "x": 720,
+   "y": 761,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "L"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F11"
+   ]
+  },
+  {
+   "a": "move",
+   "x": 482,
+   "y": 158
+  },
+  {
+   "a": "move",
+   "x": 553,
+   "y": 158
+  },
+  {
+   "a": "click",
+   "x": 553,
+   "y": 158,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 553,
+   "y": 158,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 544,
+   "y": 99,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 25,
+   "y": 398,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 450,
+   "y": 312
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 447,
+   "y": 311,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  }
+ ]
+}

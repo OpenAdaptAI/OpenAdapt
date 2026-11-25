@@ -23,13 +23,19 @@ from typing import Any, Iterable, Mapping, MutableMapping, Optional
 from urllib.parse import urlsplit
 
 from openadapt_flow.extension_network import NETWORK_SAVE_KIND, redact_network_save
+from openadapt_flow.secret_field_names import names_secret_field
 
 EVIDENCE_FILE = "extension_evidence.jsonl"
 SCHEMA = "openadapt.extension-evidence/1"
 REDACTED_VALUE = "<secret>"
 
 SECRET_NAME = re.compile(
-    r"pass(word|wd|phrase)?\b|passwd|pwd|secret|private[_-]?key|^pin$|^otp$",
+    r"pass(word|wd|phrase)?\b|passwd|pwd|secret|private[_ -]?key|api[_ -]?key|apikey|"
+    r"token|card[_ -]?(number|num|no)|cc[-_ ]?num(ber)?|cc[-_ ]?csc|cc[-_ ]?exp|"
+    r"(^|[_ -])ssn($|[_ -])|user[_ -]?ssn|social[-_ ]?security|(^|[_ -])cvv($|[_ -])|(^|[_ -])cvc($|[_ -])|"
+    r"security[-_ ]?code|^pin$|(^|[_ -])pin($|[_ -])|^otp$|(^|[_ -])otp($|[_ -])|"
+    r"^code$|sms[-_ ]?code|one[-_ ]?time[-_ ]?code|mfa|2fa|totp|authenticator|passkey|"
+    r"webauthn|duo|verification[-_ ]?code",
     re.I,
 )
 
@@ -105,7 +111,9 @@ def is_secret_field(
     if (input_type or "").lower() == "password":
         return True
     for candidate in (name, field_id):
-        if candidate and SECRET_NAME.search(str(candidate)):
+        if candidate and (
+            SECRET_NAME.search(str(candidate)) or names_secret_field(candidate)
+        ):
             return True
     _ = tag  # reserved for future tag-based rules
     return False

@@ -1,0 +1,26 @@
+[
+ {
+  "__key": "56b98baee7b08b098",
+  "name": "Cobalt Analytics",
+  "website": "cobalt.example.invalid",
+  "type": "Partner",
+  "industry": "Technology",
+  "description": "Reporting partner."
+ },
+ {
+  "__key": "8ddb8ce408d2930e7",
+  "name": "Birchwood Clinic",
+  "website": "birchwood.example.invalid",
+  "type": "Customer",
+  "industry": "Healthcare",
+  "description": "Family practice."
+ },
+ {
+  "__key": "c2a8a42aae789fe9b",
+  "name": "Alder Logistics",
+  "website": "alder.example.invalid",
+  "type": "Customer",
+  "industry": "Transportation",
+  "description": "Freight forwarding."
+ }
+]

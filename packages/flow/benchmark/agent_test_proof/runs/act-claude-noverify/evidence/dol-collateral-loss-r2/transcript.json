@@ -1,0 +1,288 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost/contact/card.php?action=create\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      113,
+      26
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Let me check whether the contact already exists first via List.",
+   "actions": [
+    {
+     "coordinate": [
+      25,
+      398
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Not existing. Create new.",
+   "actions": [
+    {
+     "coordinate": [
+      85,
+      372
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      665,
+      164
+     ]
+    },
+    {
+     "text": "Costa"
+    },
+    {
+     "coordinate": [
+      665,
+      198
+     ]
+    },
+    {
+     "text": "Joao"
+    },
+    {
+     "coordinate": [
+      665,
+      296
+     ]
+    },
+    {
+     "text": "Sales assistant"
+    },
+    {
+     "coordinate": [
+      685,
+      478
+     ]
+    },
+    {
+     "text": "555-0207"
+    },
+    {
+     "coordinate": [
+      685,
+      546
+     ]
+    },
+    {
+     "text": "j.costa@example.invalid"
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Email is scrolled; fine. Scroll down to find the Create button.",
+   "actions": [
+    {
+     "coordinate": [
+      770,
+      600
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 30
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      720,
+      756
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I created the contact Joao Costa. It isn't linked to any third party, and the job position is Sales assistant. The email is j.costa@example.invalid. I didn't touch any other fields.\n\nThe professional phone shows as 5550207 on the contact page. I typed 555-0207, and the existing contacts' phones display the same way, so this looks like Dolibarr's display formatting rather than a change to what I entered. I didn't open the edit form to confirm the stored value. I also didn't capture the record's id or URL.\n\nRESULT: DONE Contact \"Joao Costa\" created in Dolibarr (Third-parties > Contacts)",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "chars": 41
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 113,
+   "y": 26,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 25,
+   "y": 398,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 85,
+   "y": 372,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 164,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 5
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 198,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 4
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 296,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 15
+  },
+  {
+   "a": "click",
+   "x": 685,
+   "y": 478,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 8
+  },
+  {
+   "a": "click",
+   "x": 685,
+   "y": 546,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 23
+  },
+  {
+   "a": "scroll",
+   "x": 770,
+   "y": 600,
+   "dx": 0,
+   "dy": 3600
+  },
+  {
+   "a": "click",
+   "x": 720,
+   "y": 756,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ]
+}

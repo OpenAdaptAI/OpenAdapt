@@ -79,13 +79,23 @@ function TaskCard({
         <p className="task-detail">{status.detail}</p>
         <div className="task-meta">
           <LastResult workflow={task.current} />
+          <span className="task-meta-item tnum">
+            {plural(task.current.steps, "step")}
+          </span>
+          {task.current.version != null && (
+            <span className="task-meta-item mono tnum">v{task.current.version}</span>
+          )}
+          <span className="prov-chip">compiled-plan</span>
+          {task.current.certified && (
+            <span className="prov-chip prov-chip-accent">Veto-4B-r6</span>
+          )}
           {counts.done_checked > 0 && (
-            <span className="task-meta-item">
+            <span className="task-meta-item tnum">
               {plural(counts.done_checked, "item")} done and checked
             </span>
           )}
           {counts.wrong_record_prevented > 0 && (
-            <span className="task-meta-item">
+            <span className="task-meta-item tnum">
               {plural(counts.wrong_record_prevented, "wrong-record save")} prevented
             </span>
           )}
@@ -240,6 +250,39 @@ export function Tasks({
         </section>
       ) : (
         <div className="task-list">
+          <div className="lifecycle-banner" aria-label="Workflow lifecycle">
+            <div className="lifecycle-banner-step">
+              <span className="lifecycle-banner-num tnum">01</span>
+              <div>
+                <strong>Demonstrate</strong>
+                <span>Record once locally</span>
+              </div>
+            </div>
+            <span className="lifecycle-banner-arrow" aria-hidden="true">→</span>
+            <div className="lifecycle-banner-step">
+              <span className="lifecycle-banner-num tnum">02</span>
+              <div>
+                <strong>Compile</strong>
+                <span className="tnum">$0.00 / replay</span>
+              </div>
+            </div>
+            <span className="lifecycle-banner-arrow" aria-hidden="true">→</span>
+            <div className="lifecycle-banner-step">
+              <span className="lifecycle-banner-num tnum">03</span>
+              <div>
+                <strong>Verify &amp; self-heal</strong>
+                <span>Deterministic · Veto-4B-r6</span>
+              </div>
+            </div>
+            <span className="lifecycle-banner-arrow" aria-hidden="true">→</span>
+            <div className="lifecycle-banner-step">
+              <span className="lifecycle-banner-num tnum">04</span>
+              <div>
+                <strong>Signed receipt</strong>
+                <span>Bound read-back proof</span>
+              </div>
+            </div>
+          </div>
           {modeError && (
             <div className="notice warn" role="status">
               <span>{modeError}</span>

@@ -501,7 +501,9 @@ def _scope_of(
         window=Window(
             baseline_read_at=None, read_at=read_at, max_execution_window_s=None
         ),
-        strength="unchecked" if unread else _STRENGTH_BY_TIER.get(tier, "unchecked"),
+        strength=(
+            "unchecked" if unread else (_STRENGTH_BY_TIER.get(tier) or "unchecked")
+        ),
         not_covered=NOT_COVERED,
     )
 

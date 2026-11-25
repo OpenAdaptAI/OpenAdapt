@@ -1,0 +1,60 @@
+[mealie] store: 62 tables; trace: 1 write request(s)
+[mealie] demonstration: changed recipes, columns ['description', 'recipe_yield']
+[mealie] round 1: draft refused before testing: the contract does not load: invalid draft: 2 validation errors for VerifyConfig
+frame.database.allow_tables.0.contents unchanged
+  Extra inputs are not permitted [type=extra_forbidden, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.14/v/extra_forbidden
+frame.database.allow_tables.3.contents unchanged
+  Extra inputs are not permitted [type=extra_forbidden, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.14/v/extra_forbidden
+[mealie] round 2: rejected (16/17 cases, 147s)
+[mealie] round 3: rejected (0/1 cases, 7s)
+{
+ "app": "mealie",
+ "untuned": true,
+ "describe": "openapi",
+ "operator_setup_seconds": 3.4,
+ "operator_inputs": [
+  "app base URL",
+  "two users' sign-in (user, password env)",
+  "read-only DB connection",
+  "admin DB connection"
+ ],
+ "setup_minutes": 4.01,
+ "person_decisions": 0,
+ "questions": [],
+ "drafts": 3,
+ "drafts_admitted": 0,
+ "drafts_rejected": 3,
+ "admitted": false,
+ "reason": "refused after 3 round(s): [FAILED] clean clean-1: the write with payload 1. Expected confirmed, got REFUTED. Reasons: lost update: the target moved more than one version in the window, and only one save is the agent's\n[FAILED] stopped after the first clean write was not confirmed: fix that first (no fault was planted this round)",
+ "model": "claude-opus-5-5",
+ "prompt_sha256": "sha256:738a1230c4d9449f3f23487d338fce9fc8f35779f3511bf2093fc4f7c6252840",
+ "rounds": [
+  {
+   "admitted": false,
+   "faults_applicable": 7,
+   "faults_caught": 6,
+   "clean": 5,
+   "false_stops": [],
+   "probe_writes_confirmed": 5,
+   "attribution_problems": [],
+   "not_applicable": {},
+   "seconds": 146.55
+  },
+  {
+   "admitted": false,
+   "faults_applicable": 0,
+   "faults_caught": 0,
+   "clean": 1,
+   "false_stops": [
+    "clean-1"
+   ],
+   "probe_writes_confirmed": 0,
+   "attribution_problems": [],
+   "not_applicable": {},
+   "seconds": 6.7
+  }
+ ],
+ "notes": []
+}

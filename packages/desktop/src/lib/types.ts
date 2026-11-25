@@ -959,6 +959,16 @@ export type QualificationResponse =
   | QualificationProject
   | QualificationRefusal;
 
+export interface StepFrame {
+  /** Inert local data:image/* URI only; never a remote URL. */
+  data_url: string;
+  width?: number;
+  height?: number;
+  /** Optional pixel coordinate of the acted target in the frame. */
+  focus?: { x: number; y: number } | null;
+  captured_at?: string | null;
+}
+
 export interface RunStep {
   index: number;
   action: string;
@@ -966,6 +976,9 @@ export interface RunStep {
   state: StepState;
   latency_ms?: number | null;
   effect?: "verified" | "not_verified" | "checking" | null;
+  /** Optional local on-device screenshots retained before/after the step. */
+  before_screenshot?: string | StepFrame | null;
+  after_screenshot?: string | StepFrame | null;
 }
 
 export interface RunReport {
@@ -1089,9 +1102,15 @@ export interface NeedsAttention {
 }
 
 export interface PermissionStatus {
-  screen_recording: boolean;
-  accessibility: boolean;
+  screen_recording: boolean | null;
+  accessibility: boolean | null;
   input_monitoring: boolean;
+  control_permission?: {
+    setup_mode: "legacy" | "app_selection" | "unknown";
+    label: string;
+    settings_url: string;
+    instructions: string;
+  };
 }
 
 export interface FfmpegRuntimeStatus {

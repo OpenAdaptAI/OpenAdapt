@@ -39,7 +39,13 @@ from typing import Any, Callable, Iterator, Mapping, Optional, TypeVar, Union
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-def verified(contract: Any, **options: Any) -> Callable[[F], F]:
+def verified(
+    contract: Any,
+    *,
+    agent_used: Optional[str] = None,
+    verifier_adapter: str = "deterministic",
+    **options: Any,
+) -> Callable[[F], F]:
     """Decorate a write function; each call is read back from the store.
 
     ``contract`` is a path to an ``openadapt.verify/v1`` contract, the same
@@ -51,6 +57,13 @@ def verified(contract: Any, **options: Any) -> Callable[[F], F]:
     from openadapt_flow.integrations.agents import WriteGuard
 
     guard = WriteGuard(contract, **options)
+    resolved_agent = agent_used or options.get("agent_id") or "agent"
+
+    def _annotate(reply: dict) -> dict:
+        if isinstance(reply, dict):
+            reply.setdefault("agent_used", resolved_agent)
+            reply.setdefault("verifier_adapter", verifier_adapter)
+        return reply
 
     def decorate(write: F) -> F:
         signature = inspect.signature(write)
@@ -64,8 +77,10 @@ def verified(contract: Any, **options: Any) -> Callable[[F], F]:
 
             @wraps(write)
             async def checked_async(*args: Any, **kwargs: Any) -> dict:
-                return await guard.arun(
-                    arguments(args, kwargs), lambda: write(*args, **kwargs)
+                return _annotate(
+                    await guard.arun(
+                        arguments(args, kwargs), lambda: write(*args, **kwargs)
+                    )
                 )
 
             checked_async.guard = guard  # type: ignore[attr-defined]
@@ -73,7 +88,9 @@ def verified(contract: Any, **options: Any) -> Callable[[F], F]:
 
         @wraps(write)
         def checked(*args: Any, **kwargs: Any) -> dict:
-            return guard.run(arguments(args, kwargs), lambda: write(*args, **kwargs))
+            return _annotate(
+                guard.run(arguments(args, kwargs), lambda: write(*args, **kwargs))
+            )
 
         checked.guard = guard  # type: ignore[attr-defined]
         return checked  # type: ignore[return-value]
@@ -87,6 +104,8 @@ def checked_write(
     values: Mapping[str, Any],
     *,
     agent_id: str = "agent",
+    agent_used: Optional[str] = None,
+    verifier_adapter: str = "deterministic",
     workdir: Optional[Union[str, Path]] = None,
     write_receipt: bool = True,
     **options: Any,
@@ -120,6 +139,8 @@ def checked_write(
             **options,
         )
     )
+    block.agent_used = agent_used or agent_id  # type: ignore[attr-defined]
+    block.verifier_adapter = verifier_adapter  # type: ignore[attr-defined]
     try:
         yield block
     finally:

@@ -28,6 +28,11 @@
   --blue-strong: #2563eb;
   --blue-text: #1e40af;
 
+  --violet-bg: #f5f3ff;
+  --violet-border: #c4b5fd;
+  --violet-strong: #7c3aed;
+  --violet-text: #5b21b6;
+
   --radius-md: 8px;
   --radius-lg: 10px;
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
@@ -141,6 +146,12 @@ body {
   background: var(--emerald-bg);
   border-color: var(--emerald-border);
   color: var(--emerald-text);
+}
+
+.status-pill[data-status="auth_paused"] {
+  background: var(--violet-bg);
+  border-color: var(--violet-border);
+  color: var(--violet-text);
 }
 
 .refresh-btn {
@@ -591,6 +602,76 @@ body {
   text-transform: uppercase;
   color: var(--emerald-text);
   margin-bottom: 5px;
+}
+
+/* Auth / MFA Pause Card */
+.auth-pause-card {
+  background: var(--violet-bg);
+  border: 1px solid var(--violet-border);
+  border-left: 4px solid var(--violet-strong);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-pause-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.auth-pause-badge {
+  display: inline-flex;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: #ffffff;
+  color: var(--violet-text);
+  border: 1px solid var(--violet-border);
+}
+
+.auth-pause-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--violet-text);
+}
+
+.auth-pause-copy {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Child Pop-Up / Estimator Return Banner */
+.popup-banner-card {
+  background: var(--blue-bg);
+  border: 1px solid var(--blue-border);
+  border-left: 4px solid var(--blue-strong);
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.popup-banner-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--blue-text);
+}
+
+.popup-banner-copy {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 /* Empty State */

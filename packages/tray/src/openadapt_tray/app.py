@@ -19,6 +19,7 @@ import atexit
 import sys
 import threading
 import webbrowser
+from datetime import UTC
 
 import pystray
 
@@ -354,12 +355,12 @@ class TrayApplication:
 
         # Use default name if still not set
         if not name:
-            from datetime import datetime, timezone
+            from datetime import datetime
 
             # The default name is shown to the user next to their other
             # captures, so it stays in LOCAL time -- made explicit rather than
             # leaning on a naive `datetime.now()`.
-            local_now = datetime.now(tz=timezone.utc).astimezone()
+            local_now = datetime.now(tz=UTC).astimezone()
             name = local_now.strftime("capture_%Y%m%d_%H%M%S")
 
         self.state.transition(TrayState.RECORDING_STARTING, current_capture=name)

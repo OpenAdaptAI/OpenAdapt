@@ -197,6 +197,17 @@ class EndpointTemplate(_FrozenModel):
     etag_header: Optional[str] = "ETag"
     version_field: Optional[str] = None
     author_field: Optional[str] = None
+    #: JSON body sent with the request, for routes that take their arguments
+    #: in the body (an RPC call, a query document). Strings are templates:
+    #: ``"{id}"`` is the record id, ``"{id:int}"`` the id as an integer,
+    #: ``"{payload}"`` the write payload object; any other ``{name}`` is text.
+    body_template: Optional[Any] = None
+    #: Dotted path to the one record in the response, with list indexes
+    #: (``"result.0"``). Takes precedence over ``records_key``.
+    record_path: Optional[str] = None
+    #: Dotted path that is non-null when the call failed even though HTTP
+    #: said 2xx (an RPC ``error`` member).
+    error_path: Optional[str] = None
 
 
 class EntityLensSpec(_FrozenModel):
@@ -275,6 +286,9 @@ class TxCommitResult(_FrozenModel):
     receipt_id: Optional[str] = None
     rows_read: int = 0
     duration_ms: float = 0.0
+    #: The evidence-scope block (``openadapt.evidence-scope/v1``): check
+    #: level, basis, receipt word and what the read did not cover.
+    evidence_scope: Optional[dict[str, Any]] = None
 
 
 class CertificationProbeResult(_FrozenModel):

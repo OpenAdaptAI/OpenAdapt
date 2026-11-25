@@ -27,6 +27,59 @@
 - Qualification read-back checks complete before/after row multisets for
   inserts and declared field updates. A changed sibling, extra or missing
   row, duplicate row, undeclared field change or unavailable read refuses.
+- `openadapt verify draft` fix-forward for #2438. A clean admission case whose
+  recheck crashed (for example `database is locked`) now records the recheck
+  as `ERROR` and fails, instead of passing with no recheck. Trace and column
+  masking uses the shared token matcher in `openadapt_flow.secret_field_names`,
+  so `totp`, `otpCode`, `userPin`, `mfa_code`, a `cookie` key and the `code`,
+  `sig` and `X-Amz-Signature` query parameters are masked, and `author`,
+  `author_id` and `session_count` are not. The shared vocabulary gains
+  `token`, `jwt`, `bearer`, `credential(s)`, `cred`, `csrf`, `xsrf`,
+  `cookie`, `signature`, `session id`, `sessionid`, `private key`,
+  `access key`, `apikey`, `salt`, `hash`, `tfa`, `session key`,
+  `jsessionid`, `sessid`, `phpsessid`, `oauth verifier` and `authn`, plus
+  exact names (`code`, `sig`, `sid`, `refresh`, `session`, `authorization`)
+  and suffix names (`session`, `authorization`), so `JSESSIONID`,
+  `sso_session` and `proxy-authorization` stay masked as they were; the
+  Chrome extension copies follow. The earlier substring pattern stays as a
+  floor (so `sessionkey`, `pwdhash` and `authz` stay masked), with an
+  explicit list of false positives (`author`, `session_count`,
+  `authorization_id` ...) sent in clear. The admission
+  record is now signed with this computer's key, and `--check` refuses an
+  unsigned record, an edited record, or one no pinned key signed (`--keys`
+  pins another machine's key). `--check` no longer requires `--trace`,
+  `--task`, `--sandbox` and `--out`.
+
+- Checkbox attestations (`openadapt_flow.gui.attestations`) are declared in
+  pack data with the digest of their statement and ticked only on an
+  `AttestationGrant` from the person who attests. A grant is its own type, so
+  no intake value or derived fact can tick one. An undeclared box, changed
+  wording, a missing grant or an attestation bound to a field stops the run
+  before any box is ticked.
+- Hub pages of section dialogs (`openadapt_flow.gui.hub`). A dialog holding
+  an editable control is a form, never a confirmation. Each section is opened,
+  filled and saved, and its completion is read from its card on the hub after
+  the save, with the demonstrated number of writes.
+- Repeating structures (`openadapt_flow.gui.repeating`). An "add another"
+  group is learned from a demonstration. A run adds instances until the count
+  matches the intake, fills them in order and reads each one back by the
+  container it was written into. It never deletes an instance and stops on a
+  prefilled one.
+
+## v4.0.0 (2026-11-24)
+
+### Breaking Changes
+
+- **Encryption at rest is now enabled by default** (`#2423`): recordings,
+  compiled bundles, and run directories are written as sealed-set v3
+  encrypted containers unless `OPENADAPT_ENCRYPT_AT_REST=0` or `--no-encrypt`
+  is set. Released `openadapt` launcher `1.23.0` (`openadapt-flow<4`) reads
+  run files via plain paths, so this major bump keeps `1.23.0` on Flow 3.4.0
+  while pairing Flow 4.0.0 with `openadapt 1.24.0` (`>=4.0.0,<5.0.0`).
+- **Requires `openadapt-types>=0.24.2,<0.25.0`.** Flow 4.0.0 imports
+  modules and names that first ship in types 0.24.2 (`evidence_scope`,
+  `run_ledger`, `receipt`, `exception_card`, and new `check_level` names). The old `>=0.24.0` floor let an install resolve
+  types 0.24.0 and fail on import.
 
 ### Encryption at rest by default
 
@@ -75,6 +128,42 @@
 
 ### Features
 
+- One verification ladder on every path. `openadapt_types.check_level` is
+  the only source of check levels; `verify-run`, the runtime's report and
+  the `tx` engine derive their tables from it and name each check with one
+  receipt word: `VERIFIED` (levels 3 and 4 only, always with a basis:
+  `separate_session`, `system_api`, `activity_log`, `db_frame` or
+  `owned_connection`), `SHOWN`, `CONFIRMED`, `ATTESTED` or `RECORDED`.
+  Run receipts (`record/run/v1`), `verify-run` and `tx` receipts carry an
+  additive `evidence_scope` block
+  (`openadapt.evidence-scope/v1`) that states the level, basis, wire scope,
+  read-back time, recheck window and what the check did not cover. Receipts
+  without the block still verify. A run receipt whose report shows a save
+  checked below level 3 is `UNKNOWN` (`below_verified_level`), never
+  `VERIFIED`; no built-in profile produces such a run.
+- Links, tabs and menu items can be steps (`openadapt_flow.gui.steps`). Each
+  demonstrated click gets its role from what the backend counted: a commit
+  when it wrote, a navigation when the screen changed with no write. A live
+  commit holds only on exactly the demonstrated writes. `openadapt_flow.gui`
+  is a neutral view of a screen (role, name, state, containers) with adapters
+  for a browser page, an accessibility tree and a `form_tx` snapshot.
+- One verdict kernel, `openadapt_flow.verdict`, for every check that turns
+  evidence into held, refuted or not checked. It fixes the obligations from
+  the plan first, settles results against them, and never passes an empty
+  set, a truncated or short read, a probe that raised, a result bound to
+  another run, two results that disagree, or a code nobody listed.
+  `Result.nothing_else` holds a "nothing else changed" claim only on a
+  complete read. Functions marked `@verdict_site` are run by a fail-open
+  harness (`tests/failopen`) with 15 generic mutations, which checks the
+  verdict at three levels (refuted, not checked, held), not as one bit. It
+  flags 14 fail-open bugs rebuilt from this repository's history (pinned
+  pre-fix copies) and one live connector site, and passes their fixes.
+  `scripts/check_verdict_folds.py` fails CI when the repository-wide count of
+  a hand-written fold kind rises, including a broad `except` that logs and
+  falls through and a "nothing else changed" test over a set that may be a
+  partial read. See `docs/FAIL_CLOSED.md`.
+- The hard-invariant layer, the frame's version check, `verify-run`'s effect
+  folds and the receipt's line judge and tally are built on the kernel.
 - A sign-in that asks for a second factor (a code by text message or email,
   an authenticator code, or a push approval) no longer has to stop the
   program. A `second_factor` step (`one_time` is `code` or `approval`) waits
@@ -121,8 +210,45 @@
   application vocabulary: month names, yes and no words, currency signs and
   tables come from the pack. See docs/EFFECT_LOCATION.md.
 
+### Changes
+
+- Network captures no longer write raw bodies by default. `record
+  --capture-network` keeps only the `--param` and `--identifier` values of
+  each request and response body, plus a per-capture keyed hash of every
+  other value and of each HTML, text or binary body; undeclared URL query
+  values are hashed too. `dump_har` and `save_har` do the same with the wire
+  policy's id and version fields. `--capture-network-bodies raw` (and
+  `raw_bodies=True`) keeps the redacted bodies, which API step and undo
+  proposals need, and is refused unless the recording is encrypted or
+  `OPENADAPT_FLOW_PLAINTEXT_AT_REST` explicitly allows plaintext. Binary
+  bodies, files and non-text responses are sized and hashed from their
+  bytes as sent; the recording's `app_url` query is minimized too; an
+  explicit `application/octet-stream` body is never parsed as JSON (a
+  missing content type still is); and `load_har` refuses a HAR marked
+  minimized that carries a raw body.
 ### Fixes
 
+- `verify-run` with `minimum_effect_strength: independent_session` now
+  verifies on a separate-session read (check level 3), as the runtime
+  already did. Before, the two disagreed and verify-run never verified on
+  it. The default minimum is unchanged (`independent_system_of_record`).
+- The `tx` engine no longer caps every verdict at `UNCERTAIN` without a
+  SQLite row authority. A post-commit API read sent with cache-bypass
+  headers, showing no cache in its response, and whose record version is
+  exactly one past the before-image's is `CONFIRMED` with basis
+  `system_api`. Anything else stays `UNCERTAIN`.
+- `verify-run`: an effect list that is empty, or tiers that don't pair one to
+  one with the effects, is `INDETERMINATE`, `unknown` and `unchecked`, not
+  `CONFIRMED`, `present` and `independent_readback`. The receipt model already
+  refuses an empty list, so no run changes outcome today.
+- `verify-run`: the effect folds settle against the planned effects, so a
+  planned effect with no verdict is `INDETERMINATE`, and an observed-effect
+  code nobody listed is `unknown` rather than `present`.
+- The frame's version check: a duplicate version row, a version history
+  that lost a row, or a changed target with no new version no longer hides a
+  version saved by another user. The frame is refuted instead of not checked.
+- Receipts: a line check nobody listed keeps the run from `VERIFIED` and is
+  counted as not checked, so the three line counts add up to the lines.
 - The form transaction layer (`form_tx`, an unreleased prototype until this
   release) reads back every field it typed, selected or kept. Each one gets
   a `passed`, `failed` or `not_checked` verdict; a field it cannot read back

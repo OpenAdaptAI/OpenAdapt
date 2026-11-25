@@ -69,7 +69,7 @@ class _Context:
 
 def _capture(tmp_path):
     ctx = _Context()
-    cap = nc.NetworkCapture(ctx).start()
+    cap = nc.NetworkCapture(ctx, bodies="raw").start()
     finished = ctx.handlers["requestfinished"]
     login = json.dumps(
         {"user": {"login": "amy.synthetic", "password": PASSWORD, "pin": "1234"}}
@@ -119,7 +119,8 @@ def _capture(tmp_path):
     return (tmp_path / nc.NETWORK_FILE).read_text()
 
 
-def test_no_password_or_token_from_a_json_login_survives(tmp_path):
+def test_no_password_or_token_from_a_json_login_survives(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "synthetic test fixture")
     text = _capture(tmp_path)
     for leaked in (PASSWORD, ACCESS, REFRESH, SET_COOKIE, BEARER):
         assert leaked not in text, leaked
@@ -134,7 +135,8 @@ def test_no_password_or_token_from_a_json_login_survives(tmp_path):
     assert "<session:authorization>" in rows[2]["body"]
 
 
-def test_a_short_json_secret_is_withheld_by_its_field_name(tmp_path):
+def test_a_short_json_secret_is_withheld_by_its_field_name(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "synthetic test fixture")
     _capture(tmp_path)
     echo = json.loads(nc.load(tmp_path)[2]["body"])
     assert echo["secret"] == nc.SECRET

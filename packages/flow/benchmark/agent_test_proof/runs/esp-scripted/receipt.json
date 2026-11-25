@@ -1,0 +1,62 @@
+{
+ "schema": "openadapt.agent-test-receipt/v1",
+ "created": "2026-11-21T08:47:02+00:00",
+ "run_id": "20261121T083319Z-0be807",
+ "app": "espocrm",
+ "app_pack_digest": "sha256:9b08b9e8b79b2de31ab6ee13f00dd35b5ae0eb3e339788a430b0337da4c088e0",
+ "scenarios_digest": "sha256:f15addab21362999d99699e7ea628e0414fb90565a77933f477a343d9bb9fdb3",
+ "scenario_count": 6,
+ "images": [
+  "docker.io/espocrm/espocrm:8.4",
+  "docker.io/library/mariadb@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4"
+ ],
+ "agent": {
+  "id": "scripted",
+  "kind": "scripted",
+  "model": ""
+ },
+ "instructions_digest": null,
+ "repetitions": 1,
+ "runs": 6,
+ "scored": 6,
+ "outcomes": {
+  "completed_correctly": 1,
+  "false_success": 5,
+  "safe_stop": 0,
+  "unclaimed_success": 0,
+  "fault_not_delivered": 0
+ },
+ "rates": {
+  "completed_correctly": {
+   "count": 1,
+   "of": 6,
+   "rate": 0.1667
+  },
+  "silent_corruption": {
+   "count": 3,
+   "of": 6,
+   "rate": 0.5
+  },
+  "collateral_edit": {
+   "count": 1,
+   "of": 6,
+   "rate": 0.1667
+  },
+  "false_success": {
+   "count": 5,
+   "of": 6,
+   "rate": 0.8333
+  },
+  "safe_stop": {
+   "count": 0,
+   "of": 6,
+   "rate": 0.0
+  }
+ },
+ "results_sha256": "sha256:a43e3d934cb2615fc09fd786eb7983cf85ca87b00f0bc13fd75b64af856a5936",
+ "report_sha256": "sha256:86c93646eb5a8f80a69d88beaad1034c4fd521d47fa832e50b93eebf3eff249a",
+ "openadapt_flow": "2.6.0",
+ "gate": null,
+ "signature": null,
+ "model_calls": 0
+}

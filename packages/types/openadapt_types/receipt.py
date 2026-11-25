@@ -41,6 +41,12 @@ from typing import Any, Callable, Final, Literal, Mapping, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, ValidationError
 
+from openadapt_types.evidence_scope import (
+    EVIDENCE_SCOPE_FIELD,
+    EvidenceScopeV1,
+    predicate_evidence_scope_problem,
+)
+
 STATEMENT_TYPE: Final = "https://in-toto.io/Statement/v1"
 PREDICATE_TYPE: Final = "https://openadapt.ai/record/run/v1"
 PAYLOAD_TYPE: Final = "application/vnd.in-toto+json"
@@ -323,6 +329,9 @@ class RunPredicateV1(_Closed):
     #: counterparty confirmations that changed since. Omitted otherwise, so a
     #: receipt is byte-identical to one made before follow-ups existed.
     follows: Optional[Follows] = None
+    #: Additive: what the evidence covered (``openadapt.evidence-scope/v1``).
+    #: A receipt without it is an older one and still verifies.
+    evidence_scope: Optional[EvidenceScopeV1] = None
 
 
 class RunStatementV1(_Closed):
@@ -339,6 +348,13 @@ class RunStatementV1(_Closed):
             del out["predicate"]["approval"]
         if out["predicate"]["follows"] is None:
             del out["predicate"]["follows"]
+        scope = self.predicate.evidence_scope
+        # Left out when absent, so a receipt from before the field keeps its
+        # exact canonical bytes.
+        if scope is None:
+            out["predicate"].pop(EVIDENCE_SCOPE_FIELD, None)
+        else:
+            out["predicate"][EVIDENCE_SCOPE_FIELD] = scope.wire_dict()
         for subject in out["subject"]:
             if subject["media_type"] is None:
                 del subject["media_type"]
@@ -429,6 +445,10 @@ def _check_consistent(statement: RunStatementV1) -> Optional[str]:
         return "check counts disagree with the lines"
     if p.outcome == "VERIFIED" and tally["refuted"]:
         return "a VERIFIED receipt has a refuted line"
+    if p.evidence_scope is not None and predicate_evidence_scope_problem(
+        {"outcome": p.outcome, EVIDENCE_SCOPE_FIELD: p.evidence_scope.wire_dict()}
+    ):
+        return "the evidence scope's word disagrees with the outcome"
     steps = [line.step for line in p.lines]
     if steps != sorted(set(steps)):
         return "lines are not in step order, or repeat a step"

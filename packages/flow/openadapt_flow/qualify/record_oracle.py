@@ -16,18 +16,17 @@ def _value(value: Any) -> Any:
 
 
 def _matches(row: Mapping[str, Any], selector: Mapping[str, Any]) -> bool:
-    return bool(selector) and all(
-        key in row
-        and (
-            (row[key] is None and _value(want) is None)
-            or (
-                row[key] is not None
-                and _value(want) is not None
-                and str(row[key]) == str(_value(want))
-            )
-        )
-        for key, want in selector.items()
-    )
+    if not selector:
+        return False
+    for key, want in selector.items():
+        if key not in row:
+            return False
+        resolved = _value(want)
+        if row[key] is None and resolved is None:
+            continue
+        if row[key] is None or resolved is None or str(row[key]) != str(resolved):
+            return False
+    return True
 
 
 def _one_to_one(rows: list[dict[str, Any]], selectors: list[dict[str, Any]]) -> bool:
@@ -45,7 +44,10 @@ def _one_to_one(rows: list[dict[str, Any]], selectors: list[dict[str, Any]]) -> 
                 return True
         return False
 
-    return all(match(index, set()) for index in range(len(selectors)))
+    for index in range(len(selectors)):
+        if not match(index, set()):
+            return False
+    return True
 
 
 def judge_records(
@@ -78,10 +80,11 @@ def judge_records(
     unchanged = old == new
     written = [effect for effect in effects if effect.kind.value == "record_written"]
     fields = [effect for effect in effects if effect.kind.value == "field_equals"]
-    supported = all(
-        effect.kind.value in {"record_written", "field_equals", "exact_new_set"}
-        for effect in effects
-    )
+    supported = True
+    for effect in effects:
+        if effect.kind.value not in {"record_written", "field_equals", "exact_new_set"}:
+            supported = False
+            break
     exact, matched, checks = False, [], []
     if len(written) == 1:
         insert = written[0]
@@ -105,23 +108,31 @@ def judge_records(
         set_checks = [
             effect for effect in effects if effect.kind.value == "exact_new_set"
         ]
-        exact_set = all(
-            _one_to_one(added_rows, effect.new_records) for effect in set_checks
-        )
+        exact_set = True
+        for effect in set_checks:
+            if not _one_to_one(added_rows, effect.new_records):
+                exact_set = False
+                break
+        added_match = True
+        for row in added_rows:
+            if not _matches(row, insert.match):
+                added_match = False
+                break
+        checks_ok = True
+        for check in checks:
+            if not check["match"]:
+                checks_ok = False
+                break
         exact = bool(
             supported
             and exact_set
             and not (old - new)
             and len(matched) == insert.expected_count
             and len(added_rows) == insert.expected_count
-            and all(_matches(row, insert.match) for row in added_rows)
-            and all(check["match"] for check in checks)
+            and added_match
+            and checks_ok
         )
-    elif (
-        not written
-        and fields
-        and all(effect.kind.value == "field_equals" for effect in effects)
-    ):
+    elif not written and fields and len(fields) == len(effects):
         expected = [dict(row) for row in before]
         for effect in fields:
             indexes = [i for i, row in enumerate(before) if _matches(row, effect.match)]

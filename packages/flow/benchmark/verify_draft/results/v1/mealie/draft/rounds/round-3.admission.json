@@ -1,0 +1,28 @@
+{
+ "admitted": false,
+ "check_sha256": "sha256:907aa835521b6e12ab1a15031919b2ffec3bbaaf255cec6c0a5a2c4d4ac6fb8e",
+ "problems": [
+  "stopped after the first clean write was not confirmed: fix that first (no fault was planted this round)"
+ ],
+ "masked": [],
+ "seconds": 6.7,
+ "cases": [
+  {
+   "group": "clean",
+   "name": "clean-1",
+   "detail": "the write with payload 1",
+   "expect": "confirmed",
+   "outcome": "REFUTED",
+   "recheck": "",
+   "passed": false,
+   "applicable": true,
+   "note": "",
+   "reasons": [
+    "lost update: the target moved more than one version in the window, and only one save is the agent's"
+   ],
+   "moved": [],
+   "seconds": 5.73
+  }
+ ],
+ "attribution": []
+}

@@ -26,7 +26,7 @@ perf: short description         -> patch bump
 ### Releasing
 
 A pull request with a `feat`, `fix` or `perf` commit must bump the version, or
-the `desktop release intent` check fails. Run
+the `Desktop release intent` step (in `fast-checks`) fails. Run
 `python scripts/prepare_release.py` in `packages/desktop`, review the new
 `CHANGELOG.md` section, and commit. After merge, once Packages passes on main,
 `desktop-release.yml` builds the wheel, the sdist and every installer, and

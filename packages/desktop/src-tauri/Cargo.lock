@@ -2513,7 +2513,7 @@ dependencies = [
 
 [[package]]
 name = "openadapt-desktop"
-version = "0.32.2"
+version = "0.35.0"
 dependencies = [
  "hex",
  "reqwest",

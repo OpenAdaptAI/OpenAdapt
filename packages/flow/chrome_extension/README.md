@@ -1,7 +1,8 @@
 # Optional Chrome extension evidence (everyday Chrome)
 
-**Status:** unpack-first scaffold for [OpenAdapt#1872](https://github.com/OpenAdaptAI/OpenAdapt/issues/1872).
-Not a store listing. Not required for recording.
+**Status:** experimental MV3 extension for [OpenAdapt#1872](https://github.com/OpenAdaptAI/OpenAdapt/issues/1872)
+and Chrome Web Store packaging (see [STORE_LISTING.md](STORE_LISTING.md)).
+Not required for OS-level recording.
 
 OpenAdapt records everyday Chrome through the OS accessibility tree with no
 install. Accessibility cannot see open shadow DOM detail, cross-origin
@@ -53,9 +54,8 @@ and drops a record it cannot redact. See
 4. Set `OPENADAPT_EXTENSION_RECORDING` to the recording directory before the
    host starts.
 
-Do not use this in a sensitive profile until reconnect acknowledgement
-lands. Prefer Flow's Playwright recorder or CDP attach for
-governed browser recording today
+For governed browser recording without installing an extension, Flow also
+supports Playwright recording and CDP attach
 ([BROWSER_RECORDING.md](../docs/BROWSER_RECORDING.md)).
 
 ## Tests without Chrome

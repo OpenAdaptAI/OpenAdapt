@@ -96,11 +96,116 @@ type PairingState = {
   error?: string;
 };
 
-const NAV: { route: "tasks" | "needs" | "results"; label: string }[] = [
-  { route: "tasks", label: "Workflows" },
-  { route: "needs", label: "Needs you" },
-  { route: "results", label: "Results" },
+const NAV: {
+  route: "tasks" | "needs" | "results";
+  label: string;
+  shortcut: string;
+}[] = [
+  { route: "tasks", label: "Workflows", shortcut: "⌘1" },
+  { route: "needs", label: "Needs you", shortcut: "⌘2" },
+  { route: "results", label: "Results", shortcut: "⌘3" },
 ];
+
+const LIFECYCLE_STAGES = [
+  { step: "01", label: "Demonstrate", detail: "Capture once" },
+  { step: "02", label: "Compile", detail: "$0.00 / run" },
+  { step: "03", label: "Verify & heal", detail: "Deterministic" },
+  { step: "04", label: "Signed receipt", detail: "Audit proof" },
+] as const;
+
+function NavIcon({ route }: { route: "tasks" | "needs" | "results" }) {
+  const common = {
+    width: 16,
+    height: 16,
+    viewBox: "0 0 16 16",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.5,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+    focusable: false,
+  };
+  if (route === "tasks") {
+    return (
+      <svg {...common}>
+        <rect x="2.2" y="2.5" width="4.6" height="4.6" rx="1.2" />
+        <rect x="9.2" y="2.5" width="4.6" height="4.6" rx="1.2" />
+        <rect x="2.2" y="9.2" width="4.6" height="4.6" rx="1.2" />
+        <rect x="9.2" y="9.2" width="4.6" height="4.6" rx="1.2" />
+      </svg>
+    );
+  }
+  if (route === "needs") {
+    return (
+      <svg {...common}>
+        <path d="M2.5 9.2h3l1.1 1.8h2.8l1.1-1.8h3" />
+        <path d="M3.6 3.5h8.8l1.1 5.7v3.1a1.2 1.2 0 0 1-1.2 1.2H3.7a1.2 1.2 0 0 1-1.2-1.2V9.2z" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <path d="M3.5 2.5h9a1 1 0 0 1 1 1v10l-2-1.2-1.75 1.2L8 12.3l-1.75 1.2-1.75-1.2-2 1.2v-10a1 1 0 0 1 1-1z" />
+      <path d="M5.7 7.6l1.5 1.5 3.1-3.2" />
+    </svg>
+  );
+}
+
+function BrandMark() {
+  // Official OpenAdapt mark (src-tauri/icons/brand/openadapt-mark.svg).
+  return (
+    <span className="brand-mark" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M8.48024 4H12.4802L12.9802 4.5V6.53H13.5002L14.0002 7.03V8L13.5002 8.5H12.9802V11.5L12.4802 12H9.36024L6.86024 14.76L6.00024 14.4V12H3.50024L3.00024 11.36V8.5H2.50024L2.00024 8V7.03L2.50024 6.53H3.00024V4.36L3.53024 4H7.53024V2.86C7.37351 2.7766 7.24181 2.65299 7.14867 2.50184C7.05552 2.3507 7.00429 2.17749 7.00024 2C7.00024 1.73478 7.1056 1.48043 7.29314 1.29289C7.48067 1.10536 7.73503 1 8.00024 1C8.26546 1 8.51981 1.10536 8.70735 1.29289C8.89489 1.48043 9.00024 1.73478 9.00024 2C8.99203 2.17133 8.93988 2.33767 8.84882 2.48302C8.75775 2.62838 8.63083 2.74786 8.48024 2.83V4ZM12.0002 8V7.03V5H4.00024V7.03V8V10.86L6.50024 11H7.00024V13.19L8.80024 11.15L9.15024 11H12.0002V8ZM9.88026 8.51C9.50581 8.88537 9.02948 9.14266 8.51026 9.25V9.24C8.07712 9.32287 7.6303 9.29878 7.20858 9.16982C6.78686 9.04086 6.40298 8.81094 6.09026 8.5L5.39026 9.21C5.73086 9.54934 6.13531 9.81784 6.58026 10C7.03031 10.1878 7.5126 10.2863 8.00026 10.29C8.96702 10.2841 9.89308 9.90004 10.5803 9.22L9.88026 8.51ZM6.49023 6.5H5.49023V7.5H6.49023V6.5ZM9.49023 6.5H10.4902V7.5H9.49023V6.5Z"
+          fill="currentColor"
+        />
+      </svg>
+    </span>
+  );
+}
+
+function routeBreadcrumb(route: Route): string {
+  switch (route.name) {
+    case "tasks":
+      return "Workflows";
+    case "needs":
+      return "Needs you";
+    case "stops":
+      return "Needs you / Review stops";
+    case "results":
+      return "Results";
+    case "sample":
+      return "Sample run";
+    case "check":
+      return "Check workflow";
+    case "run":
+      return "Run workflow";
+    case "advanced":
+      return "Advanced";
+    case "setup":
+      return "Setup & permissions";
+    case "library":
+      return "All versions";
+    case "record":
+      return "Record & compile";
+    case "qualify":
+      return "Qualification";
+    case "watch":
+      return "Run inspection";
+    case "teach":
+      return "Teach a fix";
+    case "runner":
+      return "Local runner";
+    case "portal":
+      return "Phone portal";
+    case "settings":
+      return "Settings";
+  }
+}
 
 /** Screens that belong under one of the three tabs, for the active marker. */
 function tabFor(route: Route): "tasks" | "needs" | "results" | null {
@@ -169,8 +274,11 @@ export function routeForFirstWorkflow(
 function DesktopBrand({ onOpen }: { onOpen?: () => void }) {
   const content = (
     <>
-      <span className="brand-open">Open</span>
-      <span className="brand-adapt">Adapt</span>
+      <BrandMark />
+      <span className="brand-wordmark">
+        <span className="brand-open">Open</span>
+        <span className="brand-adapt">Adapt</span>
+      </span>
       <span className="brand-product">Desktop</span>
     </>
   );
@@ -753,6 +861,32 @@ export default function App() {
     setBreaks(na.count);
   }
 
+  const navigationLocked =
+    recording ||
+    workflowCompiling ||
+    firstWorkflowRunning ||
+    firstRunPersistencePending ||
+    screenBusy;
+
+  useEffect(() => {
+    if (!checkedAuth || showLogin || !onboarded || navigationLocked) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+      if (event.key === "1") {
+        event.preventDefault();
+        setRoute({ name: "tasks" });
+      } else if (event.key === "2") {
+        event.preventDefault();
+        setRoute({ name: "needs" });
+      } else if (event.key === "3") {
+        event.preventDefault();
+        setRoute({ name: "results" });
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [checkedAuth, showLogin, onboarded, navigationLocked]);
+
   if (!checkedAuth) {
     return (
       <>
@@ -824,12 +958,6 @@ export default function App() {
     );
   }
 
-  const navigationLocked =
-    recording ||
-    workflowCompiling ||
-    firstWorkflowRunning ||
-    firstRunPersistencePending ||
-    screenBusy;
   const navigationLockTitle = recording
     ? "Stop and save this recording before you leave."
     : workflowCompiling
@@ -862,28 +990,34 @@ export default function App() {
       <UpdateNotice engineUp={engineUp} />
       <ItemApprovalDialog />
       <div className="app">
-        <header className="desktop-shell">
+        <aside className="desktop-shell">
           <div className="desktop-shell-inner">
-            <DesktopBrand
-              onOpen={
-                navigationLocked
-                  ? undefined
-                  : () => setRoute({ name: "tasks" })
-              }
-            />
+            <div className="desktop-shell-brand">
+              <DesktopBrand
+                onOpen={
+                  navigationLocked
+                    ? undefined
+                    : () => setRoute({ name: "tasks" })
+                }
+              />
+            </div>
 
             <nav className="desktop-nav" aria-label="Desktop navigation">
               {NAV.map((n) => (
                 <button
                   aria-current={activeTab === n.route ? "page" : undefined}
                   className={`nav-item ${activeTab === n.route ? "active" : ""}`}
+                  data-shortcut={n.route === "needs" && breaks > 0 ? undefined : n.shortcut}
                   disabled={navigationLocked}
                   title={navigationLockTitle}
                   key={n.route}
                   onClick={() => setRoute({ name: n.route } as Route)}
                   type="button"
                 >
-                  <span>{n.label}</span>
+                  <span className="nav-icon">
+                    <NavIcon route={n.route} />
+                  </span>
+                  <span className="nav-label">{n.label}</span>
                   {n.route === "needs" && breaks > 0 ? (
                     <Pill tone="warn">{breaks}</Pill>
                   ) : null}
@@ -891,54 +1025,97 @@ export default function App() {
               ))}
             </nav>
 
+            <section className="sidebar-lifecycle" aria-label="Execution lifecycle">
+              <div className="sidebar-section-label">Runtime pipeline</div>
+              <ol className="lifecycle-list">
+                {LIFECYCLE_STAGES.map((stage) => (
+                  <li key={stage.step}>
+                    <span className="lifecycle-num tnum">{stage.step}</span>
+                    <span className="lifecycle-name">{stage.label}</span>
+                    <span className="lifecycle-meta tnum">{stage.detail}</span>
+                  </li>
+                ))}
+              </ol>
+              <div className="sidebar-provenance">
+                <span className="prov-chip">compiled-plan</span>
+                <span className="prov-chip">deterministic</span>
+                <span className="prov-chip prov-chip-accent">Veto-4B-r6</span>
+              </div>
+            </section>
+
             <div className="desktop-shell-spacer" />
 
-            <div className="desktop-status" aria-label="Desktop status">
-              {!engineUp && (
-                <span title="The local OpenAdapt engine isn't running">
-                  <StatusDot tone="off" />
-                  <strong>Engine stopped</strong>
-                </span>
-              )}
-              {recording ? (
-                <span className="recording" title="OpenAdapt is recording your workflow">
-                  <StatusDot tone="warn" />
-                  <strong>Recording</strong>
-                </span>
-              ) : null}
-              <ShadowModeIndicator
-                status={shadow}
-                onTogglePause={() => void toggleShadowPause()}
+            <div className="sidebar-footer">
+              <div className="desktop-status" aria-label="Desktop status">
+                {!engineUp && (
+                  <span title="The local OpenAdapt engine isn't running">
+                    <StatusDot tone="off" />
+                    <strong>Engine stopped</strong>
+                  </span>
+                )}
+                {recording ? (
+                  <span className="recording" title="OpenAdapt is recording your workflow">
+                    <StatusDot tone="warn" />
+                    <strong>Recording</strong>
+                  </span>
+                ) : null}
+                <ShadowModeIndicator
+                  status={shadow}
+                  onTogglePause={() => void toggleShadowPause()}
+                />
+                {cloudConnected && sync && sync.state !== "synced" && (
+                  <span title={`Cloud: ${syncLabel}`}>
+                    <StatusDot tone={syncTone} />
+                    <strong>{syncLabel}</strong>
+                    {sync.queued ? <small>{sync.queued}</small> : null}
+                  </span>
+                )}
+              </div>
+
+              <GearMenu
+                disabled={navigationLocked}
+                title={navigationLockTitle}
+                items={[
+                  {
+                    label: "Settings",
+                    sub: "Account, privacy, updates",
+                    onSelect: () => setRoute({ name: "settings" }),
+                  },
+                  {
+                    label: "Advanced",
+                    sub: "Exact checks, every version, runner, phone",
+                    onSelect: () => setRoute({ name: "advanced" }),
+                  },
+                ]}
               />
-              {cloudConnected && sync && sync.state !== "synced" && (
-                <span title={`Cloud: ${syncLabel}`}>
-                  <StatusDot tone={syncTone} />
-                  <strong>{syncLabel}</strong>
-                  {sync.queued ? <small>{sync.queued}</small> : null}
-                </span>
-              )}
             </div>
-
-            <GearMenu
-              disabled={navigationLocked}
-              title={navigationLockTitle}
-              items={[
-                {
-                  label: "Settings",
-                  sub: "Account, privacy, updates",
-                  onSelect: () => setRoute({ name: "settings" }),
-                },
-                {
-                  label: "Advanced",
-                  sub: "Exact checks, every version, runner, phone",
-                  onSelect: () => setRoute({ name: "advanced" }),
-                },
-              ]}
-            />
           </div>
-        </header>
+        </aside>
 
-        <main>
+        <div className="desktop-workspace">
+          <div className="workspace-topbar">
+            <div className="workspace-crumb">
+              <span className="workspace-crumb-root">Workspace</span>
+              <span className="workspace-crumb-sep" aria-hidden="true">/</span>
+              <span className="workspace-crumb-current">{routeBreadcrumb(route)}</span>
+            </div>
+            <div className="workspace-topbar-meta">
+              <span className="prov-badge">
+                <span className="prov-badge-key">Agent</span>
+                <span className="prov-badge-val mono">compiled-plan</span>
+              </span>
+              <span className="prov-badge">
+                <span className="prov-badge-key">Verifier</span>
+                <span className="prov-badge-val mono">deterministic · Veto-4B-r6</span>
+              </span>
+              <span className="prov-badge prov-badge-ok">
+                <StatusDot tone={cloudConnected ? "ok" : "run"} />
+                <span className="prov-badge-val">{cloudConnected ? "Synced" : "Local"}</span>
+              </span>
+            </div>
+          </div>
+
+          <main>
         <UsageStatsPrompt engineUp={engineUp} />
         <ShadowPromptBanner status={shadow} />
         {route.name === "tasks" && (
@@ -1106,6 +1283,7 @@ export default function App() {
           />
         )}
         </main>
+        </div>
       </div>
     </>
   );

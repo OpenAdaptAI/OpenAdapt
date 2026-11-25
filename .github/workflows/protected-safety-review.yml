@@ -13,8 +13,8 @@ on:
     branches: [main]
 
 concurrency:
-  group: protected-safety-review-${{ github.event.issue.number || github.event.pull_request.number || github.event.merge_group.head_sha }}
-  cancel-in-progress: true
+  group: protected-safety-review-${{ github.event.pull_request.number || github.event.issue.number || github.event.merge_group.head_sha || github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read

@@ -126,7 +126,7 @@ class WindowsFaultDriver(WebFaultDriver):
                 self.declined = "native_fault_did_not_settle"
                 return None
             return sha256_bytes(frame)
-        except Exception:
+        except (OSError, RuntimeError, ValueError, TypeError, KeyError, AttributeError):
             self.declined = "native_fault_staging_failed"
             return None
 

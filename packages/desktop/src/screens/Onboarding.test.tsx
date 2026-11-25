@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 // The permission card only renders on macOS, and the platform is read once
@@ -15,6 +15,7 @@ vi.mock("../lib/engine", async (importOriginal) => {
   return {
     ...actual,
     engineTry: vi.fn(),
+    openExternal: vi.fn(),
     ffmpegRuntimeStatus: vi.fn(async () => ({
       phase: "ready",
       source: "managed",
@@ -25,7 +26,7 @@ vi.mock("../lib/engine", async (importOriginal) => {
   };
 });
 
-import { CMD, engineTry } from "../lib/engine";
+import { CMD, engineTry, openExternal } from "../lib/engine";
 import { Onboarding } from "./Onboarding";
 
 afterEach(() => {
@@ -50,7 +51,14 @@ it("doesn't call permissions missing when the engine can't check them", async ()
 it("still says a permission is needed when the engine reports it missing", async () => {
   vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
     if (command === CMD.CHECK_PERMISSIONS) {
-      return { screen_recording: true, accessibility: false, input_monitoring: true };
+      return {
+        screen_recording: true, accessibility: false, input_monitoring: true,
+        control_permission: {
+          setup_mode: "legacy", label: "Accessibility",
+          settings_url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+          instructions: "Use Accessibility on earlier macOS.",
+        },
+      };
     }
     return fallback;
   });
@@ -60,4 +68,49 @@ it("still says a permission is needed when the engine reports it missing", async
   expect(await screen.findByText("needed")).toBeTruthy();
   expect(screen.getAllByText("granted")).toHaveLength(2);
   expect(screen.getByText(/Grant the permissions below/)).toBeTruthy();
+});
+
+
+it.each([true, false, null])("shows scoped control guidance without claiming a global grant (%s)", async (trusted) => {
+  vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
+    if (command === CMD.CHECK_PERMISSIONS) {
+      return {
+        screen_recording: true, accessibility: trusted, input_monitoring: true,
+        control_permission: {
+          setup_mode: "app_selection", label: "System & App Protection Override",
+          settings_url: "x-apple.systempreferences:com.apple.preference.security",
+          instructions: "Click +, Choose Apps, then select Ask First or At Any Time.",
+        },
+      };
+    }
+    return fallback;
+  });
+  render(<Onboarding onStart={() => {}} />);
+  expect(await screen.findByText("System & App Protection Override")).toBeTruthy();
+  expect(screen.getByText(trusted ? "check target" : "not confirmed")).toBeTruthy();
+  expect(screen.getAllByText("granted")).toHaveLength(2);
+  expect(screen.queryByText("Accessibility")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
+  expect(openExternal).toHaveBeenCalledWith("x-apple.systempreferences:com.apple.preference.security");
+  const start = screen.getByRole("button", { name: "Choose an app and workflow" });
+  expect((start as HTMLButtonElement).disabled).toBe(!trusted);
+});
+
+it("keeps an unavailable native API unknown on the legacy path", async () => {
+  vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
+    if (command === CMD.CHECK_PERMISSIONS) {
+      return {
+        screen_recording: null, accessibility: null, input_monitoring: true,
+        control_permission: {
+          setup_mode: "legacy", label: "Accessibility", settings_url: "legacy-settings",
+          instructions: "Use Accessibility on earlier macOS.",
+        },
+      };
+    }
+    return fallback;
+  });
+  render(<Onboarding onStart={() => {}} />);
+  await waitFor(() => expect(screen.getAllByText("unknown")).toHaveLength(2));
+  expect(screen.queryByText("needed")).toBeNull();
+  expect((screen.getByRole("button", { name: "Choose an app and workflow" }) as HTMLButtonElement).disabled).toBe(true);
 });

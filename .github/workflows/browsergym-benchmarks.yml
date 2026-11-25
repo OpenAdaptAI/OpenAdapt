@@ -1,0 +1,63 @@
+name: BrowserGym Verification Benchmarks
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "Benchmark suite to run"
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - stwebagentbench
+          - webarena_verified
+          - workarena
+      mode:
+        description: "Execution mode (contract = deterministic offline synthetic fixture)"
+        required: true
+        default: contract
+        type: choice
+        options:
+          - contract
+
+permissions:
+  contents: read
+
+jobs:
+  browsergym-benchmark:
+    name: BrowserGym contract fixture (${{ inputs.suite }}, ${{ inputs.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Run BrowserGym verification benchmark
+        shell: bash
+        env:
+          SUITE: ${{ inputs.suite }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/browsergym
+          python -m benchmarks.browsergym run \
+            --suite "${SUITE}" \
+            --mode "${MODE}" \
+            --output-json artifacts/browsergym/scoreboard.json \
+            --output-md artifacts/browsergym/scoreboard.md
+          cat artifacts/browsergym/scoreboard.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload scoreboard artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browsergym-scoreboard-${{ inputs.suite }}-${{ inputs.mode }}
+          path: artifacts/browsergym/
+          retention-days: 30
