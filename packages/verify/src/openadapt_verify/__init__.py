@@ -25,6 +25,7 @@ from openadapt_flow.write_receipt import ReceiptError
 from openadapt_flow.write_receipt import Verification as PortableReceiptVerification
 from openadapt_flow.write_receipt import verify as verify_receipt
 
+from openadapt_verify import jit
 from openadapt_verify.commit_firewall import (
     CommitBlockedError,
     CommitResult,
@@ -34,6 +35,14 @@ from openadapt_verify.commit_firewall import (
     verify_commit,
 )
 from openadapt_verify.guard import checked_write, verified
+from openadapt_verify.jit import (
+    CompiledPlan,
+    CompiledStep,
+    JitResult,
+    ParameterBinder,
+    format_scorecard,
+    jit_wrap,
+)
 from openadapt_verify.mcpify import (
     McpifyServer,
     ReadbackResult,
@@ -42,6 +51,7 @@ from openadapt_verify.mcpify import (
     WorkflowToolSpec,
     generate_mcp_client_config,
     issue_mcpify_receipt,
+    load_compiled_tools,
     load_workflow_spec,
     load_workflow_specs,
     verify_mcpify_receipt,
@@ -61,13 +71,17 @@ __all__ = [
     "AlreadyWritten",
     "CommitBlockedError",
     "CommitResult",
+    "CompiledPlan",
+    "CompiledStep",
     "ConfirmationPdfOracle",
     "Contract",
     "FieldCheck",
     "FreshReloadSummaryOracle",
+    "JitResult",
     "LocalSealVerification",
     "McpifyServer",
     "Outcome",
+    "ParameterBinder",
     "PortalReadbackResult",
     "PortableReceiptVerification",
     "ReadbackResult",
@@ -84,9 +98,13 @@ __all__ = [
     "async_verify_commit",
     "begin_write",
     "checked_write",
+    "format_scorecard",
     "generate_mcp_client_config",
     "issue_mcpify_receipt",
     "issue_write_receipt",
+    "jit",
+    "jit_wrap",
+    "load_compiled_tools",
     "load_workflow_spec",
     "load_workflow_specs",
     "recheck",
