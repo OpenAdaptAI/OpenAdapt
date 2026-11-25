@@ -223,6 +223,16 @@ def add_run_arguments(p: argparse.ArgumentParser) -> None:
         help="With --fallback-gate item-approval: a deployment config whose "
         "approvers section pins the root; it is then the only pin counted",
     )
+    p.add_argument(
+        "--fallback-script",
+        help="With --fallback agent: JSON file of scripted actions (zero model calls) "
+        "used instead of a hosted model provider",
+    )
+    p.add_argument(
+        "--fallback-command",
+        help="With --fallback agent: local command that emits JSON actions on stdout "
+        "(zero model calls) used instead of a hosted model provider",
+    )
     p.add_argument("--provider", choices=("claude", "openai"), default="claude")
     p.add_argument("--model")
     p.add_argument(
@@ -279,7 +289,76 @@ def _emit(result: Mapping[str, Any], path: Optional[str]) -> None:
     print(text)
 
 
+class _ScriptedFallbackAgent:
+    """Zero-model fallback agent driven by a JSON action file or local command."""
+
+    requires_model_key = False
+    dialect = "generic"
+    principal_id = None
+
+    def __init__(
+        self,
+        *,
+        script_path: Optional[str] = None,
+        command: Optional[str] = None,
+        max_cost_usd: Optional[float] = None,
+    ) -> None:
+        self.script_path = script_path
+        self.command = command
+        self.max_cost_usd = max_cost_usd
+        self.model_calls = 0
+        self.cost = 0.0
+
+    def _load_actions(self, request: Any) -> list[dict[str, Any]]:
+        if self.script_path:
+            raw = json.loads(Path(self.script_path).expanduser().read_text(encoding="utf-8"))
+        else:
+            import shlex
+            import subprocess
+
+            assert self.command is not None
+            proc = subprocess.run(
+                shlex.split(self.command),
+                input=json.dumps({"request": str(request)}),
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            raw = json.loads(proc.stdout)
+        if isinstance(raw, dict):
+            actions = raw.get("actions", [])
+        elif isinstance(raw, list):
+            actions = raw
+        else:
+            raise ValueError("fallback script must be a JSON list or {actions: [...]}")
+        return [dict(a) for a in actions]
+
+    def drive(self, request: Any, harness: Any) -> Any:
+        actions = self._load_actions(request)
+        for action in actions:
+            kind = str(action.get("action") or action.get("kind") or "").strip().lower()
+            if kind == "click" and hasattr(harness, "click"):
+                harness.click(action["x"], action["y"])
+            elif kind in ("type", "type_text") and hasattr(harness, "type_text"):
+                harness.type_text(str(action.get("text", "")))
+            elif kind in ("key", "press") and hasattr(harness, "press"):
+                harness.press(str(action.get("key", "")))
+            elif hasattr(harness, "act"):
+                harness.act(action)
+        return {"status": "done", "model_calls": 0, "cost_usd": 0.0}
+
+
 def _fallback_agent(args: argparse.Namespace, setup: Any) -> Any:
+    script_path = getattr(args, "fallback_script", None)
+    command = getattr(args, "fallback_command", None)
+    if script_path and command:
+        raise SystemExit("pass at most one of --fallback-script or --fallback-command")
+    if script_path or command:
+        return _ScriptedFallbackAgent(
+            script_path=script_path,
+            command=command,
+            max_cost_usd=args.fallback_max_cost_usd,
+        )
     from openadapt_flow.integrations.agents.providers import build_agent
     from openadapt_flow.jit.keys import load_customer_model_key
     from openadapt_flow.wrap.cli import _prices
@@ -419,6 +498,8 @@ def run(
         cap is not None
         or args.fallback_request_id
         or args.fallback_gate != "terminal"
+        or getattr(args, "fallback_script", None) is not None
+        or getattr(args, "fallback_command", None) is not None
         or any(option is not None for option in gate_options)
     ):
         raise SystemExit("the --fallback-* options need --fallback agent")
