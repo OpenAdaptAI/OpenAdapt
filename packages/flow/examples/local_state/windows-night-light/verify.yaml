@@ -1,0 +1,17 @@
+# Check a Windows Night Light toggle through the HKCU CloudStore registry blob.
+# Byte 18 is 0x15 when enabled and 0x13 when disabled; unexpected or missing
+# bytes fail closed as INDETERMINATE.
+schema_version: openadapt.verify/v1
+minimum_effect_strength: independent_system_of_record
+verifier:
+  kind: local-state
+  local_state:
+    - type: windows_night_light
+      id: night_light
+frame:
+  target_fields: [enabled, value]
+effects:
+  - kind: field_equals
+    match: {id: night_light}
+    field: value
+    value: {param: target_enabled}
