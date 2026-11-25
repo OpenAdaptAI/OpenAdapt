@@ -47,6 +47,9 @@ def test_1_times_out_inside_a_playwright_session():
             conn.settimeout(5)
             try:
                 conn.recv(1024)
+                # Hold the socket open without replying so pytest-timeout fires
+                # inside Playwright's sync API call instead of socket hang up.
+                threading.Event().wait(5)
             except OSError:
                 pass
             conn.close()
@@ -67,9 +70,12 @@ def test_2_next_browser_test_starts_cleanly():
 
 def test_3_stop_the_leaked_session():
     manager, _ = LEAKED.pop()
-    asyncio._set_running_loop(manager._loop)
-    manager.__exit__()
-    asyncio._set_running_loop(None)
+    if manager._loop.is_running():
+        asyncio._set_running_loop(manager._loop)
+    try:
+        manager.__exit__()
+    finally:
+        asyncio._set_running_loop(None)
 """
 
 # A healthy module-scoped session, as the e2e browser fixtures use: the
