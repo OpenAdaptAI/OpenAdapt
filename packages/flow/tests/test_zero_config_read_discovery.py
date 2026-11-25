@@ -731,3 +731,80 @@ def test_cli_flags(tmp_path, app, capsys):
     proof = json.loads((tmp_path / "out" / "record_check.proof.json").read_text())
     assert proof["read_discovery"]["status"] == "promoted"
     assert code in (0, 1)
+
+
+def test_paging_signs_detects_nested_containers_hal_and_headers():
+    from openadapt_flow.record_check_synthesis import observed_completeness
+
+    target = {"id": 1, "name": "alpha"}
+    records = [target, {"id": 2, "name": "beta"}, {"id": 3, "name": "gamma"}]
+
+    # Nested pagination.next
+    basis, problems, paged = observed_completeness(
+        "http://127.0.0.1:8000/api/items",
+        {"items": records, "pagination": {"next": "/api/items?page=2"}},
+        "items",
+        records,
+        target=target,
+        seen_before=None,
+    )
+    assert basis is None and paged is True and problems
+
+    # HAL _links.next
+    basis, problems, paged = observed_completeness(
+        "http://127.0.0.1:8000/api/items",
+        {"items": records, "_links": {"next": {"href": "/api/items?page=2"}}},
+        "items",
+        records,
+        target=target,
+        seen_before=None,
+    )
+    assert basis is None and paged is True and problems
+
+    # Nested meta.total mismatch
+    basis, problems, paged = observed_completeness(
+        "http://127.0.0.1:8000/api/items",
+        {"items": records, "meta": {"total": 10}},
+        "items",
+        records,
+        target=target,
+        seen_before=None,
+    )
+    assert basis is None and paged is True and problems
+
+    # HTTP Link / X-Total-Count / Content-Range headers on top-level array
+    for hdrs in (
+        {"Link": '<http://127.0.0.1:8000/api/items?page=2>; rel="next"'},
+        {"X-Total-Count": "10"},
+        {"Content-Range": "items 0-2/10"},
+        {"Content-Range": "items 0-2/*"},
+    ):
+        basis, problems, paged = observed_completeness(
+            "http://127.0.0.1:8000/api/items",
+            records,
+            None,
+            records,
+            target=target,
+            seen_before=None,
+            headers=hdrs,
+        )
+        assert basis is None and paged is True and problems, hdrs
+
+
+def test_is_local_origin_validates_subdomain_localhost_resolution(monkeypatch):
+    assert read_discovery.is_local_origin("http://localhost:8000/api") is True
+    assert read_discovery.is_local_origin("http://127.0.0.1:8000/api") is True
+
+    monkeypatch.setattr(
+        read_discovery.socket,
+        "getaddrinfo",
+        lambda host, port: [(2, 1, 6, "", ("93.184.216.34", 0))],
+    )
+    assert read_discovery.is_local_origin("http://evil.localhost:8000/api") is False
+
+    monkeypatch.setattr(
+        read_discovery.socket,
+        "getaddrinfo",
+        lambda host, port: [(2, 1, 6, "", ("127.0.0.1", 0))],
+    )
+    assert read_discovery.is_local_origin("http://app.localhost:8000/api") is True

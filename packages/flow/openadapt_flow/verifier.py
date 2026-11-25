@@ -677,10 +677,46 @@ class WriteResult:
     #: (``docs/WRITE_RECEIPTS.md``). Issuing never changes the outcome.
     write_receipt: str = "off"
     write_receipt_path: Optional[str] = None
+    #: ``shadow`` or ``gating`` (``docs/VERDICT_TIERS.md``): whether a caller
+    #: that stops on a verdict should stop on this one. A contract observes
+    #: (``shadow``) until it has a run of clean checks and a person turns
+    #: gating on (``openadapt-flow gate``). The outcome is computed and
+    #: recorded the same either way.
+    enforcement: str = "gating"
 
     @property
     def verified(self) -> bool:
         return self.outcome is Outcome.CONFIRMED
+
+    @property
+    def side_effects(self) -> list[dict[str, Any]]:
+        """Rows that moved outside the contract's entity tables, by table,
+        change and columns (``frame.database.entity_tables``): logged, never
+        a stop. Empty when the frame lists none."""
+
+        frame = self.evidence.get("frame") if isinstance(self.evidence, dict) else None
+        if not isinstance(frame, Mapping):
+            return []
+        return [dict(x) for x in frame.get("side_effects") or []]
+
+    @property
+    def tier(self) -> str:
+        """``hard`` (REFUTED: blocks), ``doubt`` (UNCERTAIN after the
+        verifier's own retries), ``logged`` (CONFIRMED with side effects) or
+        ``clean`` (CONFIRMED, nothing else moved)."""
+
+        if self.outcome is Outcome.REFUTED:
+            return "hard"
+        if self.outcome is Outcome.UNCERTAIN:
+            return "doubt"
+        return "logged" if self.side_effects else "clean"
+
+    @property
+    def blocks(self) -> bool:
+        """Should a caller that stops on a verdict stop here? Only a result
+        that isn't CONFIRMED, under a contract whose gating is on."""
+
+        return not self.verified and self.enforcement == "gating"
 
     @property
     def provisional(self) -> bool:
@@ -751,6 +787,10 @@ class WriteResult:
             "final": self.final,
             "write_receipt": self.write_receipt,
             "write_receipt_path": self.write_receipt_path,
+            "tier": self.tier,
+            "side_effects": self.side_effects,
+            "enforcement": self.enforcement,
+            "blocks": self.blocks,
         }
 
 
@@ -1795,6 +1835,11 @@ def verify_write(
                 "the write attempt or its verification purpose changed",
                 key=pending.write_key,
             )
+        if write_attempted:
+            # RETRY tier: a write that isn't visible yet is waited for, with
+            # backoff, before it is judged, so a slow commit isn't reported
+            # as a doubt. The judge runs in full afterwards either way.
+            await_effects(pending.contract, pending.params)
         result = _judge(
             pending,
             write_attempted=write_attempted,
@@ -1829,13 +1874,119 @@ def verify_write(
             )
     finally:
         pending.release()
-    if pending.ledger is not None:
-        import dataclasses
+    import dataclasses
 
+    from openadapt_flow import enforcement as _enforcement
+
+    result = dataclasses.replace(
+        result, enforcement=_enforcement.observe(pending.contract.digest, result)
+    )
+    if pending.ledger is not None:
         result = dataclasses.replace(result, ledger=pending.ledger)
     if write_receipt:
         result = issue_write_receipt(result)
     return result
+
+
+#: RETRY tier defaults (``docs/VERDICT_TIERS.md``): the first wait, the
+#: factor it grows by, and the total budget. ``OPENADAPT_VERIFY_RETRY_S``
+#: sets the budget (0 turns the wait off).
+RETRY_FIRST_S = 0.5
+RETRY_FACTOR = 2.0
+RETRY_BUDGET_S = 8.0
+#: Verifier kinds a wait may read: database reads only. A read through an
+#: app's API can itself move bookkeeping rows the frame then judges.
+_RETRY_READS = frozenset({"surfaces", "sql", "sqlite"})
+
+
+def _retry_budget() -> float:
+    raw = os.environ.get("OPENADAPT_VERIFY_RETRY_S")
+    if raw is None or not raw.strip():
+        return RETRY_BUDGET_S
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return RETRY_BUDGET_S
+
+
+def _kinds(value: Any) -> set[str]:
+    found: set[str] = set()
+    if isinstance(value, Mapping):
+        kind = value.get("kind")
+        if isinstance(kind, str):
+            found.add(kind)
+        for item in value.values():
+            found |= _kinds(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            found |= _kinds(item)
+    return found
+
+
+def await_effects(
+    contract: Contract,
+    params: Mapping[str, Any],
+    *,
+    budget_s: Optional[float] = None,
+    sleep: Any = None,
+) -> int:
+    """Wait, with backoff, until every effect that expects records reads at
+    least one, or the budget runs out. Returns how many reads were taken.
+
+    Only a wait: it never decides a verdict, and the judge that follows reads
+    the store again in full. It reads only through database verifiers, so it
+    can't move what the frame judges. Any failure ends the wait."""
+
+    import time as _time
+
+    from openadapt_flow.runtime.effects.effect import record_matches
+    from openadapt_flow.runtime.effects.surfaces import surface_of
+    from openadapt_flow.verify_run import _build_verifier
+
+    budget = _retry_budget() if budget_s is None else budget_s
+    if budget <= 0:
+        return 0
+    cfg = contract.config
+    try:
+        if not _kinds(cfg.verifier.model_dump(mode="json")) <= _RETRY_READS:
+            return 0
+        wanted = [e for e in cfg.effects if getattr(e, "expected_count", 0)]
+        if not wanted:
+            return 0
+        verifier = _build_verifier(cfg, params)
+    except (OSError, RuntimeError, ValueError, TypeError, KeyError, AttributeError):
+        return 0
+    pause = sleep or _time.sleep
+    waited, delay, reads = 0.0, RETRY_FIRST_S, 0
+    while True:
+        try:
+            state = verifier.capture_pre_state()
+            reads += 1
+            visible = True
+            for effect in wanted:
+                bound = effect.resolve(params)
+                name = surface_of(effect)
+                detail = state.detail or {}
+                if name is None and "record" not in detail:
+                    # One read, no surfaces: the state is that read.
+                    sub = {"reachable": state.reachable, "records": state.records}
+                else:
+                    sub = detail.get(name or "record", {})
+                if not sub.get("reachable"):
+                    return reads
+                selector = dict(bound.match)
+                if not any(
+                    record_matches(dict(r), selector) for r in sub.get("records", [])
+                ):
+                    visible = False
+                    break
+        except (OSError, RuntimeError, ValueError, TypeError, KeyError, AttributeError):
+            return reads
+        if visible or waited + delay > budget:
+            return reads
+        pause(delay)
+        waited += delay
+        delay *= RETRY_FACTOR
 
 
 def issue_write_receipt(

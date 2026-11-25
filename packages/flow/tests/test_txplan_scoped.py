@@ -1604,3 +1604,82 @@ def test_a_stored_scoped_result_without_its_evidence_is_not_verified(lab: Any) -
     assert again.get("replayed") is True and store.writes == 1
     assert again["outcome"] == "COMPLETED_UNVERIFIED", again
     assert "precondition_unproven" in again["codes"]
+
+
+def test_create_marker_merges_into_caller_list_field(lab: Any) -> None:
+    """Issue #2474 item 3: list markers (e.g. FHIR identifier) merge instead of overwriting."""
+    from openadapt_flow.txplan.scoped import default_send
+
+    store, url, state = lab
+    ctx = _ctx(url, state)
+    adapter = ctx.adapter("app")
+    coll = ctx.spec.system("app").collection("item")
+    captured: list[dict[str, Any]] = []
+    real_req = adapter.http.request
+
+    def capture(method: str, req_url: str, **kwargs: Any) -> Any:
+        if method == "POST" and "json" in kwargs and isinstance(kwargs["json"], dict):
+            captured.append(dict(kwargs["json"]))
+        return real_req(method, req_url, **kwargs)
+
+    adapter.http.request = capture  # type: ignore[method-assign]
+    scoped_with_list_marker = coll.scoped.model_copy(  # type: ignore[union-attr]
+        update={
+            "marker": {"identifier": [{"system": "urn:oa:marker", "value": "{marker}"}]}
+        }
+    )
+    coll_with_list = coll.model_copy(update={"scoped": scoped_with_list_marker})
+    caller_ids = [{"system": "urn:clinic:mrn", "value": "MRN-100"}]
+    default_send(
+        adapter,
+        coll_with_list,
+        op="create",
+        fields={"title": "Record", "identifier": caller_ids},
+        rid=None,
+        baseline=None,
+        key="k-merge",
+        marker="oa-mark-1",
+    )
+    assert len(captured) == 1
+    assert captured[0]["identifier"] == [
+        {"system": "urn:clinic:mrn", "value": "MRN-100"},
+        {"system": "urn:oa:marker", "value": "oa-mark-1"},
+    ]
+
+
+def test_scoped_write_records_audit_checked_and_enforces_require_audit(
+    lab: Any,
+) -> None:
+    """Issue #2474 item 2: receipt records audit_checked and require_audit refuses when unconfigured."""
+    from openadapt_flow.txplan.spec import TxSpecError
+
+    store, url, state = lab
+    _seed(store)
+    spec_with_audit = _spec(url)
+    sys_no_audit = spec_with_audit.system("app").model_copy(update={"audit": None})
+    ctx_no_audit = Ctx(
+        spec=spec_with_audit.model_copy(update={"systems": [sys_no_audit]}),
+        state=state,
+    )
+    with pytest.raises(TxSpecError, match="no audit log"):
+        scoped_write(
+            ctx_no_audit,
+            task="t-req-audit",
+            system="app",
+            collection="item",
+            op="update",
+            rid="1",
+            fields={"qty": 5},
+            require_audit=True,
+        )
+    out = scoped_write(
+        ctx_no_audit,
+        task="t-no-audit",
+        system="app",
+        collection="item",
+        op="update",
+        rid="1",
+        fields={"qty": 5},
+    )
+    report = json.loads((Path(out["run_dir"]) / "report.json").read_text())
+    assert report["tx"]["audit_checked"] is False

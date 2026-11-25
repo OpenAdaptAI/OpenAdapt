@@ -1452,6 +1452,36 @@ class FrameAndIntentJudge(JudgeProtocol):
                 )
                 return
 
+            if (
+                v0 is not _MISSING
+                and v1 is not _MISSING
+                and (
+                    path.startswith("_embedded.")
+                    or path.startswith("_links.")
+                    or "._embedded." in path
+                    or "._links." in path
+                )
+            ):
+                for target_path in intended_leaves:
+                    before_target = _resolve_dotted_path(r0, target_path)
+                    after_target = _resolve_dotted_path(r1, target_path)
+                    if (
+                        before_target is not _MISSING
+                        and after_target is not _MISSING
+                        and strict_equal(v0, before_target)
+                        and strict_equal(v1, after_target)
+                    ):
+                        verdicts.append(
+                            FieldVerdict(
+                                field_path=path,
+                                category="frame",
+                                passed=True,
+                                tier_used="entailment_oracle",
+                                reason=f"HAL mirror of intended field {target_path}",
+                            )
+                        )
+                        return
+
             if v1 is _MISSING:
                 wipe_reason = f"untouched field {path!r} deleted in r1 (was {v0!r})"
             else:

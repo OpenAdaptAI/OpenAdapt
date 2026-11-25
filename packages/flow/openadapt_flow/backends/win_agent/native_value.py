@@ -6,24 +6,69 @@ never an instruction to prefer one source. No names, normalization or truncation
 are used. The caller also supplies its current focus/window identity guard.
 """
 
-from __future__ import annotations
-
 import ctypes
 import hashlib
 import time
 from dataclasses import asdict, dataclass
+from enum import Enum
 from typing import Any, Callable, Protocol
 
 MAX_UTF16_UNITS = 65536
-PROOF_SCHEMA = "openadapt.native-value-completeness/v1"
+PROOF_SCHEMA = "openadapt.native-value-completeness/v3"
+IS_PASSWORD_PROPERTY = 30019
+# Win32 EDIT password evidence: the ES_PASSWORD style and EM_GETPASSWORDCHAR.
+ES_PASSWORD = 0x0020
+EM_GETPASSWORDCHAR = 0x00D2
+_EDIT_CLASSES = frozenset({"edit", "richedit20w", "richedit50w", "richedit60w"})
 
 
 def utf16_bytes(value: str) -> bytes:
     return value.encode("utf-16-le", errors="surrogatepass")
 
 
+class StructureEvidence(Enum):
+    NON_VALUE = "non_value"
+    OTHER_TYPE = "other_type"
+    VALUE_PRESENT = "value_present"
+    VALUE_UNKNOWN = "value_unknown"
+
+
+class EditEvidence(Enum):
+    PLAIN = "plain"
+    NO_HANDLE = "no_handle"
+    NON_EDIT = "non_edit"
+    CLASS_UNAVAILABLE = "class_unavailable"
+    STYLE_UNAVAILABLE = "style_unavailable"
+    OWNER_UNAVAILABLE = "owner_unavailable"
+    MASK_QUERY_UNAVAILABLE = "mask_query_unavailable"
+    PROTECTED = "protected"
+    UNAVAILABLE = "unavailable"
+
+
+class SensitivityStage(Enum):
+    """Fixed guest-only diagnostics for the strict census; never provider data."""
+
+    PROPERTY_QUERY = "sensitivity_property_query"
+    PROVIDER_REFUSAL = "sensitivity_provider_refusal"
+    MISSING_STATUS = "sensitivity_missing_status"
+    UNRECOGNIZED_STATUS = "sensitivity_unrecognized_status"
+    STRUCTURE_QUERY = "sensitivity_structure_query"
+    NATIVE_EDIT = "sensitivity_native_edit"
+    RECHECK = "sensitivity_recheck"
+
+
 class ValueUnavailable(Exception):
     """A specific absence of completeness evidence; never carries field text."""
+
+    census_stage: SensitivityStage | None = None
+    structure_evidence: StructureEvidence | None = None
+    edit_evidence: EditEvidence | None = None
+
+    def native_edit_census_label(self) -> str:
+        structure, edit = self.structure_evidence, self.edit_evidence
+        if type(structure) is StructureEvidence and type(edit) is EditEvidence:
+            return f"sensitivity_native_edit/{structure.value}/{edit.value}"
+        return SensitivityStage.NATIVE_EDIT.value
 
 
 @dataclass(frozen=True)
@@ -67,7 +112,7 @@ class CompleteValue:
 
 class NativeTextReader(Protocol):
     def owner(self, hwnd: int) -> NativeOwner: ...
-    def read(self, owner: NativeOwner) -> NativeRead: ...
+    def read(self, owner: NativeOwner, *, guard: Callable[[], None]) -> NativeRead: ...
 
 
 class Win32TextReader:
@@ -104,6 +149,14 @@ class Win32TextReader:
             ctypes.POINTER(ctypes.c_size_t),
         ]
         self._user.SendMessageTimeoutW.restype = ctypes.c_ssize_t
+        self._user.GetClassNameW.argtypes = [
+            wintypes.HWND,
+            wintypes.LPWSTR,
+            ctypes.c_int,
+        ]
+        self._user.GetClassNameW.restype = ctypes.c_int
+        self._user.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+        self._user.GetWindowLongW.restype = wintypes.LONG
 
     def owner(self, hwnd: int) -> NativeOwner:
         from ctypes import wintypes
@@ -128,10 +181,38 @@ class Win32TextReader:
             raise ValueUnavailable("native_text_timeout_or_failure")
         return int(result.value)
 
-    def read(self, owner: NativeOwner) -> NativeRead:
+    def plain_edit(self, hwnd: int) -> bool:
+        """True only for a Unicode EDIT window that shows its text.
+
+        Its class is a Win32 or WinForms EDIT/RichEdit class, its style has no
+        ES_PASSWORD, and EM_GETPASSWORDCHAR answers 0 within the timeout. Any
+        other class, a failed call or a password character is False.
+        """
+        return self._plain_edit_evidence(hwnd) is EditEvidence.PLAIN
+
+    def _plain_edit_evidence(self, hwnd: int) -> EditEvidence:
+        self.owner(hwnd)
+        name = ctypes.create_unicode_buffer(257)
+        if not 0 < self._user.GetClassNameW(hwnd, name, 257) < 257:
+            return EditEvidence.CLASS_UNAVAILABLE
+        if not _edit_class(name.value):
+            return EditEvidence.NON_EDIT
+        # A zero GWL_STYLE is valid only when the call left no Win32 error.
+        getattr(ctypes, "set_last_error")(0)
+        style = self._user.GetWindowLongW(hwnd, -16)  # GWL_STYLE
+        if style == 0 and getattr(ctypes, "get_last_error")() != 0:
+            return EditEvidence.STYLE_UNAVAILABLE
+        if style & ES_PASSWORD or self._message(hwnd, EM_GETPASSWORDCHAR) != 0:
+            return EditEvidence.PROTECTED
+        return EditEvidence.PLAIN
+
+    def read(self, owner: NativeOwner, *, guard: Callable[[], None]) -> NativeRead:
         def unchanged() -> None:
             if self.owner(owner.hwnd) != owner:
                 raise ValueUnavailable("native_owner_changed")
+            # Extent and full-text messages are separate provider calls.
+            # Recheck sensitivity after ownership and before each message.
+            guard()
 
         unchanged()
         extent = self._message(owner.hwnd, 0x000E)
@@ -153,6 +234,51 @@ class Win32TextReader:
         return NativeRead(owner, extent, copied, value)
 
 
+def _edit_class(name: str) -> bool:
+    """A Win32 EDIT/RichEdit class, or WinForms' ``WindowsForms10.EDIT.app...``."""
+    parts = name.casefold().split(".")
+    if len(parts) > 2 and parts[0].startswith("windowsforms") and parts[2] == "app":
+        return parts[1] in _EDIT_CLASSES
+    return len(parts) == 1 and parts[0] in _EDIT_CLASSES
+
+
+_PASSWORD_EVIDENCE: list[Any] = []
+
+
+def _native_edit_evidence(control: Any) -> EditEvidence:
+    """Win32 evidence for a provider that does not support IsPassword."""
+    hwnd = control.NativeWindowHandle
+    if not _positive_int(hwnd):
+        return EditEvidence.NO_HANDLE
+    if not _PASSWORD_EVIDENCE:
+        _PASSWORD_EVIDENCE.append(Win32TextReader())
+    reader = _PASSWORD_EVIDENCE[0]
+    if type(reader) is Win32TextReader:
+        probe = getattr(reader, "_plain_edit_evidence", None)
+        if callable(probe):
+            try:
+                evidence = probe(hwnd)
+            except ValueUnavailable as exc:
+                # The native reader already distinguishes these failed calls.
+                # Never emit its exception or anything returned by a provider.
+                if exc.args == ("native_text_timeout_or_failure",):
+                    return EditEvidence.MASK_QUERY_UNAVAILABLE
+                if exc.args in (
+                    ("native_window_unavailable_or_not_unicode",),
+                    ("native_owner_unavailable",),
+                ):
+                    return EditEvidence.OWNER_UNAVAILABLE
+                return EditEvidence.UNAVAILABLE
+            return (
+                evidence if type(evidence) is EditEvidence else EditEvidence.UNAVAILABLE
+            )
+    # Readers with only the original boolean interface still use that proof.
+    plain = getattr(reader, "plain_edit", None)
+    if callable(plain) and plain(hwnd) is True:
+        return EditEvidence.PLAIN
+    return EditEvidence.UNAVAILABLE
+
+
 def _positive_int(value: object) -> bool:
     return type(value) is int and value > 0
 
@@ -171,6 +297,155 @@ def _identity(control: Any) -> tuple[int, int, tuple[int, ...]]:
     return hwnd, pid, tuple(runtime)
 
 
+def is_uia_not_supported(raw: object) -> bool:
+    """Accept only UI Automation's reserved NotSupported COM object."""
+    if raw is None:
+        return False
+    try:
+        from comtypes import IUnknown
+
+        if not isinstance(raw, ctypes.POINTER(IUnknown)) or not raw:
+            return False
+        from uiautomation.uiautomation import _AutomationClient
+
+        # Compare through UIA. An arbitrary VT_UNKNOWN is not the sentinel.
+        answer = _AutomationClient.instance().IUIAutomation.CheckNotSupported(raw)
+        return type(answer) in (int, bool) and answer == 1
+    except Exception:
+        return False
+
+
+def pattern_presence(pattern: object) -> bool | None:
+    """Interpret the typed COM output from a successful GetCurrentPattern."""
+    if pattern is None:
+        return False
+    try:
+        from comtypes import IUnknown
+
+        if isinstance(pattern, ctypes.POINTER(IUnknown)):
+            return bool(pattern)
+    except Exception:
+        pass
+    return None
+
+
+# These UIA node types can carry a caption or structural metadata. A type
+# alone never establishes that its value pattern is absent.
+_STRUCTURAL_TYPES = frozenset(
+    {
+        "AppBarControl",
+        "ButtonControl",
+        "CheckBoxControl",
+        "DataGridControl",
+        "DataItemControl",
+        "GroupControl",
+        "HeaderControl",
+        "HeaderItemControl",
+        "HyperlinkControl",
+        "ImageControl",
+        "ListControl",
+        "ListItemControl",
+        "MenuBarControl",
+        "MenuControl",
+        "MenuItemControl",
+        "PaneControl",
+        "ProgressBarControl",
+        "RadioButtonControl",
+        "ScrollBarControl",
+        "SeparatorControl",
+        "SplitButtonControl",
+        "StatusBarControl",
+        "TabControl",
+        "TabItemControl",
+        "TableControl",
+        "TextControl",
+        "ThumbControl",
+        "TitleBarControl",
+        "ToolBarControl",
+        "ToolTipControl",
+        "TreeControl",
+        "TreeItemControl",
+        "WindowControl",
+    }
+)
+
+
+def _structure_evidence(
+    control: Any, get_property: Callable[..., Any]
+) -> StructureEvidence:
+    if control.ControlTypeName not in _STRUCTURAL_TYPES:
+        return StructureEvidence.OTHER_TYPE
+    available = get_property(30043, 1)  # UIA_IsValuePatternAvailablePropertyId
+    if available is not False:
+        if not is_uia_not_supported(available):
+            if available is True:
+                return StructureEvidence.VALUE_PRESENT
+            return StructureEvidence.VALUE_UNKNOWN
+        # A successful null ValuePattern is absence. Errors and malformed
+        # answers cannot authorize even a caption.
+        present = pattern_presence(control.Element.GetCurrentPattern(10002))
+        if present is True:
+            return StructureEvidence.VALUE_PRESENT
+        if present is not False:
+            return StructureEvidence.VALUE_UNKNOWN
+    # The capability/type lookup was a provider call: recheck sensitivity
+    # immediately before allowing the caller's structural metadata access.
+    status = get_property(IS_PASSWORD_PROPERTY, 1)
+    if status is False or is_uia_not_supported(status):
+        return StructureEvidence.NON_VALUE
+    raise ValueUnavailable("password_or_password_status_unavailable")
+
+
+def _require_non_sensitive(control: Any, *, structural: bool) -> None:
+    stage = SensitivityStage.PROPERTY_QUERY
+    structure = None
+    edit = EditEvidence.UNAVAILABLE
+    try:
+        method = control.GetPropertyValueEx
+        raw = method(IS_PASSWORD_PROPERTY, 1)
+        if type(raw) is bool:
+            if raw is False:
+                return
+            stage = SensitivityStage.PROVIDER_REFUSAL
+        elif is_uia_not_supported(raw):
+            stage = SensitivityStage.STRUCTURE_QUERY
+            if structural:
+                structure = _structure_evidence(control, method)
+                if structure is StructureEvidence.NON_VALUE:
+                    return
+            stage = SensitivityStage.NATIVE_EDIT
+            edit = _native_edit_evidence(control)
+            if edit is EditEvidence.PLAIN:
+                stage = SensitivityStage.RECHECK
+                status = method(IS_PASSWORD_PROPERTY, 1)
+                if status is False or is_uia_not_supported(status):
+                    return
+        else:
+            stage = (
+                SensitivityStage.MISSING_STATUS
+                if raw is None
+                else SensitivityStage.UNRECOGNIZED_STATUS
+            )
+    except Exception:
+        pass
+    error = ValueUnavailable("password_or_password_status_unavailable")
+    error.census_stage = stage
+    if stage is SensitivityStage.NATIVE_EDIT:
+        error.structure_evidence = structure
+        error.edit_evidence = edit
+    raise error
+
+
+def require_non_sensitive_value(control: Any) -> None:
+    """Require affirmative non-sensitive evidence before any semantic value read."""
+    _require_non_sensitive(control, structural=False)
+
+
+def require_non_sensitive_structure(control: Any) -> None:
+    """Allow proven non-value structural metadata; never grants a value read."""
+    _require_non_sensitive(control, structural=True)
+
+
 def observe_complete_value(
     control: Any,
     *,
@@ -187,6 +462,7 @@ def observe_complete_value(
     around every source read. It never upgrades either disagreeing source.
     """
     try:
+        require_non_sensitive_value(control)
         deadline = clock() + 5.0
         binding = identity()
         if not isinstance(binding, str) or not 1 <= len(binding) <= 256:
@@ -210,21 +486,27 @@ def observe_complete_value(
                 or reader.owner(bound[0]) != owner
             ):
                 raise ValueUnavailable("value_identity_changed")
-            if getattr(control, "IsPassword", None) is not False:
-                raise ValueUnavailable("password_or_password_status_unavailable")
             if (
                 require_editable
                 and getattr(control, "ControlTypeName", None) != "EditControl"
             ):
                 raise ValueUnavailable("not_editable_value_control")
+            # This MUST be last: any preceding provider metadata/identity
+            # getter can change the sensitive status before the next access.
+            require_non_sensitive_value(control)
 
         def uia() -> str:
             guard()
-            pattern = control.GetValuePattern()
+            method = control.GetValuePattern
+            guard()
+            pattern = method()
+            guard()
             read_only = getattr(pattern, "IsReadOnly", None)
+            guard()
             if type(read_only) is not bool or (require_editable and read_only):
                 raise ValueUnavailable("read_only_or_read_only_status_unavailable")
             value = getattr(pattern, "Value", None)
+            guard()
             if not isinstance(value, str):
                 raise ValueUnavailable("value_pattern_unavailable")
             if len(utf16_bytes(value)) // 2 > MAX_UTF16_UNITS:
@@ -236,7 +518,7 @@ def observe_complete_value(
 
         def native() -> NativeRead:
             guard()
-            result = reader.read(owner)
+            result = reader.read(owner, guard=guard)
             guard()
             units = len(utf16_bytes(result.value)) // 2
             if not 0 <= result.extent <= MAX_UTF16_UNITS:

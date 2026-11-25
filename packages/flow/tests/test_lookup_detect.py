@@ -160,7 +160,12 @@ def test_no_look_up_means_no_proposal(tmp_path: Path) -> None:
     assert detect_lookup(recording) is None
 
 
-def test_the_proposed_check_confirms_the_booking(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "prior_loaded_view", [False, True], ids=["cold-view-unknown", "prior-view-changes"]
+)
+def test_the_proposed_check_confirms_the_booking(
+    tmp_path: Path, prior_loaded_view: bool
+) -> None:
     recording, kiosk = _record(tmp_path)
     proposal = detect_lookup(recording)
     assert proposal is not None
@@ -179,9 +184,22 @@ def test_the_proposed_check_confirms_the_booking(tmp_path: Path) -> None:
     spec = DesktopReadbackSpec.model_validate(section)
 
     readers: list[KioskLookupTransport] = []
+    if prior_loaded_view:
+        # A separately stored prior record gives the positive fixture a real
+        # complete before-view and a changed after-view. A missing marker in
+        # the cold fixture is still unknown, never proof of absence/freshness.
+        kiosk.book(
+            "REQ-4814", "MRN B2002", "Prior Fixture", "2026-11-01 08:30", "Intake"
+        )
 
     def open_backend(user: str, password: str) -> tuple[Any, DesktopSessionFacts]:
         reader = KioskLookupTransport(kiosk.db_path)  # a fresh RDP logon
+        if prior_loaded_view:
+            reader.lookup = "REQ-4814"
+            reader._find()
+            # An empty query box with an already-loaded result avoids testing
+            # select-all input here; the old result remains until Find.
+            reader.lookup = ""
         readers.append(reader)
         return FreeRDPBackend(reader), DesktopSessionFacts(True, True, True, "ocr")
 
@@ -198,7 +216,13 @@ def test_the_proposed_check_confirms_the_booking(tmp_path: Path) -> None:
         raw = {k: v for k, v in raw.items() if k != "needs_operator_confirmation"}
         effect = Effect.model_validate({**raw, "timeout_s": 0.0}).resolve(PARAMS)
         verdict = verifier.verify(effect, before)
-        assert verdict.verdict is Verdict.CONFIRMED, verdict.reason
+        if prior_loaded_view:
+            assert verdict.verdict is Verdict.CONFIRMED, verdict.reason
+        else:
+            assert verdict.verdict is Verdict.INDETERMINATE, verdict.reason
+            assert verdict.unavailable
+            assert "record view did not load" in verdict.reason
+    assert before.reachable is prior_loaded_view
     assert readers
     assert all(r.save_clicks == 0 and r.booking_typed == "" for r in readers)
 

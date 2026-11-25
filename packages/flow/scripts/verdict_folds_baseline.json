@@ -1,4 +1,50 @@
 {
+  "openadapt/cli.py": {
+    "cmp_literal": 1,
+    "swallow": 10,
+    "swallow_wide": 7,
+    "slice_count": 2
+  },
+  "openadapt/quickstart/engine.py": {
+    "cmp_literal": 7,
+    "swallow": 3
+  },
+  "openadapt/quickstart/notices.py": {
+    "swallow": 1
+  },
+  "openadapt/quickstart/openemr.py": {
+    "cmp_literal": 2,
+    "swallow": 2,
+    "swallow_wide": 1
+  },
+  "openadapt/quickstart/scene.py": {
+    "cmp_literal": 1,
+    "slice_count": 1
+  },
+  "openadapt/quickstart/story.py": {
+    "swallow_wide": 3
+  },
+  "openadapt/quickstart/view.py": {
+    "cmp_literal": 2,
+    "swallow": 1
+  },
+  "openadapt/quickstart/workers.py": {
+    "cmp_literal": 1,
+    "swallow": 2,
+    "swallow_wide": 1
+  },
+  "openadapt/receipt_verify.py": {
+    "swallow": 2
+  },
+  "openadapt/seal_claim.py": {
+    "swallow": 5
+  },
+  "openadapt/seal_publish.py": {
+    "swallow": 1
+  },
+  "openadapt/seal_view/__init__.py": {
+    "swallow": 2
+  },
   "packages/flow/openadapt_flow/__main__.py": {
     "cmp_literal": 14,
     "swallow": 8,
@@ -175,7 +221,7 @@
     "swallow": 1
   },
   "packages/flow/openadapt_flow/approval_mode/form_state.py": {
-    "swallow": 5
+    "swallow": 7
   },
   "packages/flow/openadapt_flow/approval_mode/gate.py": {
     "cmp_literal": 4,
@@ -272,14 +318,14 @@
     "bool_fold": 1
   },
   "packages/flow/openadapt_flow/backends/win_agent/native_value.py": {
-    "swallow": 1
+    "swallow": 4
   },
   "packages/flow/openadapt_flow/backends/win_agent/server.py": {
-    "swallow": 28,
+    "swallow": 49,
     "swallow_wide": 6
   },
   "packages/flow/openadapt_flow/backends/windows_backend.py": {
-    "swallow": 9,
+    "swallow": 10,
     "swallow_wide": 2
   },
   "packages/flow/openadapt_flow/backends/windows_keyboard_lease.py": {
@@ -1388,8 +1434,12 @@
   "packages/flow/openadapt_flow/runtime/remote_vlm.py": {
     "swallow": 4
   },
+  "packages/flow/openadapt_flow/runtime/replay/confirming.py": {
+    "swallow": 2
+  },
   "packages/flow/openadapt_flow/runtime/replay/effects.py": {
-    "bool_fold": 1
+    "bool_fold": 1,
+    "swallow": 3
   },
   "packages/flow/openadapt_flow/runtime/replay/settling.py": {
     "swallow": 5,
@@ -1693,52 +1743,6 @@
   "packages/flow/openadapt_flow/write_receipt.py": {
     "cmp_literal": 9,
     "bool_fold": 3
-  },
-  "openadapt/cli.py": {
-    "cmp_literal": 1,
-    "swallow": 10,
-    "swallow_wide": 7,
-    "slice_count": 2
-  },
-  "openadapt/quickstart/engine.py": {
-    "cmp_literal": 7,
-    "swallow": 3
-  },
-  "openadapt/quickstart/notices.py": {
-    "swallow": 1
-  },
-  "openadapt/quickstart/openemr.py": {
-    "cmp_literal": 2,
-    "swallow": 2,
-    "swallow_wide": 1
-  },
-  "openadapt/quickstart/scene.py": {
-    "cmp_literal": 1,
-    "slice_count": 1
-  },
-  "openadapt/quickstart/story.py": {
-    "swallow_wide": 3
-  },
-  "openadapt/quickstart/view.py": {
-    "cmp_literal": 2,
-    "swallow": 1
-  },
-  "openadapt/quickstart/workers.py": {
-    "cmp_literal": 1,
-    "swallow": 2,
-    "swallow_wide": 1
-  },
-  "openadapt/receipt_verify.py": {
-    "swallow": 2
-  },
-  "openadapt/seal_claim.py": {
-    "swallow": 5
-  },
-  "openadapt/seal_publish.py": {
-    "swallow": 1
-  },
-  "openadapt/seal_view/__init__.py": {
-    "swallow": 2
   },
   "scripts/ci/attestation.py": {
     "bool_fold": 2

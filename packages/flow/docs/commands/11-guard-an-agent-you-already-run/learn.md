@@ -1,1 +1,1 @@
-Learn the app's own per-request writes from a shadow run or from read-only requests (`learn probe`), and write them into the contracts.
+Learn the app's own per-request writes from a shadow run or from read-only requests (`learn probe`), scope the frame to the setup's business entities (`learn entities`, admitted only if the planted faults are still caught), and write them into the contracts.

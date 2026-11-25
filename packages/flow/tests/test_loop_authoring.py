@@ -397,6 +397,8 @@ def test_healthy_loop_confirms_each_record_zero_model_calls(dirs):
     looped = author_data_driven_loop(body, records, loop_var="patient")
 
     url, db, stop = fault_serve()
+    for rec in records:
+        db.register_patient(rec["patient_id"])
     try:
         backend = _RowWritingBackend(url)
         report = Replayer(
@@ -442,6 +444,9 @@ def test_poisoned_record_effect_refute_halts_no_silent_skip(dirs):
     looped = author_data_driven_loop(body, records)
 
     url, db, stop = fault_serve()
+    for rec in records:
+        db.register_patient(rec["patient_id"])
+    db.register_patient("mallory")
     try:
         # The GUI, for bob, actually writes 'mallory' (a wrong-patient drift).
         backend = _RowWritingBackend(url, corrupt={"bob": "mallory"})
@@ -518,6 +523,8 @@ def test_committed_encounter_showcase_loop_replays_through_the_interpreter(tmp_p
     # Dynamic proof: the loop actually interprets, once per record.
     run_dir = tmp_path / "run"
     url, db, stop = fault_serve()
+    for rec in records:
+        db.register_patient(rec["patient_id"])
     try:
         backend = _RowWritingBackend(url)
         report = Replayer(

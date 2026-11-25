@@ -122,6 +122,8 @@ class WindowsFaultDriver(WebFaultDriver):
                 getattr(context, "capture_frame", None) or context.backend.screenshot
             )
             frame = _settled_screenshot(capture)
+            if frame is None and capture is not context.backend.screenshot:
+                frame = _settled_screenshot(context.backend.screenshot)
             if frame is None:
                 self.declined = "native_fault_did_not_settle"
                 return None

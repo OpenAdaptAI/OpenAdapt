@@ -284,10 +284,44 @@ class Question:
     text: str
     proposal: Any
     options: list[str] = field(default_factory=list)
+    #: Write kinds this question concerns; empty means global/shared (blocks every kind).
+    kinds: tuple[str, ...] = ()
 
 
 def _answer(answers: Mapping[str, Any], key: str) -> Any:
     return (answers or {}).get(key)
+
+
+def open_questions_for_kind(manifest: Mapping[str, Any], kind: str) -> list[str]:
+    """Open manifest question keys that concern ``kind``.
+
+    A question scoped to another kind does not block ``kind``. Any global,
+    shared, or ambiguous question (no explicit ``kinds`` scope and not
+    uniquely naming another declared kind) blocks ``kind``.
+    """
+    open_keys = list(manifest.get("questions_open") or [])
+    if not open_keys:
+        return []
+    declared_kinds = set(manifest.get("kinds") or {})
+    meta_by_key = {
+        str(q["key"]): q
+        for q in (manifest.get("questions") or [])
+        if isinstance(q, Mapping) and "key" in q
+    }
+    blocking: list[str] = []
+    for key in open_keys:
+        meta = meta_by_key.get(key)
+        scoped_kinds = meta.get("kinds") if isinstance(meta, Mapping) else None
+        if isinstance(scoped_kinds, list) and scoped_kinds:
+            if kind in scoped_kinds:
+                blocking.append(key)
+            continue
+        if isinstance(key, str) and key.startswith("locations."):
+            target_kind = key[len("locations.") :].split(".", 1)[0]
+            if target_kind in declared_kinds and target_kind != kind:
+                continue
+        blocking.append(key)
+    return blocking
 
 
 # -- the plan for one kind --------------------------------------------------------
@@ -2772,25 +2806,36 @@ def variants(
     # Every demonstrated set first, then sets with fewer optional fields,
     # one field left out at a time across demonstrations, so the cap keeps
     # the sets closest to what was shown.
-    sets: list[frozenset[str]] = list(dict.fromkeys(base_sets))
-    drops = {base: [p for p in optional if p in base] for base in base_sets}
-    for n in range(1, max((len(v) for v in drops.values()), default=0) + 1):
-        for base in base_sets:
-            for combo in itertools.combinations(drops[base], n):
-                s = frozenset(base - set(combo))
-                if s not in seen:
-                    seen.add(s)
-                    sets.append(s)
+    sets: list[frozenset[str]] = list(dict.fromkeys(base_sets))[:MAX_VARIANTS]
+    if len(sets) < MAX_VARIANTS:
+        drops = {base: [p for p in optional if p in base] for base in base_sets}
+        for n in range(1, max((len(v) for v in drops.values()), default=0) + 1):
+            for base in base_sets:
+                for combo in itertools.combinations(drops[base], n):
+                    s = frozenset(base - set(combo))
+                    if s not in seen:
+                        seen.add(s)
+                        sets.append(s)
+                        if len(sets) == MAX_VARIANTS:
+                            break
+                if len(sets) == MAX_VARIANTS:
+                    break
+            if len(sets) == MAX_VARIANTS:
+                break
     # A field the examples leave out sometimes, and that one demonstration
     # gives, may be added to a set from another demonstration.
-    for s in list(sets):
-        for p in optional:
-            if p not in s:
-                t = frozenset(s | {p})
-                if t not in seen:
-                    seen.add(t)
-                    sets.append(t)
-    sets = sets[:MAX_VARIANTS]
+    if len(sets) < MAX_VARIANTS:
+        for s in list(sets):
+            for p in optional:
+                if p not in s:
+                    t = frozenset(s | {p})
+                    if t not in seen:
+                        seen.add(t)
+                        sets.append(t)
+                        if len(sets) == MAX_VARIANTS:
+                            break
+            if len(sets) == MAX_VARIANTS:
+                break
     for s in sets:
         if lists:
             for n in range(1, MAX_LIST + 1):
@@ -3311,6 +3356,7 @@ def propose(
                     + " ".join(parts)
                     + f" Answer `locations.{p.kind}: {{<parameter>: <number>}}` to pick one.",
                     None,
+                    kinds=(p.kind,),
                 )
             )
             if not open_:
@@ -3328,6 +3374,15 @@ def propose(
     if phones:
         confirmed = _answer(answers, "phones")
         confirmed = set(confirmed) if isinstance(confirmed, list) else set()
+        phone_kinds = tuple(
+            sorted(
+                {
+                    p.kind
+                    for p in plans
+                    if any(loc.rule == "phone" for _, loc in _all_locations(p))
+                }
+            )
+        )
         questions.append(
             Question(
                 "phones",
@@ -3339,6 +3394,7 @@ def propose(
                 "compared exactly)? Answer `phones: [<kind.parameter>, ...]` with "
                 "the ones that are phone numbers; any other is compared exactly.",
                 phones,
+                kinds=phone_kinds,
             )
         )
         for p in plans:
@@ -3611,10 +3667,15 @@ def propose(
         _children(schema, p, [], only_missing=True)
     questions.extend(location_questions)
     questions_open = [q for q in questions if _answer(answers, q.key) is None]
-    if only is not None and questions_open:
-        raise GenerateError(
-            "open questions: " + ", ".join(q.key for q in questions_open)
-        )
+    if only is not None:
+        only_kind = only[0]
+        blocking_open = [
+            q for q in questions_open if not q.kinds or only_kind in q.kinds
+        ]
+        if blocking_open:
+            raise GenerateError(
+                "open questions: " + ", ".join(q.key for q in blocking_open)
+            )
     settings = Settings(
         read,
         dict(actor_params),
@@ -3712,6 +3773,7 @@ def propose(
                 "text": q.text,
                 "proposal": q.proposal,
                 "answered": _answer(answers, q.key) is not None,
+                **({"kinds": list(q.kinds)} if q.kinds else {}),
             }
             for i, q in enumerate(questions)
         ],
@@ -4123,12 +4185,14 @@ def choose(
     manifest = load_yaml(manifest_path) or {}
     if manifest.get("schema_version") != MANIFEST_SCHEMA:
         raise GenerateError(f"{manifest_path} is not a contract manifest")
-    if require_answers and manifest.get("questions_open"):
-        raise GenerateError(
-            "the manifest still has open questions: "
-            + ", ".join(manifest["questions_open"])
-            + " (answer them in answers.yaml and run propose again)"
-        )
+    if require_answers:
+        blocking_open = open_questions_for_kind(manifest, kind)
+        if blocking_open:
+            raise GenerateError(
+                "the manifest still has open questions: "
+                + ", ".join(blocking_open)
+                + " (answer them in answers.yaml and run propose again)"
+            )
     entry = (manifest.get("kinds") or {}).get(kind)
     if not entry or not entry.get("variants"):
         raise GenerateError(f"no contract for kind {kind!r}")

@@ -250,7 +250,9 @@ def _note_equals(value: str) -> Effect:
     )
 
 
-def test_winforms_save_is_confirmed_by_looking_the_patient_up(winforms: Any) -> None:
+def test_winforms_without_native_completeness_cannot_confirm_saved_state(
+    winforms: Any,
+) -> None:
     verifier = _winforms_verifier(winforms, NEIL)
     # Without its own sign-in, a separate window re-reads saved state.
     assert (
@@ -259,41 +261,47 @@ def test_winforms_save_is_confirmed_by_looking_the_patient_up(winforms: Any) -> 
     assert verifier.independent_system_of_record is False
 
     before = verifier.capture_pre_state()
-    assert before.reachable
-    assert before.records == [{"note": "", "patient": "Neil Sorenson"}]
+    # This faithful legacy stand-in has HWND0 and Name-only labels/virtual
+    # rows, so it cannot invent independent native completeness evidence.
+    assert not before.reachable and before.records == []
 
-    winforms.save_note(1, "Follow up in two weeks")  # the run's save
+    winforms.save_note(1, "Follow up in two weeks")  # fixture setup, not verifier input
+    stored = winforms.all_patients()
     verdict = verifier.verify(_note_equals("Follow up in two weeks"), before)
-    assert verdict.verdict is Verdict.CONFIRMED, verdict.reason
-    assert verdict.assurance == "screen_readback"
-    # The read-back typed the surname, pressed Search, opened Neil Sorenson.
-    # It never pressed Save Note and never touched the note.
+    assert verdict.verdict is Verdict.INDETERMINATE, verdict.reason
+    assert verdict.unavailable and verdict.assurance == "unchecked"
+    assert winforms.all_patients() == stored
+    # Declared complete-source effect semantics have separate positive tests.
+    # An unqualified preview cannot certify either a match or a mismatch.
     assert winforms.saves == 0
     assert set(winforms.clicked) <= {"searchBox", "searchButton", "Row 0", "Row 1"}
     assert "saveButton" not in winforms.clicked
     assert winforms.all_patients()[0]["note"] == "Follow up in two weeks"
 
 
-def test_winforms_wrong_note_is_refuted_through_ui_automation(winforms: Any) -> None:
+def test_winforms_without_complete_values_does_not_refute_from_previews(
+    winforms: Any,
+) -> None:
     verifier = _winforms_verifier(winforms, NEIL)
     before = verifier.capture_pre_state()
     winforms.save_note(1, "Follow up in three weeks")
     verdict = verifier.verify(_note_equals("Follow up in two weeks"), before)
-    assert verdict.verdict is Verdict.REFUTED
-    assert "record view" in verdict.reason
-    assert "system of record" not in verdict.reason
+    assert verdict.verdict is Verdict.INDETERMINATE and verdict.unavailable
+    assert "cannot certify" in verdict.reason
+    assert winforms.saves == 0
 
 
-def test_winforms_decoy_with_the_same_first_name_is_not_opened(winforms: Any) -> None:
-    # Searching "Neil" lists Neil Anderson above Neil Sorenson. Only the row
-    # showing the full identity is opened.
+def test_unqualified_value_source_does_not_choose_a_row(winforms: Any) -> None:
+    # No row may be chosen before the field and inventory sources qualify.
+    # The complete-source ambiguity branch has a separate unit control.
     verifier = _winforms_verifier(
         winforms, {"patient_last": "Neil", "patient": "Neil Sorenson"}
     )
     before = verifier.capture_pre_state()
     winforms.save_note(1, "Seen today")
     verdict = verifier.verify(_note_equals("Seen today"), before)
-    assert verdict.verdict is Verdict.CONFIRMED, verdict.reason
+    assert verdict.verdict is Verdict.INDETERMINATE and verdict.unavailable
+    assert winforms.saves == 0 and "saveButton" not in winforms.clicked
 
 
 def test_winforms_two_matching_rows_is_indeterminate(winforms: Any) -> None:
@@ -309,11 +317,11 @@ def test_winforms_two_matching_rows_is_indeterminate(winforms: Any) -> None:
         verifier.capture_pre_state(),
     )
     assert verdict.verdict is Verdict.INDETERMINATE
-    assert "2 search results" in verdict.reason
+    assert verdict.unavailable and "cannot certify" in verdict.reason
     assert winforms.saves == 0
 
 
-def test_winforms_search_button_declared_as_save_is_refused(winforms: Any) -> None:
+def test_unqualified_lookup_never_reaches_a_declared_save_target(winforms: Any) -> None:
     verifier = _winforms_verifier(
         winforms,
         NEIL,
@@ -325,7 +333,7 @@ def test_winforms_search_button_declared_as_save_is_refused(winforms: Any) -> No
     )
     verdict = verifier.verify(_note_equals("x"), verifier.capture_pre_state())
     assert verdict.verdict is Verdict.INDETERMINATE
-    assert "save-like" in verdict.reason
+    assert verdict.unavailable and "cannot certify" in verdict.reason
     assert winforms.saves == 0
 
 
@@ -406,7 +414,7 @@ def _booked(field: str = "visit_type", value: str = "follow-up") -> Effect:
     )
 
 
-def test_kiosk_booking_is_confirmed_from_its_own_rdp_session(
+def test_kiosk_without_complete_marker_transition_remains_indeterminate(
     kiosk: KioskLookupTransport,
 ) -> None:
     verifier = _kiosk_verifier(kiosk, "REQ-4815")
@@ -414,27 +422,32 @@ def test_kiosk_booking_is_confirmed_from_its_own_rdp_session(
     assert verifier_effect_tier(verifier) is VerificationTier.INDEPENDENT_SESSION
 
     before = verifier.capture_pre_state()
-    assert before.reachable
-    assert before.records == []  # the kiosk says "No appointment found"
+    assert not before.reachable
+    assert before.records == []  # unreachable, not proof of record absence
 
     kiosk.book("REQ-4815", "MRN A1001", "Ada Lovelace", "2026-11-02 09:30", "Follow-up")
+    stored = kiosk.db_path.read_bytes()
     verdict = verifier.verify(_booked(), before)
-    assert verdict.verdict is Verdict.CONFIRMED, verdict.reason
-    assert verifier.verify(_booked("patient_mrn", "MRN A1001"), before).confirmed
-    assert verdict.assurance == "screen_readback"
+    assert verdict.verdict is Verdict.INDETERMINATE and verdict.unavailable
+    assert not verifier.verify(_booked("patient_mrn", "MRN A1001"), before).confirmed
+    assert verdict.assurance == "unchecked"
+    assert kiosk.db_path.read_bytes() == stored
     # Only the look-up box and Find were touched.
     assert kiosk.sessions
     assert all(screen.save_clicks == 0 for screen in kiosk.sessions)
     assert all(screen.booking_typed == "" for screen in kiosk.sessions)
 
 
-def test_kiosk_ocr_mismatch_is_never_refuted(kiosk: KioskLookupTransport) -> None:
+def test_unqualified_marker_prevents_classifying_an_ocr_mismatch(
+    kiosk: KioskLookupTransport,
+) -> None:
     verifier = _kiosk_verifier(kiosk, "REQ-4815")
     before = verifier.capture_pre_state()
     kiosk.book("REQ-4815", "MRN A1001", "Ada Lovelace", "2026-11-02 09:30", "Intake")
     verdict = verifier.verify(_booked(), before)
     assert verdict.verdict is Verdict.INDETERMINATE
-    assert "OCR can misread" in verdict.reason
+    assert verdict.unavailable and "cannot certify" in verdict.reason
+    # The complete-marker + OCR-mismatch policy is covered separately.
 
 
 def test_kiosk_count_check_without_a_results_list_halts(
@@ -745,7 +758,7 @@ def test_app_sign_in_needs_a_network_rdp_session() -> None:
         )
 
 
-def test_a_ui_automation_marker_without_text_counts_when_present() -> None:
+def test_an_unavailable_ui_automation_marker_cannot_become_presence() -> None:
     from openadapt_flow.runtime.effects.desktop_readback import _present
 
     class Panel(_ScriptedSurface):
@@ -755,10 +768,10 @@ def test_a_ui_automation_marker_without_text_counts_when_present() -> None:
             return super().read(ref)
 
     surface = Panel({"recordPanel": "", "statusLabel": ""})
-    assert _present(surface, ControlRef(automation_id="recordPanel"))
-    assert not _present(surface, ControlRef(automation_id="otherPanel"))
-    # A control that reads as empty (a label still filling in) is absent.
-    assert not _present(surface, ControlRef(automation_id="statusLabel"))
+    assert _present(surface, ControlRef(automation_id="recordPanel")) is None
+    assert _present(surface, ControlRef(automation_id="otherPanel")) is None
+    # A complete empty value does not prove that an element is absent.
+    assert _present(surface, ControlRef(automation_id="statusLabel")) is None
 
 
 def test_result_rows_are_data_and_sign_in_ok_is_allowed() -> None:
@@ -884,11 +897,11 @@ def test_the_row_click_aims_at_the_identifier() -> None:
     assert _identity_piece(cells, "Neil Sorenson").point == (200, 200)
 
 
-def test_a_later_unreadable_look_up_never_replaces_a_readable_verdict(
+def test_unqualified_source_cannot_supply_a_first_readable_verdict(
     winforms: Any,
 ) -> None:
-    # Persistent seat: poll 1 reads a wrong note (REFUTED); poll 2 sees the
-    # same view and can't read it as fresh. The REFUTED stands.
+    # No first readable verdict exists when the native source is incomplete.
+    # The complete-then-unavailable polling contract is tested separately.
     verifier = _winforms_verifier(winforms, NEIL)
     before = verifier.capture_pre_state()
     winforms.save_note(1, "Follow up in three weeks")
@@ -896,7 +909,8 @@ def test_a_later_unreadable_look_up_never_replaces_a_readable_verdict(
         update={"timeout_s": 2.0}
     )
     verdict = verifier.verify(effect, before)
-    assert verdict.verdict is Verdict.REFUTED
+    assert verdict.verdict is Verdict.INDETERMINATE and verdict.unavailable
+    assert winforms.saves == 0
 
 
 # -- the same look-up through a Citrix window and a macOS window -----------------------
@@ -1009,8 +1023,10 @@ def test_kiosk_through_a_citrix_window(tmp_path: Path) -> None:
     assert (
         verifier_effect_tier(verifier) is VerificationTier.PERSISTED_STATE_REACQUISITION
     )
+    stored = kiosk.db_path.read_bytes()
     verdict = verifier.verify(_booked(), verifier.capture_pre_state())
-    assert verdict.verdict is Verdict.CONFIRMED, verdict.reason
+    assert verdict.verdict is Verdict.INDETERMINATE and verdict.unavailable
+    assert kiosk.db_path.read_bytes() == stored
     assert all(s.save_clicks == 0 and s.booking_typed == "" for s in kiosk.sessions)
 
 
@@ -1053,6 +1069,35 @@ def test_kiosk_through_a_macos_window(tmp_path: Path) -> None:
         return backend, DesktopSessionFacts(True, False, False, "ocr")
 
     verifier = _window_verifier(open_backend, "macos")
+    stored = kiosk.db_path.read_bytes()
     verdict = verifier.verify(_booked(), verifier.capture_pre_state())
-    assert verdict.verdict is Verdict.CONFIRMED, verdict.reason
+    assert verdict.verdict is Verdict.INDETERMINATE and verdict.unavailable
+    assert kiosk.db_path.read_bytes() == stored
     assert all(s.save_clicks == 0 and s.booking_typed == "" for s in kiosk.sessions)
+
+
+def test_declared_row_ambiguity_and_save_guard_still_refuse_without_preview_authority():
+    class Rows(_ScriptedSurface):
+        def rows(self, _ref):
+            return [Seen("Neil Sorenson", (1, 1)), Seen("Neil Sorenson", (2, 2))]
+
+    target = resolve_desktop_spec(_winforms_spec(), NEIL)
+    rows = Rows({"searchBox": "Sorenson", "searchButton": "Search"}, under="Search")
+    raw = look_up(rows, target, ReadOnlyLookupGuard(target.spec))
+    assert not raw.ok and "2 search results" in raw.reason
+    assert rows.actions == ["click Search"]
+
+    spec = _winforms_spec(
+        search={
+            "box": {"automation_id": "searchBox"},
+            "query": "Sorenson",
+            "submit": {"automation_id": "saveButton"},
+        }
+    )
+    target = resolve_desktop_spec(spec, NEIL)
+    dangerous = _ScriptedSurface(
+        {"searchBox": "Sorenson", "saveButton": "Save Note"}, under="Save Note"
+    )
+    with pytest.raises(ReadOnlyViolation, match="save-like"):
+        look_up(dangerous, target, ReadOnlyLookupGuard(spec))
+    assert dangerous.actions == []

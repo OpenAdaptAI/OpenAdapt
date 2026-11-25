@@ -113,6 +113,7 @@ class FaultDB:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._records: list[dict] = []
+        self._known_patients: set[str] = set(KNOWN_PATIENTS)
         self._seq = 0
         self.rejected_writes = 0  # optimistic-mode rejections observed
         #: The ``/chart/`` record pages served from this store (set by
@@ -198,12 +199,20 @@ class FaultDB:
                 "rejected_writes": self.rejected_writes,
             }
 
+    def register_patient(self, patient_id: str) -> None:
+        with self._lock:
+            self._known_patients.add(patient_id)
+
+    def has_patient(self, patient_id: str) -> bool:
+        with self._lock:
+            return patient_id in self._known_patients
+
     def rows_for_patient(self, patient_id: str) -> Optional[list[dict]]:
         """The saved encounters for one patient, for the ``/chart/`` pages.
 
         Returns None for a patient id MockMed does not know.
         """
-        if patient_id not in KNOWN_PATIENTS:
+        if not self.has_patient(patient_id):
             return None
         with self._lock:
             return [dict(r) for r in self._records if r["patient_id"] == patient_id]
@@ -329,6 +338,12 @@ def _make_handler(db: FaultDB, directory: str, chart: ChartPages):
                 db.note_rejected()
                 self._send_json(
                     409, {"ok": False, "error": "rejected after optimistic UI"}
+                )
+                return
+            if not db.has_patient(patient_id):
+                db.note_rejected()
+                self._send_json(
+                    400, {"ok": False, "error": f"unknown patient: {patient_id!r}"}
                 )
                 return
             if fault == "partial":
