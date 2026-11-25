@@ -134,8 +134,10 @@ class _SandboxedUIProxy:
         self._page = page
 
     def _loc(self, idx: int) -> Any:
-        observe_schema(self._page)
         loc = self._page.locator(f'[data-oa-idx="{int(idx)}"]').first
+        if loc.count() == 0:
+            observe_schema(self._page)
+            loc = self._page.locator(f'[data-oa-idx="{int(idx)}"]').first
         loc.wait_for(state="visible", timeout=2500)
         loc.scroll_into_view_if_needed()
         return loc
