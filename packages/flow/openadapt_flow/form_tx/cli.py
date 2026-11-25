@@ -165,6 +165,7 @@ def _cmd_induce_pack(args: argparse.Namespace) -> int:
         form_snapshots=form_snapshots,
         summary_snapshot=summary_snapshot,
         commit_button_pattern=args.commit_button_pattern,
+        commit_url_patterns=args.commit_url_pattern or (),
     )
 
     out_path = Path(args.out)
@@ -374,6 +375,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--commit-button-pattern",
         default=None,
         help="Reviewed regex for the authorized terminal action; never inferred by default.",
+    )
+    induce.add_argument(
+        "--commit-url-pattern",
+        action="append",
+        default=None,
+        help="Optional URL path pattern matching the portal's save endpoint (repeatable).",
     )
     induce.set_defaults(handler=_cmd_induce_pack)
 
