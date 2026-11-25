@@ -55,8 +55,12 @@ def contract_file(manifest_path: Path, kind: str, values: dict[str, Any]) -> Pat
     manifest = vc.load_yaml(manifest_path) or {}
     if manifest.get("schema_version") != vc.MANIFEST_SCHEMA:
         raise vc.GenerateError(f"{manifest_path} is not a contract manifest")
-    if manifest.get("questions_open"):
-        raise vc.GenerateError(f"{manifest_path} still has open questions")
+    blocking_open = vc.open_questions_for_kind(manifest, kind)
+    if blocking_open:
+        raise vc.GenerateError(
+            f"{manifest_path} still has open questions for {kind}: "
+            + ", ".join(blocking_open)
+        )
     entry = (manifest.get("kinds") or {}).get(kind)
     if not entry:
         raise vc.GenerateError(f"no contract for kind {kind!r}")
