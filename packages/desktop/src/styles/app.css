@@ -1246,6 +1246,190 @@ select.input:focus {
 .log-line-failed {
   background: color-mix(in srgb, var(--pill-crit-bg) 55%, var(--panel));
 }
+.log-line-btn {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-left: 2px solid transparent;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
+}
+.log-line-btn:last-child {
+  border-bottom: 0;
+}
+.log-line-btn:hover {
+  background: color-mix(in srgb, var(--panel) 80%, var(--bench));
+}
+.log-line-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.log-line-selected {
+  background: var(--panel);
+  border-left-color: var(--action);
+}
+.frame-dot {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+/* Playwright Trace Viewer-style local step frame preview */
+.step-frame-panel {
+  margin-top: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bench);
+  overflow: hidden;
+}
+.step-frame-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.step-frame-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  min-inline-size: 0;
+}
+.step-frame-meta strong {
+  font-size: 13px;
+  font-weight: var(--fw-semibold);
+  color: var(--text-strong);
+}
+.step-frame-local {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.step-frame-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.seg-compact {
+  padding: 2px;
+}
+.seg-compact button {
+  min-height: 26px;
+  padding: 2px 10px;
+  font-size: 12px;
+}
+.step-frame-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+}
+.step-frame-grid-split {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.step-frame-card {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  overflow: hidden;
+}
+.step-frame-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 11px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bench) 70%, var(--panel));
+  font-size: 11.5px;
+}
+.step-frame-label {
+  font-weight: var(--fw-semibold);
+  color: var(--text-strong);
+}
+.step-frame-target {
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.step-frame-verdict {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: var(--fw-medium);
+}
+.step-frame-verdict.verified {
+  color: var(--pill-ok-fg);
+}
+.step-frame-verdict.halted {
+  color: var(--pill-warn-fg);
+}
+.step-frame-viewport {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background: var(--panel-sunk);
+  overflow: hidden;
+}
+.step-frame-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: filter var(--motion-fast) var(--ease-out);
+}
+.frame-img-blurred {
+  filter: blur(7px);
+}
+.step-frame-focus {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  transform: translate(-50%, -50%);
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--focus);
+  background: color-mix(in srgb, var(--focus) 16%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--panel) 80%, transparent);
+  pointer-events: none;
+}
+.step-frame-focus-callout {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--focus);
+  background: var(--panel);
+  color: var(--text-strong);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+}
+.step-frame-missing,
+.step-frame-empty {
+  padding: 18px 16px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  text-align: center;
+}
+@media (max-width: 720px) {
+  .step-frame-grid-split {
+    grid-template-columns: 1fr;
+  }
+}
 @keyframes scanreveal {
   from {
     opacity: 0;
