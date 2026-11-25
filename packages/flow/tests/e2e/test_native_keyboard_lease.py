@@ -179,7 +179,15 @@ def _read(backend, automation_id: str) -> str:
             pytrace=False,
         )
     if result["complete"] is not True or not isinstance(result["text"], str):
-        pytest.fail("UIA value proof incomplete after a unique match", pytrace=False)
+        reason = (
+            result.get("reason")
+            if isinstance(result.get("reason"), str)
+            else "unclassified"
+        )
+        pytest.fail(
+            f"UIA value proof incomplete after a unique match (reason={reason})",
+            pytrace=False,
+        )
     return result["text"]
 
 

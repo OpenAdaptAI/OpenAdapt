@@ -1962,7 +1962,7 @@ def _perform_uia_initialized(
         if not isinstance(data.get("rows", False), bool):
             raise AgentRequestError(400, "invalid_schema", "rows must be a boolean")
         read_locator = _locator_payload(data["locator"])
-        read_deadline = time.monotonic() + 5.0
+        read_deadline = time.monotonic() + 15.0
         found, truncated = _find_candidates(read_locator, auto, strict_walk=True)
         unique = len(found) == 1 and not truncated
         result: dict[str, Any] = {
