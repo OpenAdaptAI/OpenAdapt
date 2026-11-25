@@ -28,17 +28,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Install package and test dependencies
-        working-directory: packages/kernel
         run: |
-          uv sync --locked --extra browser --extra dev
-          uv run --no-sync python -m playwright install chromium
+          python -m pip install --upgrade pip
+          python -m pip install -e "packages/kernel[browser,dev]"
+          python -m playwright install chromium
       - name: Lint with ruff
-        working-directory: packages/kernel
-        run: uv run --no-sync ruff check .
+        run: ruff check packages/kernel
       - name: Run unit, boundary, CLI, and headless Chromium tests
-        working-directory: packages/kernel
-        run: uv run --no-sync pytest -v tests
+        run: pytest -v packages/kernel/tests

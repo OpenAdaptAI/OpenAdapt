@@ -1,4 +1,4 @@
-"""Full-DOM schema extraction, transactional form staging, and stepwise live-DOM healing."""
+"""Full-DOM schema extraction (including Shadow DOM & iframes), transactional form staging, and stepwise live-DOM healing."""
 
 from __future__ import annotations
 
@@ -10,17 +10,29 @@ from openadapt_kernel.interceptor import CommitInterceptor
 from openadapt_kernel.ledger import ObligationLedger, ProvenanceViolation
 
 _OBSERVE_SCHEMA_JS = """() => {
-  const nodes = document.querySelectorAll(
-    'input, textarea, select, button, a[href], [role="button"], [role="textbox"], [role="combobox"], [role="checkbox"]'
-  );
+  const selectorQuery = 'input, textarea, select, button, a[href], [role="button"], [role="textbox"], [role="combobox"], [role="checkbox"]';
+  const collected = [];
+  const walkRoot = (root, inShadow) => {
+    const all = root.querySelectorAll('*');
+    for (const el of all) {
+      if (el.matches && el.matches(selectorQuery)) {
+        collected.push({ el, inShadow, root });
+      }
+      if (el.shadowRoot) {
+        walkRoot(el.shadowRoot, true);
+      }
+    }
+  };
+  walkRoot(document, false);
+
   const items = [];
-  const labelTextFor = (el) => {
+  const labelTextFor = (el, root) => {
     if (el.getAttribute('aria-label')) return el.getAttribute('aria-label').trim();
-    if (el.id) {
-      const lbl = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+    if (el.id && root && root.querySelector) {
+      const lbl = root.querySelector(`label[for="${CSS.escape(el.id)}"]`);
       if (lbl) return (lbl.innerText || lbl.textContent || '').trim();
     }
-    const parentLabel = el.closest('label');
+    const parentLabel = el.closest ? el.closest('label') : null;
     if (parentLabel) return (parentLabel.innerText || parentLabel.textContent || '').trim();
     if (el.placeholder) return el.placeholder.trim();
     const txt = (el.innerText || el.textContent || '').trim();
@@ -29,15 +41,25 @@ _OBSERVE_SCHEMA_JS = """() => {
   const cssSelectorFor = (el) => {
     const tid = el.getAttribute('data-testid');
     if (tid) return `[data-testid="${tid.replace(/"/g, '\\\\"')}"]`;
-    if (el.id) return `#${CSS.escape(el.id)}`;
     const name = el.getAttribute('name');
     if (name) return `${el.tagName.toLowerCase()}[name="${name.replace(/"/g, '\\\\"')}"]`;
     const aria = el.getAttribute('aria-label');
     if (aria) return `${el.tagName.toLowerCase()}[aria-label="${aria.replace(/"/g, '\\\\"')}"]`;
+    if (el.id && !/^input-\\d+$/.test(el.id)) return `#${CSS.escape(el.id)}`;
+    if (el.id) return `#${CSS.escape(el.id)}`;
     return '';
   };
-  const modalRoot = document.querySelector('[role="dialog"], .v-dialog--active, .modal.show, dialog[open]');
-  for (const el of nodes) {
+  const modalRoots = Array.from(
+    document.querySelectorAll('[role="dialog"], .v-overlay--active, .v-dialog--active, .modal.show, dialog[open]')
+  );
+  const isInsideModal = (el) => {
+    for (const mr of modalRoots) {
+      if (mr.contains(el)) return true;
+    }
+    return false;
+  };
+
+  for (const { el, inShadow, root } of collected) {
     const st = window.getComputedStyle(el);
     if (!st || st.display === 'none' || st.visibility === 'hidden') continue;
     const type = (el.getAttribute('type') || '').toLowerCase();
@@ -46,7 +68,7 @@ _OBSERVE_SCHEMA_JS = """() => {
     if (rect.width === 0 && rect.height === 0) continue;
     const tag = el.tagName.toLowerCase();
     const role = (el.getAttribute('role') || '').toLowerCase();
-    const inModal = Boolean(modalRoot && modalRoot.contains(el));
+    const inModal = isInsideModal(el);
     const options = tag === 'select'
       ? Array.from(el.options).map(o => ({ value: o.value, text: (o.text || '').trim() }))
       : [];
@@ -54,7 +76,7 @@ _OBSERVE_SCHEMA_JS = """() => {
       tag,
       input_type: type,
       role,
-      label: labelTextFor(el),
+      label: labelTextFor(el, root),
       placeholder: (el.getAttribute('placeholder') || '').trim(),
       name: (el.getAttribute('name') || '').trim(),
       element_id: (el.id || '').trim(),
@@ -63,8 +85,9 @@ _OBSERVE_SCHEMA_JS = """() => {
       selector: cssSelectorFor(el),
       value: tag === 'input' && (type === 'checkbox' || type === 'radio')
         ? String(Boolean(el.checked))
-        : String(el.value !== undefined ? el.value : ''),
+        : String(el.value !== undefined ? el.value : (el.getAttribute('data-value') || el.innerText || '').trim()),
       options,
+      in_shadow: inShadow,
     });
   }
   return items;
@@ -85,6 +108,8 @@ class ControlSchema:
     selector: str
     value: str = ""
     options: List[Dict[str, str]] = field(default_factory=list)
+    in_shadow: bool = False
+    frame_index: int = -1
 
 
 @dataclass
@@ -105,6 +130,7 @@ class PlanStep:
     value: Optional[str] = None
     is_commit: bool = False
     prefer_modal: bool = False
+    wait_ms: int = 250
 
 
 @dataclass
@@ -119,10 +145,26 @@ def _tokens(text: str) -> set[str]:
     return set(re.findall(r"[a-z0-9]+", (text or "").lower()))
 
 
-def observe_schema(page: Any) -> List[ControlSchema]:
-    """Extract all visible interactive controls across the full scrollable page."""
-    raw_items = page.evaluate(_OBSERVE_SCHEMA_JS) or []
-    return [ControlSchema(**item) for item in raw_items]
+def observe_schema(page: Any, *, include_frames: bool = True) -> List[ControlSchema]:
+    """Extract all visible interactive controls across main DOM, open Shadow DOM, and child iframes."""
+    controls: List[ControlSchema] = []
+    raw_main = page.evaluate(_OBSERVE_SCHEMA_JS) or []
+    for item in raw_main:
+        controls.append(ControlSchema(frame_index=-1, **item))
+
+    if include_frames and hasattr(page, "frames"):
+        frames = list(page.frames)
+        main_frame = getattr(page, "main_frame", frames[0] if frames else None)
+        for idx, frame in enumerate(frames):
+            if frame == main_frame:
+                continue
+            try:
+                raw_sub = frame.evaluate(_OBSERVE_SCHEMA_JS) or []
+                for item in raw_sub:
+                    controls.append(ControlSchema(frame_index=idx, **item))
+            except Exception:
+                continue
+    return controls
 
 
 def _match_control(
@@ -138,7 +180,7 @@ def _match_control(
     best_score = 0.0
 
     for ctrl in controls:
-        if allowed_tags and ctrl.tag not in allowed_tags:
+        if allowed_tags and ctrl.tag not in allowed_tags and ctrl.role not in ("combobox", "textbox"):
             continue
         score = 0.0
         if ctrl.selector and ctrl.selector.lower() == key_l:
@@ -167,11 +209,20 @@ def _match_control(
     return best
 
 
+def _target_root(page: Any, ctrl: ControlSchema) -> Any:
+    if ctrl.frame_index >= 0 and hasattr(page, "frames"):
+        frames = list(page.frames)
+        if ctrl.frame_index < len(frames):
+            return frames[ctrl.frame_index]
+    return page
+
+
 def _resolve_locator(page: Any, ctrl: ControlSchema) -> Any:
+    root = _target_root(page, ctrl)
     if ctrl.selector:
-        return page.locator(ctrl.selector).first
+        return root.locator(ctrl.selector).first
     if ctrl.label and ctrl.tag in ("button", "a"):
-        return page.locator(f"{ctrl.tag}:has-text({ctrl.label!r})").first
+        return root.locator(f"{ctrl.tag}:has-text({ctrl.label!r})").first
     raise ValueError(f"Control lacks deterministic selector: {ctrl}")
 
 
@@ -185,7 +236,7 @@ def stage_form(
     subject_key: Optional[str] = None,
     prefer_modal: bool = False,
 ) -> StageResult:
-    """Fill an entire form in one pre-commit batch and verify every DOM value."""
+    """Fill an entire form (main DOM, Shadow DOM, iframes, ARIA comboboxes) in one verified batch."""
     if ledger is not None and opaque_fields:
         violations = ledger.verify_ssa_provenance(
             bindings, opaque_fields=opaque_fields, target_subject_key=subject_key
@@ -194,7 +245,11 @@ def stage_form(
             return StageResult(ok=False, provenance_violations=violations)
 
     controls = observe_schema(page)
-    input_controls = [c for c in controls if c.tag in ("input", "textarea", "select")]
+    input_controls = [
+        c
+        for c in controls
+        if c.tag in ("input", "textarea", "select") or c.role in ("combobox", "textbox", "checkbox")
+    ]
     result = StageResult(ok=True)
 
     for key, val in bindings.items():
@@ -204,6 +259,7 @@ def stage_form(
             result.ok = False
             continue
 
+        root = _target_root(page, ctrl)
         loc = _resolve_locator(page, ctrl)
         loc.scroll_into_view_if_needed()
 
@@ -213,6 +269,15 @@ def stage_form(
             matched = actual == val or any(
                 o["text"].lower() == val.lower() and o["value"] == actual for o in ctrl.options
             )
+        elif ctrl.role == "combobox" and ctrl.tag not in ("input", "select"):
+            loc.click()
+            opt = root.locator(f'[role="option"]:has-text("{val}")').first
+            opt.wait_for(state="visible", timeout=1500)
+            opt.click()
+            actual = str(
+                loc.evaluate("el => (el.getAttribute('data-value') || el.innerText || '').trim()")
+            )
+            matched = val.lower() in actual.lower()
         elif ctrl.input_type in ("checkbox", "radio"):
             want_checked = str(val).strip().lower() in ("true", "1", "yes", "checked")
             if want_checked:
@@ -254,7 +319,7 @@ class StepwiseHealer:
 
     def _execute_step(self, page: Any, step: PlanStep, selector: str) -> None:
         loc = page.locator(selector).first
-        loc.wait_for(state="visible", timeout=1500)
+        loc.wait_for(state="visible", timeout=2000)
         loc.scroll_into_view_if_needed()
         if step.action == "click":
             loc.click()
@@ -269,6 +334,8 @@ class StepwiseHealer:
                 loc.check()
             else:
                 loc.uncheck()
+        if step.wait_ms > 0 and hasattr(page, "wait_for_timeout"):
+            page.wait_for_timeout(step.wait_ms)
 
     def _heal_live_step(self, page: Any, step: PlanStep) -> Optional[str]:
         controls = observe_schema(page)
@@ -340,6 +407,7 @@ class StepwiseHealer:
                         value=step.value,
                         is_commit=step.is_commit,
                         prefer_modal=step.prefer_modal,
+                        wait_ms=step.wait_ms,
                     )
                 )
 
