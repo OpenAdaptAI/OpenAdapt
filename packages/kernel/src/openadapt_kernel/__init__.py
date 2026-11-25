@@ -42,6 +42,11 @@ from openadapt_kernel.macro import (
     observe_schema,
     stage_form,
 )
+from openadapt_kernel.runner import (
+    RunResult,
+    format_run_result_json,
+    run_portal_pack,
+)
 
 __all__ = [
     "CapabilityToken",
@@ -61,10 +66,12 @@ __all__ = [
     "PortalPack",
     "ProvenanceViolation",
     "ReadBackProof",
+    "RunResult",
     "ShadowObserver",
     "ShadowTrace",
     "StageResult",
     "StepwiseHealer",
+    "format_run_result_json",
     "generate_ephemeral_ed25519_keypair",
     "induce_pack_from_extension_recordings",
     "is_search_or_filter_field",
@@ -73,6 +80,7 @@ __all__ = [
     "parse_extension_evidence_jsonl",
     "qualify_verifier_offline",
     "replay_evidence_into_interceptor",
+    "run_portal_pack",
     "sanitize_action_string",
     "stage_form",
     "verify_receipt",

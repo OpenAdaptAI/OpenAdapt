@@ -19,6 +19,7 @@ from openadapt_kernel.extension_bridge import (
     induce_pack_from_extension_recordings,
     parse_extension_evidence_jsonl,
 )
+from openadapt_kernel.runner import format_run_result_json, run_portal_pack
 
 
 def _token_boundary_verifier(fields: Dict[str, str], text: str) -> bool:
@@ -105,6 +106,24 @@ def _cmd_verify_receipt(args: argparse.Namespace) -> int:
     return 0 if valid else 1
 
 
+def _cmd_run(args: argparse.Namespace) -> int:
+    dossier = json.loads(Path(args.dossier).read_text(encoding="utf-8"))
+    result = run_portal_pack(
+        pack_path=Path(args.pack),
+        dossier=dossier,
+        mode=args.mode,
+        url=args.url,
+        cdp_url=args.cdp_url,
+        commit_selector=args.commit_selector,
+        private_key_path=Path(args.priv) if args.priv else None,
+        receipt_out=Path(args.receipt_out) if args.receipt_out else None,
+        episode_id=args.episode_id,
+        headless=not args.headed,
+    )
+    print(format_run_result_json(result))
+    return 0 if result.outcome in ("READY_FOR_HUMAN_COMMIT", "VERIFIED") else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="openadapt-kernel")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -130,6 +149,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_ver.add_argument("--receipt", required=True)
     p_ver.add_argument("--pub", required=True)
     p_ver.set_defaults(func=_cmd_verify_receipt)
+
+    p_run = sub.add_parser("run", help="Run a PortalPack in draft or verified autopilot mode")
+    p_run.add_argument("--pack", required=True)
+    p_run.add_argument("--dossier", required=True)
+    p_run.add_argument("--mode", choices=["draft", "autopilot"], default="draft")
+    p_run.add_argument("--url")
+    p_run.add_argument("--cdp-url")
+    p_run.add_argument("--commit-selector")
+    p_run.add_argument("--priv")
+    p_run.add_argument("--receipt-out")
+    p_run.add_argument("--episode-id", default="ep-live-1")
+    p_run.add_argument("--headed", action="store_true")
+    p_run.set_defaults(func=_cmd_run)
 
     return parser
 
