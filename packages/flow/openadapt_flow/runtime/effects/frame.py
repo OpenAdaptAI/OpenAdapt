@@ -2418,9 +2418,10 @@ def _reason(verdict: FrameVerdict) -> str:
         )
     if verdict.side_effects:
         tables = sorted({c.surface for c in verdict.side_effects})
+        sample_tables = [t for idx, t in enumerate(tables) if idx < _SAMPLE_LIMIT]
         parts.append(
             f"{len(verdict.side_effects)} row(s) moved outside the entity tables "
-            f"({', '.join(tables[:_SAMPLE_LIMIT])}"
+            f"({', '.join(sample_tables)}"
             f"{'' if len(tables) <= _SAMPLE_LIMIT else ', ...'}): logged as side "
             "effects, not counted against this save"
         )

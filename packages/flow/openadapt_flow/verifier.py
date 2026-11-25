@@ -1954,7 +1954,7 @@ def await_effects(
         if not wanted:
             return 0
         verifier = _build_verifier(cfg, params)
-    except Exception:  # noqa: BLE001 - no wait; the judge decides
+    except (OSError, RuntimeError, ValueError, TypeError, KeyError, AttributeError):
         return 0
     pause = sleep or _time.sleep
     waited, delay, reads = 0.0, RETRY_FIRST_S, 0
@@ -1980,7 +1980,7 @@ def await_effects(
                 ):
                     visible = False
                     break
-        except Exception:  # noqa: BLE001
+        except (OSError, RuntimeError, ValueError, TypeError, KeyError, AttributeError):
             return reads
         if visible or waited + delay > budget:
             return reads

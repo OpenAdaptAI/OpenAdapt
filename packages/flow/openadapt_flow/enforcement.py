@@ -130,8 +130,10 @@ def status(digest: str) -> GateStatus:
     }
     checks = [e for e in entries if e.get("event") == "check"]
     run = 0
+    from openadapt_flow.verifier import Outcome
+
     for e in checks:
-        clean = e.get("outcome") == "CONFIRMED" or (
+        clean = e.get("outcome") == Outcome.CONFIRMED.value or (
             labels.get(str(e.get("write_id"))) == "caught"
         )
         run = run + 1 if clean else 0
@@ -174,11 +176,11 @@ def observe(digest: str, result: Any) -> str:
                 "tier": str(getattr(result, "tier", "")),
             },
         )
-    except Exception:  # noqa: BLE001 - the log never changes a verdict
+    except (OSError, TypeError, ValueError):  # the log never changes a verdict
         pass
     try:
         return status(digest).mode
-    except Exception:  # noqa: BLE001
+    except (OSError, TypeError, ValueError):
         forced = os.environ.get("OPENADAPT_ENFORCEMENT", "").strip().lower()
         return forced if forced in MODES else "shadow"
 
