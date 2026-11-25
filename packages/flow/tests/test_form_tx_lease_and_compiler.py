@@ -1725,7 +1725,9 @@ def test_queue_requires_consistent_request_identity() -> None:
         )
 
 
-def test_induce_form_pack_requires_commit_evidence_and_derives_commit_endpoint() -> None:
+def test_induce_form_pack_requires_commit_evidence_and_derives_commit_endpoint() -> (
+    None
+):
     """Issue #2556: certified_ready requires commit evidence, and demo save requests derive commit_url_patterns."""
     from openadapt_flow.form_tx.pack_compiler import (
         CanonicalDomainSchema,
@@ -1803,8 +1805,16 @@ def test_induce_form_pack_requires_commit_evidence_and_derives_commit_endpoint()
         summary_snapshot=summary_snap,
         commit_button_pattern=r"submit record",
         demo_commit_requests=(
-            {"method": "GET", "url": "https://portal.example/api/records", "status": 200},
-            {"method": "POST", "url": "https://portal.example/api/records", "status": 500},
+            {
+                "method": "GET",
+                "url": "https://portal.example/api/records",
+                "status": 200,
+            },
+            {
+                "method": "POST",
+                "url": "https://portal.example/api/records",
+                "status": 500,
+            },
         ),
     )
     assert report_failed_demo.pack.commit_url_patterns == ()
