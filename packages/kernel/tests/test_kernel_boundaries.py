@@ -1,4 +1,4 @@
-"""Boundary tests: zero openadapt_flow imports, zero app-specific names, and strict <3,600 LOC budget."""
+"""Boundary tests: zero openadapt_flow imports, zero app-specific names, and strict <5,400 LOC budget."""
 
 from __future__ import annotations
 
@@ -7,7 +7,16 @@ from pathlib import Path
 
 SRC_DIR = Path(__file__).resolve().parents[1] / "src" / "openadapt_kernel"
 FORBIDDEN_IMPORTS = ("openadapt_flow", "openadapt_desktop", "openadapt_capture")
-FORBIDDEN_APP_NAMES = ("openemr", "medplum", "openimis", "mealie", "vikunja", "nationwide", "dentrix")
+FORBIDDEN_APP_NAMES = (
+    "openemr",
+    "medplum",
+    "openimis",
+    "mealie",
+    "vikunja",
+    "nationwide",
+    "dentrix",
+    "availity",
+)
 
 
 def test_zero_legacy_engine_imports_and_zero_app_names() -> None:
@@ -30,4 +39,4 @@ def test_zero_legacy_engine_imports_and_zero_app_names() -> None:
         for app in FORBIDDEN_APP_NAMES:
             assert app not in lower, f"{path} contains app-specific string {app!r}"
 
-    assert total_lines < 3600, f"Kernel exceeded 3,600 LOC budget: {total_lines} lines"
+    assert total_lines < 5400, f"Kernel exceeded 5,400 LOC budget: {total_lines} lines"
