@@ -142,11 +142,16 @@ pixels, OCR, relational anchors, identity regions, and fresh-frame verification.
 from __future__ import annotations
 
 import json
+import logging
 import math
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional, Sequence, TypeGuard
+
+_logger = logging.getLogger(__name__)
+_VALID_SURFACES = frozenset({"web", "windows", "macos", "linux", "rdp", "citrix"})
+_TRIM_POLICIES = frozenset({"refuse", "drop-with-log"})
 
 if TYPE_CHECKING:  # pragma: no cover
     from openadapt_capture.capture import Action, CaptureSession
@@ -634,26 +639,56 @@ def _window_viewport_timeline(
     return entries
 
 
+def _parse_operator_surface(surface: str) -> tuple[str, Optional[str]]:
+    """Parse an explicit operator surface binding (e.g. 'windows' or 'windows:notepad.exe')."""
+    raw = surface.strip()
+    if not raw:
+        raise ValueError(
+            "surface must be a non-empty surface name (e.g. 'windows' or 'windows:notepad.exe')"
+        )
+    if ":" in raw:
+        kind_part, app_part = raw.split(":", 1)
+        kind = kind_part.strip().lower()
+        app = app_part.strip()
+        if not app:
+            raise ValueError(
+                f"surface {surface!r} has an empty application name after ':'"
+            )
+    else:
+        kind = raw.lower()
+        app = None
+    if kind not in _VALID_SURFACES:
+        raise ValueError(
+            f"unknown surface {kind!r}; expected one of {sorted(_VALID_SURFACES)}"
+        )
+    return kind, app
+
+
 def _reject_out_of_window(
     actions: "list[Action]",
     timeline: list[tuple[float, tuple[int, int]]],
     *,
     scope: str = "window-scoped",
     boundary_error: str = "out-of-window input",
-) -> None:
-    """Refuse loudly on a mouse action outside a captured pixel viewport.
+    trim_policy: str = "refuse",
+) -> "tuple[list[Action], list[dict[str, Any]]]":
+    """Screen mouse actions against a captured pixel viewport.
 
-    Window-scoped recording translates GLOBAL input into the captured frame's
-    pixel space *without clamping*, so input aimed at another window (or the
-    desktop) lands at out-of-range coordinates. Such an action cannot replay
-    faithfully inside the window: dropping it would silently lose a
-    demonstrated action, and keeping it would compile a wrong-target step —
-    so, per this module's loud-rejection policy, conversion refuses. Each
-    action is checked against the viewport in effect at its timestamp (the
-    latest bounds-timeline entry at or before it).
+    Under ``trim_policy="refuse"`` (default), any mouse action outside the
+    viewport raises ``ValueError``. Under ``trim_policy="drop-with-log"``,
+    out-of-window mouse actions (such as clicking an external Stop button) are
+    dropped with a warning and returned in the dropped-actions audit list;
+    malformed or pre-timeline actions still raise ``ValueError``.
     """
+    if trim_policy not in _TRIM_POLICIES:
+        raise ValueError(
+            f"unknown trim_out_of_window policy {trim_policy!r}; expected one of {sorted(_TRIM_POLICIES)}"
+        )
+    kept: list[Action] = []
+    dropped: list[dict[str, Any]] = []
     for action in actions:
         if not action.type.startswith("mouse."):
+            kept.append(action)
             continue
         x, y = action.x, action.y
         if x is None or y is None:
@@ -707,6 +742,7 @@ def _reject_out_of_window(
                 "verified safely"
             )
         width, height = active_size
+        out_of_bounds_msg: Optional[str] = None
         for point_x, point_y, point_name in points:
             emitted_x = int(round(point_x))
             emitted_y = int(round(point_y))
@@ -717,7 +753,7 @@ def _reject_out_of_window(
                 and 0 <= emitted_x < width
                 and 0 <= emitted_y < height
             ):
-                raise ValueError(
+                out_of_bounds_msg = (
                     f"{boundary_error}: {action.type}{point_suffix} at "
                     f"({point_x:.3f}, {point_y:.3f}) "
                     f"(t={ts:.3f}) falls outside the captured {scope} viewport "
@@ -726,6 +762,23 @@ def _reject_out_of_window(
                     "captured pixel, so converting it would compile a "
                     "wrong-target step"
                 )
+                break
+        if out_of_bounds_msg is not None:
+            if trim_policy == "drop-with-log":
+                _logger.warning("Dropping %s", out_of_bounds_msg)
+                dropped.append(
+                    {
+                        "type": action.type,
+                        "timestamp": ts,
+                        "x": parsed_x,
+                        "y": parsed_y,
+                        "viewport": [width, height],
+                    }
+                )
+                continue
+            raise ValueError(out_of_bounds_msg)
+        kept.append(action)
+    return kept, dropped
 
 
 def _window_selectors(
@@ -1187,6 +1240,8 @@ def convert_capture(
     settle_s: float = 1.0,
     include_structural: bool = False,
     include_process: bool = False,
+    surface: Optional[str] = None,
+    trim_out_of_window: str = "refuse",
 ) -> Path:
     """Convert an openadapt-capture session into a flow recording directory.
 
@@ -1258,6 +1313,14 @@ def convert_capture(
     CaptureSession = _require_capture()
     capture_dir = Path(capture_dir)
     out_dir = Path(out_recording_dir)
+    if trim_out_of_window not in _TRIM_POLICIES:
+        raise ValueError(
+            f"unknown trim_out_of_window policy {trim_out_of_window!r}; "
+            f"expected one of {sorted(_TRIM_POLICIES)}"
+        )
+    parsed_surface: Optional[tuple[str, Optional[str]]] = (
+        _parse_operator_surface(surface) if surface is not None else None
+    )
 
     params = dict(params or {})
     value_to_param: dict[str, str] = {}
@@ -1309,19 +1372,23 @@ def convert_capture(
         actions = list(session.actions(include_moves=False))
         scoped_viewport: Optional[tuple[int, int]] = None
         scope_label: Optional[str] = None
+        dropped_out_of_window: list[dict[str, Any]] = []
         if window_capture is not None:
             timeline = _window_viewport_timeline(session, window_capture)
-            _reject_out_of_window(actions, timeline)
+            actions, dropped_out_of_window = _reject_out_of_window(
+                actions, timeline, trim_policy=trim_out_of_window
+            )
             scoped_viewport = timeline[0][1]
             scope_label = "window-scoped"
         elif desktop_provenance is not None:
             desktop_viewport = desktop_provenance["viewport"]
             scoped_viewport = (desktop_viewport[0], desktop_viewport[1])
-            _reject_out_of_window(
+            actions, dropped_out_of_window = _reject_out_of_window(
                 actions,
                 [(float("-inf"), scoped_viewport)],
                 scope="virtual-desktop",
                 boundary_error="out-of-desktop input",
+                trim_policy=trim_out_of_window,
             )
             scope_label = "virtual-desktop"
         events = _flow_events(
@@ -1448,6 +1515,14 @@ def convert_capture(
                 meta["window_capture"]["resolved_window_id"] = resolved_window_id
         elif desktop_provenance is not None:
             meta["desktop_capture"] = desktop_provenance
+        if parsed_surface is not None:
+            surface_kind, app_name = parsed_surface
+            meta["surface"] = surface_kind
+            meta["surface_binding_source"] = "operator"
+            if app_name is not None:
+                meta["application"] = app_name
+        if dropped_out_of_window:
+            meta["dropped_out_of_window_actions"] = dropped_out_of_window
         (out_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
         _write_capture_narration(session, out_dir, started_at, step_times)
         return out_dir
