@@ -864,6 +864,12 @@ def _quickstart_own(root: Path, url: Optional[str], watch: bool) -> None:
         "--out) and exit. Runs nothing."
     ),
 )
+@click.option(
+    "-y",
+    "--yes",
+    is_flag=True,
+    help="Run straight through without pausing for Enter or prompts.",
+)
 # --headed is the older spelling of --watch. --headless was the opt-out when
 # the window showed by default; hidden is the default now, so it changes
 # nothing and is kept so older commands still run.
@@ -960,6 +966,7 @@ def quickstart(
     no_break: bool,
     verbose: bool,
     more: bool,
+    yes: bool,
     own: bool,
     url: Optional[str],
     task: Optional[str],
@@ -1078,7 +1085,7 @@ def quickstart(
         openemr is None and _agent_serves_tutorial(),
         keep=_keep_command(),
         shadow=_shadowing_openadapt if _under_uvx() else None,
-        offer_publish=_quickstart_publish_offer(),
+        offer_publish=None if yes else _quickstart_publish_offer(),
     )
     try:
         with _synthetic_scrub_off():
@@ -1088,6 +1095,7 @@ def quickstart(
                 break_it=not no_break,
                 verbose=verbose,
                 steps=steps,
+                interactive=False if yes else None,
                 openemr=openemr,
                 open_seal=open_seal,
             )
