@@ -37,7 +37,9 @@ try:
             VerifyConfig,
         )
     )
-except ImportError:  # launcher CI installs released openadapt-flow without everyday probes
+except (
+    ImportError
+):  # launcher CI installs released openadapt-flow without everyday probes
     LocalStateVerifier = None  # type: ignore[assignment]
     VerifyConfig = None  # type: ignore[assignment]
     _HAS_EVERYDAY_PROBES = False
