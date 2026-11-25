@@ -1549,7 +1549,23 @@ class CaptureSession:
         """
         video_path = self.video_path
         if video_path is None:
-            return None
+            from PIL import Image
+
+            best_screenshot = None
+            best_diff = float("inf")
+            for screenshot in self._recording.screenshots:
+                if not screenshot.png_data:
+                    continue
+                diff = abs(screenshot.timestamp - timestamp)
+                if diff <= tolerance and diff < best_diff:
+                    best_diff = diff
+                    best_screenshot = screenshot
+            if best_screenshot is None:
+                return None
+            try:
+                return Image.open(io.BytesIO(best_screenshot.png_data)).convert("RGB")
+            except Exception:
+                return None
 
         try:
             from openadapt_capture.video import extract_frame
