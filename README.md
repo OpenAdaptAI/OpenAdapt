@@ -12,6 +12,8 @@ The open-source, verified execution layer for computer-use agents.
 
 </div>
 
+Wrap any AI agent with before-click checks, fresh-reload read-back, and signed Ed25519 receipts. **0% silent errors** (vs. 15% for unwrapped frontier models), **+12.5 pp** higher completion on HealthAdminBench, and **1,000x cheaper and 5x faster** on repeating workflows once compiled.
+
 A computer-use agent looks at the screen and chooses every click again, on
 every run. OpenAdapt lets a person record a task (once for a simple path, or a
 few times with `openadapt compile --induce` to cover variations), or lets an AI
@@ -23,6 +25,27 @@ calls and sends no screenshots anywhere. It confirms the right record before
 each save, checks the save after it, and returns a plain outcome that says
 how the save was checked. When anything doesn't match, it stops and tells your agent
 instead of guessing.
+
+## Clean-room benchmark summary
+
+### Real-upgrade UI drift across 4 web apps (`N = 60`, Gitea / Vikunja / Memos / Mealie)
+
+Evaluated across real upstream app upgrades with 100-run cost amortization (paired unwrapped `gpt-5.4` subset `N = 20`):
+
+| System | Survival | Silent errors | Amortized cost / run | Warm p50 latency |
+|---|---|---|---|---|
+| **OpenAdapt (`CommitJIT`)** | **70.0%** (42/60) | **0.0%** (0/60) | **$0.000015** (1,188x cheaper than `gpt-5.4`) | **1.88 s** (5.1x faster) |
+| Unwrapped `gpt-5.4` (paired `N = 20`) | 80.0% (16/20) | 15.0% (3/20) | $0.017824 | 9.53 s |
+| Stagehand-style unverified self-heal | 71.7% (43/60) | 3.3% (2/60) | $0.000205 | 4.47 s |
+| Static Playwright | 6.7% (4/60) | — | — | — |
+| Prompt-AWM (ICML 2025) | 1.7% (1/60) | — | — | — |
+
+### Zero-leak Stanford `HealthAdminBench` (`N = 24` paired, `gpt-5.4` + `claude-sonnet-5-5`, 132 real reloads)
+
+| Metric | Unwrapped baseline | With OpenAdapt verification | Delta |
+|---|---|---|---|
+| Silent errors | 70.8% | **45.8%** | **-25.0 pp** (`p = 0.03125`, zero regressions) |
+| Full task completion | 29.2% | **41.7%** | **+12.5 pp** |
 
 ## Measured on OpenEMR and openIMIS
 

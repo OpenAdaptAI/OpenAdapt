@@ -3,6 +3,10 @@
 
 ## Unreleased
 
+- `check_level`: a `fresh_reload` basis at level 3. It is a new navigation in
+  the acting session that is proven to have fetched from the server (cache
+  bypassed, the request kept as evidence). With it a level 3 check is
+  `VERIFIED`; a reopen without that proof stays level 2, `SHOWN`.
 - Test vectors only, no code change: six `record/run/v1` vectors
   (`evidence-scope-null`, `evidence-scope-null-basis`,
   `evidence-scope-null-read-back-at`, `evidence-scope-null-recheck-window`,

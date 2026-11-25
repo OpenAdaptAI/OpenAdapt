@@ -1347,13 +1347,14 @@ class IdempotencyLedger:
 
     def _ensure_claims_directory(self) -> None:
         descriptor = self._open_claims_directory(create=True)
-        try:
-            self._fsync_descriptor(descriptor)
-        finally:
-            os.close(descriptor)
+        if descriptor is not None:
+            try:
+                self._fsync_descriptor(descriptor)
+            finally:
+                os.close(descriptor)
         self._fsync_parent_directory()
 
-    def _open_claims_directory(self, *, create: bool) -> int:
+    def _open_claims_directory(self, *, create: bool) -> Optional[int]:
         """Open the claim directory relative to the trusted ledger parent."""
 
         assert self.path is not None
@@ -1375,9 +1376,9 @@ class IdempotencyLedger:
                 raise FileNotFoundError(directory)
             if not directory.is_dir():
                 raise RuntimeError("idempotency ledger claim path is not a directory")
-            flags = os.O_RDONLY
-            if hasattr(os, "O_DIRECTORY"):
-                flags |= os.O_DIRECTORY
+            if os.name == "nt" or not hasattr(os, "O_DIRECTORY"):
+                return None
+            flags = os.O_RDONLY | os.O_DIRECTORY
             if hasattr(os, "O_NOFOLLOW"):
                 flags |= os.O_NOFOLLOW
             return open_binary(directory, flags)
@@ -1419,18 +1420,21 @@ class IdempotencyLedger:
             flags |= os.O_NOFOLLOW
         try:
             if self._parent_descriptor is None:
-                descriptor = open_binary(
-                    self._claims_directory / self._claim_filename(key), flags
-                )
+                claim_path = self._claims_directory / self._claim_filename(key)
+                self._assert_safe_path(claim_path)
+                descriptor = open_binary(claim_path, flags)
             else:
+                assert directory is not None
                 descriptor = open_binary(
                     self._claim_filename(key), flags, dir_fd=directory
                 )
         except FileNotFoundError:
-            os.close(directory)
+            if directory is not None:
+                os.close(directory)
             return None
         except OSError as error:
-            os.close(directory)
+            if directory is not None:
+                os.close(directory)
             raise RuntimeError(
                 "idempotency ledger claim cannot be read safely; refusing to actuate"
             ) from error
@@ -1442,7 +1446,8 @@ class IdempotencyLedger:
             raw = os.read(descriptor, 64 * 1024)
         finally:
             os.close(descriptor)
-            os.close(directory)
+            if directory is not None:
+                os.close(directory)
         try:
             loaded = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -1478,21 +1483,26 @@ class IdempotencyLedger:
             flags |= os.O_NOFOLLOW
         try:
             if self._parent_descriptor is None:
+                claim_path = self._claims_directory / self._claim_filename(key)
+                self._assert_safe_path(claim_path)
                 descriptor = open_binary(
-                    self._claims_directory / self._claim_filename(key),
+                    claim_path,
                     flags,
                     0o600,
                 )
             else:
+                assert directory is not None
                 descriptor = open_binary(
                     self._claim_filename(key), flags, 0o600, dir_fd=directory
                 )
         except FileExistsError:
-            os.close(directory)
+            if directory is not None:
+                os.close(directory)
             claim = self._read_claim(key)
             self._raise_duplicate(key, None if claim is None else claim["run_id"])
         except OSError as error:
-            os.close(directory)
+            if directory is not None:
+                os.close(directory)
             raise RuntimeError(
                 "idempotency ledger claim cannot be created safely; refusing to actuate"
             ) from error
@@ -1507,8 +1517,9 @@ class IdempotencyLedger:
             raise
         finally:
             os.close(descriptor)
-            self._fsync_descriptor(directory)
-            os.close(directory)
+            if directory is not None:
+                self._fsync_descriptor(directory)
+                os.close(directory)
         self._fsync_parent_directory()
 
     def _require_claim_owner(self, key: str, *, run_id: str) -> None:
@@ -1736,9 +1747,9 @@ class IdempotencyLedger:
 
     @staticmethod
     def _fsync_directory(path: Path) -> None:
-        if os.name == "nt":
+        if os.name == "nt" or not hasattr(os, "O_DIRECTORY"):
             return
-        descriptor = open_binary(path, os.O_RDONLY)
+        descriptor = open_binary(path, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(descriptor)
         finally:

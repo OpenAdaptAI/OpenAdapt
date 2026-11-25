@@ -31,6 +31,8 @@ DATA_SLOT = "<!--SEAL-DATA-->"
 #: The run's files a reader can open from the page, when present.
 RUN_FILES = (
     "report.json",
+    "receipt.json",
+    "receipt.anchor.json",
     "seal.json",
     "seal.anchor.json",
     "seal.tsa.json",
@@ -274,12 +276,12 @@ def page_data(
     run_dir = Path(run_dir)
     report = _report_bytes(run_dir / "report.json")
     seal = _text(run_dir / "seal.json")
-    if seal is None:
-        raise SealViewError(f"{run_dir} has no seal.json")
-    present = [name for name in RUN_FILES if (run_dir / name).is_file()]
     receipt = _text(run_dir / "receipt.json")
     if receipt is not None and '"payloadType"' not in receipt:
         receipt = None  # an older run summary under the receipt's name
+    if seal is None and receipt is None:
+        raise SealViewError(f"{run_dir} has no seal.json or receipt.json")
+    present = [name for name in RUN_FILES if (run_dir / name).is_file()]
     return {
         "report_b64": base64.b64encode(report).decode("ascii"),
         "seal_text": seal,
@@ -332,8 +334,12 @@ def write_seal_page(
 
     run_dir = Path(run_dir)
     report_path = run_dir / "report.json"
-    if not (run_dir / "seal.json").is_file():
-        raise SealViewError(f"{run_dir} is not a sealed run (no seal.json)")
+    receipt_text = _text(run_dir / "receipt.json")
+    has_receipt = receipt_text is not None and '"payloadType"' in receipt_text
+    if not (run_dir / "seal.json").is_file() and not has_receipt:
+        raise SealViewError(
+            f"{run_dir} is not a sealed run (no seal.json or receipt.json)"
+        )
     try:
         report = json.loads(_report_bytes(report_path))
     except (OSError, ValueError) as exc:
