@@ -506,6 +506,7 @@ def test_routed_variant_runs_through_the_replayer_and_its_report_names_it(
 ) -> None:
     variant_set, parent = _author(tmp_path)
     url, db, stop = fault_serve()
+    db.register_patient("alice")
     try:
 
         def child_run(
