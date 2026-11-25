@@ -14,7 +14,7 @@ before any click is executed:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 from openadapt_kernel.copilot import ShadowTrace
 from openadapt_kernel.ledger import ObligationLedger
@@ -196,3 +196,52 @@ def verify_fsm_safety(
                         )
 
     return SafetyProof(safe=not violations, checked_properties=checked, violations=violations)
+
+
+def _norm_policy_str(value: str) -> str:
+    return " ".join(str(value).strip().split()).casefold()
+
+
+@dataclass(frozen=True)
+class PolicyRule:
+    rule_id: str
+    conditions: Dict[str, str]
+    required_disposition: str
+
+
+@dataclass(frozen=True)
+class PolicyDecisionTable:
+    table_id: str
+    rules: Sequence[PolicyRule]
+    require_human_if_unmatched: bool = True
+
+
+@dataclass(frozen=True)
+class PolicyDecisionResult:
+    allowed: bool
+    reason: str
+    matched_rule_id: Optional[str] = None
+    expected_disposition: Optional[str] = None
+    requires_prepare: bool = False
+
+
+def evaluate_policy_decision(
+    table: PolicyDecisionTable, observed_facts: Mapping[str, str], proposed_disposition: str
+) -> PolicyDecisionResult:
+    """Evaluate a proposed disposition against a declarative policy routing table."""
+    norm_facts = {_norm_policy_str(k): _norm_policy_str(v) for k, v in observed_facts.items()}
+    norm_proposed = _norm_policy_str(proposed_disposition)
+    for rule in table.rules:
+        if all(
+            (nk := _norm_policy_str(ck)) in norm_facts
+            and ((nv := _norm_policy_str(cv)) == "*" and bool(norm_facts[nk]) or norm_facts[nk] == nv)
+            for ck, cv in rule.conditions.items()
+        ):
+            if norm_proposed != _norm_policy_str(rule.required_disposition):
+                return PolicyDecisionResult(
+                    False, "policy_disposition_mismatch", rule.rule_id, rule.required_disposition
+                )
+            return PolicyDecisionResult(True, "policy_rule_matched", rule.rule_id, rule.required_disposition)
+    if table.require_human_if_unmatched:
+        return PolicyDecisionResult(False, "uncodified_judgment_requires_prepare", requires_prepare=True)
+    return PolicyDecisionResult(True, "no_matching_policy_rule_allowed")

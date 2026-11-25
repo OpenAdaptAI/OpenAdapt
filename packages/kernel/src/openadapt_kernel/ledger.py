@@ -10,10 +10,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Literal, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Literal, Mapping, Optional, Sequence
+
+if TYPE_CHECKING:
+    from openadapt_kernel.canonical import FieldType
 
 ObligationState = Literal["PENDING", "COMMITTED", "EXEMPT", "ESCALATED"]
 EpisodeOutcome = Literal["UNVERIFIED", "VERIFIED", "ESCALATED", "AWAITING_MICRO_HANDOFF"]
@@ -402,3 +406,91 @@ class ObligationLedger:
         for tok_d in data.get("capabilities", []):
             ledger.capabilities.append(CapabilityToken(**tok_d))
         return ledger
+
+
+@dataclass
+class ClosureVerdict:
+    outcome: EpisodeOutcome
+    allowed: bool
+    reason: str
+    missing_dossier_keys: List[str] = field(default_factory=list)
+    uncited_triage_keys: List[str] = field(default_factory=list)
+    pending_obligations: List[str] = field(default_factory=list)
+
+
+_DATE_SCAN_RE = re.compile(
+    r"\b(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4}|[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4})\b"
+)
+_CURRENCY_SCAN_RE = re.compile(
+    r"(?:\$\(\s*[\d,]+(?:\.\d{1,2})?\s*\)|\(\s*\$?\s*[\d,]+(?:\.\d{1,2})?\s*\)|[-+]?\s*(?:USD\s*)?\$\s*[\d,]+(?:\.\d{1,2})?|[-+]?\b\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?\b|[-+]?\b\d+\.\d{2}\b)"
+)
+_PHONE_SCAN_RE = re.compile(r"(?:\+?\d[\d\s().-]{7,}\d)")
+
+
+def _lookup_key(mapping: Mapping[str, Any], key: str) -> Any:
+    return mapping[key] if key in mapping else mapping.get(key.lstrip("$"))
+
+
+def _evidence_cited_in_text(expected: str, summary_text: str, ftype: FieldType) -> bool:
+    from openadapt_kernel import canonical as _can
+
+    if not expected or not summary_text:
+        return False
+    if ftype == "exact":
+        return expected in summary_text
+    if (norm_exp := _can.normalize_casefold_ws(expected)) and norm_exp in _can.normalize_casefold_ws(summary_text):
+        return True
+    if (ftype == "date" or ftype == "casefold_ws") and (td := _can.parse_canonical_date(expected)) is not None:
+        return any(_can.parse_canonical_date(m.group(0)) == td for m in _DATE_SCAN_RE.finditer(summary_text))
+    if ftype == "currency" and (tc := _can.parse_canonical_currency_cents(expected)) is not None:
+        return any(_can.parse_canonical_currency_cents(m.group(0)) == tc for m in _CURRENCY_SCAN_RE.finditer(summary_text))
+    if ftype == "phone" and (tp := _can.parse_canonical_phone(expected)) is not None:
+        return any(_can.parse_canonical_phone(m.group(0)) == tp for m in _PHONE_SCAN_RE.finditer(summary_text))
+    if ftype == "code_prefix":
+        tok = _can.extract_code_prefix_token(expected)
+        return bool(tok and re.search(rf"(?<![A-Za-z0-9]){re.escape(tok)}(?![A-Za-z0-9])", summary_text.upper()))
+    if ftype == "masked_id":
+        return any(_can.match_masked_id(expected, tok) for tok in re.findall(r"[A-Za-z0-9*\u2022\u25cf\u00b7-]+", summary_text))
+    return False
+
+
+def verify_completion_closure(
+    ledger: ObligationLedger, *, step_idx: int, max_steps: int, required_dossier_keys: Sequence[str] = (),
+    readback_values: Optional[Mapping[str, str]] = None, dossier_values: Optional[Mapping[str, str]] = None,
+    field_types: Optional[Mapping[str, FieldType]] = None, triage_summary_text: str = "",
+    required_triage_evidence: Optional[Mapping[str, str]] = None,
+) -> ClosureVerdict:
+    """Enforce non-waivable step-limit default-deny, dossier key coverage, and triage citation."""
+    from openadapt_kernel.canonical import canonical_equal
+
+    rb, dos, ftypes, triage_req = readback_values or {}, dossier_values or {}, field_types or {}, required_triage_evidence or {}
+    pending = ledger.pending_ids()
+    unproven = [oid for oid, ob in ledger.obligations.items() if ob.readback_proof is None or not ob.readback_proof.is_valid()]
+    all_obs_verified = bool(ledger.obligations) and not pending and not unproven
+    uncited = [
+        k for k, exp in triage_req.items()
+        if not _evidence_cited_in_text(exp, triage_summary_text, _lookup_key(ftypes, k) or "casefold_ws")
+    ]
+    if step_idx >= max_steps and ((ledger.obligations and not all_obs_verified) or (not ledger.obligations and (not triage_req or bool(uncited)))):
+        ledger.status, ledger.escalation_reason = "ESCALATED", f"default_deny_step_limit: step_idx={step_idx}>=max_steps={max_steps}"
+        return ClosureVerdict("ESCALATED", False, "default_deny_step_limit", uncited_triage_keys=uncited, pending_obligations=pending or unproven)
+    if ledger.obligations and not all_obs_verified:
+        ledger.status, ledger.escalation_reason = "ESCALATED", f"unverified_obligations: {pending or unproven}"
+        return ClosureVerdict("ESCALATED", False, "unverified_obligations", pending_obligations=pending or unproven)
+    if not ledger.obligations and not triage_req:
+        ledger.status, ledger.escalation_reason = "ESCALATED", "no_declared_obligations_verified"
+        return ClosureVerdict("ESCALATED", False, "no_declared_obligations_verified")
+    missing_keys = [
+        key for key in required_dossier_keys
+        if (exp := _lookup_key(dos, key)) is None
+        or (obs := _lookup_key(rb, key)) is None
+        or not canonical_equal(exp, obs, _lookup_key(ftypes, key) or "casefold_ws")
+    ]
+    if missing_keys:
+        ledger.status, ledger.escalation_reason = "ESCALATED", f"missing_required_dossier_keys: {missing_keys}"
+        return ClosureVerdict("ESCALATED", False, "missing_required_dossier_keys", missing_dossier_keys=missing_keys)
+    if uncited:
+        ledger.status, ledger.escalation_reason = "ESCALATED", f"uncited_triage_evidence: {uncited}"
+        return ClosureVerdict("ESCALATED", False, "uncited_triage_evidence", uncited_triage_keys=uncited)
+    ledger.status, ledger.escalation_reason = "VERIFIED", ""
+    return ClosureVerdict("VERIFIED", True, "closure_verified")

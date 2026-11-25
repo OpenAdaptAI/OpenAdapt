@@ -4,10 +4,25 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Sequence, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 from openadapt_kernel.interceptor import CommitInterceptor
 from openadapt_kernel.ledger import ObligationLedger, ProvenanceViolation
+
+if TYPE_CHECKING:
+    from openadapt_kernel.canonical import FieldType
 
 _OBSERVE_SCHEMA_JS = """() => {
   const selectorQuery = 'input, textarea, select, button, a[href], [contenteditable="true"], [role="button"], [role="textbox"], [role="combobox"], [role="checkbox"], [role="option"]';
@@ -518,3 +533,124 @@ class StepwiseHealer:
             )
 
         return HealResult(verified=True, healed_steps=healed_ids, healed_plan=healed_plan)
+
+
+_EPHEMERAL_SELECTOR_PATTERNS: Tuple[re.Pattern[str], ...] = (
+    re.compile(r"#[A-Za-z_][\w-]*[-_]\d+\b"),
+    re.compile(r"(?:\.|\[class[*^$~]?=[\"']?)(?:css-[a-z0-9]{4,}|sc-[A-Za-z0-9]{4,}|jss\d+|Mui\w+-\d+)\b|__[A-Za-z0-9]{5,}\b"),
+    re.compile(r"(?:#|id=[\"']?)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|#\\?:r[0-9a-z]+\\?:|#[0-9a-f]{8,}\b", re.IGNORECASE),
+)
+
+
+@dataclass(frozen=True)
+class ControlSignature:
+    in_modal: bool = False
+    tag: str = ""
+    input_type: str = ""
+    role: str = ""
+    name: str = ""
+    placeholder: str = ""
+    label_tokens: Tuple[str, ...] = ()
+    text_tokens: Tuple[str, ...] = ()
+    ordinal: int = 0
+
+    @classmethod
+    def from_control(cls, ctrl: ControlSchema, *, ordinal: int = 0, text: str = "") -> "ControlSignature":
+        return cls(
+            ctrl.in_modal, ctrl.tag.lower(), ctrl.input_type.lower(), ctrl.role.lower(), ctrl.name.strip(),
+            ctrl.placeholder.strip(), tuple(sorted(_tokens(ctrl.label))), tuple(sorted(_tokens(text or ctrl.value))), ordinal,
+        )
+
+
+@dataclass(frozen=True)
+class LiftedPackStep:
+    step_id: str
+    action: str
+    selector: Optional[str]
+    control_signature: Optional[ControlSignature]
+    value: Optional[str] = None
+    stripped_ephemeral_selector: Optional[str] = None
+    parameterized_var: Optional[str] = None
+
+
+@dataclass
+class LiftedPackSteps:
+    steps: List[LiftedPackStep] = field(default_factory=list)
+    stripped_selector_count: int = 0
+    parameterized_vars: List[str] = field(default_factory=list)
+
+
+def is_ephemeral_selector(sel: str) -> bool:
+    """Detect framework-generated ephemeral IDs, CSS-in-JS hashes, and UUID selectors."""
+    s = (sel or "").strip()
+    return bool(s) and any(pat.search(s) for pat in _EPHEMERAL_SELECTOR_PATTERNS)
+
+
+def parameterize_value_against_dossier(
+    val: str, dossier: Mapping[str, str], *, field_types: Optional[Mapping[str, FieldType]] = None
+) -> str:
+    """Replace a concrete value with a $var reference when it canonically matches a dossier entry."""
+    from openadapt_kernel import canonical as _can
+
+    if not val or val.startswith("$"):
+        return val
+    ftypes = field_types or {}
+    for key, d_val in dossier.items():
+        if not d_val:
+            continue
+        var_ref = _can.canonical_var_name(key)
+        explicit = ftypes.get(key) or ftypes.get(var_ref) or ftypes.get(var_ref.lstrip("$"))
+        if explicit is not None:
+            matched = _can.canonical_equal(d_val, val, explicit)
+        else:
+            matched = (
+                (_can.parse_canonical_date(d_val) is not None and _can.canonical_equal(d_val, val, "date"))
+                or (_can.parse_canonical_phone(d_val) is not None and _can.canonical_equal(d_val, val, "phone"))
+                or (
+                    any(ch in d_val or ch in val for ch in ("$", ",", "."))
+                    and _can.parse_canonical_currency_cents(d_val) is not None
+                    and _can.canonical_equal(d_val, val, "currency")
+                )
+                or _can.canonical_equal(d_val, val, "casefold_ws")
+            )
+        if matched:
+            return var_ref
+    return val
+
+
+def _build_signature_from_step(raw: Mapping[str, Any]) -> Optional[ControlSignature]:
+    ctrl = raw.get("control")
+    if isinstance(ctrl, ControlSchema):
+        return ControlSignature.from_control(ctrl, ordinal=int(raw.get("ordinal", 0)), text=str(raw.get("text", "")))
+    src: Mapping[str, Any] = ctrl if isinstance(ctrl, Mapping) else raw
+    label_val, text_val = str(src.get("label") or raw.get("semantic_label") or ""), str(src.get("text") or "")
+    if not any(src.get(k) for k in ("tag", "input_type", "role", "name", "placeholder", "in_modal")) and not (label_val or text_val):
+        return None
+    return ControlSignature(
+        bool(src.get("in_modal", raw.get("prefer_modal", False))), str(src.get("tag", "")).lower(),
+        str(src.get("input_type", "")).lower(), str(src.get("role", "")).lower(), str(src.get("name", "")).strip(),
+        str(src.get("placeholder", "")).strip(), tuple(sorted(_tokens(label_val))), tuple(sorted(_tokens(text_val))), int(src.get("ordinal", 0)),
+    )
+
+
+def lift_cold_trace_to_pack(
+    raw_steps: Sequence[Mapping[str, Any]], dossier: Mapping[str, str], *, field_types: Optional[Mapping[str, FieldType]] = None
+) -> LiftedPackSteps:
+    """Lift raw trace steps into durable pack steps by stripping ephemeral selectors and parameterizing values."""
+    lifted, seen_vars = LiftedPackSteps(), set()
+    for idx, raw in enumerate(raw_steps):
+        sel = str(raw.get("selector") or "").strip() or None
+        stripped = sel if (sel and is_ephemeral_selector(sel)) else None
+        if stripped is not None:
+            sel = None
+            lifted.stripped_selector_count += 1
+        raw_val = raw.get("value")
+        val_out = parameterize_value_against_dossier(str(raw_val), dossier, field_types=field_types) if raw_val is not None else None
+        param_var = val_out if (raw_val is not None and val_out is not None and val_out != str(raw_val) and val_out.startswith("$")) else None
+        if param_var and param_var not in seen_vars:
+            seen_vars.add(param_var)
+            lifted.parameterized_vars.append(param_var)
+        lifted.steps.append(
+            LiftedPackStep(str(raw.get("step_id") or f"step_{idx}"), str(raw.get("action") or "click"), sel, _build_signature_from_step(raw), val_out, stripped, param_var)
+        )
+    return lifted
