@@ -302,7 +302,7 @@ class FlightProxy:
         ssl_context: Optional[ssl.SSLContext] = None,
         ocr_words: Any = None,
         pseudonymize: bool = True,
-        known_values: Sequence[tuple[str, str]] | Sequence[str] = (),
+        known_values: Sequence[tuple[str, str] | str] = (),
         known_record: Optional[Mapping[str, Any]] = None,
         ui_allowlist: Sequence[str] = (),
     ) -> None:

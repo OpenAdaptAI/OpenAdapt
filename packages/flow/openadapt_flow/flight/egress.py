@@ -202,7 +202,7 @@ class ScrubbedEgress:
         loopback_ports: Optional[Sequence[int]] = None,
         usage_path: Optional[Path] = None,
         use_block: bool = True,
-        known_values: Sequence[tuple[str, str]] | Sequence[str] = (),
+        known_values: Sequence[tuple[str, str] | str] = (),
         known_record: Optional[Mapping[str, Any]] = None,
         ui_allowlist: Sequence[str] = (),
     ) -> None:
@@ -228,7 +228,7 @@ class ScrubbedEgress:
             Path(usage_path) if usage_path else self.run_dir / "usage.json"
         )
         self.use_block = use_block
-        self.known_values = list(known_values)
+        self.known_values: list[tuple[str, str] | str] = list(known_values)
         self.known_record = dict(known_record) if known_record else None
         self.ui_allowlist = list(ui_allowlist)
         self._timeline = timeline
