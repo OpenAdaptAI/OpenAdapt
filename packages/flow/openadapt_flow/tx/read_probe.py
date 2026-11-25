@@ -60,6 +60,39 @@ _CREDENTIAL_KEY_RE = re.compile(
 _REPLAYED_HEADERS = frozenset({"content-type", "accept", "x-requested-with"})
 
 
+_READ_VERB_SEGMENTS = frozenset(
+    {
+        "fetch",
+        "search",
+        "query",
+        "list",
+        "get",
+        "find",
+        "read",
+        "view",
+        "lookup",
+        "count",
+    }
+)
+_ID_SEG_RE = re.compile(
+    r"^(?:\d+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{16,})$",
+    re.IGNORECASE,
+)
+
+
+def _is_read_verb_path(path: str) -> bool:
+    segs = [s for s in path.split("/") if s]
+    return bool(segs) and segs[-1].lower() in _READ_VERB_SEGMENTS
+
+
+def _generalize_read_path_regex(path: str) -> str:
+    parts = path.split("/")
+    out = [
+        "[^/]+" if seg and _ID_SEG_RE.match(seg) else re.escape(seg) for seg in parts
+    ]
+    return "/".join(out)
+
+
 class ReadRouteProbe(BaseModel):
     """What the probe saw for one route."""
 
@@ -71,6 +104,8 @@ class ReadRouteProbe(BaseModel):
     read_only: bool
     reason: str
     body_equals: tuple[tuple[str, str], ...] = ()
+    path_only: bool = False
+    path_pattern: Optional[str] = None
 
 
 class ReadRouteReport(BaseModel):
@@ -87,7 +122,10 @@ class ReadRouteReport(BaseModel):
             return ()
         return tuple(
             ReadRoute(
-                method=r.method, path=re.escape(r.path), body_equals=r.body_equals
+                method=r.method,
+                path=r.path_pattern or re.escape(r.path),
+                body_equals=r.body_equals,
+                path_only=r.path_only,
             )
             for r in self.routes
             if r.read_only
@@ -178,6 +216,21 @@ def _constant_fields(samples: list[_Sample]) -> Optional[tuple[tuple[str, str], 
     )
 
 
+def _shares_body_schema(samples: list[_Sample]) -> bool:
+    """True when all samples share at least one non-credential body key or all are empty."""
+    key_sets: list[set[str]] = []
+    for sample in samples:
+        fields = _top_level_body_fields(sample.body, sample.headers)
+        if fields is None:
+            return False
+        key_sets.append({k for k in fields if not _CREDENTIAL_KEY_RE.search(k)})
+    if not key_sets:
+        return False
+    if all(not ks for ks in key_sets):
+        return True
+    return bool(set.intersection(*key_sets))
+
+
 def _replay(
     base_url: str,
     sample: _Sample,
@@ -255,29 +308,37 @@ def probe_read_routes(
             )
             continue
         body_equals = _constant_fields(samples)
+        path_only = False
         if body_equals is None:
-            probes.append(
-                ReadRouteProbe(
-                    method=method,
-                    path=path,
-                    samples=len(samples),
-                    read_only=False,
-                    reason="body is neither a JSON object nor a form",
+            if _is_read_verb_path(path) and all(not s.body.strip() for s in samples):
+                body_equals = ()
+                path_only = True
+            else:
+                probes.append(
+                    ReadRouteProbe(
+                        method=method,
+                        path=path,
+                        samples=len(samples),
+                        read_only=False,
+                        reason="body is neither a JSON object nor a form",
+                    )
                 )
-            )
-            continue
-        if not body_equals:
-            probes.append(
-                ReadRouteProbe(
-                    method=method,
-                    path=path,
-                    samples=len(samples),
-                    read_only=False,
-                    reason="no body field was constant across the samples, so "
-                    "nothing tells a read on this path from a write",
+                continue
+        elif not body_equals:
+            if _is_read_verb_path(path) and _shares_body_schema(samples):
+                path_only = True
+            else:
+                probes.append(
+                    ReadRouteProbe(
+                        method=method,
+                        path=path,
+                        samples=len(samples),
+                        read_only=False,
+                        reason="no body field was constant across the samples, so "
+                        "nothing tells a read on this path from a write",
+                    )
                 )
-            )
-            continue
+                continue
         reason = "every replay returned 2xx and left the store unchanged"
         read_only = True
         for sample in samples:
@@ -299,6 +360,10 @@ def probe_read_routes(
                 read_only=read_only,
                 reason=reason,
                 body_equals=body_equals if read_only else (),
+                path_only=path_only if read_only else False,
+                path_pattern=_generalize_read_path_regex(path)
+                if (read_only and path_only)
+                else None,
             )
         )
     return ReadRouteReport(store_idle=idle, routes=tuple(probes))

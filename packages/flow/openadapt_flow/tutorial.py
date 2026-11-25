@@ -899,6 +899,57 @@ def serve_demo_app(*, port: int = 0) -> tuple[str, Callable[[], None]]:
     return serve(port=port)
 
 
+def demo_app_is_tasks_bundle(workflow: Any) -> bool:
+    """Whether a bundle recorded on MockMed starts on ``#tasks`` (e.g. tutorial)."""
+    if getattr(workflow, "name", None) == "local-quickstart":
+        return True
+    steps = getattr(workflow, "steps", None) or []
+    if any(getattr(step, "effects", None) for step in steps):
+        return True
+    if steps:
+        first = steps[0]
+        intent = str(getattr(first, "intent", "") or "").lower()
+        target = getattr(first, "target", None)
+        selector = str(getattr(target, "dom_selector", "") or "")
+        text = str(getattr(target, "text", "") or "").lower()
+        if ".open-btn" in selector or text == "open" or "click 'open'" in intent:
+            return True
+    return False
+
+
+def demo_app_entry_url(base_url: str, *, workflow: Any, drift: Optional[str]) -> str:
+    """Build the entry URL for ``flow replay --demo-app``."""
+    if not demo_app_is_tasks_bundle(workflow):
+        if not drift:
+            return base_url
+        return f"{base_url.rstrip('/')}/?drift={drift}"
+    query_parts = ["fault=ok", "idempotency=demo"]
+    if drift:
+        query_parts.append(f"drift={drift}")
+    return f"{base_url.rstrip('/')}/?{'&'.join(query_parts)}#tasks"
+
+
+def start_demo_app_for_replay(
+    *,
+    workflow: Any,
+    drift: Optional[str] = None,
+) -> tuple[str, Callable[[], None]]:
+    """Start MockMed for ``flow replay --demo-app`` and return ``(url, stop)``.
+
+    Does not attach an independent effect verifier: the Demo profile must still
+    refuse to report ``VERIFIED`` on declared consequential effects without an
+    explicit deployment or verifier.
+    """
+    if demo_app_is_tasks_bundle(workflow):
+        from openadapt_flow.mockmed.fault_server import serve as serve_fault_demo
+
+        base_url, _db, stop = serve_fault_demo(port=0)
+    else:
+        base_url, stop = serve_demo_app(port=0)
+    url = demo_app_entry_url(base_url, workflow=workflow, drift=drift)
+    return url, stop
+
+
 def demo_execute_admissions() -> tuple[Any, ...]:
     """Return the bundled demo Execute admissions for ``--seed-mockmed``."""
 

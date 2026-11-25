@@ -37,6 +37,10 @@ def _run(records, dirs, *, corrupt=None, pipeline=None, verifier_factory=None):
     bundle, run_dir = dirs
     looped = author_data_driven_loop(_encounter_body(), records)
     url, db, stop = fault_serve()
+    for rec in records:
+        db.register_patient(rec["patient_id"])
+    for target in (corrupt or {}).values():
+        db.register_patient(target)
     backend = _RowWritingBackend(url, corrupt=corrupt)
     replayer = Replayer(
         backend,
@@ -184,6 +188,7 @@ def test_pending_report_is_not_saved_as_success(dirs, monkeypatch) -> None:
         _encounter_body(), [{"patient_id": "alice", "note": "alice triage"}]
     )
     url, db, stop = fault_serve()
+    db.register_patient("alice")
     try:
         report = Replayer(
             _RowWritingBackend(url),

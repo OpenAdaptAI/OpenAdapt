@@ -219,6 +219,7 @@ def test_two_child_fixture_second_is_local_backend(tmp_path: Path):
 
     composition, parent = _compose_two(tmp_path)
     url, db, stop = fault_serve()
+    db.register_patient("alice")
     typed_on_posting: list[str] = []
     try:
 

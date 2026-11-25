@@ -673,6 +673,10 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
             generate_self_signed_cert,
         )
 
+        source = Path(agent_server.__file__)
+        native_value = source.with_name("native_value.py")
+        if not native_value.is_file():
+            raise FileNotFoundError("agent native-value helper is missing")
         self.attach_console()
         self.run_ps(
             f"Stop-ScheduledTask -TaskName '{AGENT_TASK}' -ErrorAction SilentlyContinue; "
@@ -681,10 +685,10 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
             "$_.ProcessId -Force }",
             check=False,
         )
-        self.push_file(Path(agent_server.__file__), rf"{GUEST_DIR}\win_agent_server.py")
+        self.push_file(source, rf"{GUEST_DIR}\win_agent_server.py")
         for helper in ("keyboard_lease", "native_value"):
             self.push_file(
-                Path(agent_server.__file__).with_name(helper + ".py"),
+                source.with_name(helper + ".py"),
                 rf"{GUEST_DIR}\win_agent_{helper}.py",
             )
         bundle = generate_self_signed_cert([self.host])

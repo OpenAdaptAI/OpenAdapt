@@ -397,6 +397,7 @@ def test_launch_agent_autoprovisions_tls_and_returns_pinned_endpoint(monkeypatch
     assert ep.require_tls is True
     assert ep.token == "tok-xyz"
     assert ep.pin_fingerprint and len(ep.pin_fingerprint) == 64  # SHA-256 hex
+    assert f"{pv.GUEST_DIR}/win_agent_native_value.py" in pushed
     # The per-run cert + key were provisioned into the guest.
     assert f"{pv.GUEST_DIR}/agent-cert.pem" in pushed
     assert f"{pv.GUEST_DIR}/agent-key.pem" in pushed

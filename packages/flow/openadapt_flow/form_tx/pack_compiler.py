@@ -9,7 +9,7 @@ PII + volatile-ID scrubbing. Zero application or vendor names.
 from __future__ import annotations
 
 import re
-from typing import Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -892,6 +892,57 @@ def _induce_summary_check(
     )
 
 
+_COMMIT_WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+_DYNAMIC_PATH_SEGMENT_RE = re.compile(
+    r"^(?:\d+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{16,})$",
+    flags=re.IGNORECASE,
+)
+
+
+def _normalize_commit_path_pattern(raw_url: str) -> Optional[str]:
+    """Turn a recorded save URL into a path-only pattern without record IDs."""
+    text = raw_url.strip()
+    if not text:
+        return None
+    path = urlsplit(text).path.strip()
+    if not path:
+        return None
+    if not path.startswith("/"):
+        path = f"/{path}"
+    segments = [
+        "*" if _DYNAMIC_PATH_SEGMENT_RE.match(seg) else seg for seg in path.split("/")
+    ]
+    return "/".join(segments)
+
+
+def _derive_commit_url_patterns(
+    demo_commit_requests: Sequence[Mapping[str, Any]],
+    explicit_patterns: Sequence[str] = (),
+) -> tuple[str, ...]:
+    """Derive commit endpoint URL patterns from successful demo save writes."""
+    patterns: list[str] = []
+    for raw in explicit_patterns:
+        pat = str(raw).strip()
+        if pat and pat not in patterns:
+            patterns.append(pat)
+    for req in demo_commit_requests:
+        method = str(req.get("method", "")).strip().upper()
+        if method not in _COMMIT_WRITE_METHODS:
+            continue
+        status_raw = req.get("status")
+        try:
+            status = int(status_raw) if status_raw is not None else -1
+        except (TypeError, ValueError):
+            continue
+        if not (200 <= status < 400):
+            continue
+        raw_url = str(req.get("url") or req.get("path") or "")
+        derived = _normalize_commit_path_pattern(raw_url)
+        if derived and derived not in patterns:
+            patterns.append(derived)
+    return tuple(patterns)
+
+
 def induce_form_pack(
     *,
     pack_id: str,
@@ -901,6 +952,8 @@ def induce_form_pack(
     summary_snapshot: Optional[FormSnapshot] = None,
     commit_button_pattern: Optional[str] = None,
     next_button_pattern: str = r"next|continue",
+    commit_url_patterns: Sequence[str] = (),
+    demo_commit_requests: Sequence[Mapping[str, Any]] = (),
 ) -> PackInductionReport:
     """Deterministically induce a ``FormPack`` from scrubbed structural snapshots."""
     scrubbed_forms = tuple(_scrub_snapshot_values(snap) for snap in form_snapshots)
@@ -1110,6 +1163,11 @@ def induce_form_pack(
         else None
     )
 
+    resolved_commit_url_patterns = _derive_commit_url_patterns(
+        demo_commit_requests,
+        explicit_patterns=commit_url_patterns,
+    )
+
     pack = FormPack(
         pack_id=pack_id,
         domain_schema=domain.schema_id,
@@ -1117,7 +1175,16 @@ def induce_form_pack(
         bindings=ordered_bindings,
         screens=screens,
         summary_check=summary_check,
+        commit_url_patterns=resolved_commit_url_patterns,
     )
+
+    has_record_lookup = bool(
+        summary_check is not None
+        and summary_check.search_by_output_key
+        and summary_check.search_input_anchor is not None
+        and summary_check.search_submit_anchor is not None
+    )
+    has_commit_evidence = bool(resolved_commit_url_patterns) or has_record_lookup
 
     certified_ready = (
         bool(ordered_matched_keys)
@@ -1126,6 +1193,7 @@ def induce_form_pack(
         and not unmapped_portal_required
         and commit_button_pattern is not None
         and any(screen.is_commit_screen for screen in screens)
+        and has_commit_evidence
         and summary_check is not None
         and bool(summary_check.field_readbacks)
         and {binding.dossier_key for binding in ordered_bindings}

@@ -194,15 +194,15 @@ def test_workflow_keeps_build_failure_and_observes_only_failed_macos_bundles():
         if step.get("name") == "Read scoped DMG diagnostics after bundle failure"
     )
     assert "continue-on-error" not in build and "continue-on-error" not in diagnostic
-    expected_command = " ".join(
-        [
-            "npm run tauri build --",
-            "--bundles ${{ matrix.bundles }}",
-            "--target ${{ matrix.target }}",
-            "--config src-tauri/tauri.adhoc.conf.json",
-        ]
-    )
-    assert build["run"] == expected_command
+    run_script = build["run"]
+    for required_fragment in (
+        "npm run tauri build --",
+        '--bundles "${{ matrix.bundles }}"',
+        '--target "${{ matrix.target }}"',
+        "--config src-tauri/tauri.adhoc.conf.json",
+        "exit 1",
+    ):
+        assert required_fragment in run_script
     assert (
         diagnostic["if"]
         == "${{ failure() && runner.os == 'macOS' && steps.native_bundle.outcome == 'failure' }}"

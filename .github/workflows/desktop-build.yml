@@ -60,12 +60,12 @@ jobs:
             else
               # Paths relative to packages/desktop, as the classifier expects.
               git diff --relative --name-only "${before}" HEAD > "${changed_paths}"
-              # The workflows that build Desktop live at the monorepo root now.
-              # A change to them still demands the full native matrix.
+              # Only Desktop build/release workflow changes force the full
+              # native matrix; unrelated packages.yml edits must not pile up
+              # macOS/Windows installer builds on main.
               if git diff --name-only "${before}" HEAD -- \
                   ../../.github/workflows/desktop-build.yml \
-                  ../../.github/workflows/desktop-release.yml \
-                  ../../.github/workflows/packages.yml | grep -q .; then
+                  ../../.github/workflows/desktop-release.yml | grep -q .; then
                 echo ".github/workflows/build.yml" >> "${changed_paths}"
               fi
             fi
@@ -309,14 +309,26 @@ jobs:
 
       - name: Build native installer packages
         id: native_bundle
+        shell: bash
         env:
           # Supported logging only; keep the existing non-GUI CI packaging path.
           TAURI_CLI_VERBOSITY: ${{ runner.os == 'macOS' && '1' || '0' }}
-        run: >-
-          npm run tauri build --
-          --bundles ${{ matrix.bundles }}
-          --target ${{ matrix.target }}
-          --config src-tauri/tauri.adhoc.conf.json
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if npm run tauri build -- \
+              --bundles "${{ matrix.bundles }}" \
+              --target "${{ matrix.target }}" \
+              --config src-tauri/tauri.adhoc.conf.json; then
+              exit 0
+            fi
+            if [ "${attempt}" -lt 3 ]; then
+              backoff=$((attempt * 15))
+              echo "::warning::Tauri bundle failed (attempt ${attempt}/3); retrying in ${backoff}s..." >&2
+              sleep "${backoff}"
+            fi
+          done
+          exit 1
 
       - name: Read scoped DMG diagnostics after bundle failure
         if: ${{ failure() && runner.os == 'macOS' && steps.native_bundle.outcome == 'failure' }}

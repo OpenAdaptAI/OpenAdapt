@@ -1209,7 +1209,7 @@ def _database_frame(
         if again is None:
             unreachable.too_large = any(e.startswith(limit_error) for e in errors)
             return unreachable
-        if settled_state(new, again):
+        if settled_state(new, again, database.entity_scope(cfg.frame)):
             settled = True
             break
         if used < attempts:

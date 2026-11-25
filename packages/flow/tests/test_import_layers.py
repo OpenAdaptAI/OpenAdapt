@@ -1260,6 +1260,21 @@ def _unresolvable_imports(tree, module, is_package, exports, *, importers=None):
         for child in ast.iter_child_nodes(node)
     }
     found = set()
+    _const_vals: dict[str, str | None] = {}
+    for _n in ast.walk(tree):
+        if isinstance(_n, ast.Assign) and len(_n.targets) == 1:
+            _t = _n.targets[0]
+            if isinstance(_t, ast.Name):
+                _v = _str(_n.value)
+                _const_vals[_t.id] = (
+                    None if (_t.id in _const_vals or _v is None) else _v
+                )
+        elif isinstance(_n, ast.AnnAssign) and isinstance(_n.target, ast.Name):
+            _v = _str(_n.value) if _n.value is not None else None
+            _const_vals[_n.target.id] = (
+                None if (_n.target.id in _const_vals or _v is None) else _v
+            )
+    static_consts = {k: v for k, v in _const_vals.items() if v is not None}
     for node in ast.walk(tree):
         if id(node) in owner._unevaluated:
             continue
@@ -1295,7 +1310,16 @@ def _unresolvable_imports(tree, module, is_package, exports, *, importers=None):
                     and level.value == 0
                 )
             if unresolved:
-                found.add((node.lineno, "nonliteral or unresolved import target"))
+                arg0 = _arg(node, 0, "name")
+                static_target = (
+                    static_consts.get(arg0.id) if isinstance(arg0, ast.Name) else None
+                )
+                reason = (
+                    f"nonliteral or unresolved import target -> {static_target}"
+                    if static_target
+                    else "nonliteral or unresolved import target"
+                )
+                found.add((node.lineno, reason))
         if (
             isinstance(node, ast.ClassDef)
             and _class_namespace(module, node) in owner.capability_namespaces
@@ -6800,3 +6824,22 @@ def test_repository_debt_receipt_detaches_raw_and_policy_without_safety_claim(
     policy.append("changed after observation")
     assert "changed after observation" not in receipt["raw_validator_results"]
     assert receipt["repository_policy_results"] == ()
+
+
+def test_constant_held_dynamic_import_names_resolved_target() -> None:
+    """Static string constants passed to import_module name the target in diagnostics (#2125)."""
+    source = (
+        "import importlib\n"
+        'TARGET = "openadapt_flow.benchmark.secret_app"\n'
+        "def load():\n"
+        "    return importlib.import_module(TARGET)\n"
+    )
+    tree = ast.parse(source)
+    problems = _unresolvable_imports(
+        tree, "openadapt_flow.core", is_package=False, exports={}
+    )
+    assert any(
+        "unresolvable dynamic import (nonliteral or unresolved import target -> openadapt_flow.benchmark.secret_app)"
+        in msg
+        for msg in problems
+    ), problems

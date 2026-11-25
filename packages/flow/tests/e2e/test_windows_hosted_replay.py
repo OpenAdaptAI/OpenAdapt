@@ -91,12 +91,19 @@ class _Host:
                 return value
         raise AssertionError("pn_db.py all returned no JSON rows")
 
-    def launch_app(self, drift: str = "none") -> None:
+    def launch_app(
+        self,
+        drift: str = "none",
+        *,
+        powershell: str = "powershell.exe",
+        reseed: bool = True,
+    ) -> None:
         self.stop_app()
-        self.db("seed", "--drift", drift)
+        if reseed:
+            self.db("seed", "--drift", drift)
         self.app = subprocess.Popen(
             [
-                "powershell.exe",
+                powershell,
                 "-STA",
                 "-NoProfile",
                 "-ExecutionPolicy",

@@ -17,6 +17,8 @@
 
 ## Unreleased
 
+### Fixes
+
 - `openadapt quickstart` no longer exits 1 on a fresh machine with encryption
   at rest on, the default since 4.0.0 (#2682). The tutorial wrote its run
   summary (`run-summary.json`, `.md`, `.png`) in plaintext into the encrypted
@@ -28,6 +30,31 @@
   (`receipt.md`, `receipt.png`). Any other plaintext file in a sealed run
   still makes it refuse. The OpenEMR quickstart driver's halted-run screenshot
   is also written through the set.
+- Native approval and structural field reads require exact UIA values to agree
+  with independent native extent/full reads under the same control identity.
+  Missing, sensitive, incomplete or disagreeing values refuse the observation;
+  an advertised native approval channel does not fall back to OCR. Empty
+  complete values remain values. A container cannot hide unread descendants
+  ([#2291](https://github.com/OpenAdaptAI/OpenAdapt/pull/2291)).
+- Value reads negotiate independent client/server read-v3 declarations and
+  require the separate helper proof-v3 contract before any preview or value
+  getter. Incompatible consumers refuse before provider access; versioned
+  refusal-parser imports reject mixed local modules. One
+  current sensitivity guard protects values, previews and capability probes.
+  Failed/unknown capability probes cannot become caption masks. Structural
+  previews and unqualified row inventories do not authorize effect checks.
+- Unavailable native form projections return a closed request-local refusal
+  receipt with stage/channel/reason and already-known numeric metadata. A
+  closed property/guard-phase/result category locates raw-boolean failures;
+  the first unknown stops later probes. Partial fields, names, values, raw COM
+  objects and provider exceptions are excluded. No
+  additional source read, global last-error state, fallback or retry is added.
+- Approval form state reads proven values separately from the remaining OCR
+  pixels, so caret/title-bar display noise need not alter an unchanged field's
+  value digest ([#2189](https://github.com/OpenAdaptAI/OpenAdapt/issues/2189)).
+  Current complete-value approval/structural qualification is pending. The
+  native observation fixture excludes a full Flow save; earlier short-note
+  governed evidence does not qualify this new source or unbounded values.
 - `openadapt verify draft` fix-forward for #2438. A clean admission case whose
   recheck crashed (for example `database is locked`) now records the recheck
   as `ERROR` and fails, instead of passing with no recheck. Trace and column

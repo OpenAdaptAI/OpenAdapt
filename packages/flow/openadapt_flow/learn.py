@@ -131,6 +131,18 @@ def episode_record(episode: Any, result: Any) -> dict[str, Any]:
         moves = frame.get("moves")
         if isinstance(moves, list):
             out["moves"] = [dict(m) for m in moves if isinstance(m, Mapping)]
+        side = frame.get("side_effect_moves")
+        from openadapt_flow.verifier import Outcome
+
+        if (
+            out["outcome"] == Outcome.CONFIRMED.value
+            and isinstance(side, list)
+            and side
+        ):
+            # Logged side effects (rows outside the entity tables): the
+            # write passed, and these are the learner's candidates.
+            out["moves"] = [dict(m) for m in side if isinstance(m, Mapping)]
+            out["logged"] = True
         out["has_database"] = isinstance(frame.get("database"), Mapping)
     return out
 
@@ -339,8 +351,13 @@ def _why_ignored(ep: Mapping[str, Any]) -> Optional[str]:
         if ep.get("frame") != "refuted":
             return "nothing moved in the read-only window"
         return _why_rows_ignored(ep)
+    from openadapt_flow.verifier import Outcome
+
     outcome = ep.get("outcome")
-    if outcome == "CONFIRMED":
+    if outcome == Outcome.CONFIRMED.value:
+        if ep.get("logged") and ep.get("delta") == "held":
+            # Passed with logged side effects: they are candidate excuses.
+            return _why_rows_ignored(ep)
         return "confirmed: nothing moved that needs an excuse"
     if ep.get("delta") != "held":
         return "the declared effects didn't hold"
@@ -951,6 +968,10 @@ def build_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     from openadapt_flow import learn_probe
 
     learn_probe.register_parser(steps)
+
+    from openadapt_flow import learn_entities
+
+    learn_entities.register(steps)
     return p
 
 

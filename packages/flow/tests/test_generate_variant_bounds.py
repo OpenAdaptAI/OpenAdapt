@@ -120,3 +120,125 @@ def test_create_variants_keep_demonstrated_set_first() -> None:
     )
 
     assert [v.fields for v in actual] == [["optional", "required"], ["required"]]
+
+
+def _create_plan(optional_count: int, *, multi_demo: bool = False) -> gen.KindPlan:
+    optional = [f"opt_{i:02d}" for i in reversed(range(optional_count))]
+    locations = {
+        name: Location((), (name,), "exact") for name in ("required", *optional)
+    }
+    demo1 = Demo(
+        "create_record",
+        {"required": "a", **{name: f"v_{name}" for name in optional}},
+        Diff([]),
+        {},
+    )
+    demos = [demo1]
+    if multi_demo and optional_count >= 2:
+        demo2 = Demo(
+            "create_record",
+            {"required": "b", **{name: f"w_{name}" for name in optional[1:]}},
+            Diff([]),
+            {},
+        )
+        demos.append(demo2)
+    return gen.KindPlan(
+        kind="create_record",
+        mode="create",
+        optional=optional,
+        locations=locations,
+        demos=demos,
+    )
+
+
+def _reference_create_variants(plan: gen.KindPlan, limit: int) -> list[gen.Variant]:
+    located = set(plan.locations)
+    base_sets = [
+        frozenset(
+            {
+                k
+                for k, v in d.values.items()
+                if v is not None and not isinstance(v, list)
+            }
+            & located
+        )
+        for d in plan.demos
+    ]
+    optional = [p for p in plan.optional if p in located]
+    seen: set[frozenset[str]] = set(base_sets)
+    sets: list[frozenset[str]] = list(dict.fromkeys(base_sets))
+    drops = {base: [p for p in optional if p in base] for base in base_sets}
+    for n in range(1, max((len(v) for v in drops.values()), default=0) + 1):
+        for base in base_sets:
+            for combo in itertools.combinations(drops[base], n):
+                s = frozenset(base - set(combo))
+                if s not in seen:
+                    seen.add(s)
+                    sets.append(s)
+    for s in list(sets):
+        for p in optional:
+            if p not in s:
+                t = frozenset(s | {p})
+                if t not in seen:
+                    seen.add(t)
+                    sets.append(t)
+    return [gen.Variant(plan.kind, sorted(s)) for s in sets[:limit]]
+
+
+@pytest.mark.parametrize(
+    ("optional_count", "limit", "multi_demo"),
+    [
+        (0, 64, False),
+        (1, 64, False),
+        (4, 64, False),
+        (6, 64, False),
+        (7, 64, False),
+        (5, 7, False),
+        (6, 1, False),
+        (5, 10, True),
+        (6, 64, True),
+    ],
+)
+def test_create_variants_keep_exact_ordered_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+    optional_count: int,
+    limit: int,
+    multi_demo: bool,
+) -> None:
+    plan = _create_plan(optional_count, multi_demo=multi_demo)
+    expected = _reference_create_variants(plan, limit)
+    monkeypatch.setattr(gen, "MAX_VARIANTS", limit)
+
+    actual = gen.variants(
+        Schema("mysql", "synthetic", {}), plan, gen.KindSpec(plan.kind, []), {}
+    )
+
+    assert actual == expected
+    assert [v.slug for v in actual] == [v.slug for v in expected]
+
+
+def test_create_variants_do_not_consume_beyond_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = itertools.combinations
+    consumed = 0
+
+    def bounded_combinations(values: list[str], size: int) -> Iterator[tuple[str, ...]]:
+        nonlocal consumed
+        for combo in original(values, size):
+            consumed += 1
+            if consumed > gen.MAX_VARIANTS:
+                raise AssertionError(
+                    "create mode requested combinations beyond MAX_VARIANTS"
+                )
+            yield combo
+
+    monkeypatch.setattr(gen.itertools, "combinations", bounded_combinations)
+    plan = _create_plan(20)
+
+    actual = gen.variants(
+        Schema("mysql", "synthetic", {}), plan, gen.KindSpec(plan.kind, []), {}
+    )
+
+    assert consumed == gen.MAX_VARIANTS - 1
+    assert len(actual) == gen.MAX_VARIANTS

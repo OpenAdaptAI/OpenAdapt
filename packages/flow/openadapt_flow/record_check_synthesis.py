@@ -693,19 +693,79 @@ _PAGING_BODY = frozenset(
 )
 #: Body fields that state how many records the server holds.
 _TOTAL_BODY = frozenset({"total", "total_count", "totalcount", "count", "totalsize"})
+_NESTED_PAGING_CONTAINERS = frozenset(
+    {"paging", "pagination", "meta", "_links", "links"}
+)
+_LINK_NEXT_RE = re.compile(r';\s*rel\s*=\s*"?next"?(?:\s*;|\s*,|\s*$)', re.IGNORECASE)
+_CONTENT_RANGE_TOTAL_RE = re.compile(r"/(\d+|\*)\s*$")
 #: A response holding exactly this many records may be a server's default page.
 #: Completeness is never inferred from length; this only refuses it.
 _PAGE_SIZES = frozenset({10, 12, 15, 20, 24, 25, 30, 40, 50, 100, 200, 250, 500, 1000})
 
 
+def _scan_paging_mapping(
+    mapping: Mapping[str, Any],
+    *,
+    records: Any,
+    records_key: Optional[str],
+    prefix: str,
+    signs: list[str],
+) -> None:
+    for key, value in mapping.items():
+        low = str(key).lower()
+        if not prefix and key == records_key:
+            continue
+        label = f"{prefix}.{key}" if prefix else str(key)
+        if low in _PAGING_BODY and value not in (None, False, "", [], {}):
+            signs.append(f"the response has a paging field ({label})")
+        elif low == "next" and value not in (None, False, "", [], {}):
+            signs.append(f"the response links to a next page ({label})")
+        elif (
+            low in ("links", "_links")
+            and "next" in json.dumps(value, default=str).lower()
+        ):
+            if not isinstance(value, Mapping):
+                signs.append("the response links to a next page")
+            else:
+                next_val = next(
+                    (v for k, v in value.items() if str(k).lower() == "next"),
+                    None,
+                )
+                if next_val not in (None, False, "", [], {}):
+                    signs.append(f"the response links to a next page ({label}.next)")
+        elif low in _TOTAL_BODY and isinstance(records, list):
+            if isinstance(value, bool) or not isinstance(value, int):
+                continue
+            if value != len(records):
+                signs.append(
+                    f"the response says {label}={value} but holds {len(records)}"
+                )
+        elif (
+            not prefix
+            and low in _NESTED_PAGING_CONTAINERS
+            and isinstance(value, Mapping)
+        ):
+            _scan_paging_mapping(
+                value,
+                records=records,
+                records_key=None,
+                prefix=str(key),
+                signs=signs,
+            )
+
+
 def _paging_signs(
-    url: str, body: Any, records_key: Optional[str]
+    url: str,
+    body: Any,
+    records_key: Optional[str],
+    headers: Optional[Mapping[str, str]] = None,
 ) -> tuple[list[str], list[str]]:
     """``(paged, doubts)``: why one REST response is, or may be, one page.
 
     ``paged`` are statements the request or response makes (a paging
-    parameter or field, a stated total that differs); a person's declaration
-    does not override them. ``doubts`` are guesses (a common page size).
+    parameter, body field, nested paging/meta/links object, response header,
+    or a stated total that differs); a person's declaration does not override
+    them. ``doubts`` are guesses (a common page size).
     """
 
     signs: list[str] = []
@@ -716,20 +776,39 @@ def _paging_signs(
     records: Any = body
     if isinstance(body, dict):
         records = body.get(records_key) if records_key else None
-        for key, value in body.items():
-            low = str(key).lower()
-            if key == records_key:
-                continue
-            if low in _PAGING_BODY and value not in (None, False, "", [], {}):
-                signs.append(f"the response has a paging field ({key})")
-            elif low == "links" and "next" in json.dumps(value, default=str).lower():
-                signs.append("the response links to a next page")
-            elif low in _TOTAL_BODY and isinstance(records, list):
-                if isinstance(value, bool) or not isinstance(value, int):
-                    continue
-                if value != len(records):
+        _scan_paging_mapping(
+            body,
+            records=records,
+            records_key=records_key,
+            prefix="",
+            signs=signs,
+        )
+    if headers:
+        norm_headers = {
+            str(k).lower(): str(v) for k, v in headers.items() if v is not None
+        }
+        link_header = norm_headers.get("link", "")
+        if link_header and _LINK_NEXT_RE.search(link_header):
+            signs.append("the response Link header points to a next page")
+        total_header = norm_headers.get("x-total-count", "").strip()
+        if total_header.isdigit() and isinstance(records, list):
+            total_val = int(total_header)
+            if total_val != len(records):
+                signs.append(
+                    f"the response header X-Total-Count={total_val} but holds {len(records)}"
+                )
+        content_range = norm_headers.get("content-range", "").strip()
+        if content_range:
+            match = _CONTENT_RANGE_TOTAL_RE.search(content_range)
+            if match:
+                total_token = match.group(1)
+                if total_token == "*":
                     signs.append(
-                        f"the response says {key}={value} but holds {len(records)}"
+                        "the response Content-Range header has unknown total (*)"
+                    )
+                elif isinstance(records, list) and int(total_token) != len(records):
+                    signs.append(
+                        f"the response header Content-Range total={total_token} but holds {len(records)}"
                     )
     if isinstance(records, list) and len(records) in _PAGE_SIZES:
         doubts.append(
@@ -748,6 +827,7 @@ def observed_completeness(
     target: Mapping[str, Any],
     seen_before: Optional[list[dict[str, Any]]],
     truncated: bool = False,
+    headers: Optional[Mapping[str, str]] = None,
 ) -> tuple[Optional[str], list[str], bool]:
     """``(basis, problems, paged)``: whether one REST response held the whole
     collection, as far as the recording observed it.
@@ -763,7 +843,7 @@ def observed_completeness(
     problems: list[str] = []
     if truncated:
         problems.append("the response body was cut, so it may not hold every record")
-    paged, doubts = _paging_signs(url, body, records_key)
+    paged, doubts = _paging_signs(url, body, records_key, headers=headers)
     problems.extend(paged + doubts)
     keys = {stable_id(dict(r)) for r in records}
     if stable_id(dict(target)) not in keys:
@@ -928,6 +1008,9 @@ def _surface_from_listing(
         target=target,
         seen_before=before_records if recorded else None,
         truncated=bool(line.get("response_truncated")),
+        headers=line.get("response_headers")
+        if isinstance(line.get("response_headers"), Mapping)
+        else None,
     )
     surface = Surface(
         name=_unique_name(tpl.safe.replace("*", "x").strip("/") or "records", taken),
