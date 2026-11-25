@@ -101,6 +101,7 @@ _LEVEL_LABEL = Literal[
     "counterparty_confirmed",
 ]
 _ISO_SECONDS = r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+_PROVENANCE_LABEL = r"^[A-Za-z0-9][A-Za-z0-9._:@+/ -]{0,127}$"
 _MAX_RECHECK_S: Final = 30 * 24 * 3600
 
 
@@ -132,6 +133,14 @@ class EvidenceScopeV1(_Closed):
     read_back_at: Optional[StrictStr] = Field(default=None, pattern=_ISO_SECONDS)
     recheck_window_s: Optional[StrictInt] = Field(default=None, ge=0, le=_MAX_RECHECK_S)
     not_covered: list[NotCovered] = Field(min_length=2, max_length=7)
+    #: Additive: actor/model or compiled plan that produced the run (e.g.
+    #: ``"claude-code"``, ``"gpt-5.4"``, ``"compiled-plan@v1.2"``).
+    agent_used: Optional[StrictStr] = Field(default=None, pattern=_PROVENANCE_LABEL)
+    #: Additive: verifier/adapter stack that checked the run (e.g.
+    #: ``"deterministic"``, ``"Veto-4B-r6"``, ``"deterministic+Veto-4B-r6"``).
+    verifier_adapter: Optional[StrictStr] = Field(
+        default=None, pattern=_PROVENANCE_LABEL
+    )
 
     @model_validator(mode="after")
     def _consistent(self) -> "EvidenceScopeV1":
@@ -159,6 +168,12 @@ class EvidenceScopeV1(_Closed):
             raise ValueError("a block with read_back_at covers the read-back time")
         if self.recheck_window_s is not None and self.read_back_at is None:
             raise ValueError("a recheck window needs read_back_at")
+        for label_name, label_val in (
+            ("agent_used", self.agent_used),
+            ("verifier_adapter", self.verifier_adapter),
+        ):
+            if label_val is not None and "://" in label_val:
+                raise ValueError(f"{label_name} must not contain a URL")
         return self
 
     def wire_dict(self) -> dict[str, Any]:
@@ -177,6 +192,8 @@ def build_evidence_scope(
     read_back_at: Optional[str] = None,
     recheck_window_s: Optional[int] = None,
     not_covered: Iterable[str] = (),
+    agent_used: Optional[str] = None,
+    verifier_adapter: Optional[str] = None,
 ) -> dict[str, Any]:
     """The evidence-scope block for one check, as a wire dict.
 
@@ -206,6 +223,8 @@ def build_evidence_scope(
                 "read_back_at": read_back_at,
                 "recheck_window_s": recheck_window_s,
                 "not_covered": codes,
+                "agent_used": agent_used,
+                "verifier_adapter": verifier_adapter,
             }
         )
     except ValidationError as error:

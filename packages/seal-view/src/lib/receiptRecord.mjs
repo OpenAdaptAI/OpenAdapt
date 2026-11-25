@@ -116,6 +116,7 @@ const WIRE_PROTOCOLS = ['http', 'graphql', 'fhir', 'sql', 'websocket', 'grpc', '
 const NOT_COVERED = ['server_side_async_effects', 'outbound_effects', 'changes_after_read_back', 'fields_not_read', 'other_records', 'other_actors', 'read_back_time']
 const ALWAYS_NOT_COVERED = ['server_side_async_effects', 'outbound_effects']
 const MAX_RECHECK_S = 30 * 24 * 3600
+const PROVENANCE_LABEL = /^(?!.*:\/\/)[A-Za-z0-9][A-Za-z0-9._:@+/ -]{0,127}$/
 const EVIDENCE_SCOPE_OUTCOMES = {
     VERIFIED: ['VERIFIED'],
     CONFIRMED: ['VERIFIED'],
@@ -254,7 +255,7 @@ function validateStatement(s) {
     // and a missing wire.protocols_parsed, so present means validated here too.
     if ('evidence_scope' in p) {
         const es = p.evidence_scope
-        closed(es, ['schema', 'check_level', 'word', 'wire', 'not_covered'], ['basis', 'read_back_at', 'recheck_window_s'], 'predicate.evidence_scope')
+        closed(es, ['schema', 'check_level', 'word', 'wire', 'not_covered'], ['basis', 'read_back_at', 'recheck_window_s', 'agent_used', 'verifier_adapter'], 'predicate.evidence_scope')
         str(es.schema, [EVIDENCE_SCOPE_SCHEMA], 'predicate.evidence_scope.schema')
         str(es.check_level, CHECK_LEVELS, 'predicate.evidence_scope.check_level')
         str(es.word, OUTCOME_WORDS, 'predicate.evidence_scope.word')
@@ -268,6 +269,8 @@ function validateStatement(s) {
         if (es.wire.channel === 'none' && protos.length) throw new Refusal('malformed', 'a run that watched no wire parsed no protocol')
         if ('read_back_at' in es) str(es.read_back_at, ISO_SECONDS, 'predicate.evidence_scope.read_back_at')
         if ('recheck_window_s' in es) int(es.recheck_window_s, 0, MAX_RECHECK_S, 'predicate.evidence_scope.recheck_window_s')
+        if ('agent_used' in es) str(es.agent_used, PROVENANCE_LABEL, 'predicate.evidence_scope.agent_used')
+        if ('verifier_adapter' in es) str(es.verifier_adapter, PROVENANCE_LABEL, 'predicate.evidence_scope.verifier_adapter')
         if (!Array.isArray(es.not_covered) || es.not_covered.length < 2 || es.not_covered.length > 7) throw new Refusal('malformed', 'predicate.evidence_scope.not_covered')
         es.not_covered.forEach((nc, j) => str(nc, NOT_COVERED, `predicate.evidence_scope.not_covered[${j}]`))
         if (new Set(es.not_covered).size !== es.not_covered.length) throw new Refusal('malformed', 'not_covered repeats a code')
