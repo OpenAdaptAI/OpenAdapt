@@ -940,9 +940,12 @@ def start_demo_app_for_replay(
     refuse to report ``VERIFIED`` on declared consequential effects without an
     explicit deployment or verifier.
     """
-    from openadapt_flow.mockmed.fault_server import serve as serve_fault_demo
+    if demo_app_is_tasks_bundle(workflow):
+        from openadapt_flow.mockmed.fault_server import serve as serve_fault_demo
 
-    base_url, _db, stop = serve_fault_demo(port=0)
+        base_url, _db, stop = serve_fault_demo(port=0)
+    else:
+        base_url, stop = serve_demo_app(port=0)
     url = demo_app_entry_url(base_url, workflow=workflow, drift=drift)
     return url, stop
 
