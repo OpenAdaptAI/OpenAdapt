@@ -10,7 +10,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from openadapt_flow.compile_agent.pipeline import _repeats_run1, _write_run1_values
+from openadapt_flow.compile_agent.pipeline import (
+    _duplicate_canary_rows,
+    _repeats_run1,
+    _write_run1_values,
+)
 
 
 class _Task:
@@ -56,3 +60,30 @@ def test_canaries_with_new_values_pass(tmp_path: Path) -> None:
 def test_missing_run1_digests_fail_closed(tmp_path: Path) -> None:
     why = _repeats_run1(tmp_path / "absent.json", _Task, [{"patient": "x"}])
     assert why is not None and "record run 1 again" in why
+
+
+def test_multi_canary_refuses_reusing_fewer_rows_than_required() -> None:
+    why = _duplicate_canary_rows(_Task, [{"patient": "Ada", "note": "n1"}], count=2)
+    assert why is not None
+    assert "at least 2 distinct canary" in why
+
+
+def test_multi_canary_refuses_duplicate_rows() -> None:
+    why = _duplicate_canary_rows(
+        _Task,
+        [
+            {"patient": "Ada", "note": "n1"},
+            {"patient": "Grace", "note": "n2"},
+            {"patient": "Ada", "note": "n1"},
+        ],
+        count=3,
+    )
+    assert why is not None
+    assert "canary 3 repeats canary 1" in why
+    assert "Ada" not in why
+
+
+def test_multi_canary_accepts_distinct_rows() -> None:
+    rows = [{"patient": f"Patient {i}", "note": f"Note {i}"} for i in range(1, 5)]
+    assert _duplicate_canary_rows(_Task, rows, count=4) is None
+    assert _duplicate_canary_rows(_Task, rows[:1], count=1) is None

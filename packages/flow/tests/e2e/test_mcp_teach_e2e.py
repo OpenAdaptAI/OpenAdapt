@@ -309,7 +309,10 @@ def test_teach_compile_admit_then_call_with_no_model_calls(
             before = _records(mockmed)
             refused = await client.call(
                 "teach_admit",
-                {"task_key": task_key, "canary_inputs": [{"note": "Canary"}]},
+                {
+                    "task_key": task_key,
+                    "canary_inputs": [{"note": "Canary 1"}, {"note": "Canary 2"}],
+                },
             )
             assert refused["status"] == "needs_person", refused
             assert "self-admission" in (refused.get("detail") or "")
@@ -322,7 +325,10 @@ def test_teach_compile_admit_then_call_with_no_model_calls(
         async with connect(server) as client:
             refused = await client.call(
                 "teach_admit",
-                {"task_key": task_key, "canary_inputs": [{"note": "Canary"}]},
+                {
+                    "task_key": task_key,
+                    "canary_inputs": [{"note": "Canary 1"}, {"note": "Canary 2"}],
+                },
             )
             assert refused["status"] == "needs_person"
             assert "compile-agent admit" in " ".join(refused["needs_person"])
@@ -336,7 +342,10 @@ def test_teach_compile_admit_then_call_with_no_model_calls(
                 "teach_admit",
                 {
                     "task_key": task_key,
-                    "canary_inputs": [{"note": "Canary test note"}],
+                    "canary_inputs": [
+                        {"note": "Canary test note 1"},
+                        {"note": "Canary test note 2"},
+                    ],
                 },
             )
             assert admitted["status"] == "admitted", admitted

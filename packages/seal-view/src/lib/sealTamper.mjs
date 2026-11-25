@@ -46,14 +46,23 @@ export function tamperOptions(sealOutcome, reportOutcome) {
  */
 export function applyTamper(files, option) {
     if (option.target === 'seal') {
-        const seal = JSON.parse(files.sealText)
-        if (seal[option.field] !== option.from)
-            throw new Error('The value to change is not in the receipt.')
-        return {
-            ...files,
-            sealText: JSON.stringify({ ...seal, [option.field]: option.to }, null, 2),
-            receiptText: files.receiptText ? changeReceiptOutcome(files.receiptText) : files.receiptText,
+        if (files.sealText != null) {
+            const seal = JSON.parse(files.sealText)
+            if (seal[option.field] !== option.from)
+                throw new Error('The value to change is not in the receipt.')
+            return {
+                ...files,
+                sealText: JSON.stringify({ ...seal, [option.field]: option.to }, null, 2),
+                receiptText: files.receiptText ? changeReceiptOutcome(files.receiptText) : files.receiptText,
+            }
         }
+        if (files.receiptText != null) {
+            return {
+                ...files,
+                receiptText: changeReceiptOutcome(files.receiptText),
+            }
+        }
+        throw new Error('The value to change is not in the receipt.')
     }
     const text = new TextDecoder().decode(files.report)
     const [from, to] = option.text

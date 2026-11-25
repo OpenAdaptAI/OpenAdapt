@@ -880,6 +880,73 @@ def _quickstart_own(root: Path, url: Optional[str], watch: bool) -> None:
     default=None,
     help="With --own: your web app's address. Recording opens a browser window.",
 )
+@click.option(
+    "--task",
+    type=click.Choice(["night-shift", "calendar-block"]),
+    default=None,
+    help=(
+        "Built-in OS everyday task (no sample app, no login): "
+        "night-shift (macOS Night Shift / Windows Night Light) or "
+        "calendar-block (parameterized recurring Calendar block)."
+    ),
+)
+@click.option(
+    "--title",
+    default=None,
+    help="With --task calendar-block: Calendar event title.",
+)
+@click.option(
+    "--calendar",
+    "calendar_name",
+    default=None,
+    help="With --task calendar-block: macOS Calendar name (default: Calendar).",
+)
+@click.option(
+    "--start",
+    "start_iso",
+    default=None,
+    help="With --task calendar-block: ISO-8601 start timestamp.",
+)
+@click.option(
+    "--duration",
+    "duration_minutes",
+    type=int,
+    default=None,
+    help="With --task calendar-block: duration in minutes (default: 30).",
+)
+@click.option(
+    "--recurrence",
+    type=click.Choice(["none", "daily", "weekly", "weekdays"]),
+    default=None,
+    help="With --task calendar-block: recurrence cadence (default: weekly).",
+)
+@click.option(
+    "--event-uid",
+    default=None,
+    help=(
+        "With --task calendar-block: optional EventKit eventIdentifier to bind "
+        "forward and revert checks to one specific event (without --event-uid, "
+        "the check matches any event with the same calendar, title, time, and recurrence)."
+    ),
+)
+@click.option(
+    "--revert/--no-revert",
+    default=True,
+    show_default=True,
+    help=(
+        "With --task: write a revert_verify.yaml check file to run after undoing "
+        "the change (withheld when baseline is not confirmed or Night Shift baseline is unreadable)."
+    ),
+)
+@click.option(
+    "--probe-baseline",
+    is_flag=True,
+    default=False,
+    help=(
+        "With --task calendar-block: run an opt-in read-only macOS EventKit "
+        "baseline check (requires Calendars privacy permission)."
+    ),
+)
 @click.option("--headed", is_flag=True, hidden=True)
 @click.option("--headless", is_flag=True, hidden=True)
 @click.option("--break-it", "break_it", is_flag=True, hidden=True)
@@ -895,6 +962,15 @@ def quickstart(
     more: bool,
     own: bool,
     url: Optional[str],
+    task: Optional[str],
+    title: Optional[str],
+    calendar_name: Optional[str],
+    start_iso: Optional[str],
+    duration_minutes: Optional[int],
+    recurrence: Optional[str],
+    event_uid: Optional[str],
+    revert: bool,
+    probe_baseline: bool,
     headed: bool,
     headless: bool,
     break_it: bool,
@@ -923,6 +999,62 @@ def quickstart(
     _require_supported_python()
     if url is not None and not own:
         raise click.UsageError("--url works with --own.")
+    calendar_opts_used = any(
+        opt is not None
+        for opt in (
+            title,
+            calendar_name,
+            start_iso,
+            duration_minutes,
+            recurrence,
+            event_uid,
+        )
+    )
+    if (calendar_opts_used or probe_baseline) and task != "calendar-block":
+        raise click.UsageError(
+            "--title, --calendar, --start, --duration, --recurrence, --event-uid, "
+            "and --probe-baseline require --task calendar-block."
+        )
+    if task is not None:
+        if own:
+            raise click.UsageError("--task cannot be combined with --own.")
+        from openadapt.quickstart.everyday import (
+            DEFAULT_CALENDAR_NAME,
+            DEFAULT_CALENDAR_TITLE,
+            DEFAULT_DURATION_MINUTES,
+            DEFAULT_RECURRENCE,
+            EverydayTaskError,
+            run_everyday_task,
+        )
+
+        root = _quickstart_root(out)
+        try:
+            run_everyday_task(
+                task,
+                root,
+                title=title if title is not None else DEFAULT_CALENDAR_TITLE,
+                calendar_name=(
+                    calendar_name
+                    if calendar_name is not None
+                    else DEFAULT_CALENDAR_NAME
+                ),
+                start_iso=start_iso,
+                duration_minutes=(
+                    duration_minutes
+                    if duration_minutes is not None
+                    else DEFAULT_DURATION_MINUTES
+                ),
+                recurrence=(
+                    recurrence if recurrence is not None else DEFAULT_RECURRENCE
+                ),
+                event_uid=event_uid,
+                revert=revert,
+                probe_baseline=probe_baseline,
+                say=click.echo,
+            )
+        except EverydayTaskError as error:
+            raise click.ClickException(str(error)) from error
+        return
     if own:
         _quickstart_own(_quickstart_root(out), url, watch or headed)
         return
@@ -3017,7 +3149,83 @@ def _verify_sealed_runs(folder: Path, extra: list[str]) -> int:
     return 0 if valid == len(runs) else 1
 
 
-@main.command("connect")
+_DEFAULT_CONNECT_SERVER = "https://app.openadapt.ai"
+_CONNECT_SUBCOMMANDS = frozenset({"run", "enroll", "rotate-token", "service"})
+
+
+def _render_connect_service(target: str, *, server: str, name: str | None) -> str:
+    """Return copy-paste OS service setup instructions without echoing raw tokens."""
+    connector_name = name or "openadapt-connector"
+    if target == "windows":
+        return (
+            "# Windows Service setup (run in an elevated PowerShell):\n"
+            f"$env:CONTROL_PLANE_URL = {server!r}\n"
+            "$env:BYOC_CONNECTOR_TOKEN = '<paste-connector-token>'\n"
+            "openadapt flow connector service install\n"
+            "openadapt flow connector service start\n"
+            "openadapt flow connector service status\n"
+        )
+    if target == "systemd":
+        return (
+            f"# /etc/systemd/system/{connector_name}.service\n"
+            "[Unit]\n"
+            "Description=OpenAdapt BYOC Connector\n"
+            "After=network-online.target\n"
+            "Wants=network-online.target\n\n"
+            "[Service]\n"
+            "Type=simple\n"
+            "EnvironmentFile=/etc/openadapt/connector.env\n"
+            f"ExecStart=/usr/bin/env openadapt connect --server {server}\n"
+            "Restart=on-failure\n"
+            "RestartSec=5\n\n"
+            "[Install]\n"
+            "WantedBy=multi-user.target\n"
+        )
+    return (
+        "# Docker container setup:\n"
+        f"docker run -d --name {connector_name} --restart unless-stopped \\\n"
+        '  -e BYOC_CONNECTOR_TOKEN="$BYOC_CONNECTOR_TOKEN" \\\n'
+        f"  -e CONTROL_PLANE_URL={server} \\\n"
+        "  python:3.12-slim \\\n"
+        f"  sh -c 'pip install -q openadapt && openadapt connect --server {server}'\n"
+    )
+
+
+@main.command(
+    "connect",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+    },
+)
+@click.option(
+    "--token",
+    default=None,
+    help="Connector token from app.openadapt.ai (or set BYOC_CONNECTOR_TOKEN)",
+)
+@click.option(
+    "--server",
+    default=None,
+    help="OpenAdapt control plane URL (default: https://app.openadapt.ai)",
+)
+@click.option(
+    "--name",
+    default=None,
+    help="Connector name (for enrollment or --print-service templates)",
+)
+@click.option(
+    "--print-service",
+    "print_service",
+    type=click.Choice(["windows", "systemd", "docker"], case_sensitive=False),
+    default=None,
+    help="Print OS service setup instructions (windows, systemd, or docker) and exit",
+)
+@click.option(
+    "--once",
+    is_flag=True,
+    default=False,
+    help="Poll the control plane once and exit",
+)
 @click.option(
     "--pairing", default=None, help="Five-minute pairing code from Cloud settings"
 )
@@ -3037,15 +3245,72 @@ def _verify_sealed_runs(folder: Path, extra: list[str]) -> int:
     multiple=True,
     help="Exact allowed customer-managed origin (repeatable)",
 )
-def connect(pairing, uri, host, device_name, destination_kind, trusted_host):
-    """Connect this computer to the signed-in OpenAdapt Cloud workspace.
+@click.pass_context
+def connect(
+    command_ctx,
+    token,
+    server,
+    name,
+    print_service,
+    once,
+    pairing,
+    uri,
+    host,
+    device_name,
+    destination_kind,
+    trusted_host,
+):
+    """Connect this computer or VPC runner to OpenAdapt Cloud.
 
-    The browser creates a five-minute, one-use pairing. This command claims it
-    and saves the resulting workspace credential in the OS keychain. It cannot
-    execute arbitrary terminal commands or grant browser access to the shell.
+    Pass ``--token`` (or a connector subcommand such as ``enroll`` or
+    ``service``) to run the BYOC connector over outbound HTTPS, ``--print-service``
+    to print Windows Service, systemd, or Docker setup templates, or
+    ``--pairing`` / ``--uri`` to claim a five-minute workspace pairing code.
     """
+    control_plane = server or _DEFAULT_CONNECT_SERVER
+    if print_service is not None:
+        click.echo(
+            _render_connect_service(
+                print_service.lower(), server=control_plane, name=name
+            ),
+            nl=False,
+        )
+        return
+    extra = list(command_ctx.args)
+    if (
+        token is not None or server is not None or name is not None or once or extra
+    ) and not (pairing or uri):
+        _require_supported_python()
+        if extra and extra[0] in _CONNECT_SUBCOMMANDS:
+            subcommand, rest = extra[0], extra[1:]
+            flow_args = ["connector", subcommand]
+            if (
+                subcommand in {"run", "enroll", "rotate-token"}
+                and "--control-plane-url" not in rest
+            ):
+                flow_args.extend(["--control-plane-url", control_plane])
+            if subcommand == "run" and token is not None:
+                flow_args.extend(["--token", token])
+            if subcommand == "enroll" and name is not None:
+                flow_args.extend(["--name", name])
+            if subcommand == "run" and once and "--once" not in rest:
+                flow_args.append("--once")
+            flow_args.extend(rest)
+        else:
+            flow_args = ["connector", "run", "--control-plane-url", control_plane]
+            if token is not None:
+                flow_args.extend(["--token", token])
+            if once:
+                flow_args.append("--once")
+            flow_args.extend(extra)
+        _run_flow(flow_args)
+        return
+
     if bool(pairing) == bool(uri):
-        raise click.UsageError("Pass exactly one of --pairing or --uri.")
+        raise click.UsageError(
+            "Pass --token for the BYOC connector, --print-service for service templates, "
+            "or exactly one of --pairing or --uri."
+        )
     _require_supported_python()
     try:
         from openadapt_flow import hosted

@@ -514,6 +514,7 @@ export async function verifyReceipt(document, registry, { openings = null } = {}
             ok: true,
             reason: null,
             detail: '',
+            signers: ordered,
             signerLines,
             confirmationLines: confirmations.map((c, i) => confirmationLine(c, disclosed[`confirmations.${i}.observed_at`])),
             independent: confirmations.map((c) => INDEPENDENT_READS.includes(c.read_method)),

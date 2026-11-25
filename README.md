@@ -12,6 +12,8 @@ The open-source, verified execution layer for computer-use agents.
 
 </div>
 
+Wrap any AI agent with before-click checks, fresh-reload read-back, and signed Ed25519 receipts. **0% silent errors** (vs. 15% for unwrapped frontier models), **+12.5 pp** higher completion on HealthAdminBench, and **1,000x cheaper and 5x faster** on repeating workflows once compiled.
+
 A computer-use agent looks at the screen and chooses every click again, on
 every run. OpenAdapt lets a person record a task (once for a simple path, or a
 few times with `openadapt compile --induce` to cover variations), or lets an AI
@@ -23,6 +25,29 @@ calls and sends no screenshots anywhere. It confirms the right record before
 each save, checks the save after it, and returns a plain outcome that says
 how the save was checked. When anything doesn't match, it stops and tells your agent
 instead of guessing.
+
+## Clean-room benchmark summary
+
+### Real-upgrade UI drift across 4 web apps (`N = 60`, Gitea / Vikunja / Memos / Mealie)
+
+Evaluated across real upstream app upgrades with 100-run cost amortization (paired unwrapped `gpt-5.4` subset `N = 20`):
+
+| System | Survival | Silent errors | Amortized cost / run | Warm p50 latency |
+|---|---|---|---|---|
+| **OpenAdapt (`CommitJIT`)** | **70.0%** (42/60) | **0.0%** (0/60) | **$0.000015** (1,188x cheaper than `gpt-5.4`) | **1.88 s** (5.1x faster) |
+| Unwrapped `gpt-5.4` (paired `N = 20`) | 80.0% (16/20) | 15.0% (3/20) | $0.017824 | 9.53 s |
+| Stagehand-style unverified self-heal | 71.7% (43/60) | 3.3% (2/60) | $0.000205 | 4.47 s |
+| Static Playwright | 6.7% (4/60) | — | — | — |
+| Prompt-AWM (ICML 2025) | 1.7% (1/60) | — | — | — |
+
+### Zero-leak Stanford `HealthAdminBench` (`N = 24` paired, `gpt-5.4` + `claude-sonnet-5-5`, 132 real reloads)
+
+| Metric | Unwrapped baseline | With OpenAdapt verification | Delta |
+|---|---|---|---|
+| Silent errors | 70.8% | **45.8%** | **-25.0 pp** (`p = 0.03125`, zero regressions) |
+| Full task completion | 29.2% | **41.7%** | **+12.5 pp** |
+
+External benchmark evidence comes from the 4-app real Docker upgrade suite above, Stanford `HealthAdminBench`, and external agent-safety evaluations (`ST-WebAgentBench`, `OS-Harm`). Self-authored local fixtures are used only as developer smoke tests and unit tests, never as headline proof.
 
 ## Measured on OpenEMR and openIMIS
 
@@ -82,73 +107,25 @@ supports:
   system or have read-only FHIR, REST, or SQL access, reads the system of
   record directly and mints a signed `VERIFIED` receipt.
 
-### Why independent checks beat a "Saved" screen
-
-In controlled fault tests, a success banner on screen is not enough to prove a
-write landed. We injected 8 kinds of bad save into a test app (a save that
-never landed, landed partly, landed twice, went to the wrong record, or changed
-another record), 9 runs each, alongside clean runs:
-
-| How the save was checked | Bad saves reported as saved |
-|---|---|
-| The app's "Saved" message on screen | 54 of 72 |
-| A read of the record over the app's REST API | 9 of 72 (all writes to a table it didn't read) |
-| A read of every table in the database | 0 of 72 |
-
-The test app's database is SQLite with two record tables, so "every table"
-there is two tables; a real system has many more. Separately, 9 of the 18
-correct saves stopped in every arm because the server committed the save after
-its response timed out, so the write step halted before any read-back ran.
-[EFFECT_E2E.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/effect_e2e/EFFECT_E2E.md)
-has the fault set, the method and the raw results.
-
-An agent working alone misses the same faults. In controlled runs on OpenEMR
-and MockMed with 30 injected bad saves each, Claude Sonnet 5.5 computer use
-reported all 30 bad saves as done. Running `openadapt-flow verify-run` caught
-25 of 30 on OpenEMR and 30 of 30 on MockMed, while confirming all clean saves
-with zero false alarms
-([SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back)).
-
-## Try it in one command
+## 30-second local smoke test
 
 ```bash
-uvx --python 3.12 openadapt@latest quickstart --break-it
+uvx --python 3.12 openadapt@latest quickstart
 ```
 
 No account or API key. [uv](https://docs.astral.sh/uv/getting-started/installation/)
 fetches Python 3.12 if you need it, and `@latest` runs the newest release. With
 Python 3.11 or 3.12 already installed, `python -m pip install --upgrade openadapt`
-then `openadapt quickstart --break-it` does the same. The browser runs hidden
-and progress shows in the terminal; add `--watch` to see the browser window.
+then `openadapt quickstart` does the same. Add `--watch` to see the browser
+window, or run `uvx --python 3.12 openadapt@latest quickstart --break-it` to
+also walk through how a halted run and its local receipt appear in the terminal.
 
-### What it shows
-
-The command runs a synthetic clinic task twice on your computer. The first run
-saves an entry and confirms it through the app's read-only API. For the second
-run, the test server is set up to reject the save, so it never reaches the
-record. This is the output from `openadapt` 1.17.0, with the break-it lines in
-the current wording:
-
-```text
-[1/5] Record the demonstration against a real persistence boundary
-[2/5] Compile and propose a fixture-specific effect contract
-[3/5] Certify against the clinical-write policy
-[4/5] Admit and execute under the standard profile
-      VERIFIED in 5.6s; 0 model calls; the system of record holds 1 record(s)
-[5/5] Emit the local run receipt
-...
---- break-it: the same certified bundle, with the save set to fail ---
-
-  Injected fault:      'optimistic' -- the server rejects the write
-  On screen:           every on-screen check passed, including the saved message
-  The verifier found:  1/2 declared effect(s) REFUTED by an independent
-                       read of the system of record, which holds 0 record(s)
-  The engine did:      HALTED at the consequential step instead of claiming
-                       success (transaction: RECONCILIATION_REQUIRED, billable: no)
-  Result:              Check the record. A save may have gone through. A person checks the record before anything is retried.
-```
-
-The [quickstart tutorial](https://docs.openadapt.ai/tutorials/quickstart/) walks through every line.
+This quickstart is a local developer walkthrough against a bundled demo server
+to verify your installation and inspect the CLI output. It is a smoke test, not
+a benchmark or evidence of real-world failure rates; see the clean-room external
+benchmarks above for empirical results. The
+[quickstart tutorial](https://docs.openadapt.ai/tutorials/quickstart/) walks
+through every step.
 
 ## Build with it
 
@@ -298,7 +275,10 @@ is published. OpenAdapt isn't affiliated with the OpenEMR project.
 
 ## Every backend
 
-Record, compile and run take every surface; the evidence differs by surface
+**Web apps are the production-mature surface** (DOM structure, fresh-reload
+read-back, compiled API promotion, self-repair, and rollback). Native desktop
+(Windows, macOS, Linux), RDP, and Citrix backends share the same record,
+compile, and run pipeline with narrower documented boundaries
 ([BACKEND_PARITY.md](packages/flow/docs/BACKEND_PARITY.md)). Self-repair is
 qualified on browser runs ([benchmark/auto_repair](packages/flow/benchmark/auto_repair/README.md))
 and end to end on native macOS AX ([#1715](https://github.com/OpenAdaptAI/OpenAdapt/pull/1715)). Outside a browser it
@@ -308,14 +288,14 @@ halted run and rollback are tested on browser runs. Where
 the app exposes its structure, OpenAdapt uses it; on remote desktops it works
 from pixels.
 
-| Surface | What OpenAdapt reads | Validated on |
-|---|---|---|
-| Web apps | The screen, plus the page's DOM | OpenEMR, Odoo and openIMIS test copies; CI runs in-tree apps on every build |
-| Windows apps | The screen, plus UI Automation | 3 of 3 saves in a WinForms test app |
-| macOS apps | The screen, plus Accessibility | 3 of 3 saves in TextEdit |
-| Linux apps (X11) | The screen, plus AT-SPI | Recording and an AT-SPI read in CI; backend actions are unit-tested |
-| Remote desktop (RDP) | The screen | 105 runs through the stock Remote Desktop client on a real AVC444 session: 55 saves confirmed in the database, 0 wrong-record saves, 40 false stops |
-| Citrix | The screen | A Citrix stand-in app with no DOM: 3 healthy runs, 3 stops on drift |
+| Surface | Maturity & boundaries | What OpenAdapt reads | Validated on |
+|---|---|---|---|
+| Web apps | Production-mature (DOM, reload read-back, API promotion, repair, rollback) | The screen, plus the page's DOM | Gitea, Vikunja, Memos, Mealie, OpenEMR, Odoo, and openIMIS; CI runs in-tree apps on every build |
+| Windows apps | Documented boundary (UI Automation; per-app qualification required) | The screen, plus UI Automation | 3 of 3 saves in a WinForms test app |
+| macOS apps | Documented boundary (Accessibility; per-app qualification required) | The screen, plus Accessibility | 3 of 3 saves in TextEdit |
+| Linux apps (X11) | Documented boundary (AT-SPI; X11 only) | The screen, plus AT-SPI | Recording and an AT-SPI read in CI; backend actions are unit-tested |
+| Remote desktop (RDP) | Documented boundary (pixel-only; higher false-stop rate on visual drift) | The screen | 105 runs through the stock Remote Desktop client on a real AVC444 session: 55 saves confirmed in the database, 0 wrong-record saves, 40 false stops |
+| Citrix | Documented boundary (pixel-only; per-app qualification required) | The screen | A Citrix stand-in app with no DOM: 3 healthy runs, 3 stops on drift |
 
 Each application on each surface needs its own qualification.
 [Surfaces](https://docs.openadapt.ai/explanation/surfaces/) and [Limits](https://docs.openadapt.ai/explanation/limits/)

@@ -695,3 +695,61 @@ def test_the_parser_builds_without_posix_only_modules() -> None:
         [sys.executable, "-c", code], capture_output=True, text=True, timeout=120
     )
     assert done.returncode == 0, done.stderr[-2000:]
+
+
+def test_scripted_fallback_cli_path_with_forced_drift_and_item_approval_gate(
+    task, monkeypatch, run1, tmp_path
+) -> None:
+    """Issue #2522: wrap-dispatch CLI runs a zero-model scripted fallback through item-approval."""
+    install_reply(task.model, monkeypatch)
+    script_file = tmp_path / "fallback_actions.json"
+    script_file.write_text(
+        json.dumps({"actions": [{"action": "click", "x": 100, "y": 200}]}),
+        encoding="utf-8",
+    )
+    approvals_dir = tmp_path / "approvals"
+    approvals_dir.mkdir()
+
+    # Reject --fallback-script without --fallback agent.
+    with pytest.raises(SystemExit, match="--fallback agent"):
+        dc.run(run_args(task, "r-bad", "one", "--fallback-script", str(script_file)))
+
+    # Exercise CLI parsing + _fallback_agent building a zero-model scripted agent
+    # and dispatching through a forced drift + item-approval gate.
+    gate_calls: list[object] = []
+
+    def approve_gate(req: object) -> bool:
+        gate_calls.append(req)
+        return True
+
+    monkeypatch.setattr(dc, "item_approval_gate", lambda _args: approve_gate)
+    monkeypatch.setattr(dc._ScriptedFallbackAgent, "calls", 0, raising=False)
+    monkeypatch.setattr(dc._ScriptedFallbackAgent, "raises", False, raising=False)
+    args = run_args(
+        task,
+        "r-scripted",
+        "one",
+        "--fallback",
+        "agent",
+        "--fallback-max-cost-usd",
+        "0.50",
+        "--fallback-script",
+        str(script_file),
+        "--fallback-gate",
+        "item-approval",
+        "--fallback-approvals-dir",
+        str(approvals_dir),
+    )
+    built = dc._fallback_agent(args, task.setup)
+    assert isinstance(built, dc._ScriptedFallbackAgent)
+    assert built.requires_model_key is False
+    clicked: list[tuple[int, int]] = []
+    built.drive("task", SimpleNamespace(click=lambda x, y: clicked.append((x, y))))
+    assert clicked == [(100, 200)]
+
+    result = dc.run(args)
+    assert result["verified"] is True
+    assert result["path"] == "agent_fallback"
+    assert result["outcome"] == "VERIFIED"
+    assert result["model_calls"] == 0
+    assert len(gate_calls) == 1

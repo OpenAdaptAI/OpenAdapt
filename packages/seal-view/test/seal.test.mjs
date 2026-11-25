@@ -109,3 +109,39 @@ it('a run awaiting its counterparty is never shown as saved and checked', async 
     expect(card.label).toBe('Awaiting counterparty confirmation')
     expect(card.tone).not.toBe('ok')
 })
+
+describe('receipt-only runs (#2479)', () => {
+    const receiptEnvelope = () => {
+        const vec = JSON.parse(
+            fs.readFileSync(
+                path.join(here, '..', '..', 'types', 'tests', 'vectors', 'record-run-v1', 'cloud-countersign.json'),
+                'utf8'
+            )
+        )
+        return JSON.stringify(vec.document)
+    }
+
+    it('builds page props and tamper copy without legacy seal.json', async () => {
+        const f = {
+            report: new Uint8Array(read('run-1', 'report.json')),
+            sealText: null,
+            receiptText: receiptEnvelope(),
+            receiptAnchorText: null,
+        }
+        const { page } = await sealPageProps({
+            files: f,
+            keys,
+            program: { spec },
+            about: { app: 'MockMed', job: 'Add a triage note' },
+        })
+        expect(page.files.seal).toBeNull()
+        expect(page.files.receipt).toBe('receipt.json')
+        expect(page.receiptRecord).toMatchObject({
+            schema: 'record/run/v1',
+            outcome: 'VERIFIED',
+        })
+        expect(page.irisSeed).toMatch(/^[a-f0-9]{64}$/)
+        const tampered = applyTamper(f, { target: 'seal', field: 'outcome', from: 'VERIFIED', to: 'HALTED' })
+        expect(tampered.receiptText).not.toBe(f.receiptText)
+    })
+})

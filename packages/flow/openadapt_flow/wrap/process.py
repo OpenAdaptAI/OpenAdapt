@@ -57,6 +57,7 @@ from typing import Any, Optional
 from openadapt_flow.integrations.agents.skills import BrowserTools, FrameworkAgent
 
 __all__ = [
+    "ENV_CDP_URL",
     "ENV_TASK",
     "ENV_TOKEN",
     "ENV_URL",
@@ -69,6 +70,7 @@ __all__ = [
     "verify_env_names",
 ]
 
+ENV_CDP_URL = "OPENADAPT_CDP_URL"
 ENV_URL = "OPENADAPT_MCP_URL"
 ENV_TOKEN = "OPENADAPT_MCP_TOKEN"
 ENV_TASK = "OPENADAPT_TASK"
@@ -458,6 +460,7 @@ class ProcessAgent(FrameworkAgent):
         timeout_s: float = 600.0,
         principal_id: str = "agent:wrapped-process",
         withheld_env: Iterable[str] = (),
+        cdp_url: Optional[str] = None,
     ) -> None:
         if not command or any(not isinstance(part, str) for part in command):
             raise ValueError("the wrapped command is empty")
@@ -468,6 +471,8 @@ class ProcessAgent(FrameworkAgent):
         self.timeout_s = timeout_s
         #: Variables the task's verifier reads; the command never gets them.
         self.withheld_env: frozenset[str] = frozenset(withheld_env)
+        #: Optional remote CDP WebSocket URL for cloud browser sandboxes.
+        self.cdp_url: Optional[str] = cdp_url
         #: The command's exit status, once it has exited (negative: a signal).
         self.exit_code: Optional[int] = None
 
@@ -479,6 +484,8 @@ class ProcessAgent(FrameworkAgent):
             env.update(
                 {ENV_URL: endpoint.url, ENV_TOKEN: endpoint.token, ENV_TASK: task}
             )
+            if self.cdp_url:
+                env[ENV_CDP_URL] = self.cdp_url
             try:
                 self.exit_code = _run_group(self.command, env, self.timeout_s)
             except CommandFailed as failed:
