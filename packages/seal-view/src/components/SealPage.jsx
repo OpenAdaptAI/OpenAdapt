@@ -54,11 +54,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { checkReceipt } from '../lib/receiptCheck.mjs'
 import { verifyReceipt } from '../lib/receiptRecord.mjs'
-import { sha256Hex } from '../lib/localSeal.mjs'
+import { canonicalJson, sha256Hex } from '../lib/localSeal.mjs'
 import { sealSha256 } from '../lib/sealAnchor.mjs'
 import { loadSealFiles } from '../lib/sealFiles.mjs'
 import { applyTamper } from '../lib/sealTamper.mjs'
-import { checkWitnesses } from '../lib/sealWitnesses.mjs'
+import { checkReceiptAnchor, checkWitnesses } from '../lib/sealWitnesses.mjs'
 import { rekorLiveMatch, rekorSearchUrl } from '../lib/rekorLive.mjs'
 import { frameOfStep, litAt, nextHighlight, replayFrames } from '../lib/sealReplay.mjs'
 import { authorizedLine as authorizedWords, checkGithubIdentity } from '../lib/runAuthorization.mjs'
@@ -304,7 +304,7 @@ export default function SealPage({ seal: page, host = {} }) {
     const [digest, setDigest] = useState(null)
     // The iris is drawn from the files actually checked: the published ones, or a changed copy.
     const [seed, setSeed] = useState(publishedSeed)
-    const hasWitness = Boolean(files.anchor || files.tsa)
+    const hasWitness = Boolean(files.anchor || files.receiptAnchor || files.tsa)
     const [witness, setWitness] = useState(null)
     const [live, setLive] = useState(null)
     const [change, setChange] = useState(null)
@@ -417,9 +417,33 @@ export default function SealPage({ seal: page, host = {} }) {
         }
         const record = await verifyReceipt(doc, copy.receiptKeys)
         if (!record.ok) return { ...legacyResult, ok: false, reason: record.reason, record }
+        const reportHex = await sha256Hex(copy.report)
         const named = record.statement.subject.find((x) => x.name === 'report.json')
-        if (!named || named.digest.sha256 !== (await sha256Hex(copy.report))) return { ...legacyResult, ok: false, reason: 'subject_mismatch', record }
-        return { ...legacyResult, ok: true, reason: null, record }
+        if (!named || named.digest.sha256 !== reportHex) return { ...legacyResult, ok: false, reason: 'subject_mismatch', subject: { sha256: reportHex }, record }
+        if (copy.receiptAnchorText != null) {
+            const anchorResult = await checkReceiptAnchor(doc, copy.receiptAnchorText, copy.receiptKeys, record.signers)
+            if (!anchorResult.ok) {
+                const reason = anchorResult.reason || 'inconsistent'
+                return {
+                    ...legacyResult,
+                    ok: false,
+                    reason,
+                    subject: { sha256: reportHex },
+                    record: { ...record, ok: false, reason, signerLines: ["Not verified: the public log entry doesn't verify for this receipt"] },
+                    receiptAnchor: anchorResult,
+                }
+            }
+            const when = new Date(anchorResult.integratedTime * 1000).toISOString().replace(/\.\d+Z$/, 'Z')
+            return {
+                ...legacyResult,
+                ok: true,
+                reason: null,
+                subject: { sha256: reportHex },
+                record: { ...record, signerLines: [...record.signerLines, `Logged publicly at ${when}`] },
+                receiptAnchor: anchorResult,
+            }
+        }
+        return { ...legacyResult, ok: true, reason: null, subject: { sha256: reportHex }, record }
     }
 
     const verify = useCallback(
@@ -439,15 +463,27 @@ export default function SealPage({ seal: page, host = {} }) {
                 filesRef.current = filesRef.current || (await (loadFiles ? loadFiles() : loadSealFiles(files, authorization)))
                 const copy = option ? applyTamper(filesRef.current, option) : filesRef.current
                 const required = { anchor: Boolean(files.anchor), authorization: Boolean(authorization) }
-                next = await checkReceipt(copy, keys, {
-                    requireAnchor: required.anchor,
-                    requireAuthorization: required.authorization,
-                })
+                next =
+                    copy.sealText != null
+                        ? await checkReceipt(copy, keys, {
+                              requireAnchor: required.anchor,
+                              requireAuthorization: required.authorization,
+                          })
+                        : { ok: false, sealOk: false, reason: 'malformed', steps: [] }
                 if (copy.receiptText) next = await withRecord(next, copy, required)
-                seen = hasWitness ? await checkWitnesses(copy, keys) : null
+                if (hasWitness) {
+                    if (next.receiptAnchor && !copy.tsaText) seen = { rekor: next.receiptAnchor, tsa: null }
+                    else {
+                        seen = await checkWitnesses(copy, keys)
+                        if (next.receiptAnchor) seen = { ...seen, rekor: next.receiptAnchor }
+                    }
+                }
                 try {
-                    const sealDigest = await sealSha256(JSON.parse(copy.sealText))
-                    const nextSeed = await sha256Hex(new TextEncoder().encode(`${await sha256Hex(copy.report)}${sealDigest}`))
+                    const docDigest =
+                        copy.sealText != null
+                            ? await sealSha256(JSON.parse(copy.sealText))
+                            : await sha256Hex(new TextEncoder().encode(canonicalJson(JSON.parse(copy.receiptText))))
+                    const nextSeed = await sha256Hex(new TextEncoder().encode(`${await sha256Hex(copy.report)}${docDigest}`))
                     if (id === runId.current) setSeed(nextSeed)
                 } catch {
                     // A Seal file that doesn't parse keeps the last picture; the verdict says why.
@@ -680,7 +716,7 @@ export default function SealPage({ seal: page, host = {} }) {
                     : null
     const witnessState = (present, w) => (!present ? null : !w ? 'pending' : w.ok ? 'pass' : 'fail')
     const witnesses = hasWitness
-        ? { rekor: witnessState(files.anchor, witness?.rekor), tsa: witnessState(files.tsa, witness?.tsa) }
+        ? { rekor: witnessState(files.anchor || files.receiptAnchor, witness?.rekor), tsa: witnessState(files.tsa, witness?.tsa) }
         : null
     const ariaSeal = `The receipt of this run: ${stats.map((l) => `${l.big} ${l.small}`).join('; ')}.`
     const busy = phase === 'verify' || phase === 'build'
@@ -782,7 +818,8 @@ export default function SealPage({ seal: page, host = {} }) {
                 : verdict === 'fails'
                   ? { state: 'fails', text: 'Not verified: the signature check failed' }
                   : { state: 'unchecked', text: 'Not verified here' }
-    const hasRecord = Boolean(files?.receiptText || result?.record)
+    const hasRecord = Boolean(page.receiptRecord || files?.receipt || files?.receiptText || result?.record)
+    const activeRecord = hasRecord && page.receiptRecord ? page.receiptRecord : seal
     const legacy = !hasRecord && typeof seal?.schema === 'string' && /^openadapt\.(local-seal|public-seal)\//.test(seal.schema)
 
     const verdictText =
@@ -1109,15 +1146,15 @@ export default function SealPage({ seal: page, host = {} }) {
                             <div className={s.proof}>
                                 <HashLine
                                     label={tampered && change.target === 'report' ? 'This copy of report.json' : 'report.json, in this browser'}
-                                    from={seal.signature}
+                                    from={activeRecord.signature}
                                     to={digest}
-                                    against={seal.subject_sha256}
+                                    against={activeRecord.subject_sha256}
                                     running={phase === 'verify'}
                                     still={reduced}
                                 />
                                 <div className={s.signed}>
                                     <span className={s.proofLabel}>Signed in the receipt</span>
-                                    <code className={s.hex}>{seal.subject_sha256}</code>
+                                    <code className={s.hex}>{activeRecord.subject_sha256}</code>
                                 </div>
                             </div>
 
@@ -1182,7 +1219,7 @@ export default function SealPage({ seal: page, host = {} }) {
                                     Format: record/run/v1
                                 </p>
                             ) : null}
-                            <RecordTable seal={seal} files={files} links={links} witnesses={witnesses} witness={witness} live={change ? null : live} authorization={authorization} authorizedLine={authorizedLine} />
+                            <RecordTable seal={activeRecord} isRecord={hasRecord} files={files} links={links} witnesses={witnesses} witness={witness} live={change ? null : live} authorization={authorization} authorizedLine={authorizedLine} />
                             {commands ? (
                                 <>
                                     <h2 className={s.sub}>{page.commandsLabel || 'Check the same files on your computer'}</h2>
@@ -1446,7 +1483,7 @@ const WITNESS_REASONS = {
 
 // The signed fields and the outside witnesses, one table. A witness the files
 // don't have has no row.
-function RecordTable({ seal, files, links, witnesses, witness, live, authorization, authorizedLine }) {
+function RecordTable({ seal, isRecord = false, files, links, witnesses, witness, live, authorization, authorizedLine }) {
     const r = witness?.rekor
     const t = witness?.tsa
     const rows = [
@@ -1454,8 +1491,15 @@ function RecordTable({ seal, files, links, witnesses, witness, live, authorizati
         ['Report SHA-256', <code key="d" title={seal.subject_sha256}>{short(seal.subject_sha256, 24)}</code>, null],
         ['Signed by', <code key="k">{seal.key_id}</code>, null],
         ['Signature', <code key="s" title={seal.signature}>{short(seal.signature, 24)}</code>, 'Ed25519'],
-        ['Issued', isoUtc(seal.issued_at), null],
-        ...(seal.scope_item ? [['Scope', <code key="sc">{seal.scope_item}</code>, null]] : []),
+        ...(isRecord
+            ? [
+                  ...(seal.started_hour ? [['Started', isoUtc(seal.started_hour), null]] : []),
+                  ...(seal.program_id ? [['Program', <code key="pr">{seal.program_id}</code>, null]] : []),
+              ]
+            : [
+                  ['Issued', isoUtc(seal.issued_at), null],
+                  ...(seal.scope_item ? [['Scope', <code key="sc">{seal.scope_item}</code>, null]] : []),
+              ]),
     ]
     if (witnesses?.rekor) {
         rows.push([
@@ -1534,7 +1578,15 @@ function RecordTable({ seal, files, links, witnesses, witness, live, authorizati
             </table>
             {links.file ? (
                 <p className={s.fileLinks}>
-                    {['report.json', 'seal.json', files.anchor ? 'seal.anchor.json' : null, files.tsa ? 'seal.tsa.json' : null, files.tsr ? 'seal.tsr' : null]
+                    {[
+                        'report.json',
+                        files.receipt ? 'receipt.json' : null,
+                        files.receiptAnchor ? 'receipt.anchor.json' : null,
+                        files.seal ? 'seal.json' : null,
+                        files.anchor ? 'seal.anchor.json' : null,
+                        files.tsa ? 'seal.tsa.json' : null,
+                        files.tsr ? 'seal.tsr' : null,
+                    ]
                         .filter(Boolean)
                         .map((name) => [name, safeHref(links.file(name))])
                         .filter(([, href]) => href)
