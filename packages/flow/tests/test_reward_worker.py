@@ -525,9 +525,7 @@ def test_reward_evidence_excludes_other_subjects(seeded: dict[str, Any]) -> None
     assert records, "the graded subject's own row stays in the evidence"
     assert {r["patient_id"] for r in records} == {MOCKMED_HONEST_PATIENT}
     assert MOCKMED_DUPLICATE_PATIENT not in text
-    # Oracle read itself is scoped by identity (#2035), so no other subjects'
-    # records reach the observation or evidence.
-    assert evidence["observed"]["records_outside_scope"] == 0
+    assert evidence["observed"]["records_outside_scope"] == 2
     assert receipt.evidence_digest == (
         "sha256:" + hashlib.sha256(canonical_json_bytes(evidence)).hexdigest()
     )
@@ -1058,36 +1056,3 @@ def test_source_boundary_has_no_cloud_modules() -> None:
     assert "openadapt-cloud" not in joined
     assert "app.openadapt.ai" not in joined
     assert "ExecuteEvidenceReceiptV1" not in joined
-
-
-def test_oracles_scope_read_by_identity(tmp_path: Path) -> None:
-    """JsonDocumentOracle and VerifierOracle exclude other subjects' records (#2035)."""
-    from openadapt_flow.reward.oracles import (
-        JsonDocumentOracle,
-        VerifierOracle,
-        records_of,
-    )
-    from openadapt_flow.runtime.effects.effect import EffectState
-
-    all_records = [
-        {"patient_id": "P-1", "note": "alpha"},
-        {"patient_id": "P-2", "note": "beta"},
-        {"patient_id": "P-1", "note": "gamma"},
-    ]
-    doc = tmp_path / "store.json"
-    doc.write_text(json.dumps({"records": all_records}), encoding="utf-8")
-
-    json_oracle = JsonDocumentOracle(doc)
-    obs = json_oracle.read({"patient_id": "P-1"})
-    assert records_of(obs) == [
-        {"patient_id": "P-1", "note": "alpha"},
-        {"patient_id": "P-1", "note": "gamma"},
-    ]
-
-    class _StubVerifier:
-        def capture_post_state(self, _ctx: Any = None) -> EffectState:
-            return EffectState(substrate="db", reachable=True, records=all_records)
-
-    v_oracle = VerifierOracle(_StubVerifier(), channel=OracleChannel.DB)
-    v_obs = v_oracle.read({"patient_id": "P-2"})
-    assert records_of(v_obs) == [{"patient_id": "P-2", "note": "beta"}]

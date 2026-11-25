@@ -41,31 +41,6 @@ from openadapt_flow.reward.models import OracleRecipeV1
 from openadapt_flow.runtime.effects.effect import EffectState
 
 
-def _scope_records_by_identity(
-    records: list[dict[str, Any]], identity: Mapping[str, str]
-) -> list[dict[str, Any]]:
-    """Keep only records belonging to ``identity`` when identity keys appear on records."""
-    if not identity:
-        return list(records)
-    identity_keys = set(identity)
-    any_key_present = any(
-        isinstance(item, dict) and any(k in item for k in identity_keys)
-        for item in records
-    )
-    if not any_key_present:
-        return list(records)
-    scoped: list[dict[str, Any]] = []
-    for item in records:
-        if not isinstance(item, dict):
-            continue
-        present = [k for k in identity_keys if k in item]
-        if not present:
-            continue
-        if all(str(item[k]) == str(identity[k]) for k in present):
-            scoped.append(item)
-    return scoped
-
-
 def observation(
     channel: OracleChannel,
     identity: Mapping[str, str],
@@ -136,6 +111,9 @@ class JsonDocumentOracle:
         self.records_key = records_key
 
     def read(self, identity: Mapping[str, str]) -> OracleObservation:
+        # ``identity`` is stamped, not applied: this returns the whole
+        # document. See the note on ``VerifierOracle.read`` for what binds a
+        # judgement to a subject and for the guard that enforces it.
         try:
             body = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -148,11 +126,10 @@ class JsonDocumentOracle:
             records = None
         if not isinstance(records, list):
             return observation(self.channel, identity, None)
-        dict_records = [item for item in records if isinstance(item, dict)]
         return observation(
             self.channel,
             identity,
-            _scope_records_by_identity(dict_records, identity),
+            [item for item in records if isinstance(item, dict)],
         )
 
 
@@ -169,17 +146,24 @@ class VerifierOracle:
         self.channel = channel
 
     def read(self, identity: Mapping[str, str]) -> OracleObservation:
+        # ``identity`` is stamped onto the observation; it does NOT scope the
+        # read. The verifier returns every record in the collection, so the
+        # judgement is bound to the subject only by the required effect's own
+        # selector (``worker._bind`` resolves ``{"param": ...}`` references
+        # against this identity). ``RewardBundle.load`` compensates: it refuses
+        # a bundle whose required effects select no record by a declared
+        # identity key. The worker stores and hashes only the records the
+        # bound selectors pick (``worker._scoped_observation``), so other
+        # subjects' records stay out of the evidence and the receipt. Scoping
+        # the read itself is the broader fix, tracked in
+        # OpenAdaptAI/openadapt-flow#455.
         try:
             state = self.verifier.capture_post_state(None)
         except Exception:  # noqa: BLE001 - an unreadable store is not a guess
             return observation(self.channel, identity, None)
         if not getattr(state, "reachable", False):
             return observation(self.channel, identity, None)
-        return observation(
-            self.channel,
-            identity,
-            _scope_records_by_identity(list(state.records), identity),
-        )
+        return observation(self.channel, identity, list(state.records))
 
 
 class OracleMechanismError(ValueError):
