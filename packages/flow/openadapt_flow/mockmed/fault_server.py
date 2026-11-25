@@ -331,6 +331,12 @@ def _make_handler(db: FaultDB, directory: str, chart: ChartPages):
                     409, {"ok": False, "error": "rejected after optimistic UI"}
                 )
                 return
+            if patient_id not in KNOWN_PATIENTS:
+                db.note_rejected()
+                self._send_json(
+                    400, {"ok": False, "error": f"unknown patient: {patient_id!r}"}
+                )
+                return
             if fault == "partial":
                 # Backend persisted the row but dropped the note field.
                 rec = db.add(patient_id, enc_type, "", key=key)
