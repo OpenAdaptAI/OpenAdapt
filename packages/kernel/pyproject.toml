@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openadapt-kernel"
+version = "0.1.0"
+description = "Minimal commit-boundary verification, macro-action staging, stepwise live-DOM healing, and shadow-to-autopilot kernel for GUI agents"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    "cryptography>=42.0.0",
+]
+
+[project.optional-dependencies]
+browser = ["playwright>=1.45.0"]
+dev = ["pytest>=8", "ruff>=0.4", "mypy>=1.10"]
+
+[tool.hatch.build]
+dev-mode-dirs = ["src"]
+
+[tool.hatch.build.targets.wheel]
+ignore-vcs = true
+exclude = ["**/__pycache__/**", "**/*.pyc"]
+packages = ["src/openadapt_kernel"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
