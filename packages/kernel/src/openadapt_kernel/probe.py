@@ -98,3 +98,36 @@ def probe_before_click(page: Any, selector: str) -> ProbeResult:
         focus_responded=focus_ok,
         reason="clear",
     )
+
+
+def compute_pixel_delta_ratio(pre_bytes: bytes, post_bytes: bytes, threshold: int = 8) -> float:
+    """Compute fraction of differing bytes/samples between two equal-sized frame buffers (RDP/Canvas/Win32)."""
+    if not pre_bytes or not post_bytes:
+        return 0.0
+    n = min(len(pre_bytes), len(post_bytes))
+    diff = sum(1 for a, b in zip(pre_bytes[:n], post_bytes[:n]) if abs(a - b) > threshold)
+    return round(diff / max(n, 1), 6)
+
+
+def probe_hover_pixel_delta(
+    page: Any,
+    x: float,
+    y: float,
+    *,
+    box_size: int = 120,
+    wait_ms: int = 80,
+) -> float:
+    """Reversible 80ms hover differential pixel probe at (x, y) for Canvas/RDP/non-DOM controls."""
+    clip = {
+        "x": max(0.0, x - box_size / 2.0),
+        "y": max(0.0, y - box_size / 2.0),
+        "width": float(box_size),
+        "height": float(box_size),
+    }
+    pre = bytes(page.screenshot(clip=clip))
+    page.mouse.move(x, y)
+    page.wait_for_timeout(wait_ms)
+    post = bytes(page.screenshot(clip=clip))
+    if pre == post:
+        return 0.0
+    return max(compute_pixel_delta_ratio(pre, post, threshold=1), 0.001)

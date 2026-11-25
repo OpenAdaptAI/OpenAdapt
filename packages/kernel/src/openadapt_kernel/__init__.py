@@ -69,7 +69,9 @@ from openadapt_kernel.oracles import (
 )
 from openadapt_kernel.probe import (
     ProbeResult,
+    compute_pixel_delta_ratio,
     probe_before_click,
+    probe_hover_pixel_delta,
 )
 from openadapt_kernel.registry import (
     SignedPackEnvelope,
@@ -117,6 +119,7 @@ __all__ = [
     "SignedPackEnvelope",
     "StageResult",
     "StepwiseHealer",
+    "compute_pixel_delta_ratio",
     "dispatch_tool_call",
     "extract_pdf_visible_text",
     "format_run_result_json",
@@ -128,6 +131,7 @@ __all__ = [
     "observe_schema",
     "parse_extension_evidence_jsonl",
     "probe_before_click",
+    "probe_hover_pixel_delta",
     "publish_signed_pack",
     "pull_verified_pack",
     "qualify_verifier_offline",
