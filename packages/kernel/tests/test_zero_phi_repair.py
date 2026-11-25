@@ -158,7 +158,14 @@ def test_multi_turn_repl_wrapped_hidden_input_and_dynamic_overlay_options_zero_p
           document.getElementById('combo_wrap').addEventListener('click', () => {{
             overlay.style.display = 'block';
             overlay.innerHTML = '<div role="option" id="opt1" style="width:200px;height:36px;">Confidential Psychiatric Ward #7788</div>';
-            document.getElementById('opt1').onclick = () => {{ chosen = true; sync(); }};
+            document.getElementById('opt1').onclick = () => {{
+              chosen = true;
+              const chipBtn = document.createElement('button');
+              chipBtn.type = 'button';
+              chipBtn.innerText = 'Remove';
+              document.getElementById('combo_wrap').appendChild(chipBtn);
+              sync();
+            }};
           }});
           save.onclick = () => {{
             document.getElementById('db_out').innerText = 'COMMITTED:' + nm.value + '|' + ds.value;

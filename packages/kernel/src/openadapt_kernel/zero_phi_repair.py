@@ -80,6 +80,7 @@ class DistilledRepairStep:
     var_key: str = ""
     arg: Any = None
     is_stripped_target: bool = False
+    ctrl_sig: Tuple[str, str, str, str] = ("", "", "", "")
 
 
 def verify_symbolic_repair_ast(code_str: str, allowed_vars: FrozenSet[str]) -> ASTVerificationResult:
@@ -224,9 +225,10 @@ class _ZeroPhiUIProxy:
         loc.evaluate("el => { try { el.focus(); } catch (e) {} }")
 
     def _record(self, method: str, idx: int = -1, var_key: str = "", arg: Any = None) -> None:
-        ctrl = self._by_idx.get(int(idx))
+        c = self._by_idx.get(int(idx))
         is_strip = idx >= 0 and self._stripped_idx is not None and int(idx) == self._stripped_idx
-        self.recorded_steps.append(DistilledRepairStep(method, _safe_selector(ctrl.selector) if ctrl else "", self._modal_ords.get(int(idx), -1), var_key or (self._stripped_var if is_strip else ""), arg, is_strip))
+        sig = (c.tag, c.input_type, c.role, sanitize_ui_label_allowlist(f"{c.label} {c.placeholder}")) if c else ("", "", "", "")
+        self.recorded_steps.append(DistilledRepairStep(method, _safe_selector(c.selector) if c else "", self._modal_ords.get(int(idx), -1), var_key or (self._stripped_var if is_strip else ""), arg, is_strip, sig))
 
     def click(self, idx: int) -> None:
         loc, is_dis = self._raw_loc(idx), "el => Boolean(el.disabled || el.getAttribute('aria-disabled') === 'true')"
@@ -480,8 +482,13 @@ def replay_distilled_zero_phi_repair(
         target_idx: Optional[int] = stripped_idx if (step.is_stripped_target and stripped_idx is not None) else None
         if target_idx is None and step.modal_ordinal >= 0:
             modal_ctrls = [c for c in controls if c.in_modal and c.role != "option"]
-            if step.modal_ordinal < len(modal_ctrls):
+            csig = lambda x: (x.tag, x.input_type, x.role, sanitize_ui_label_allowlist(f"{x.label} {x.placeholder}"))  # noqa: E731
+            if step.modal_ordinal < len(modal_ctrls) and (step.ctrl_sig == ("", "", "", "") or csig(modal_ctrls[step.modal_ordinal]) == step.ctrl_sig):
                 target_idx = modal_ctrls[step.modal_ordinal].control_index
+            else:
+                hits = [i for i, x in enumerate(modal_ctrls) if csig(x) == step.ctrl_sig]
+                if hits:
+                    target_idx = modal_ctrls[min(hits, key=lambda i: abs(i - step.modal_ordinal))].control_index
         if target_idx is None and step.selector:
             loc = page.locator(step.selector).first
             raw_idx = loc.get_attribute("data-oa-idx") if loc.count() > 0 else None
