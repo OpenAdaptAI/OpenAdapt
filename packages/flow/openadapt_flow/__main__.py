@@ -3203,10 +3203,9 @@ def _cmd_replay(args: argparse.Namespace) -> int:
 
     stop = None
     if url is None and demo_app:
-        from openadapt_flow.tutorial import serve_demo_app as serve
+        from openadapt_flow.tutorial import start_demo_app_for_replay
 
-        url, stop = serve(port=0)
-        url = _with_drift(url, args.drift)
+        url, stop = start_demo_app_for_replay(workflow=workflow, drift=args.drift)
         drift_note = f" (drift: {args.drift})" if args.drift else ""
         print(f"--demo-app: replaying against bundled demo app{drift_note}")
 
