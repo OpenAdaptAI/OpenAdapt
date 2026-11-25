@@ -6,7 +6,7 @@ Releases up to v2.2.0 are recorded in the [openadapt-agent repository](https://g
 
 - Accept `openadapt-flow` 4.x (`openadapt-flow[vision]>=2.2.0,<5` and
   `tutorial` extra `openadapt-flow[browser,macos,vision]>=2.2.0,<5`) so
-  `openadapt 1.24.0` can resolve with `openadapt-flow 4.0.0`.
+  `openadapt 1.24.0` can resolve with `openadapt-flow 4.0.0` (now live on PyPI).
 
 ## v2.2.3 (2026-11-22)
 
