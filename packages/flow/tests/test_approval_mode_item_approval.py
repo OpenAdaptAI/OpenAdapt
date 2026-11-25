@@ -94,6 +94,14 @@ def test_a_request_is_two_private_files_and_waits(tmp_path):
     assert "form_state_sha256" not in summary
 
 
+def test_a_desktop_window_read_by_its_fields_is_a_request_kind(tmp_path):
+    # A desktop approval that read the app window's controls by value (#2189).
+    store = ItemApprovalStore(tmp_path / "run")
+    request = _open(store, form_state=("window_fields", "sha256:" + "2" * 64))
+    assert request.form_state_kind == "window_fields"
+    assert store.read_request(request.request_id) == request
+
+
 def test_an_approval_is_recorded_once_and_used_once(tmp_path):
     store = ItemApprovalStore(tmp_path / "run")
     request = _open(store)

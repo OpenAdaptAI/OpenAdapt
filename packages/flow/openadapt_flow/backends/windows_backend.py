@@ -45,7 +45,15 @@ from urllib.parse import urlparse
 
 import requests
 
+from openadapt_flow.approval_mode.window_fields import valid_form_field
 from openadapt_flow.backend import ActionDeliveryUncertain, StructuralResolutionRefused
+from openadapt_flow.backends.win_agent.server import (
+    valid_form_projection_refusal_v2,
+)
+from openadapt_flow.backends.win_agent.value_protocol import (
+    locator_scope,
+    valid_structural_response,
+)
 from openadapt_flow.ir import (
     ActionDeliveryReceipt,
     StructuralHandle,
@@ -54,6 +62,9 @@ from openadapt_flow.ir import (
 from openadapt_flow.runtime.step_timing import timed_span
 
 DEFAULT_SERVER_URL = "http://localhost:5001"
+# The client advertises only the wire semantics implemented by THIS module.
+# Never import a version from a possibly newer local server/helper module.
+CLIENT_VALUE_READ_CONTRACT = "openadapt.native-value-read/v3"
 
 # Hosts treated as loopback: plaintext HTTP to these never leaves the machine,
 # so it is permitted in dev (with a warning) even when TLS is not required.
@@ -230,6 +241,26 @@ def _pixel_box(value: object) -> Optional[dict[str, int]]:
     if value["w"] <= 0 or value["h"] <= 0:
         return None
     return {k: int(value[k]) for k in ("x", "y", "w", "h")}
+
+
+def _window_frame(
+    window: Any, hwnd: int, pid: int
+) -> Optional[tuple[int, int, int, int]]:
+    """The ``bounds`` of a typed window answer for exactly ``(hwnd, pid)``."""
+    if not isinstance(window, dict) or set(window) != {"hwnd", "pid", "bounds"}:
+        return None
+    bounds = window["bounds"]
+    if (
+        window["hwnd"] != hwnd
+        or window["pid"] != pid
+        or not isinstance(bounds, list)
+        or len(bounds) != 4
+        or any(isinstance(v, bool) or not isinstance(v, int) for v in bounds)
+        or bounds[2] <= 0
+        or bounds[3] <= 0
+    ):
+        return None
+    return (bounds[0], bounds[1], bounds[2], bounds[3])
 
 
 def _window_pair(raw: object) -> Optional[tuple[int, int]]:
@@ -1007,6 +1038,19 @@ class WindowsBackend:
         verified, when steps were seen in different windows, when the window
         is gone, or when the agent cannot say. Never raises.
         """
+        found = self._approval_window(exclude_step, points)
+        if found is None:
+            return None
+        hwnd, pid = found
+        typed = self._post_typed_read("/window/bounds", {"hwnd": hwnd, "pid": pid})
+        window = typed.payload.get("window") if typed.payload is not None else None
+        return _window_frame(window, hwnd, pid)
+
+    def _approval_window(
+        self, exclude_step: Optional[str], points: Sequence[tuple[int, int]]
+    ) -> Optional[tuple[int, int]]:
+        """``(hwnd, pid)`` of the one window the run's verified steps (apart
+        from ``exclude_step``) were in, or None."""
         captures = {
             capture
             for step_id, capture in self._verified_windows.items()
@@ -1025,23 +1069,81 @@ class WindowsBackend:
             captures = {c for c in found if c is not None}
         if len(captures) != 1:
             return None
-        hwnd, pid = next(iter(captures))
-        typed = self._post_typed_read("/window/bounds", {"hwnd": hwnd, "pid": pid})
-        window = typed.payload.get("window") if typed.payload is not None else None
-        if not isinstance(window, dict) or set(window) != {"hwnd", "pid", "bounds"}:
+        return next(iter(captures))
+
+    def approval_form_fields(
+        self,
+        exclude_step: Optional[str] = None,
+        points: Sequence[tuple[int, int]] = (),
+    ) -> Optional[dict[str, Any]]:
+        """The approval window's frame and its text fields, read through UI
+        Automation, for an approval's form state.
+
+        Returns ``{"bounds": (x, y, w, h), "fields": [{"kind", "rect",
+        "text", "state"}, ...]}``: the same window
+        :meth:`approval_form_region` names, and its title bar, text fields,
+        labels, buttons and cells whose text UIA reads (with toggle and
+        selection state), in tree order. The caller reads those fields by value and the rest of
+        the window by OCR, so a blinking caret or a hovered title-bar button
+        no longer changes the digest. Value-backed entries require independent
+        complete-value proof. None on any doubt; approval must then refuse,
+        including when an older agent does not provide the proof. Never raises.
+        """
+        try:
+            found = self._approval_window(exclude_step, points)
+            if found is None:
+                return None
+            hwnd, pid = found
+            typed = self._post_typed_read(
+                "/window/form-fields",
+                {
+                    "hwnd": hwnd,
+                    "pid": pid,
+                    "value_contract": CLIENT_VALUE_READ_CONTRACT,
+                },
+            )
+            payload = typed.payload
+            if (
+                payload is None
+                or set(payload) != {"status", "window", "fields", "refusal"}
+                or payload["status"] != "ok"
+            ):
+                return None
+            if payload["refusal"] is not None:
+                # A closed reason is diagnosis only, never permission or retry.
+                # Do not retain it as mutable backend/last-error state.
+                if (
+                    payload["window"] is not None
+                    or payload["fields"] != []
+                    or not valid_form_projection_refusal_v2(
+                        payload["refusal"], window=(hwnd, pid)
+                    )
+                ):
+                    return None
+                return None
+            bounds = _window_frame(payload["window"], hwnd, pid)
+            fields = payload["fields"]
+            if bounds is None or not isinstance(fields, list):
+                return None
+            checked: list[dict[str, Any]] = []
+            for field in fields:
+                if not valid_form_field(field, pid=pid):
+                    return None
+                rect, text = field["rect"], field["text"]
+                proof = field["value_proof"]
+                checked.append(
+                    {
+                        "kind": field["kind"],
+                        "rect": tuple(rect),
+                        "text": text,
+                        "state": field["state"],
+                        "value_proof": proof,
+                        "value_identity": field["value_identity"],
+                    }
+                )
+            return {"bounds": bounds, "fields": checked}
+        except Exception:  # noqa: BLE001 - no answer is no fields
             return None
-        bounds = window["bounds"]
-        if (
-            window["hwnd"] != hwnd
-            or window["pid"] != pid
-            or not isinstance(bounds, list)
-            or len(bounds) != 4
-            or any(isinstance(v, bool) or not isinstance(v, int) for v in bounds)
-            or bounds[2] <= 0
-            or bounds[3] <= 0
-        ):
-            return None
-        return (bounds[0], bounds[1], bounds[2], bounds[3])
 
     def window_root_at(self, x: int, y: int) -> Optional[tuple[int, int]]:
         """``(hwnd, pid)`` of the foreground app's top-level window at (x, y).
@@ -1490,51 +1592,29 @@ class WindowsBackend:
     ) -> Optional[dict]:
         """Read one control's text (and, with ``rows``, its rows) via UIA.
 
-        Read-only: the agent returns the control's value or name and never
-        acts on it. Returns the agent's payload (``match`` is ``unique``,
-        ``ambiguous`` or ``not_found``), or None when the read is unavailable
-        (older agent, transport error, malformed answer).
+        Read-only. Normal text requires an exact complete native-value proof;
+        visible labels/MSAA/clipped strings are preview_text only. Missing or
+        malformed proof never becomes a field value. Unsupported values return
+        text=None; legacy responses or unqualified row inventories return None.
         """
+        scope = locator_scope(locator.model_dump(mode="json", exclude_none=True))
         typed = self._post_typed_read(
             "/uia/read",
             {
-                "locator": locator.model_dump(mode="json", exclude_none=True),
+                "locator": scope,
+                "value_contract": CLIENT_VALUE_READ_CONTRACT,
                 **({"rows": True} if rows else {}),
             },
         )
         payload = typed.payload
-        if not typed.available or payload is None:
+        if not typed.available or not valid_structural_response(
+            payload, scope, rows=rows
+        ):
             return None
-        if payload.get("match") not in ("unique", "ambiguous", "not_found"):
+        if rows:
+            # Explicit preview rows cannot authorize semantic record counts,
+            # field values or absence. A qualified inventory is still required.
             return None
-        text = payload.get("text")
-        if text is not None and not isinstance(text, str):
-            return None
-        if rows and payload.get("match") == "unique":
-            items = payload.get("rows")
-            if not isinstance(items, list) or not all(
-                isinstance(item, dict)
-                and isinstance(item.get("text"), str)
-                and isinstance(item.get("point"), list)
-                and len(item["point"]) == 2
-                and all(
-                    isinstance(v, int) and not isinstance(v, bool)
-                    for v in item["point"]
-                )
-                and all(
-                    isinstance(cell, dict)
-                    and isinstance(cell.get("text"), str)
-                    and isinstance(cell.get("point"), list)
-                    and len(cell["point"]) == 2
-                    and all(
-                        isinstance(v, int) and not isinstance(v, bool)
-                        for v in cell["point"]
-                    )
-                    for cell in item.get("cells") or []
-                )
-                for item in items
-            ):
-                return None
         return payload
 
     def window_tree(

@@ -54,6 +54,7 @@ on:
       - packages/flow/tests/e2e/test_windows_hosted_replay.py
       - packages/flow/tests/e2e/test_native_keyboard_lease.py
       - packages/flow/tests/e2e/test_windows_hosted_governed.py
+      - packages/flow/tests/e2e/test_windows_approval_completeness.py
       - packages/flow/tests/_approver_keys.py
       - packages/flow/tests/conftest.py
       - packages/flow/tests/e2e/conftest.py
@@ -62,6 +63,14 @@ on:
       - packages/flow/tests/test_check_it_dry_run_apps.py
       - packages/flow/tests/native_apps/check_it_gtk.py
       - packages/flow/tests/test_approval_form_window.py
+      - packages/flow/tests/test_approval_form_fields.py
+      - packages/flow/tests/test_approval_value_completeness.py
+      - packages/flow/tests/test_native_value_completeness.py
+      - packages/flow/tests/test_native_sensitive_reads.py
+      - packages/flow/tests/test_form_projection_refusal.py
+      - packages/flow/tests/test_native_value_deployment.py
+      - packages/flow/tests/test_structural_value_completeness.py
+      - packages/flow/tests/test_desktop_readback.py
       - packages/flow/tests/test_binary_file_descriptors.py
       - packages/flow/tests/_binary_descriptor_contract.py
       - packages/flow/benchmark/rdp_pool/**
@@ -121,7 +130,12 @@ jobs:
         run: |
           mkdir -p runs
           pytest -v -rs -p no:cacheprovider tests/test_windows_attempt_ledger.py \
-            tests/test_approval_form_window.py tests/test_binary_file_descriptors.py --junitxml=runs/windows-guards-junit.xml
+            tests/test_approval_form_window.py tests/test_approval_form_fields.py \
+            tests/test_binary_file_descriptors.py tests/test_native_value_completeness.py \
+            tests/test_native_sensitive_reads.py tests/test_form_projection_refusal.py \
+            tests/test_approval_value_completeness.py tests/test_native_value_deployment.py \
+            tests/test_structural_value_completeness.py tests/test_desktop_readback.py \
+            --junitxml=runs/windows-guards-junit.xml
       - name: Native keyboard leases (real input, read-back and planted refusals)
         timeout-minutes: 6
         env:
@@ -216,6 +230,14 @@ jobs:
                   assert result["delivery_receipt"] == case["input_attempts"][-1]["response"]["receipt"]
           print(json.dumps({"editable_observation_cases": 8, "runtime_type_cases": 2, "skipped": 0, "rows_unchanged": True}))
           PYTHON
+      - name: Native approval complete values and no-write refusal
+        env:
+          OAFLOW_WINDOWS_HOSTED_E2E: "1"
+          OAFLOW_NATIVE_APPROVAL_EVIDENCE: ${{ runner.temp }}/native-approval-evidence.json
+          OAFLOW_NATIVE_APPROVAL_SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/ac" \
+            tests/e2e/test_windows_approval_completeness.py --junitxml=runs/native-approval-junit.xml
       - name: Record, compile and replay, judged from the record
         env:
           OAFLOW_WINDOWS_HOSTED_E2E: "1"
@@ -231,7 +253,7 @@ jobs:
           import xml.etree.ElementTree as ET
           cases = [
               case
-              for name in ("windows-guards", "windows-replay")
+              for name in ("windows-guards", "native-approval", "windows-replay")
               for case in ET.parse(f"runs/{name}-junit.xml").getroot().iter("testcase")
           ]
           skipped = [c for c in cases if c.find("skipped") is not None]
@@ -269,6 +291,8 @@ jobs:
         with:
           name: windows-replay-evidence
           path: |
+            ${{ runner.temp }}/native-approval-evidence.json
+            ${{ runner.temp }}/native-approval-evidence.frames/*.png
             ${{ runner.temp }}/windows-replay-evidence.json
             ${{ runner.temp }}/windows-governed-evidence.json
             ${{ runner.temp }}/nkl-editable/*.json

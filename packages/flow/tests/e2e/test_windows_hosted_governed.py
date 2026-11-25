@@ -401,6 +401,26 @@ def _form_state_probe(backend, run_dir: Path, frame_png: bytes) -> dict[str, Any
             from openadapt_flow.approval_mode.form_state import _crop
 
             out["window_words"] = _words(vision, _crop(frame_png, clamped))
+        # The read the replayer makes first: the window's controls through
+        # UI Automation, painted out of the OCR (synthetic data only).
+        from openadapt_flow.approval_mode.form_state import approval_form_state
+
+        fields = backend.approval_form_fields(request["step_id"], points)
+        out["fields"] = (
+            None
+            if fields is None
+            else [
+                [f["kind"], list(f["rect"]), f["text"], f["state"]]
+                for f in fields["fields"]
+            ]
+        )
+        out["fields_matches"] = (
+            approval_form_state(
+                backend, vision, frame_png, request["step_id"], report.results
+            )
+            == expected
+        )
+        out["request_kind"] = expected[0]
     except Exception as exc:  # noqa: BLE001 - diagnostics never fail the test
         out["probe_error"] = f"{type(exc).__name__}: {exc}"
     return out

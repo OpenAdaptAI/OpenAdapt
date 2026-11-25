@@ -71,7 +71,12 @@ a token.** The client refuses plaintext to a non-loopback host by default
 then polls `/health`. This is what the opt-in e2e harness uses.
 
 ### B. At user logon — unattended VM
-1. Copy this folder into the guest, e.g. `C:\oa\win_agent\`.
+1. Copy this entire folder into the guest, e.g. `C:\oa\win_agent\`,
+   including `server.py` and its `native_value.py` sibling. The programmatic
+   single-file deployments name that same helper `win_agent_native_value.py`.
+   The standalone server loads only these exact local sibling files and refuses
+   missing or conflicting copies; it never falls back to an installed package.
+   Client and agent must agree on the server-owned read contract (openadapt.native-value-read/v2) and helper proof v3 before value/preview reads.
 2. Register a logon scheduled task **running as the interactive user** (not
    SYSTEM), highest privileges:
 
@@ -96,3 +101,19 @@ The original `waa_shim.py` (Flask) is kept only for the desktop benchmark's
 accepts an optional bearer token, and no longer has an exec route. This package is the **hardened,
 dependency-free, auth-capable** successor used by `launch_agent()` and the
 snapshot-safe e2e; both speak the identical `WindowsBackend` contract.
+
+### Unavailable form observations
+
+The `window/form-fields` response has a closed `refusal` field. On success it
+is null. On refusal, `window` is null, `fields` is empty, and the receipt gives
+fixed stage/channel/reason codes with only the already-verified window handle,
+process ID and traversal ordinal when known. It contains no names, values,
+provider exception text or control representation. No diagnostic source read
+runs after refusal, and reasons never select a fallback or retry. This receipt
+is request-local observation metadata, not write permission or qualification.
+
+The host client and guest server declare their understood read contract
+independently. The historical server export `VALUE_READ_CONTRACT` is removed:
+an older backend module mixed with a newer local server module fails import
+before reading a control. Update the package coherently; server metadata never
+upgrades the response parser of an older client.

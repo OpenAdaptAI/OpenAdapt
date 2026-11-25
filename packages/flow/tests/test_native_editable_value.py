@@ -34,7 +34,8 @@ def independent_native_protocol(monkeypatch):
             control, _ = _native_controls[hwnd]
             return NativeOwner(hwnd, control.ProcessId, 9876)
 
-        def read(self, owner):
+        def read(self, owner, *, guard):
+            guard()
             control, pattern = _native_controls[owner.hwnd]
             value = getattr(control, "native_stored_value", pattern.Value)
             units = len(utf16_bytes(value)) // 2 if isinstance(value, str) else 0
@@ -48,6 +49,12 @@ def independent_native_protocol(monkeypatch):
 def editable(value=""):
     auto, control = focused_auto()
     control.IsPassword = False
+
+    def property_value(property_id, ignore_default):
+        assert property_id == native_value.IS_PASSWORD_PROPERTY and ignore_default == 1
+        return control.IsPassword
+
+    control.GetPropertyValueEx = property_value
     pattern = SimpleNamespace(Value=value, IsReadOnly=False)
     control.GetValuePattern = lambda: pattern
     control.NativeWindowHandle = 12345

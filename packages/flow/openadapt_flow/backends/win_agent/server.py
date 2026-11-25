@@ -19,8 +19,8 @@ matching the Windows Agent Arena Flask contract (the WAADirect pattern):
     POST /uia/identity-candidates-at -> rows that read the same as that row
     POST /uia/find          -> zero / unique / ambiguous exact candidates
     POST /uia/act           -> unique native UIA action + delivery receipt
-    POST /uia/read          -> read-only text of one unique control (value or
-                               name) and, on request, the text of its rows
+    POST /uia/read          -> complete native value of one unique control,
+                               with non-authorizing text/row previews separate
     POST /execute_windows   -> legacy WAA-shaped input commands, DISABLED by
                                default (``--allow-legacy-commands``). Commands
                                are parsed into an allow-listed set of
@@ -594,35 +594,43 @@ def _control_value(control: object, attr: str, default: object = "") -> object:
         return default
 
 
-def _parent(control: object) -> Optional[object]:
-    method = _control_value(control, "GetParentControl", None)
+def _parent(
+    control: object, *, get: Callable[..., Any] = _control_value
+) -> Optional[object]:
+    method = get(control, "GetParentControl", None)
     try:
         return method() if callable(method) else None
     except Exception:  # noqa: BLE001
         return None
 
 
-def _window_name(control: object) -> Optional[str]:
+def _window_name(
+    control: object, *, get: Callable[..., Any] = _control_value
+) -> Optional[str]:
     node: Optional[object] = control
     for _ in range(_MAX_UIA_DEPTH):
-        if str(_control_value(node, "ControlTypeName", "")) == "WindowControl":
-            value = " ".join(str(_control_value(node, "Name", "") or "").split())
+        if str(get(node, "ControlTypeName", "")) == "WindowControl":
+            value = " ".join(str(get(node, "Name", "") or "").split())
             return value or None
-        node = _parent(node)
+        node = _parent(node, get=get)
         if node is None:
             break
     return None
 
 
-def _role(control: object) -> Optional[str]:
-    control_type = str(_control_value(control, "ControlTypeName", ""))
+def _role(
+    control: object, *, get: Callable[..., Any] = _control_value
+) -> Optional[str]:
+    control_type = str(get(control, "ControlTypeName", ""))
     if control_type == "SplitButtonControl":
         return "button"
     return _CONTROL_TO_ROLE.get(control_type)
 
 
-def _bounds(control: object) -> Optional[list[int]]:
-    rect: Any = _control_value(control, "BoundingRectangle", None)
+def _bounds(
+    control: object, *, get: Callable[..., Any] = _control_value
+) -> Optional[list[int]]:
+    rect: Any = get(control, "BoundingRectangle", None)
     try:
         if rect is None or rect.right <= rect.left or rect.bottom <= rect.top:
             return None
@@ -654,17 +662,19 @@ def _centered_on(control: object, x: int, y: int) -> bool:
     )
 
 
-def _locator_from_control(control: object) -> Optional[dict[str, Any]]:
-    automation_id = str(_control_value(control, "AutomationId", "") or "") or None
-    name = " ".join(str(_control_value(control, "Name", "") or "").split()) or None
-    role = _role(control)
+def _locator_from_control(
+    control: object, *, get: Callable[..., Any] = _control_value
+) -> Optional[dict[str, Any]]:
+    automation_id = str(get(control, "AutomationId", "") or "") or None
+    name = " ".join(str(get(control, "Name", "") or "").split()) or None
+    role = _role(control, get=get)
     if not automation_id and not (role and name):
         return None
     return {
         "automation_id": automation_id,
         "role": role,
         "name": name,
-        "window_name": _window_name(control),
+        "window_name": _window_name(control, get=get),
     }
 
 
@@ -933,9 +943,11 @@ def _locator_payload(value: object) -> dict[str, Any]:
     return out
 
 
-def _runtime_id(control: object) -> list[int]:
+def _runtime_id(
+    control: object, *, get: Callable[..., Any] = _control_value
+) -> list[int]:
     """Return UIA's per-element runtime id as a bounded JSON value."""
-    method = _control_value(control, "GetRuntimeId", None)
+    method = get(control, "GetRuntimeId", None)
     try:
         value = list(method()) if callable(method) else []
     except Exception:  # noqa: BLE001 - some providers omit RuntimeId
@@ -947,7 +959,12 @@ def _runtime_id(control: object) -> list[int]:
     return value
 
 
-def _target_fingerprint(control: object, candidate: dict[str, Any]) -> str:
+def _target_fingerprint(
+    control: object,
+    candidate: dict[str, Any],
+    *,
+    get: Callable[..., Any] = _control_value,
+) -> str:
     """Bind resolution to this exact live UIA element and geometry.
 
     The locator alone is intentionally insufficient: a closed/reopened window
@@ -961,10 +978,10 @@ def _target_fingerprint(control: object, candidate: dict[str, Any]) -> str:
             for key in ("automation_id", "role", "name", "window_name")
         },
         "bounds": candidate.get("bounds"),
-        "runtime_id": _runtime_id(control),
-        "process_id": _control_value(control, "ProcessId", 0),
-        "native_window_handle": _control_value(control, "NativeWindowHandle", 0),
-        "class_name": str(_control_value(control, "ClassName", "") or ""),
+        "runtime_id": _runtime_id(control, get=get),
+        "process_id": get(control, "ProcessId", 0),
+        "native_window_handle": get(control, "NativeWindowHandle", 0),
+        "class_name": str(get(control, "ClassName", "") or ""),
     }
     canonical = json.dumps(identity, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -1101,18 +1118,12 @@ def _editable_value_observation(auto: Any, payload: dict[str, Any]) -> dict[str,
         left <= point[0] < right and top <= point[1] < bottom
     ):
         return unavailable("point_outside_focused_target")
-    try:
-        from openadapt_flow.backends.win_agent.native_value import (
-            observe_complete_value,
-        )
-    except ModuleNotFoundError:
-        from win_agent_native_value import observe_complete_value  # type: ignore[no-redef,import-not-found]
 
     def current_binding() -> Optional[str]:
         current = _focused_target_control(auto, verify_locator_uniqueness=False)
         return current[1]["fingerprint"] if current is not None else None
 
-    result = observe_complete_value(
+    result = _native_value_api().observe_complete_value(
         control, identity=current_binding, require_editable=True
     )
     if not result.complete or result.proof is None or result.value is None:
@@ -1143,9 +1154,11 @@ def _focused_field_label(auto: Any) -> Optional[str]:
     return _uia_field_label(focused)
 
 
-def _candidate(control: object) -> Optional[dict[str, Any]]:
-    locator = _locator_from_control(control)
-    bounds = _bounds(control)
+def _candidate(
+    control: object, *, get: Callable[..., Any] = _control_value
+) -> Optional[dict[str, Any]]:
+    locator = _locator_from_control(control, get=get)
+    bounds = _bounds(control, get=get)
     if locator is None or bounds is None:
         return None
     role = locator["role"]
@@ -1165,12 +1178,12 @@ def _candidate(control: object) -> Optional[dict[str, Any]]:
         "point": [int((bounds[0] + bounds[2]) / 2), int((bounds[1] + bounds[3]) / 2)],
         "supported_operations": operations,
     }
-    candidate["fingerprint"] = _target_fingerprint(control, candidate)
+    candidate["fingerprint"] = _target_fingerprint(control, candidate, get=get)
     return candidate
 
 
 def _find_candidates(
-    locator: dict[str, Any], auto: Any
+    locator: dict[str, Any], auto: Any, *, strict_walk: bool = False
 ) -> tuple[list[tuple[Any, dict[str, Any]]], bool]:
     try:
         root = auto.GetRootControl()
@@ -1181,14 +1194,100 @@ def _find_candidates(
     stack: list[tuple[Any, int]] = [(root, 0)]
     found: list[tuple[Any, dict[str, Any]]] = []
     visited = 0
-    truncated = False
+    native_api = None
+
+    def incomplete(stage: str, error: Exception | None = None):
+        # Fixture diagnostics stay in the guest log. Never log control metadata
+        # or provider exceptions, including their messages.
+        if strict_walk and os.environ.get("OAFLOW_AGENT_TRACE_CENSUS") == "1":
+            if native_api is not None and isinstance(
+                error, native_api.ValueUnavailable
+            ):
+                stage = "sensitivity"
+                # Older standalone helpers report the coarse stage. Only the
+                # matching helper's enum may supply a more precise log label.
+                detail = getattr(error, "census_stage", None)
+                if type(detail) is getattr(native_api, "SensitivityStage", None):
+                    stage = detail.value
+                    if detail is native_api.SensitivityStage.NATIVE_EDIT:
+                        label = getattr(
+                            native_api.ValueUnavailable,
+                            "native_edit_census_label",
+                            None,
+                        )
+                        if label is not None:
+                            stage = label(error)
+            try:
+                print(
+                    f"[win-agent] strict census stop: {stage}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            except (OSError, ValueError):
+                pass
+        return found, True
+
     while stack:
         control, depth = stack.pop()
         visited += 1
         if visited > _MAX_UIA_NODES:
-            truncated = True
-            break
-        candidate = _candidate(control)
+            return incomplete("node_limit")
+        possible = False
+        if strict_walk:
+            # A failed selector/bounds read cannot hide a second match and
+            # turn a partial query into unique value authority.
+            try:
+                native_api = _native_value_api()
+                native_api.require_non_sensitive_structure(control)
+                facts = {
+                    key: _read_control_value(control, key, None)
+                    for key in ("AutomationId", "Name", "ControlTypeName")
+                }
+                _native_value_api().require_non_sensitive_structure(control)
+                if any(not isinstance(value, str) for value in facts.values()):
+                    return incomplete("selector_property")
+                possible = all(
+                    expected is None or actual == expected
+                    for expected, actual in (
+                        (locator.get("automation_id"), facts["AutomationId"] or None),
+                        (locator.get("name"), " ".join(facts["Name"].split()) or None),
+                        (
+                            locator.get("role"),
+                            "button"
+                            if facts["ControlTypeName"] == "SplitButtonControl"
+                            else _CONTROL_TO_ROLE.get(facts["ControlTypeName"]),
+                        ),
+                    )
+                )
+                if possible:
+                    node = control
+                    for _ in range(_MAX_UIA_DEPTH + 1):
+                        if node is None:
+                            break
+                        if (
+                            _read_control_value(node, "ControlTypeName", None)
+                            == "WindowControl"
+                        ):
+                            if not isinstance(
+                                _read_control_value(node, "Name", None), str
+                            ):
+                                return incomplete("ancestor_name")
+                            break
+                        node = _parent(node, get=_read_control_value)
+                    else:
+                        return incomplete("ancestor_depth")
+            except Exception as exc:  # noqa: BLE001 - unknown query scope is incomplete
+                return incomplete("selector", exc)
+        try:
+            candidate = _candidate(
+                control, get=_read_control_value if strict_walk else _control_value
+            )
+        except Exception as exc:  # noqa: BLE001 - changing sensitive metadata is no complete census
+            if strict_walk:
+                return incomplete("candidate_properties", exc)
+            raise
+        if strict_walk and possible and candidate is None:
+            return incomplete("candidate_unavailable")
         if candidate is not None:
             matches = True
             for key in ("automation_id", "role", "name", "window_name"):
@@ -1199,17 +1298,24 @@ def _find_candidates(
             if matches:
                 found.append((control, candidate))
                 if len(found) >= _MAX_UIA_CANDIDATES:
-                    truncated = True
-                    break
-        if depth >= _MAX_UIA_DEPTH:
+                    return incomplete("candidate_limit")
+        if depth >= _MAX_UIA_DEPTH and not strict_walk:
             continue
         children = _control_value(control, "GetChildren", None)
         try:
+            if strict_walk and not callable(children):
+                return incomplete("children_unavailable")
             values = list(children()) if callable(children) else []
         except Exception:  # noqa: BLE001
+            if strict_walk:
+                return incomplete("children_error")
             values = []
+        if depth >= _MAX_UIA_DEPTH:
+            if values:
+                return incomplete("depth_limit")
+            continue
         stack.extend((child, depth + 1) for child in reversed(values))
-    return found, truncated
+    return found, False
 
 
 def _structured_text_at(auto: Any, x: int, y: int) -> Optional[str]:
@@ -1479,34 +1585,117 @@ _MAX_READ_ROWS = 200
 _MAX_ROW_DEPTH = 4
 
 
-def _value_text(control: object) -> Optional[str]:
-    """The text a person sees in ``control``: its value, else its name.
+_STANDALONE_NATIVE_VALUE_API: Any = None
 
-    Read-only. Edit boxes and grid cells expose their content through the
-    Value pattern (an empty box reads as empty, never as its name); other
-    controls through the legacy MSAA value or their Name.
+
+def _native_value_api() -> Any:
+    """Use the package helper or load only the exact local deployment sibling.
+
+    The three programmatic launchers use win_agent_native_value.py; the
+    documented copied-folder/run_agent.bat route keeps native_value.py. Never
+    search installed modules, and refuse conflicting local copies. A process
+    binds the selected source once, as it does its own loaded server source.
     """
-    method = _control_value(control, "GetValuePattern", None)
-    if callable(method):
-        try:
-            pattern = method()
-            value = getattr(pattern, "Value", None) if pattern is not None else None
-        except Exception:  # noqa: BLE001 - pattern not supported
-            value = None
-        if isinstance(value, str):
-            return value[:_MAX_READ_TEXT]
-    method = _control_value(control, "GetLegacyIAccessiblePattern", None)
-    if callable(method):
-        try:
-            value = getattr(method(), "Value", None)
-        except Exception:  # noqa: BLE001 - pattern not supported
-            value = None
-        if isinstance(value, str) and value:
-            return value[:_MAX_READ_TEXT]
-    name = _control_value(control, "Name", "")
-    if isinstance(name, str) and name:
-        return name[:_MAX_READ_TEXT]
-    return None
+    if __package__:
+        from openadapt_flow.backends.win_agent import native_value
+
+        return native_value
+    global _STANDALONE_NATIVE_VALUE_API
+    if _STANDALONE_NATIVE_VALUE_API is not None:
+        return _STANDALONE_NATIVE_VALUE_API
+    import importlib.util
+    from pathlib import Path
+
+    directory = Path(__file__).resolve().parent
+    sources = []
+    for name in ("win_agent_native_value.py", "native_value.py"):
+        path = directory / name
+        if path.is_symlink():
+            raise ImportError("native-value helper must be an exact local file")
+        if path.is_file():
+            sources.append((path, path.read_bytes()))
+    if not sources:
+        raise ModuleNotFoundError("exact local native-value helper is missing")
+    if any(raw != sources[0][1] for _, raw in sources[1:]):
+        raise ImportError("conflicting local native-value helpers")
+    path, raw = sources[0]
+    key = (
+        "_win_agent_native_value_"
+        + hashlib.sha256(str(path).encode() + raw).hexdigest()
+    )
+    spec = importlib.util.spec_from_file_location(key, path)
+    if spec is None or spec.loader is None:
+        raise ImportError("exact local native-value helper cannot be loaded")
+    module = importlib.util.module_from_spec(spec)
+    # Execute the exact selected bytes without changing the interpreter's
+    # global import cache. The helper uses concrete annotations, so its
+    # dataclasses do not need a registered module to resolve forward strings.
+    # Do not inherit this server's future-annotations compiler flag.
+    exec(compile(raw, str(path), "exec", dont_inherit=True), module.__dict__)
+    _STANDALONE_NATIVE_VALUE_API = module
+    return module
+
+
+def _read_control_value(control: object, name: str, default: Any) -> Any:
+    """Metadata for a semantic value read, without a sensitivity-order gap."""
+    guard = _native_value_api().require_non_sensitive_structure
+    guard(control)
+    value = _control_value(control, name, default)
+    guard(control)
+    return value
+
+
+# This contract belongs to the SERVER consumer semantics, not to the helper.
+# Deliberately do not export the historical VALUE_READ_CONTRACT name: old
+# backend modules imported it and could falsely advertise a newer parser when
+# only this local server module was replaced. Mixed old modules must fail import.
+# Updating a helper beside an older server cannot advertise a new read policy.
+SERVER_VALUE_READ_CONTRACT = "openadapt.native-value-read/v3"
+_EXPECTED_VALUE_PROOF_SCHEMA = "openadapt.native-value-completeness/v3"
+
+
+def _require_value_contract(value: object) -> None:
+    if (
+        not isinstance(value, str)
+        or value != SERVER_VALUE_READ_CONTRACT
+        or _native_value_api().PROOF_SCHEMA != _EXPECTED_VALUE_PROOF_SCHEMA
+    ):
+        raise AgentRequestError(
+            400, "invalid_schema", "incompatible native value contract"
+        )
+
+
+def _value_text(control: object) -> Optional[str]:
+    """Bounded non-authorizing preview, only for known non-sensitive controls.
+
+    A protocol declaration never authorizes a getter. Recheck the shared
+    sensitive-status guard before/after every capability, value or fallback
+    call; changes during a provider call discard the preview and stop fallback.
+    """
+    guard = _native_value_api().require_non_sensitive_value
+    try:
+        guard(control)
+        for capability in ("GetValuePattern", "GetLegacyIAccessiblePattern"):
+            guard(control)
+            method = _control_value(control, capability, None)
+            guard(control)
+            if not callable(method):
+                continue
+            try:
+                pattern = method()
+                guard(control)
+                value = getattr(pattern, "Value", None)
+            except Exception:  # noqa: BLE001 - unsupported capability is no value
+                value = None
+            guard(control)
+            if isinstance(value, str) and (value or capability == "GetValuePattern"):
+                return value[:_MAX_READ_TEXT]
+        guard(control)
+        name = _control_value(control, "Name", "")
+        guard(control)
+        return name[:_MAX_READ_TEXT] if isinstance(name, str) and name else None
+    except Exception:  # noqa: BLE001 - sensitivity and provider failures refuse
+        return None
 
 
 def _children(control: object) -> list[object]:
@@ -1765,33 +1954,105 @@ def _perform_uia_initialized(
     if operation == "read":
         data = _exact_object(
             payload,
-            required=frozenset({"locator"}),
+            required=frozenset({"locator", "value_contract"}),
             optional=frozenset({"rows"}),
             label="uia read",
         )
+        _require_value_contract(data["value_contract"])
         if not isinstance(data.get("rows", False), bool):
             raise AgentRequestError(400, "invalid_schema", "rows must be a boolean")
-        locator = _locator_payload(data["locator"])
-        found, truncated = _find_candidates(locator, auto)
-        if len(found) != 1 or truncated:
-            return {
-                "status": "ok",
-                "match": "ambiguous" if found or truncated else "not_found",
-                "candidate_count": len(found),
-                "text": None,
-            }
-        control, candidate = found[0]
+        read_locator = _locator_payload(data["locator"])
+        read_deadline = time.monotonic() + 15.0
+        found, truncated = _find_candidates(read_locator, auto, strict_walk=True)
+        unique = len(found) == 1 and not truncated
         result: dict[str, Any] = {
             "status": "ok",
-            "match": "unique",
-            "candidate_count": 1,
-            "text": _value_text(control),
-            "point": candidate["point"],
+            "match": "unique"
+            if unique
+            else "ambiguous"
+            if found or truncated
+            else "not_found",
+            "candidate_count": len(found),
+            "text": None,
+            "point": None,
+            "complete": False,
+            "value_proof": None,
+            "value_identity": None,
+            "read_scope": read_locator,
+            "preview_text": None,
+            "reason": "not_unique",
         }
+        if unique:
+            control, candidate = found[0]
+            result["point"] = candidate["point"]
+            # Existing display previews remain explicit non-authorizing data.
+            # A legacy client sees text=None for every unavailable value.
+            result["preview_text"] = _value_text(control)
+
+            hwnd = _control_value(control, "NativeWindowHandle", 0)
+
+            def identity() -> Optional[str]:
+                # A strict complete census is required at both observation
+                # endpoints. Between them, guard the fixed element through a
+                # fresh handle lookup, RuntimeId/PID/geometry/locator binding.
+                # This is neither continuous global uniqueness nor permission
+                # for a future write. Rewalking the whole desktop for every
+                # native guard exhausted the unchanged five-second bound.
+                try:
+                    if (
+                        time.monotonic() >= read_deadline
+                        or type(hwnd) is not int
+                        or hwnd <= 0
+                    ):
+                        return None
+                    live = auto.ControlFromHandle(hwnd)
+                    _native_value_api().require_non_sensitive_value(live)
+                    current = _candidate(live, get=_read_control_value)
+                    _native_value_api().require_non_sensitive_value(live)
+                    if (
+                        current is None
+                        or current["fingerprint"] != candidate["fingerprint"]
+                    ):
+                        return None
+                    return hashlib.sha256(
+                        json.dumps(
+                            [read_locator, current["fingerprint"]],
+                            sort_keys=True,
+                            separators=(",", ":"),
+                            ensure_ascii=False,
+                        ).encode("utf-8")
+                    ).hexdigest()
+                except Exception:  # noqa: BLE001 - unknown fixed identity refuses
+                    return None
+
+            binding = identity()
+            observed = _form_field_value(control, identity)
+            result["reason"] = observed.reason or "value_identity_changed"
+            if observed.complete and observed.proof is not None and binding is not None:
+                fresh, cut = _find_candidates(read_locator, auto, strict_walk=True)
+                if (
+                    not cut
+                    and len(fresh) == 1
+                    and fresh[0][1]["fingerprint"] == candidate["fingerprint"]
+                    and identity() == binding
+                ):
+                    result.update(
+                        text=observed.value,
+                        complete=True,
+                        reason=None,
+                        value_proof=observed.proof.payload(),
+                        value_identity=binding,
+                    )
         if data.get("rows"):
-            rows, rows_truncated = _read_rows(control)
-            result["rows"] = rows
-            result["rows_truncated"] = rows_truncated
+            # Row/cell concatenation and a bounded preview walk do not prove
+            # full text or inventory. No composite row source is qualified.
+            preview_rows, _ = _read_rows(found[0][0]) if unique else ([], True)
+            result.update(
+                rows=None,
+                rows_truncated=True,
+                rows_complete=False,
+                preview_rows=preview_rows,
+            )
         return result
 
     data = _exact_object(
@@ -2440,8 +2701,888 @@ def _window_operation(
     return {"status": "ok", "window": owned}
 
 
+#: Control types whose on-screen text is their UIA value: an approval reads
+#: the value and leaves their pixels out of the OCR (a caret blinks there).
+_FORM_VALUE_TYPES = frozenset({"EditControl", "DocumentControl"})
+#: Leaf controls whose on-screen text is their UIA name by convention
+#: (labels, buttons), and leaf items whose on-screen text is their UIA value
+#: (list and grid cells; their name is often a position such as "first Row
+#: 0", so they count only with a value). Both are read and painted out too,
+#: so a selection highlight or a focus change cannot change how OCR reads
+#: them.
+_FORM_NAMED_TYPES = frozenset(
+    {
+        "TextControl",
+        "ButtonControl",
+        "CheckBoxControl",
+        "RadioButtonControl",
+        "TabItemControl",
+        "HeaderItemControl",
+        "HyperlinkControl",
+        "MenuItemControl",
+    }
+)
+_FORM_ITEM_TYPES = frozenset(
+    {"ListItemControl", "DataItemControl", "TreeItemControl", "CustomControl"}
+)
+_MAX_FORM_FIELDS = 512
+_TOGGLE_STATES = {0: "off", 1: "on", 2: "indeterminate"}
+
+
+_UIA_IS_VALUE_PATTERN_AVAILABLE = 30043
+
+
+_FORM_PROPERTY_NAMES = {
+    30041: "toggle",
+    30036: "selection_item",
+    30043: "value",
+    30022: "offscreen",
+}
+_FORM_PROPERTY_PHASES = {
+    "guard_before_lookup": frozenset({"guard_refused"}),
+    "lookup": frozenset({"lookup_unavailable", "lookup_error"}),
+    "guard_before_query": frozenset({"guard_refused"}),
+    "query": frozenset({"query_error"}),
+    "guard_after_query": frozenset({"guard_refused"}),
+    "result_kind": frozenset({"none", "non_bool"}),
+}
+
+
+def _valid_form_property_detail(value: object) -> bool:
+    if type(value) is not dict or set(value) != {"property", "phase", "outcome"}:
+        return False
+    if any(type(item) is not str for item in value.values()):
+        return False
+    return value["property"] in _FORM_PROPERTY_NAMES.values() and value[
+        "outcome"
+    ] in _FORM_PROPERTY_PHASES.get(value["phase"], ())
+
+
+@dataclass(frozen=True)
+class _FormPropertyDetail:
+    property: str
+    phase: str
+    outcome: str
+
+    def payload(self) -> dict[str, str]:
+        value = {
+            "property": self.property,
+            "phase": self.phase,
+            "outcome": self.outcome,
+        }
+        if not _valid_form_property_detail(value):
+            raise ValueError("invalid non-content property detail")
+        return value
+
+
+@dataclass(frozen=True)
+class _FormBooleanObservation:
+    value: Optional[bool]
+    detail: Optional[_FormPropertyDetail] = None
+
+
+def _form_boolean_observation(
+    control: object, property_id: int
+) -> _FormBooleanObservation:
+    """One existing raw-property probe, with closed failure attribution only.
+
+    This never queries again to diagnose an unknown. Each guard/lookup/query
+    runs at most once; an already-unknown lookup/result stops immediately,
+    except that an unsupported pattern-availability answer asks the raw
+    element for that pattern once (``_form_pattern_support``).
+    No provider text, type name, exception
+    value or representation enters the request-local result.
+    """
+    name = _FORM_PROPERTY_NAMES.get(property_id) if type(property_id) is int else None
+    if name is None:
+        return _FormBooleanObservation(None)
+
+    def refused(phase: str, outcome: str) -> _FormBooleanObservation:
+        return _FormBooleanObservation(None, _FormPropertyDetail(name, phase, outcome))
+
+    try:
+        guard = _native_value_api().require_non_sensitive_structure
+        guard(control)
+    except Exception:  # noqa: BLE001 - no provider exception data
+        return refused("guard_before_lookup", "guard_refused")
+    try:
+        method = getattr(control, "GetPropertyValueEx", None)
+    except Exception:  # noqa: BLE001 - no diagnostic lookup after failure
+        return refused("lookup", "lookup_error")
+    if not callable(method):
+        return refused("lookup", "lookup_unavailable")
+    try:
+        guard(control)
+    except Exception:  # noqa: BLE001 - no raw query after guard refusal
+        return refused("guard_before_query", "guard_refused")
+    try:
+        available = method(property_id, 1)
+    except Exception:  # noqa: BLE001 - do not stringify COM/provider errors
+        return refused("query", "query_error")
+    if type(available) is not bool:
+        # A provider that does not support a pattern-availability property
+        # (the WinForms proxies answer VT_UNKNOWN) still answers the pattern
+        # itself: UIA's GetCurrentPattern returns the pattern exactly when it
+        # is supported. Only that exact answer counts; anything else refuses.
+        outcome = "none" if available is None else "non_bool"
+        if not _native_value_api().is_uia_not_supported(available):
+            return refused("result_kind", outcome)
+        available = _form_pattern_support(control, property_id, guard)
+        if available is None:
+            return refused("result_kind", outcome)
+    try:
+        guard(control)
+    except Exception:  # noqa: BLE001 - no post-refusal diagnostic getter
+        return refused("guard_after_query", "guard_refused")
+    return _FormBooleanObservation(available)
+
+
+# UIA pattern ids for the availability properties in _FORM_PROPERTY_NAMES.
+_FORM_PATTERN_IDS = {30041: 10015, 30036: 10010, 30043: 10002}
+
+
+def _form_pattern_support(
+    control: object, property_id: int, guard: Callable[[object], None]
+) -> Optional[bool]:
+    """Whether the control supports the pattern, or None when not answerable."""
+    pattern_id = _FORM_PATTERN_IDS.get(property_id)
+    if pattern_id is None:
+        return None
+    try:
+        # The raw IUIAutomationElement, not uiautomation's GetPattern, which
+        # turns a COM error into the same None as an unsupported pattern.
+        guard(control)
+        method = getattr(getattr(control, "Element", None), "GetCurrentPattern", None)
+        if not callable(method):
+            return None
+        guard(control)
+        pattern = method(pattern_id)
+        guard(control)
+        # comtypes answers a NULL interface pointer for an unsupported pattern.
+        return _native_value_api().pattern_presence(pattern)
+    except Exception:  # noqa: BLE001 - no provider exception data
+        return None
+
+
+def _form_boolean_property(control: object, property_id: int) -> Optional[bool]:
+    """An exact supported boolean, or unknown; never default or absence."""
+    return _form_boolean_observation(control, property_id).value
+
+
+def _form_exposes_value(control: object) -> Optional[bool]:
+    return _form_boolean_property(control, _UIA_IS_VALUE_PATTERN_AVAILABLE)
+
+
+def _form_field_value(control: object, identity: Callable[[], Optional[str]]) -> Any:
+    """A complete identity-bound value; partial/unsupported sources refuse."""
+    return _native_value_api().observe_complete_value(control, identity=identity)
+
+
+def _form_value_identity(
+    control: object, window: object, hwnd: int, scope: Callable[[], bool], auto: Any
+) -> Optional[str]:
+    """Fresh immutable field/window scope, including ancestry and geometry."""
+    try:
+        if not scope() or _control_value(window, "NativeWindowHandle", None) != hwnd:
+            return None
+        pid = _control_value(window, "ProcessId", None)
+        root_id, field_id = _runtime_id(window), _runtime_id(control)
+        if (
+            not root_id
+            or not field_id
+            or not isinstance(pid, int)
+            or isinstance(pid, bool)
+        ):
+            return None
+        if _control_value(control, "ProcessId", None) != pid:
+            return None
+        live_window = auto.ControlFromHandle(hwnd)
+        live_control = auto.ControlFromHandle(
+            _control_value(control, "NativeWindowHandle", 0)
+        )
+        if (
+            live_window is None
+            or live_control is None
+            or _runtime_id(live_window) != root_id
+            or _runtime_id(live_control) != field_id
+            or _bounds(live_control) != _bounds(control)
+            or _control_value(live_control, "ControlTypeName", None)
+            != _control_value(control, "ControlTypeName", None)
+        ):
+            return None
+        chain = []
+        node = live_control
+        for _ in range(_MAX_UIA_DEPTH):
+            runtime = _runtime_id(node)
+            if not runtime or _control_value(node, "ProcessId", None) != pid:
+                return None
+            chain.append(runtime)
+            if runtime == root_id:
+                break
+            node = node.GetParentControl()
+        else:
+            return None
+        bounds = _bounds(control)
+        if bounds is None or _control_value(control, "IsOffscreen", None) is not False:
+            return None
+        return hashlib.sha256(
+            json.dumps(
+                [
+                    hwnd,
+                    pid,
+                    chain,
+                    bounds,
+                    _control_value(control, "ControlTypeName", None),
+                ],
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+    except Exception:  # noqa: BLE001 - a missing scope is never complete
+        return None
+
+
+@dataclass(frozen=True)
+class _FormStateObservation:
+    complete: bool
+    state: Optional[str]
+    reason: Optional[str] = None
+    detail: Optional[_FormPropertyDetail] = None
+
+
+def _form_field_state(control: object) -> _FormStateObservation:
+    """Known absent patterns differ from unknown, with first-refusal detail."""
+
+    def read(capability: str, attribute: str) -> Any:
+        # A structural guard can inspect availability, never a toggle or
+        # selection value. Keep the full guard adjacent to each state read.
+        guard = _native_value_api().require_non_sensitive_value
+        guard(control)
+        method = _control_value(control, capability, None)
+        guard(control)
+        if not callable(method):
+            raise ValueError("state pattern unavailable")
+        pattern = method()
+        guard(control)
+        value = getattr(pattern, attribute, None)
+        guard(control)
+        return value
+
+    try:
+        toggle_probe = _form_boolean_observation(control, 30041)
+        if toggle_probe.value is None:
+            return _FormStateObservation(
+                False, None, "state_capability_unknown", toggle_probe.detail
+            )
+        selection_probe = _form_boolean_observation(control, 30036)
+        if selection_probe.value is None:
+            return _FormStateObservation(
+                False, None, "state_capability_unknown", selection_probe.detail
+            )
+        toggle, selection = toggle_probe.value, selection_probe.value
+        if toggle and selection:
+            return _FormStateObservation(False, None, "composite_state_unrepresented")
+
+        def recheck() -> tuple[bool, Optional[_FormPropertyDetail]]:
+            for property_id, expected in ((30041, toggle), (30036, selection)):
+                current = _form_boolean_observation(control, property_id)
+                if current.value is None:
+                    return False, current.detail
+                if current.value != expected:
+                    return False, None
+            return True, None
+
+        if toggle:
+            value = read("GetTogglePattern", "ToggleState")
+            if type(value) is not int or value not in _TOGGLE_STATES:
+                return _FormStateObservation(False, None, "toggle_state_unavailable")
+            complete, detail = recheck()
+            if not complete:
+                return _FormStateObservation(
+                    False, None, "state_capability_changed", detail
+                )
+            return _FormStateObservation(True, _TOGGLE_STATES[value])
+        if selection:
+            value = read("GetSelectionItemPattern", "IsSelected")
+            if type(value) is not bool:
+                return _FormStateObservation(False, None, "selection_state_unavailable")
+            complete, detail = recheck()
+            if not complete:
+                return _FormStateObservation(
+                    False, None, "state_capability_changed", detail
+                )
+            return _FormStateObservation(True, "selected" if value else "unselected")
+        complete, detail = recheck()
+        return _FormStateObservation(
+            complete, None, None if complete else "state_capability_changed", detail
+        )
+    except Exception:  # noqa: BLE001 - non-boolean failures have no property detail
+        return _FormStateObservation(False, None, "state_observation_unavailable")
+
+
+def _rect(bounds: list[int]) -> list[int]:
+    return [bounds[0], bounds[1], bounds[2] - bounds[0], bounds[3] - bounds[1]]
+
+
+FORM_REFUSAL_SCHEMA = "openadapt.native-form-projection-refusal/v2"
+_FORM_VALUE_REFUSAL_REASONS = frozenset(
+    {
+        "value_unavailable",
+        "value_proof_unavailable",
+        "required_value_unavailable",
+        "native_api_unavailable",
+        "native_window_unavailable_or_not_unicode",
+        "native_owner_unavailable",
+        "native_text_timeout_or_failure",
+        "value_exceeds_limit",
+        "native_owner_changed",
+        "native_extent_or_copy_incomplete",
+        "bound_identity_unavailable",
+        "native_identity_unavailable",
+        "native_owner_disagreement",
+        "value_observation_deadline",
+        "password_or_password_status_unavailable",
+        "not_editable_value_control",
+        "read_only_or_read_only_status_unavailable",
+        "value_pattern_unavailable",
+        "value_readability_changed",
+        "value_observation_changed",
+        "provider_native_value_disagreement",
+        "value_observation_unavailable",
+        "value_identity_changed",
+    }
+)
+# One closed model binds reason to its stage/channel. No free-text diagnostic
+# slot or provider exception can cross this boundary.
+_FORM_REFUSAL_MODEL = {
+    ("frame", "window"): frozenset({"window_unavailable"}),
+    ("owned_windows", "window"): frozenset(
+        {"owned_window_present", "owned_window_inventory_unavailable"}
+    ),
+    ("uia_setup", "uia"): frozenset({"uia_unavailable", "root_unavailable"}),
+    ("traversal", "children"): frozenset({"children_unavailable"}),
+    ("traversal", "limits"): frozenset({"node_limit", "field_limit", "depth_limit"}),
+    ("observation", "visibility"): frozenset({"visibility_unknown"}),
+    ("observation", "geometry"): frozenset({"geometry_unavailable"}),
+    ("observation", "control_type"): frozenset({"control_type_unavailable"}),
+    ("observation", "state"): frozenset(
+        {
+            "state_capability_unknown",
+            "composite_state_unrepresented",
+            "toggle_state_unavailable",
+            "selection_state_unavailable",
+            "state_capability_changed",
+            "state_observation_unavailable",
+        }
+    ),
+    ("observation", "value_capability"): frozenset({"value_capability_unknown"}),
+    ("observation", "value"): _FORM_VALUE_REFUSAL_REASONS,
+    ("observation", "value_identity"): frozenset(
+        {"value_identity_unavailable", "value_identity_changed"}
+    ),
+    ("observation", "caption"): frozenset(
+        {"caption_unavailable", "caption_capability_changed"}
+    ),
+    ("final_scope", "window"): frozenset({"final_window_unavailable"}),
+}
+_FORM_REFUSAL_MODEL = {
+    key: reasons | {"projection_unavailable"}
+    for key, reasons in _FORM_REFUSAL_MODEL.items()
+}
+_FORM_REFUSAL_REASONS = frozenset().union(*_FORM_REFUSAL_MODEL.values())
+_FORM_PROPERTY_DETAIL_SCOPE = {
+    ("observation", "visibility", "visibility_unknown"): frozenset({"offscreen"}),
+    ("observation", "state", "state_capability_unknown"): frozenset(
+        {"toggle", "selection_item"}
+    ),
+    ("observation", "state", "state_capability_changed"): frozenset(
+        {"toggle", "selection_item"}
+    ),
+    ("observation", "value_capability", "value_capability_unknown"): frozenset(
+        {"value"}
+    ),
+    ("observation", "caption", "caption_capability_changed"): frozenset({"value"}),
+}
+
+
+# Do not export the legacy unversioned validator: a client must import the
+# parser schema it actually implements, not silently borrow a newer/older one
+# from a separately replaced local server module.
+def valid_form_projection_refusal_v2(
+    payload: object, *, window: Optional[tuple[int, int]] = None
+) -> bool:
+    """Closed non-content receipt. It cannot authorize a projection or retry."""
+    if type(payload) is not dict or set(payload) != {
+        "schema",
+        "stage",
+        "channel",
+        "reason",
+        "ordinal",
+        "window",
+        "detail",
+    }:
+        return False
+    if type(payload["schema"]) is not str or payload["schema"] != FORM_REFUSAL_SCHEMA:
+        return False
+    if any(type(payload[key]) is not str for key in ("stage", "channel", "reason")):
+        return False
+    allowed = _FORM_REFUSAL_MODEL.get((payload["stage"], payload["channel"]))
+    if allowed is None or payload["reason"] not in allowed:
+        return False
+    detail = payload["detail"]
+    if detail is not None:
+        if not _valid_form_property_detail(detail):
+            return False
+        if detail["property"] not in _FORM_PROPERTY_DETAIL_SCOPE.get(
+            (payload["stage"], payload["channel"], payload["reason"]), ()
+        ):
+            return False
+    ordinal = payload["ordinal"]
+    if ordinal is not None and (
+        type(ordinal) is not int or not 0 <= ordinal <= _MAX_UIA_NODES + 1
+    ):
+        return False
+    framed = payload["window"]
+    if framed is not None:
+        if (
+            type(framed) is not dict
+            or set(framed) != {"hwnd", "pid"}
+            or any(
+                type(framed[key]) is not int or framed[key] <= 0
+                for key in ("hwnd", "pid")
+            )
+        ):
+            return False
+        if window is not None and (framed["hwnd"], framed["pid"]) != window:
+            return False
+    return True
+
+
+@dataclass(frozen=True)
+class _FormProjectionRefusal:
+    stage: str
+    channel: str
+    reason: str
+    ordinal: Optional[int] = None
+    detail: Optional[_FormPropertyDetail] = None
+
+    def payload(self, window: Optional[tuple[int, int]] = None) -> dict[str, Any]:
+        # Never serialize controls, provider errors, names or partial fields.
+        value = {
+            "schema": FORM_REFUSAL_SCHEMA,
+            "stage": self.stage,
+            "channel": self.channel,
+            "reason": self.reason,
+            "ordinal": self.ordinal,
+            "detail": self.detail.payload() if self.detail is not None else None,
+            "window": {"hwnd": window[0], "pid": window[1]}
+            if window is not None
+            else None,
+        }
+        if not valid_form_projection_refusal_v2(value):
+            raise ValueError("invalid non-content projection refusal")
+        return value
+
+
+@dataclass(frozen=True)
+class _FormProjectionObservation:
+    fields: Optional[list[dict[str, Any]]]
+    refusal: Optional[_FormProjectionRefusal] = None
+
+
+def _form_refused(
+    stage: str,
+    channel: str,
+    reason: object,
+    ordinal: Optional[int] = None,
+    detail: Optional[_FormPropertyDetail] = None,
+) -> _FormProjectionObservation:
+    # Only enum values cross the wire. Do not str/repr an unknown reason, even
+    # if a provider injected its exception into an incomplete observation.
+    fixed = (
+        reason
+        if type(reason) is str
+        and reason in _FORM_REFUSAL_MODEL.get((stage, channel), ())
+        else "projection_unavailable"
+    )
+    return _FormProjectionObservation(
+        None, _FormProjectionRefusal(stage, channel, fixed, ordinal, detail)
+    )
+
+
+def _form_unavailable(
+    refusal: _FormProjectionRefusal, window: Optional[tuple[int, int]] = None
+) -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "window": None,
+        "fields": [],
+        "refusal": refusal.payload(window),
+    }
+
+
+def _window_form_fields(
+    auto: Any, hwnd: int, scope: Callable[[], bool]
+) -> _FormProjectionObservation:
+    """The window's controls whose text UIA reads, in tree order.
+
+    Each entry is ``{"kind", "rect": [x, y, w, h], "text", "state"}``:
+
+    - ``title_bar``, with the window's title;
+    - ``edit``, a text field with its value;
+    - ``text``, a leaf label or button with its value or name, or a leaf
+      list or grid cell with its value, and ``state`` its toggle or
+      selection state;
+    - ``value``, a complete container value whose pixels stay visible;
+    - ``state``, a container (a grid row) whose selection state UIA reads:
+      it carries no text and its pixels stay in the caller's OCR read.
+
+    Value-backed entries include independent complete-value proof, including
+    empty values. Missing proof refuses the entire projection; OCR is not an
+    alternative for a hidden suffix. Off-screen controls are left out.
+    An unavailable observation carries only a request-local closed refusal;
+    partial fields are discarded. No diagnostic getter runs after refusal.
+    """
+    from_handle = getattr(auto, "ControlFromHandle", None)
+    if not callable(from_handle):
+        return _form_refused("uia_setup", "uia", "root_unavailable")
+    try:
+        window = from_handle(hwnd)
+    except Exception:  # noqa: BLE001 - provider failure is no answer
+        return _form_refused("uia_setup", "uia", "root_unavailable")
+    if window is None:
+        return _form_refused("uia_setup", "uia", "root_unavailable")
+    guard = _native_value_api().require_non_sensitive_structure
+    try:
+        guard(window)
+        title = " ".join(str(_control_value(window, "Name", "") or "").split())
+        guard(window)
+    except Exception:  # noqa: BLE001 - no sensitive/unknown name preview
+        return _form_refused("observation", "caption", "caption_unavailable", 0)
+    fields: list[dict[str, Any]] = []
+
+    def children_of(control: Any) -> list[Any]:
+        # The general preview helper treats a provider error as no children.
+        # Here that could make a container look like a leaf and hide text we
+        # never read, so an incomplete walk must refuse the projection.
+        return list(control.GetChildren())
+
+    try:
+        stack: list[tuple[Any, int]] = [(c, 1) for c in reversed(children_of(window))]
+    except Exception:  # noqa: BLE001 - incomplete UIA is no projection
+        return _form_refused("traversal", "children", "children_unavailable", 0)
+    visited = 0
+    while stack:
+        control, depth = stack.pop()
+        visited += 1
+        if visited > _MAX_UIA_NODES:
+            return _form_refused("traversal", "limits", "node_limit", visited)
+        if len(fields) > _MAX_FORM_FIELDS:
+            return _form_refused("traversal", "limits", "field_limit", visited)
+        control_type = _control_value(control, "ControlTypeName", None)
+        bounds = _bounds(control)
+        visibility = _form_boolean_observation(control, 30022)
+        offscreen = visibility.value
+        if offscreen is None:
+            return _form_refused(
+                "observation",
+                "visibility",
+                "visibility_unknown",
+                visited,
+                visibility.detail,
+            )
+        on_screen = not offscreen
+        if on_screen and bounds is None:
+            return _form_refused(
+                "observation", "geometry", "geometry_unavailable", visited
+            )
+        if on_screen and (not isinstance(control_type, str) or not control_type):
+            return _form_refused(
+                "observation", "control_type", "control_type_unavailable", visited
+            )
+        try:
+            children = children_of(control)
+        except Exception:  # noqa: BLE001 - an unknown subtree is not a leaf
+            return _form_refused(
+                "traversal", "children", "children_unavailable", visited
+            )
+        state = None
+        exposes = False
+        if on_screen:
+            observed_state = _form_field_state(control)
+            if not observed_state.complete:
+                return _form_refused(
+                    "observation",
+                    "state",
+                    observed_state.reason,
+                    visited,
+                    observed_state.detail,
+                )
+            state = observed_state.state
+            value_probe = _form_boolean_observation(
+                control, _UIA_IS_VALUE_PATTERN_AVAILABLE
+            )
+            capability = value_probe.value
+            if capability is None:
+                return _form_refused(
+                    "observation",
+                    "value_capability",
+                    "value_capability_unknown",
+                    visited,
+                    value_probe.detail,
+                )
+            exposes = capability
+
+        def identity(c: object = control) -> Optional[str]:
+            return _form_value_identity(c, window, hwnd, scope, auto)
+
+        def append_state() -> None:
+            if state is not None and bounds is not None and on_screen:
+                fields.append(
+                    {
+                        "kind": "state",
+                        "rect": _rect(bounds),
+                        "text": "",
+                        "state": state,
+                        "value_proof": None,
+                        "value_identity": None,
+                    }
+                )
+
+        if on_screen and exposes and bounds is not None:
+            # A real value capability owns a complete-value obligation on ANY
+            # control type. Containers and generic value controls stay unmasked;
+            # no Edit/Document or nominal label type may hide an unread value.
+            value_identity = identity()
+            observed = _form_field_value(control, identity)
+            if not observed.complete:
+                reason = (
+                    observed.reason
+                    if type(observed.reason) is str
+                    and observed.reason in _FORM_REFUSAL_REASONS
+                    else "value_unavailable"
+                )
+                return _form_refused("observation", "value", reason, visited)
+            if observed.proof is None:
+                return _form_refused(
+                    "observation", "value", "value_proof_unavailable", visited
+                )
+            if value_identity is None:
+                return _form_refused(
+                    "observation",
+                    "value_identity",
+                    "value_identity_unavailable",
+                    visited,
+                )
+            if identity() != value_identity:
+                return _form_refused(
+                    "observation", "value_identity", "value_identity_changed", visited
+                )
+            if (
+                children
+                or control_type
+                not in _FORM_VALUE_TYPES | _FORM_NAMED_TYPES | _FORM_ITEM_TYPES
+            ):
+                kind = "value"
+            else:
+                kind = "edit" if control_type in _FORM_VALUE_TYPES else "text"
+            fields.append(
+                {
+                    "kind": kind,
+                    "rect": _rect(bounds),
+                    "text": observed.value,
+                    "state": state if kind == "text" else None,
+                    "value_proof": observed.proof.payload(),
+                    "value_identity": value_identity,
+                }
+            )
+            if kind != "text":
+                append_state()
+            if not children:
+                continue
+        elif on_screen and (
+            control_type in _FORM_VALUE_TYPES
+            or (not children and control_type in _FORM_ITEM_TYPES)
+        ):
+            # A required field with no supported value source is unavailable;
+            # pattern absence does not establish absence of business data.
+            return _form_refused(
+                "observation", "value", "required_value_unavailable", visited
+            )
+        elif control_type == "TitleBarControl":
+            if bounds is not None and on_screen and title:
+                fields.append(
+                    {
+                        "kind": "title_bar",
+                        "rect": _rect(bounds),
+                        "text": title,
+                        "state": None,
+                        "value_proof": None,
+                        "value_identity": None,
+                    }
+                )
+            append_state()
+            continue
+        elif not children and control_type in _FORM_NAMED_TYPES:
+            if bounds is not None and on_screen:
+                try:
+                    guard(control)
+                    name = " ".join(
+                        str(_control_value(control, "Name", "") or "").split()
+                    )
+                    guard(control)
+                    caption_probe = _form_boolean_observation(
+                        control, _UIA_IS_VALUE_PATTERN_AVAILABLE
+                    )
+                    if caption_probe.value is not False:
+                        return _form_refused(
+                            "observation",
+                            "caption",
+                            "caption_capability_changed",
+                            visited,
+                            caption_probe.detail,
+                        )
+                except Exception:  # noqa: BLE001 - no sensitive/unknown fallback
+                    return _form_refused(
+                        "observation", "caption", "caption_unavailable", visited
+                    )
+                if name:
+                    fields.append(
+                        {
+                            "kind": "text",
+                            "rect": _rect(bounds),
+                            "text": name,
+                            "state": state,
+                            "value_proof": None,
+                            "value_identity": None,
+                        }
+                    )
+                elif state is not None:
+                    append_state()
+            continue
+        else:
+            append_state()
+        if children:
+            if depth >= _MAX_UIA_DEPTH:
+                return _form_refused("traversal", "limits", "depth_limit", visited)
+            stack.extend((c, depth + 1) for c in reversed(children))
+    if len(fields) > _MAX_FORM_FIELDS:
+        return _form_refused("traversal", "limits", "field_limit", visited)
+    return _FormProjectionObservation(fields)
+
+
+def _window_form_fields_operation(
+    payload: dict[str, Any], user32: Any, auto_loader: Callable[[], Any]
+) -> dict[str, Any]:
+    """One complete projection or its request-local non-content refusal."""
+    data = _exact_object(
+        payload,
+        required=frozenset({"hwnd", "pid", "value_contract"}),
+        label="window form fields",
+    )
+    _require_value_contract(data["value_contract"])
+    frame_payload = {key: data[key] for key in ("hwnd", "pid")}
+    framed = _window_operation("window-bounds", frame_payload, user32)
+    window = framed.get("window")
+    if window is None:
+        return _form_unavailable(
+            _FormProjectionRefusal("frame", "window", "window_unavailable")
+        )
+    hwnd, pid = window["hwnd"], window["pid"]
+    known_window = (hwnd, pid)
+    try:
+        for candidate in user32.top_level_windows():
+            if candidate == hwnd or user32.pid_of(candidate) != pid:
+                continue
+            if not user32.is_visible(candidate):
+                continue
+            cloaked = user32.is_cloaked(candidate)
+            if cloaked is None or not cloaked:
+                return _form_unavailable(
+                    _FormProjectionRefusal(
+                        "owned_windows", "window", "owned_window_present"
+                    ),
+                    known_window,
+                )
+    except Exception:  # noqa: BLE001 - no provider error text in diagnostics
+        return _form_unavailable(
+            _FormProjectionRefusal(
+                "owned_windows", "window", "owned_window_inventory_unavailable"
+            ),
+            known_window,
+        )
+
+    def unchanged() -> bool:
+        fresh = _window_operation("window-bounds", frame_payload, user32).get("window")
+        if fresh != window:
+            return False
+        return all(
+            candidate == hwnd
+            or user32.pid_of(candidate) != pid
+            or not user32.is_visible(candidate)
+            or user32.is_cloaked(candidate) is True
+            for candidate in user32.top_level_windows()
+        )
+
+    result: Optional[_FormProjectionObservation] = None
+    try:
+        auto = auto_loader()
+        with auto.UIAutomationInitializerInThread():
+            result = _window_form_fields(auto, hwnd, unchanged)
+    except Exception:  # noqa: BLE001 - a cleanup error never overwrites first refusal
+        if result is not None and result.refusal is not None:
+            return _form_unavailable(result.refusal, known_window)
+        return _form_unavailable(
+            _FormProjectionRefusal("uia_setup", "uia", "uia_unavailable"), known_window
+        )
+    if result.refusal is not None:
+        # No unchanged(), tree query or extra getter after the first refusal.
+        return _form_unavailable(result.refusal, known_window)
+    if result.fields is None:
+        return _form_unavailable(
+            _FormProjectionRefusal("uia_setup", "uia", "projection_unavailable"),
+            known_window,
+        )
+    try:
+        current = unchanged()
+    except Exception:  # noqa: BLE001 - no extra source query to diagnose this
+        current = False
+    if not current:
+        return _form_unavailable(
+            _FormProjectionRefusal("final_scope", "window", "final_window_unavailable"),
+            known_window,
+        )
+    return {"status": "ok", "window": window, "fields": result.fields, "refusal": None}
+
+
+def _load_uiautomation() -> Any:
+    try:
+        import uiautomation as auto  # noqa: PLC0415 - Windows-only, lazy
+    except Exception as exc:  # noqa: BLE001
+        raise AgentRequestError(
+            503, "uia_unavailable", "UI Automation is unavailable"
+        ) from exc
+    if os.name == "nt":
+        import comtypes.client  # noqa: PLC0415
+
+        comtypes.client.gen_dir = None
+    return auto
+
+
 def _perform_uia(operation: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Perform one typed UIA operation on one COM-affine server thread."""
+    if operation == "window-form-fields":
+        if os.name != "nt":
+            raise AgentRequestError(503, "uia_unavailable", "Win32 is unavailable")
+        try:
+            return _window_form_fields_operation(
+                payload, _user32_factory(), _load_uiautomation
+            )
+        except AgentRequestError:
+            raise
+        except Exception:  # noqa: BLE001 - no provider exception text in receipt
+            return _form_unavailable(
+                _FormProjectionRefusal("uia_setup", "uia", "uia_unavailable")
+            )
     if operation in _WINDOW_OPERATIONS:
         if os.name != "nt":
             raise AgentRequestError(503, "uia_unavailable", "Win32 is unavailable")
@@ -3112,6 +4253,7 @@ def make_handler_class(
                             "uia_v1",
                             "uia_read_v1",
                             "window_bounds_v1",
+                            "window_form_fields_v1",
                             "uia_authoring_tree_v1",
                             "native_focus_v1",
                             *(
@@ -3155,6 +4297,7 @@ def make_handler_class(
                 "/window/root-at": ("uia", "window-root-at"),
                 "/window/owned-over": ("uia", "owned-window-over"),
                 "/window/bounds": ("uia", "window-bounds"),
+                "/window/form-fields": ("uia", "window-form-fields"),
                 "/uia/text-at-point": ("uia", "text-at-point"),
                 "/uia/focused-field-label": ("uia", "focused-field-label"),
                 "/uia/editable-value": ("uia", "editable-value"),

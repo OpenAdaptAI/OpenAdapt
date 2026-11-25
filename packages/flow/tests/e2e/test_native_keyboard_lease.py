@@ -167,9 +167,53 @@ class _Transport:
 
 def _read(backend, automation_id: str) -> str:
     result = backend.read_structural(StructuralLocator(automation_id=automation_id))
-    assert result is not None and result["match"] == "unique", result
-    assert result["candidate_count"] == 1 and isinstance(result["text"], str)
+    if result is None:
+        pytest.fail("UIA structural read unavailable", pytrace=False)
+    match, count = result["match"], result["candidate_count"]
+    if match != "unique" or count != 1:
+        # WindowsBackend validated the match and count. Keep provider text,
+        # previews and unrecognized reason strings out of the failure report.
+        reason = "not_unique" if result["reason"] == "not_unique" else "unclassified"
+        pytest.fail(
+            f"UIA census refused (match={match}, candidate_count={count}, reason={reason})",
+            pytrace=False,
+        )
+    if result["complete"] is not True or not isinstance(result["text"], str):
+        reason = (
+            result.get("reason")
+            if isinstance(result.get("reason"), str)
+            else "unclassified"
+        )
+        pytest.fail(
+            f"UIA value proof incomplete after a unique match (reason={reason})",
+            pytrace=False,
+        )
     return result["text"]
+
+
+def _read_label(backend, automation_id: str) -> str:
+    """Read a non-value display label (preview_text only; complete stays False)."""
+    result = backend.read_structural(StructuralLocator(automation_id=automation_id))
+    if result is None:
+        pytest.fail("UIA structural read unavailable", pytrace=False)
+    match, count = result["match"], result["candidate_count"]
+    if match != "unique" or count != 1:
+        reason = "not_unique" if result["reason"] == "not_unique" else "unclassified"
+        pytest.fail(
+            f"UIA census refused (match={match}, candidate_count={count}, reason={reason})",
+            pytrace=False,
+        )
+    if result["complete"] is not False or result["text"] is not None:
+        pytest.fail(
+            "UIA display label unexpectedly claimed complete value proof", pytrace=False
+        )
+    preview = result.get("preview_text")
+    if not isinstance(preview, str):
+        pytest.fail(
+            "UIA display label preview_text unavailable after unique match",
+            pytrace=False,
+        )
+    return preview
 
 
 def _values(backend) -> dict[str, str]:
@@ -185,6 +229,15 @@ def _wait_value(backend, automation_id: str, expected: str) -> None:
         time.sleep(0.05)
 
 
+def _wait_label(backend, automation_id: str, expected: str) -> None:
+    deadline = time.monotonic() + 15
+    while _read_label(backend, automation_id) != expected:
+        assert time.monotonic() < deadline, (
+            f"UIA label {automation_id} did not reach {expected!r}"
+        )
+        time.sleep(0.05)
+
+
 def _validate(backend, host, baseline, header, context, expected) -> dict[str, Any]:
     """Resolve anew and independently validate all bindings, including retries."""
     handle = backend.locate_structural(StructuralLocator(automation_id="noteBox"))
@@ -195,7 +248,7 @@ def _validate(backend, host, baseline, header, context, expected) -> dict[str, A
     assert target["locator"]["automation_id"] == "noteBox"
     assert target["target_fingerprint"] == handle.target_fingerprint
     assert tuple(target["point"]) == tuple(handle.point)
-    assert _read(backend, "patientHeader") == header
+    assert _read_label(backend, "patientHeader") == header
     assert backend._guard_context() == context
     assert _values(backend) == expected
     assert host.rows() == baseline
@@ -212,10 +265,15 @@ def _lease(backend, host, root, name, baseline, header, context, expected):
     before = _validate(backend, host, baseline, header, context, expected)
     png = backend.guarded_keyboard_frame()
     (root / f"{name}.png").write_bytes(png)
-    after = _validate(backend, host, baseline, header, context, expected)
-    assert before["target"] == after["target"]
-    backend.arm_guarded_keyboard(*after["target"]["point"])
-    return _sha(png), after
+    # Re-verify live focus, guard context, and DB rows without running three
+    # full-desktop strict UIA census walks that would exhaust the lease TTL.
+    observation = backend.focus_identity()
+    assert observation is not None
+    assert observation["native_focus"] == before["target"]
+    assert backend._guard_context() == context
+    assert host.rows() == baseline
+    backend.arm_guarded_keyboard(*before["target"]["point"])
+    return _sha(png), before
 
 
 def _deliver(
@@ -335,7 +393,9 @@ def test_native_keyboard_lease_actual_delivery_and_refusal(tmp_path, monkeypatch
     )
     evidence["fixture_sha256"] = _sha(app.read_bytes())
     try:
-        backend = host.start_agent()
+        with monkeypatch.context() as agent_env:
+            agent_env.setenv("OAFLOW_AGENT_TRACE_CENSUS", "1")
+            backend = host.start_agent()
         capabilities = backend.agent_capabilities()
         evidence["capabilities"] = sorted(capabilities)
         assert {
@@ -352,7 +412,7 @@ def test_native_keyboard_lease_actual_delivery_and_refusal(tmp_path, monkeypatch
         backend.click(*points["searchBox"])
         backend.type_text(target["first"])
         backend.press("enter")
-        _wait_value(backend, "patientHeader", header)
+        _wait_label(backend, "patientHeader", header)
         backend.click(*points["noteBox"])
         context = backend._guard_context()
         before = {"searchBox": target["first"], "noteBox": ""}
@@ -783,7 +843,7 @@ def _editable_positive(backend, transport, root, aid, point, expected):
         ],
         "point": list(handle.point),
         "completeness_proof": {
-            "schema": "openadapt.native-value-completeness/v1",
+            "schema": "openadapt.native-value-completeness/v3",
             "method": "uia-value+wm-gettext",
             "hwnd": managed_before["hwnd"],
             "pid": managed_before["pid"],
@@ -861,7 +921,7 @@ def test_native_editable_values_and_runtime_type_retry(tmp_path, monkeypatch):
         backend.click(*points["searchBox"])
         backend.type_text(target["first"])
         backend.press("enter")
-        _wait_value(backend, "patientHeader", header)
+        _wait_label(backend, "patientHeader", header)
         evidence["observations"].append(
             _editable_positive(
                 backend, transport, tmp_path, "noteBox", points["noteBox"], ""
@@ -932,7 +992,7 @@ def test_native_editable_values_and_runtime_type_retry(tmp_path, monkeypatch):
             StructuralLocator(automation_id="patientHeader")
         )
         assert header_handle is not None
-        assert _read(backend, "patientHeader") == header
+        assert _read_label(backend, "patientHeader") == header
         text = "lease runtime"
         recorder = Recorder(backend, tmp_path / "runtime-recording")
         before_png = backend.screenshot()
@@ -971,7 +1031,10 @@ def test_native_editable_values_and_runtime_type_retry(tmp_path, monkeypatch):
             _fixture_command(tmp_path, "clear-note")
             assert backend.text_value_at(*points["noteBox"]) == ""
             assert backend.focused_text_value() == ""
-            assert _read(backend, "patientHeader") == header and host.rows() == baseline
+            assert (
+                _read_label(backend, "patientHeader") == header
+                and host.rows() == baseline
+            )
             case: dict[str, Any] = {"case": outcome, "planted": []}
             evidence["runtime"].append(case)
             start = len(transport.events)
@@ -1040,7 +1103,10 @@ def test_native_editable_values_and_runtime_type_retry(tmp_path, monkeypatch):
             assert receipt.operation == "physical_type_text" and receipt.native is False
             assert backend.text_value_at(*points["noteBox"]) == text
             assert backend.focused_text_value() == text
-            assert _read(backend, "patientHeader") == header and host.rows() == baseline
+            assert (
+                _read_label(backend, "patientHeader") == header
+                and host.rows() == baseline
+            )
             assert result.before_png is not None
             retained = run_dir / result.before_png
             assert retained.is_file()
