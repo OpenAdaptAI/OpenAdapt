@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, NamedTuple, Optional, cast
 from urllib.parse import parse_qsl, unquote, urljoin, urlsplit
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from openadapt_flow.secret_redaction import MASK, credential_header, mask_header
 from openadapt_flow.tx.receipt import write_private_record
@@ -86,18 +86,16 @@ class ReadRoute(BaseModel):
 
     method: str = "POST"
     path: str
-    body_equals: tuple[tuple[str, str], ...]
+    body_equals: tuple[tuple[str, str], ...] = ()
+    path_only: bool = False
 
-    @field_validator("body_equals")
-    @classmethod
-    def _needs_a_discriminator(
-        cls, value: tuple[tuple[str, str], ...]
-    ) -> tuple[tuple[str, str], ...]:
-        # With no body field to match, a read route would also match a write
-        # sent to the same path (a form that both searches and saves).
-        if not value:
+    @model_validator(mode="after")
+    def _needs_a_discriminator(self) -> "ReadRoute":
+        # With no body field to match and path_only=False, a read route would
+        # also match a write sent to the same path.
+        if not self.body_equals and not self.path_only:
             raise ValueError("a read route needs at least one body_equals field")
-        return value
+        return self
 
 
 class WirePolicy(BaseModel):
@@ -675,6 +673,8 @@ def matches_read_route(
     for route in routes:
         if not matches_write_route(method, path, route.method, route.path):
             continue
+        if route.path_only:
+            return True
         if not fields_parsed:
             fields = _top_level_body_fields(request_body, request_headers)
             fields_parsed = True

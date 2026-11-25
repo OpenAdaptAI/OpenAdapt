@@ -758,6 +758,24 @@ def _induce_rpc_lens(
     )
 
 
+def _match_item_route_id(
+    segments: tuple[str, ...], rec: Mapping[str, Any], cand: str
+) -> Optional[tuple[tuple[str, ...], str]]:
+    """Match ``.../<id>`` or ``.../<id>/<verb>`` item routes against ``rec[cand]``."""
+    rid = _record_id(rec, cand)
+    if rid is None:
+        return None
+    if len(segments) >= 2 and segments[-1] == rid:
+        return segments[:-1], rid
+    if (
+        len(segments) >= 3
+        and segments[-2] == rid
+        and segments[-1].isalpha()
+    ):
+        return segments[:-2], rid
+    return None
+
+
 def _shows_item_route(scoped: list[_HarExchange]) -> bool:
     """True when some 2xx response is one record served at its own URL."""
     for ex in scoped:
@@ -767,7 +785,7 @@ def _shows_item_route(scoped: list[_HarExchange]) -> bool:
         if rec is None:
             continue
         for cand in _ID_CANDIDATE_KEYS:
-            if _record_id(rec, cand) == ex.segments[-1]:
+            if _match_item_route_id(ex.segments, rec, cand) is not None:
                 return True
     return False
 
@@ -783,9 +801,10 @@ def _infer_effect_routes(scoped: list[_HarExchange]) -> Optional[_EffectRoutes]:
         if rec is None:
             continue
         for cand in _ID_CANDIDATE_KEYS:
-            rid = _record_id(rec, cand)
-            if rid is not None and ex.segments[-1] == rid:
-                key = (ex.segments[:-1], cand)
+            matched = _match_item_route_id(ex.segments, rec, cand)
+            if matched is not None:
+                parent_segs, rid = matched
+                key = (parent_segs, cand)
                 groups.setdefault(key, []).append((ex, rid))
                 wrappers.setdefault(key, wrapper)
                 break
