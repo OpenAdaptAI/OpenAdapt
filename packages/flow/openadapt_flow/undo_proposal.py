@@ -1390,13 +1390,9 @@ class DeploymentUndoTestCopy:
     def snapshot(self) -> Optional[list[dict[str, Any]]]:
         from openadapt_flow.reward.oracles import records_of
 
-        # The read returns every record in the collection; the identity only
-        # labels the observation (``reward.oracles.VerifierOracle.read``).
-        identity = {
-            key: str(self._params.get(key) or "undo-propose-snapshot")
-            for key in self._identity_keys or ("subject",)
-        }
-        return records_of(self._oracle.read(identity))
+        # Empty identity requests an unscoped whole-collection snapshot for
+        # the collateral guard.
+        return records_of(self._oracle.read({}))
 
     def read_records(self) -> Optional[list[dict[str, Any]]]:
         from openadapt_flow.after_stop import records_reader

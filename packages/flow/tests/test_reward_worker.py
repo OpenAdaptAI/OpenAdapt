@@ -525,7 +525,9 @@ def test_reward_evidence_excludes_other_subjects(seeded: dict[str, Any]) -> None
     assert records, "the graded subject's own row stays in the evidence"
     assert {r["patient_id"] for r in records} == {MOCKMED_HONEST_PATIENT}
     assert MOCKMED_DUPLICATE_PATIENT not in text
-    assert evidence["observed"]["records_outside_scope"] == 2
+    # Oracle read itself is scoped by identity (#2035), so no other subjects'
+    # records reach the observation or evidence.
+    assert evidence["observed"]["records_outside_scope"] == 0
     assert receipt.evidence_digest == (
         "sha256:" + hashlib.sha256(canonical_json_bytes(evidence)).hexdigest()
     )
