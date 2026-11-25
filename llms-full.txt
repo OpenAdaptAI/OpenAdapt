@@ -742,6 +742,7 @@ improvising or retrying when something is off.
 | Citrix from outside the session, pixels only (`remote_display`), the fallback when nothing can be installed inside | Exploratory | A Citrix stand-in with no DOM: 3 healthy runs, 3 stops on drift | [LIMITS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/LIMITS.md) |
 | Chain programs across surfaces, passing confirmed values | Released | Synthetic | `openadapt-flow compose`, `process`; [PROCESS_CONTRACT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/PROCESS_CONTRACT.md) |
 | One program that switches surfaces, tabs and popups mid-run | Released ([#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197)) | Real Chromium; Windows switch on a mock | [#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197) |
+| Qualify a native Windows program with the normal case and five faults through an opt-in authenticated agent; bind the observed executable and machine/OS environment and judge declared inserts or field updates from complete record snapshots | In this change | Synthetic unit and transport tests; real Windows campaign evidence required before release | `qualify/windows.py`, `qualify/record_oracle.py`, [QUALIFY_A_WORKFLOW.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/QUALIFY_A_WORKFLOW.md) |
 | Record and replay native or listed browser choices using one generic contract; require one enabled semantic match and exact committed-field read-back, and refuse unmapped held-out labels before selection; retain browser dialog answers with producer-document and dialog-kind checks | Experimental, PR [#2295](https://github.com/OpenAdaptAI/OpenAdapt/pull/2295) | Synthetic Chromium fixtures cover native, ARIA, plain lists, searchable libraries, asynchronous options, cascades and calendars; historical measurement SHAs and configurations are listed separately. Real-app evidence is partial: OpenEMR native choices read back, and OpenMRS relationship choices recorded/compiled; neither completed a verified save because an existing identity guard stopped the run. Governed receipt-bound choices refuse before input. | [CHOICES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/CHOICES.md), [benchmark/choice_widgets](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/choice_widgets/README.md) |
 | Halt when a workflow qualified with page structure runs on a pixels-only surface | Released | Synthetic | `openadapt-flow qualify` |
 | Stop before acting when another shown row has the same identity; when the rows carry an app-owned record id (a `data-*` id, the row link), act on the row with the recorded id; on a surface that cannot count the rows, stop before any step that leads into a write | Released ([#1504](https://github.com/OpenAdaptAI/OpenAdapt/pull/1504)) | Real browser (headless Chromium worklist with identical rows) | `runtime/identity_census.py`; `PlaywrightBackend.identity_candidates_at` |
@@ -1397,6 +1398,17 @@ or evidence that OpenAdapt is appropriate for unsupervised clinical use.
 For the current evidence behind each capability claim, see
 [`VERIFICATION.md`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFICATION.md). For the package-wide evidence map, see
 [`PRODUCT_STATUS.md`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/PRODUCT_STATUS.md).
+
+## Native Windows qualification campaigns
+
+`qualify` can run the normal case and five faults through a native Windows
+session hook with an authenticated, explicitly enabled fault agent. The native
+screen mutations currently support buttons with an AutomationId or exact
+role/name; other controls refuse. RDP and Citrix campaign fault staging is
+separate and remains unavailable. The executable, machine and exact OS build
+are part of the qualification boundary, so this does not qualify arbitrary
+fresh workers. A script-hosted application's own code is covered by its
+declared version, not the host executable's hash.
 
 ## Validated on
 
