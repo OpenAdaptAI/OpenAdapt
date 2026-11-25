@@ -96,11 +96,113 @@ type PairingState = {
   error?: string;
 };
 
-const NAV: { route: "tasks" | "needs" | "results"; label: string }[] = [
-  { route: "tasks", label: "Workflows" },
-  { route: "needs", label: "Needs you" },
-  { route: "results", label: "Results" },
+const NAV: {
+  route: "tasks" | "needs" | "results";
+  label: string;
+  shortcut: string;
+}[] = [
+  { route: "tasks", label: "Workflows", shortcut: "⌘1" },
+  { route: "needs", label: "Needs you", shortcut: "⌘2" },
+  { route: "results", label: "Results", shortcut: "⌘3" },
 ];
+
+const LIFECYCLE_STAGES = [
+  { step: "01", label: "Demonstrate", detail: "Capture once" },
+  { step: "02", label: "Compile", detail: "$0.00 / run" },
+  { step: "03", label: "Verify & heal", detail: "Deterministic" },
+  { step: "04", label: "Signed receipt", detail: "Audit proof" },
+] as const;
+
+function NavIcon({ route }: { route: "tasks" | "needs" | "results" }) {
+  const common = {
+    width: 16,
+    height: 16,
+    viewBox: "0 0 16 16",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.5,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+    focusable: false,
+  };
+  if (route === "tasks") {
+    return (
+      <svg {...common}>
+        <rect x="2.2" y="2.5" width="4.6" height="4.6" rx="1.2" />
+        <rect x="9.2" y="2.5" width="4.6" height="4.6" rx="1.2" />
+        <rect x="2.2" y="9.2" width="4.6" height="4.6" rx="1.2" />
+        <rect x="9.2" y="9.2" width="4.6" height="4.6" rx="1.2" />
+      </svg>
+    );
+  }
+  if (route === "needs") {
+    return (
+      <svg {...common}>
+        <path d="M2.5 9.2h3l1.1 1.8h2.8l1.1-1.8h3" />
+        <path d="M3.6 3.5h8.8l1.1 5.7v3.1a1.2 1.2 0 0 1-1.2 1.2H3.7a1.2 1.2 0 0 1-1.2-1.2V9.2z" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <path d="M3.5 2.5h9a1 1 0 0 1 1 1v10l-2-1.2-1.75 1.2L8 12.3l-1.75 1.2-1.75-1.2-2 1.2v-10a1 1 0 0 1 1-1z" />
+      <path d="M5.7 7.6l1.5 1.5 3.1-3.2" />
+    </svg>
+  );
+}
+
+function BrandMark() {
+  return (
+    <span className="brand-mark" aria-hidden="true">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="2" y="9.5" width="2.4" height="4.5" rx="0.7" fill="currentColor" opacity="0.45" />
+        <rect x="5.6" y="6.8" width="2.4" height="7.2" rx="0.7" fill="currentColor" opacity="0.7" />
+        <rect x="9.2" y="4.2" width="2.4" height="9.8" rx="0.7" fill="currentColor" opacity="0.88" />
+        <rect x="12.6" y="2" width="2.2" height="12" rx="0.7" fill="currentColor" />
+      </svg>
+    </span>
+  );
+}
+
+function routeBreadcrumb(route: Route): string {
+  switch (route.name) {
+    case "tasks":
+      return "Workflows";
+    case "needs":
+      return "Needs you";
+    case "stops":
+      return "Needs you / Review stops";
+    case "results":
+      return "Results";
+    case "sample":
+      return "Sample run";
+    case "check":
+      return "Check workflow";
+    case "run":
+      return "Run workflow";
+    case "advanced":
+      return "Advanced";
+    case "setup":
+      return "Setup & permissions";
+    case "library":
+      return "All versions";
+    case "record":
+      return "Record & compile";
+    case "qualify":
+      return "Qualification";
+    case "watch":
+      return "Run inspection";
+    case "teach":
+      return "Teach a fix";
+    case "runner":
+      return "Local runner";
+    case "portal":
+      return "Phone portal";
+    case "settings":
+      return "Settings";
+  }
+}
 
 /** Screens that belong under one of the three tabs, for the active marker. */
 function tabFor(route: Route): "tasks" | "needs" | "results" | null {
@@ -169,8 +271,11 @@ export function routeForFirstWorkflow(
 function DesktopBrand({ onOpen }: { onOpen?: () => void }) {
   const content = (
     <>
-      <span className="brand-open">Open</span>
-      <span className="brand-adapt">Adapt</span>
+      <BrandMark />
+      <span className="brand-wordmark">
+        <span className="brand-open">Open</span>
+        <span className="brand-adapt">Adapt</span>
+      </span>
       <span className="brand-product">Desktop</span>
     </>
   );
@@ -753,6 +858,32 @@ export default function App() {
     setBreaks(na.count);
   }
 
+  const navigationLocked =
+    recording ||
+    workflowCompiling ||
+    firstWorkflowRunning ||
+    firstRunPersistencePending ||
+    screenBusy;
+
+  useEffect(() => {
+    if (!checkedAuth || showLogin || !onboarded || navigationLocked) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+      if (event.key === "1") {
+        event.preventDefault();
+        setRoute({ name: "tasks" });
+      } else if (event.key === "2") {
+        event.preventDefault();
+        setRoute({ name: "needs" });
+      } else if (event.key === "3") {
+        event.preventDefault();
+        setRoute({ name: "results" });
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [checkedAuth, showLogin, onboarded, navigationLocked]);
+
   if (!checkedAuth) {
     return (
       <>
@@ -824,12 +955,6 @@ export default function App() {
     );
   }
 
-  const navigationLocked =
-    recording ||
-    workflowCompiling ||
-    firstWorkflowRunning ||
-    firstRunPersistencePending ||
-    screenBusy;
   const navigationLockTitle = recording
     ? "Stop and save this recording before you leave."
     : workflowCompiling
@@ -862,28 +987,34 @@ export default function App() {
       <UpdateNotice engineUp={engineUp} />
       <ItemApprovalDialog />
       <div className="app">
-        <header className="desktop-shell">
+        <aside className="desktop-shell">
           <div className="desktop-shell-inner">
-            <DesktopBrand
-              onOpen={
-                navigationLocked
-                  ? undefined
-                  : () => setRoute({ name: "tasks" })
-              }
-            />
+            <div className="desktop-shell-brand">
+              <DesktopBrand
+                onOpen={
+                  navigationLocked
+                    ? undefined
+                    : () => setRoute({ name: "tasks" })
+                }
+              />
+            </div>
 
             <nav className="desktop-nav" aria-label="Desktop navigation">
               {NAV.map((n) => (
                 <button
                   aria-current={activeTab === n.route ? "page" : undefined}
                   className={`nav-item ${activeTab === n.route ? "active" : ""}`}
+                  data-shortcut={n.route === "needs" && breaks > 0 ? undefined : n.shortcut}
                   disabled={navigationLocked}
                   title={navigationLockTitle}
                   key={n.route}
                   onClick={() => setRoute({ name: n.route } as Route)}
                   type="button"
                 >
-                  <span>{n.label}</span>
+                  <span className="nav-icon">
+                    <NavIcon route={n.route} />
+                  </span>
+                  <span className="nav-label">{n.label}</span>
                   {n.route === "needs" && breaks > 0 ? (
                     <Pill tone="warn">{breaks}</Pill>
                   ) : null}
@@ -891,54 +1022,97 @@ export default function App() {
               ))}
             </nav>
 
+            <section className="sidebar-lifecycle" aria-label="Execution lifecycle">
+              <div className="sidebar-section-label">Runtime pipeline</div>
+              <ol className="lifecycle-list">
+                {LIFECYCLE_STAGES.map((stage) => (
+                  <li key={stage.step}>
+                    <span className="lifecycle-num tnum">{stage.step}</span>
+                    <span className="lifecycle-name">{stage.label}</span>
+                    <span className="lifecycle-meta tnum">{stage.detail}</span>
+                  </li>
+                ))}
+              </ol>
+              <div className="sidebar-provenance">
+                <span className="prov-chip">compiled-plan</span>
+                <span className="prov-chip">deterministic</span>
+                <span className="prov-chip prov-chip-accent">Veto-4B-r6</span>
+              </div>
+            </section>
+
             <div className="desktop-shell-spacer" />
 
-            <div className="desktop-status" aria-label="Desktop status">
-              {!engineUp && (
-                <span title="The local OpenAdapt engine isn't running">
-                  <StatusDot tone="off" />
-                  <strong>Engine stopped</strong>
-                </span>
-              )}
-              {recording ? (
-                <span className="recording" title="OpenAdapt is recording your workflow">
-                  <StatusDot tone="warn" />
-                  <strong>Recording</strong>
-                </span>
-              ) : null}
-              <ShadowModeIndicator
-                status={shadow}
-                onTogglePause={() => void toggleShadowPause()}
+            <div className="sidebar-footer">
+              <div className="desktop-status" aria-label="Desktop status">
+                {!engineUp && (
+                  <span title="The local OpenAdapt engine isn't running">
+                    <StatusDot tone="off" />
+                    <strong>Engine stopped</strong>
+                  </span>
+                )}
+                {recording ? (
+                  <span className="recording" title="OpenAdapt is recording your workflow">
+                    <StatusDot tone="warn" />
+                    <strong>Recording</strong>
+                  </span>
+                ) : null}
+                <ShadowModeIndicator
+                  status={shadow}
+                  onTogglePause={() => void toggleShadowPause()}
+                />
+                {cloudConnected && sync && sync.state !== "synced" && (
+                  <span title={`Cloud: ${syncLabel}`}>
+                    <StatusDot tone={syncTone} />
+                    <strong>{syncLabel}</strong>
+                    {sync.queued ? <small>{sync.queued}</small> : null}
+                  </span>
+                )}
+              </div>
+
+              <GearMenu
+                disabled={navigationLocked}
+                title={navigationLockTitle}
+                items={[
+                  {
+                    label: "Settings",
+                    sub: "Account, privacy, updates",
+                    onSelect: () => setRoute({ name: "settings" }),
+                  },
+                  {
+                    label: "Advanced",
+                    sub: "Exact checks, every version, runner, phone",
+                    onSelect: () => setRoute({ name: "advanced" }),
+                  },
+                ]}
               />
-              {cloudConnected && sync && sync.state !== "synced" && (
-                <span title={`Cloud: ${syncLabel}`}>
-                  <StatusDot tone={syncTone} />
-                  <strong>{syncLabel}</strong>
-                  {sync.queued ? <small>{sync.queued}</small> : null}
-                </span>
-              )}
             </div>
-
-            <GearMenu
-              disabled={navigationLocked}
-              title={navigationLockTitle}
-              items={[
-                {
-                  label: "Settings",
-                  sub: "Account, privacy, updates",
-                  onSelect: () => setRoute({ name: "settings" }),
-                },
-                {
-                  label: "Advanced",
-                  sub: "Exact checks, every version, runner, phone",
-                  onSelect: () => setRoute({ name: "advanced" }),
-                },
-              ]}
-            />
           </div>
-        </header>
+        </aside>
 
-        <main>
+        <div className="desktop-workspace">
+          <div className="workspace-topbar">
+            <div className="workspace-crumb">
+              <span className="workspace-crumb-root">Workspace</span>
+              <span className="workspace-crumb-sep" aria-hidden="true">/</span>
+              <span className="workspace-crumb-current">{routeBreadcrumb(route)}</span>
+            </div>
+            <div className="workspace-topbar-meta">
+              <span className="prov-badge">
+                <span className="prov-badge-key">Agent</span>
+                <span className="prov-badge-val mono">compiled-plan</span>
+              </span>
+              <span className="prov-badge">
+                <span className="prov-badge-key">Verifier</span>
+                <span className="prov-badge-val mono">deterministic · Veto-4B-r6</span>
+              </span>
+              <span className="prov-badge prov-badge-ok">
+                <StatusDot tone={cloudConnected ? "ok" : "run"} />
+                <span className="prov-badge-val">{cloudConnected ? "Synced" : "Local"}</span>
+              </span>
+            </div>
+          </div>
+
+          <main>
         <UsageStatsPrompt engineUp={engineUp} />
         <ShadowPromptBanner status={shadow} />
         {route.name === "tasks" && (
@@ -1106,6 +1280,7 @@ export default function App() {
           />
         )}
         </main>
+        </div>
       </div>
     </>
   );

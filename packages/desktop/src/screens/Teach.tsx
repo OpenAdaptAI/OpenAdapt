@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { CMD, engineInvoke, engineTry } from "../lib/engine";
 import type { RunPersistenceRetryResponse, RunReport } from "../lib/types";
-import { Button, Card, CardHead, Callout, Field } from "../ui/primitives";
+import { Button, Card, CardHead, Callout, Field, SegControl } from "../ui/primitives";
 
 interface TeachCorrection {
   schema: "openadapt.desktop-teach-correction/v1";
@@ -204,52 +204,56 @@ export function Teach({
           sub="Re-demonstrate the halted step, or describe the correct target."
         />
 
-        <div className="row" style={{ marginBottom: "var(--space-4)" }}>
-          <Button
-            variant={mode === "record" ? "primary" : "ghost"}
-            size="sm"
-            onClick={() => setMode("record")}
-          >
-            Re-record the step
-          </Button>
-          <Button
-            variant={mode === "describe" ? "primary" : "ghost"}
-            size="sm"
-            onClick={() => setMode("describe")}
-          >
-            Describe the fix
-          </Button>
+        <div className="teach-mode-bar">
+          <SegControl<"record" | "describe">
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: "record", label: "Re-record the step" },
+              { value: "describe", label: "Describe the fix" },
+            ]}
+          />
         </div>
 
-        {mode === "record" ? (
-          <div className="row">
-            {phase === "recording" ? (
-              <>
-                <span className="rec-dot" />
-                <Button variant="danger" onClick={stopFix}>
-                  Stop fix recording
-                </Button>
-              </>
-            ) : (
-              <Button variant="ghost" onClick={recordFix}>
-                Record the correct action
-              </Button>
-            )}
-          </div>
-        ) : (
-          <Field
-            label="What should this step do?"
-            hint="No PHI — describe the target (e.g. 'the Save button in the toolbar')."
-          >
-            <textarea
-              className="input"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-            />
-          </Field>
-        )}
+        <div className="teach-bench">
+          {mode === "record" ? (
+            <div className="row">
+              {phase === "recording" ? (
+                <>
+                  <span className="rec-dot" />
+                  <Button variant="danger" onClick={stopFix}>
+                    Stop fix recording
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="ghost" onClick={recordFix}>
+                    Record the correct action
+                  </Button>
+                  <span className="page-sub">
+                    Demonstrate just this step; your correction stays on this computer.
+                  </span>
+                </>
+              )}
+            </div>
+          ) : (
+            <Field
+              label="What should this step do?"
+              hint="No PHI — describe the target (e.g. 'the Save button in the toolbar')."
+            >
+              <textarea
+                className="input"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+              />
+            </Field>
+          )}
+        </div>
 
-        <div className="row" style={{ marginTop: "var(--space-5)" }}>
+        <div className="teach-footer">
+          <Button variant="ghost" onClick={onDone}>
+            Back to library
+          </Button>
           <Button
             variant="primary"
             disabled={
@@ -260,9 +264,6 @@ export function Teach({
             onClick={teach}
           >
             {phase === "teaching" ? "Teaching…" : "Submit fix"}
-          </Button>
-          <Button variant="ghost" onClick={onDone}>
-            Back to library
           </Button>
         </div>
 
