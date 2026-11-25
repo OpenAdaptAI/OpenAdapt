@@ -251,7 +251,7 @@ def synthesize_pack(
     manifest_doc = {
         "schema_version": gen.MANIFEST_SCHEMA,
         "pack_name": spec.name,
-        "zero_touch": {"admitted": sorted(ks.kind for ks in spec.kinds)},
+        "zero_touch": {"admitted": []},
         "kinds": kinds_manifest,
     }
     manifest_path = root / "manifest.yaml"
@@ -331,8 +331,35 @@ def _sqlite_table_rows(db: Path, table: str) -> list[dict[str, Any]]:
         con.close()
 
 
+def _stage_sandbox_pack(pack_dir: Path, dst_dir: Path, sb_db: Path) -> Path:
+    """Copy the pack under qualification into ``dst_dir`` and point SQL reads at ``sb_db``."""
+
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    src_manifest = pack_dir / "manifest.yaml"
+    dst_manifest = dst_dir / "manifest.yaml"
+    shutil.copy2(src_manifest, dst_manifest)
+    src_contracts = pack_dir / "contracts"
+    if src_contracts.is_dir():
+        dst_contracts = dst_dir / "contracts"
+        shutil.copytree(src_contracts, dst_contracts, dirs_exist_ok=True)
+        for contract_file in sorted(dst_contracts.rglob("*.yaml")):
+            doc = yaml.safe_load(contract_file.read_text(encoding="utf-8"))
+            if isinstance(doc, dict):
+                surfaces = (doc.get("verifier") or {}).get("surfaces")
+                if isinstance(surfaces, dict):
+                    for surface in surfaces.values():
+                        if isinstance(surface, dict) and "sqlite_database" in surface:
+                            surface["sqlite_database"] = str(sb_db)
+                contract_file.write_text(
+                    yaml.safe_dump(doc, sort_keys=False, allow_unicode=True),
+                    encoding="utf-8",
+                )
+    return dst_manifest
+
+
 def _run_planted_faults_sqlite(
     spec: OnboardSpec,
+    pack_dir: Path,
     source_db: Path,
     clean_cases: Sequence[CleanWriteCase],
     *,
@@ -367,11 +394,7 @@ def _run_planted_faults_sqlite(
                 td_path = Path(td)
                 sb_db = td_path / "sandbox.sqlite"
                 shutil.copy2(source_db, sb_db)
-                sb_manifest, _ = synthesize_pack(
-                    spec,
-                    td_path / "pack",
-                    read_override={**dict(spec.read), "sqlite_database": str(sb_db)},
-                )
+                sb_manifest = _stage_sandbox_pack(pack_dir, td_path / "pack", sb_db)
                 contract, params = gen.choose(sb_manifest, ks.kind, rep_values)
                 pending = begin_write(
                     contract,
@@ -382,7 +405,11 @@ def _run_planted_faults_sqlite(
                 )
                 mutate(sb_db)
                 res = verify_write(pending)
-                caught = res.outcome is not Outcome.CONFIRMED
+                caught = res.outcome is Outcome.REFUTED or (
+                    fault_class == "missing_write"
+                    and res.outcome is Outcome.UNCERTAIN
+                    and res.observed == "absent"
+                )
                 return PlantedFaultOutcome(
                     kind=ks.kind,
                     fault_class=fault_class,
@@ -631,8 +658,8 @@ def _issue_signed_run_receipt(
             }
         ],
         "outcome_envelope": {
-            "required_contracts": {"effect": 1, "authorization": 1},
-            "passed_contracts": {"effect": 1 if verified else 0, "authorization": 1},
+            "required_contracts": {"effect": 1},
+            "passed_contracts": {"effect": 1 if verified else 0},
         },
     }
     if write_result.receipt:
@@ -652,14 +679,12 @@ def qualify_pack(
     manifest_path: str | Path,
     clean_cases: Sequence[CleanWriteCase] = (),
     *,
-    pack_digest: Optional[str] = None,
     workdir: Optional[str | Path] = None,
 ) -> QualificationResult:
     """Run planted-fault mutation suite + clean-write verification and emit ``QUALIFICATION.json``."""
 
     mpath = Path(manifest_path)
     pack_dir = mpath.parent
-    digest = pack_digest or _pack_digest(pack_dir)
     manifest_doc = yaml.safe_load(mpath.read_text(encoding="utf-8")) or {}
     actor = Actor(kind="agent", id=spec.actor_id)
     run_workdir = Path(workdir) if workdir is not None else pack_dir / "runs"
@@ -667,12 +692,14 @@ def qualify_pack(
 
     refusal_reasons: list[str] = []
 
-    # Step 1: Deterministic planted-fault mutation suite against isolated sandbox copies.
+    # Step 1: Deterministic planted-fault mutation suite against isolated sandbox copies
+    # of the actual on-disk pack under qualification.
     fault_outcomes: list[PlantedFaultOutcome] = []
     sqlite_db = spec.read.get("sqlite_database")
     if isinstance(sqlite_db, str) and Path(sqlite_db).is_file():
         fault_outcomes = _run_planted_faults_sqlite(
             spec,
+            pack_dir,
             Path(sqlite_db),
             clean_cases,
             actor=actor,
@@ -820,16 +847,21 @@ def qualify_pack(
 
     clean_total = len(clean_outcomes)
     clean_verified = sum(1 for c in clean_outcomes if c.confirmed)
+    verified_kinds = {c.kind for c in clean_outcomes if c.confirmed}
     if clean_total == 0:
         refusal_reasons.append(
             "no clean writes were verified (at least one verified clean write "
             "with a signed record/run/v1 receipt is required for certification)"
         )
-    elif len(receipt_paths) < clean_verified:
-        refusal_reasons.append(
-            f"signed receipts issued ({len(receipt_paths)}) fewer than "
-            f"verified clean writes ({clean_verified})"
-        )
+    else:
+        for ks in spec.kinds:
+            if ks.kind not in verified_kinds:
+                refusal_reasons.append(f"kind {ks.kind!r} has no verified clean write")
+        if len(receipt_paths) < clean_verified:
+            refusal_reasons.append(
+                f"signed receipts issued ({len(receipt_paths)}) fewer than "
+                f"verified clean writes ({clean_verified})"
+            )
     false_stop_rate = (
         round((clean_total - clean_verified) / clean_total, 4)
         if clean_total > 0
@@ -844,6 +876,16 @@ def qualify_pack(
         and len(receipt_paths) == clean_verified
         and not refusal_reasons
     )
+
+    if certified:
+        manifest_doc["zero_touch"] = {
+            "admitted": sorted(ks.kind for ks in spec.kinds),
+        }
+        mpath.write_text(
+            yaml.safe_dump(manifest_doc, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+    digest = _pack_digest(pack_dir)
 
     result = QualificationResult(
         pack_name=spec.name,
@@ -877,11 +919,10 @@ def onboard_pack(
 ) -> QualificationResult:
     """Single-call onboarding loop: synthesize pack -> planted-fault qualify -> certify."""
 
-    manifest_path, digest = synthesize_pack(spec, out_dir)
+    manifest_path, _ = synthesize_pack(spec, out_dir)
     return qualify_pack(
         spec,
         manifest_path,
         clean_cases,
-        pack_digest=digest,
         workdir=workdir,
     )

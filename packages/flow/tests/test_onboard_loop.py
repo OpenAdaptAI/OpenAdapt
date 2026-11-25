@@ -753,6 +753,116 @@ def test_onboard_cli_end_to_end_and_dry_run(
         assert full_out["clean_writes_verified"] == 1
         assert full_out["receipts_issued"] == 1
         _assert_signed_receipt(full_out["receipt_paths"][0])
+        # P1-4: receipt report must not hardcode authorization in outcome_envelope.
+        report_path = Path(full_out["receipt_paths"][0]).parent / "report.json"
+        report_doc = json.loads(report_path.read_text(encoding="utf-8"))
+        assert (
+            "authorization" not in report_doc["outcome_envelope"]["required_contracts"]
+        )
+        assert "authorization" not in report_doc["outcome_envelope"]["passed_contracts"]
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_onboard_regression_p1_and_p2_gates(tmp_path: Path, monkeypatch: Any) -> None:
+    """Regression coverage for P1-1..P1-4 and P2-5 qualification gates."""
+    from dataclasses import replace
+
+    from openadapt_flow.onboard import engine as onboard_engine
+    from openadapt_flow.onboard.engine import qualify_pack, synthesize_pack
+    from openadapt_flow.verifier import Outcome, WriteResult
+
+    db = tmp_path / "mini.sqlite"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE items (code TEXT, title TEXT, status TEXT)")
+    con.execute(
+        "INSERT INTO items (code, title, status) VALUES ('I-1', 'Existing', 'open')"
+    )
+    con.commit()
+    con.close()
+
+    spec = OnboardSpec(
+        name="mini-reg",
+        read={"sqlite_database": str(db)},
+        kinds=(
+            KindOnboardingSpec(
+                kind="create_item",
+                mode="create",
+                table="items",
+                identity_field="code",
+                required_fields=("code", "title"),
+                optional_fields=("status",),
+                filter_params=("code",),
+                demonstrated_field_sets=(("code", "title"),),
+                sample_values={"code": "I-2", "title": "New"},
+            ),
+            KindOnboardingSpec(
+                kind="update_item",
+                mode="update",
+                table="items",
+                identity_field="code",
+                identity_params=("code",),
+                change_fields=("status",),
+                filter_params=("code",),
+                demonstrated_field_sets=(("code", "status"),),
+                sample_values={"code": "I-1", "status": "closed"},
+            ),
+        ),
+    )
+
+    # P2-5: synthesize_pack must not mark unqualified kinds admitted.
+    pack_dir = tmp_path / "pack"
+    mpath, synth_digest = synthesize_pack(spec, pack_dir)
+    manifest_before = yaml.safe_load(mpath.read_text(encoding="utf-8"))
+    assert manifest_before["zero_touch"]["admitted"] == []
+
+    # P1-2: certifying with clean writes for only one of two kinds must refuse.
+    def _insert_item() -> None:
+        c = sqlite3.connect(db)
+        c.execute("INSERT INTO items (code, title) VALUES ('I-3', 'Clean')")
+        c.commit()
+        c.close()
+
+    partial_res = qualify_pack(
+        spec,
+        mpath,
+        [
+            CleanWriteCase(
+                kind="create_item",
+                name="only_create",
+                values={"code": "I-3", "title": "Clean"},
+                apply_write=_insert_item,
+            )
+        ],
+    )
+    assert partial_res.certified is False
+    assert any(
+        "update_item" in r and "no verified clean write" in r
+        for r in partial_res.refusal_reasons
+    )
+    # P1-3: digest is computed from on-disk pack files, and unqualified pack stays unadmitted.
+    assert partial_res.pack_digest == synth_digest
+    manifest_after_refusal = yaml.safe_load(mpath.read_text(encoding="utf-8"))
+    assert manifest_after_refusal["zero_touch"]["admitted"] == []
+
+    # P1-1: an unjudged UNCERTAIN read (observed != "absent") must NOT count as caught.
+    real_verify = onboard_engine.verify_write
+    seen_once = {"done": False}
+
+    def _uncertain_once(pending: Any) -> WriteResult:
+        res = real_verify(pending)
+        if not seen_once["done"]:
+            seen_once["done"] = True
+            return replace(
+                res,
+                outcome=Outcome.UNCERTAIN,
+                observed="unknown",
+                reasons=("simulated unreadable store",),
+            )
+        return res
+
+    monkeypatch.setattr(onboard_engine, "verify_write", _uncertain_once)
+    uncertain_res = qualify_pack(spec, mpath, [])
+    assert uncertain_res.certified is False
+    assert uncertain_res.planted_faults_caught < uncertain_res.planted_faults_total
