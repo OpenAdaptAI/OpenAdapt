@@ -40,7 +40,7 @@ import threading
 import time
 from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Sequence
 from urllib.parse import urlsplit
 
 from openadapt_flow.flight.scrub import Scrub, ScrubRefused, scrub_request
@@ -302,6 +302,9 @@ class FlightProxy:
         ssl_context: Optional[ssl.SSLContext] = None,
         ocr_words: Any = None,
         pseudonymize: bool = True,
+        known_values: Sequence[tuple[str, str] | str] = (),
+        known_record: Optional[Mapping[str, Any]] = None,
+        ui_allowlist: Sequence[str] = (),
     ) -> None:
         if scrub and scrubber is None:
             raise ValueError("scrubbing is on but no scrubber was given")
@@ -318,8 +321,17 @@ class FlightProxy:
             if scrub and pseudonymize
             else Placeholders()
         )
+        if known_values:
+            self.pseudonyms.seed(known_values)
+        if known_record:
+            self.pseudonyms.seed_record(known_record)
         self._scrub = (
-            Scrub(scrubber, ocr_words=ocr_words, pseudonyms=self.pseudonyms)
+            Scrub(
+                scrubber,
+                ocr_words=ocr_words,
+                pseudonyms=self.pseudonyms,
+                ui_allowlist=ui_allowlist,
+            )
             if scrub
             else None
         )

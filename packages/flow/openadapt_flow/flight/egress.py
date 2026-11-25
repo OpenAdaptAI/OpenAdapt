@@ -202,6 +202,9 @@ class ScrubbedEgress:
         loopback_ports: Optional[Sequence[int]] = None,
         usage_path: Optional[Path] = None,
         use_block: bool = True,
+        known_values: Sequence[tuple[str, str] | str] = (),
+        known_record: Optional[Mapping[str, Any]] = None,
+        ui_allowlist: Sequence[str] = (),
     ) -> None:
         """The J7 arguments, plus keyword-only extras for ``openadapt-flow
         flight``: ``gate`` (the pre-commit gate the proxy answers for
@@ -225,6 +228,9 @@ class ScrubbedEgress:
             Path(usage_path) if usage_path else self.run_dir / "usage.json"
         )
         self.use_block = use_block
+        self.known_values: list[tuple[str, str] | str] = list(known_values)
+        self.known_record = dict(known_record) if known_record else None
+        self.ui_allowlist = list(ui_allowlist)
         self._timeline = timeline
         self._scrubber = scrubber
         self._proxy: Any = None
@@ -288,6 +294,9 @@ class ScrubbedEgress:
                 scrub=self.scrub,
                 max_cost_usd=self.spend_cap_usd,
                 gate=self.gate,
+                known_values=self.known_values,
+                known_record=self.known_record,
+                ui_allowlist=self.ui_allowlist,
             ).start()
         except ValueError as exc:
             raise EgressRefused(f"nothing was started: {exc}") from None

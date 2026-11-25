@@ -402,6 +402,7 @@ def detect(
     known: Callable[[str], list[Span]],
     *,
     whole: bool = True,
+    allowlist: Optional[frozenset[str]] = None,
 ) -> list[Span]:
     """Every personal value in ``text`` as merged (start, end, kind) spans.
 
@@ -454,7 +455,13 @@ def detect(
         for s, e, k in spans:
             # An entity never runs across a line break.
             for m in re.finditer(r"[^\n]+", piece[s:e]):
-                found.append((ps + s + m.start(), ps + s + m.end(), k, 2))
+                span_start = ps + s + m.start()
+                span_end = ps + s + m.end()
+                if allowlist:
+                    norm = " ".join(text[span_start:span_end].split()).casefold()
+                    if norm in allowlist:
+                        continue
+                found.append((span_start, span_end, k, 2))
     # Tokens, placeholders and cut URL paths are cut out of a span that
     # touches them; the rest of the span is still scrubbed.
     protected: list[Span] = [(*m.span(), "") for m in _PROTECTED.finditer(text)]
@@ -640,16 +647,37 @@ class Scrub:
         *,
         ocr_words: Optional[OcrWords] = None,
         pseudonyms: Any = None,
+        ui_allowlist: Sequence[str] = (),
     ) -> None:
-        from openadapt_flow.flight.pseudonym import Placeholders
+        from openadapt_flow.flight.pseudonym import Placeholders, normalise
 
         self.scrubber = scrubber
         self.ocr_words = ocr_words
         self.pseudonyms = pseudonyms if pseudonyms is not None else Placeholders()
+        self._allowlist: frozenset[str] = frozenset(
+            normalise(w) for w in ui_allowlist if w and w.strip()
+        )
         self._images: OrderedDict[str, bytes] = OrderedDict()
         self._texts: OrderedDict[str, str] = OrderedDict()
         self._ner: OrderedDict[str, str] = OrderedDict()
+        self._allowed_leaves: OrderedDict[str, None] = OrderedDict()
         self._lock = threading.Lock()
+
+    def is_allowed_leaf(self, value: str) -> bool:
+        digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
+        with self._lock:
+            return digest in self._allowed_leaves
+
+    def mark_allowed_leaves(self, values: Sequence[str]) -> None:
+        with self._lock:
+            for value in values:
+                if not value:
+                    continue
+                digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
+                self._allowed_leaves[digest] = None
+                self._allowed_leaves.move_to_end(digest)
+                while len(self._allowed_leaves) > 16384:
+                    self._allowed_leaves.popitem(last=False)
 
     def ner(self, piece: str) -> Any:
         from openadapt_flow.privacy import scrub_outbound_text
@@ -667,10 +695,21 @@ class Scrub:
         return out
 
     def detect(self, text: str) -> list[Span]:
-        return detect(text, self.ner, self.pseudonyms.known_spans)
+        return detect(
+            text,
+            self.ner,
+            self.pseudonyms.known_spans,
+            allowlist=self._allowlist or None,
+        )
 
     def detect_screen(self, text: str) -> list[Span]:
-        return detect(text, self.ner, self.pseudonyms.known_spans, whole=False)
+        return detect(
+            text,
+            self.ner,
+            self.pseudonyms.known_spans,
+            whole=False,
+            allowlist=self._allowlist or None,
+        )
 
     def token(self, kind: str, value: str) -> str:
         return self.pseudonyms.token(kind, value)
@@ -898,8 +937,11 @@ def _runs(value: str) -> list[Run]:
                 groups = groups[:-1]
         if sum(len(g[2]) for g in groups) < _BLOB_MIN:
             continue
-        if len(set("".join(g[2] for g in groups))) < 8:
+        joined_groups = "".join(g[2] for g in groups)
+        if len(set(joined_groups)) < 8:
             continue  # a rule ("-----") or padding, not encoded data
+        if all(ch in _HEX_CHARS for ch in joined_groups):
+            continue  # pure hex digest list (e.g. git SHAs), not base64
         middle = groups[1:-1]
         if any(len(g[2]) < _B64_LINE_MIN for g in middle):
             continue
@@ -975,13 +1017,31 @@ _ALPHABET = frozenset(
 )
 
 
+_HEX_CHARS = frozenset("0123456789abcdefABCDEF")
+_CAMEL_WORD_RE = re.compile(r"^[a-z][a-zA-Z]{2,35}$")
+
+
+def _looks_like_camel_identifiers(text: str) -> bool:
+    """Whether ``text`` is predominantly whitespace-separated camelCase identifiers."""
+    tokens = text.split()
+    if len(tokens) < 4:
+        return False
+    camel_hits = sum(1 for tok in tokens if _CAMEL_WORD_RE.match(tok))
+    return camel_hits / len(tokens) >= 0.8
+
+
 def dense_payload(value: str) -> bool:
     """Whether ``value`` holds encoded data the run detection did not take
     apart: a 512-character window (whitespace and backslashes removed) that
     is mostly base64 letters, with base64's mix of upper and lower case.
 
-    URL paths and queries are cut first and don't count."""
+    URL paths and queries are cut first and don't count. Pure hex-digest lists
+    (e.g. git SHAs) and whitespace-separated camelCase identifier lists do not
+    trip this check.
+    """
     text = scrub_urls(unescape_json(value))
+    if _looks_like_camel_identifiers(text):
+        return False
     compact = "".join(ch for ch in text if not ch.isspace() and ch != "\\")
     n = _DENSE_WINDOW
     if len(compact) < n:
@@ -989,15 +1049,27 @@ def dense_payload(value: str) -> bool:
     alpha = [ch in _ALPHABET for ch in compact]
     upper = [ch.isascii() and ch.isupper() for ch in compact]
     lower = [ch.isascii() and ch.islower() for ch in compact]
-    a, u, lo = sum(alpha[:n]), sum(upper[:n]), sum(lower[:n])
+    non_hex = [ch in _ALPHABET and ch not in _HEX_CHARS for ch in compact]
+    a, u, lo, nh = (
+        sum(alpha[:n]),
+        sum(upper[:n]),
+        sum(lower[:n]),
+        sum(non_hex[:n]),
+    )
     for i in range(n, len(compact) + 1):
-        if a >= _DENSE_ALPHABET * n and u >= _DENSE_CASE * n and lo >= _DENSE_CASE * n:
+        if (
+            a >= _DENSE_ALPHABET * n
+            and u >= _DENSE_CASE * n
+            and lo >= _DENSE_CASE * n
+            and nh >= 0.2 * n
+        ):
             return True
         if i == len(compact):
             break
         a += alpha[i] - alpha[i - n]
         u += upper[i] - upper[i - n]
         lo += lower[i] - lower[i - n]
+        nh += non_hex[i] - non_hex[i - n]
     return False
 
 
@@ -1480,23 +1552,40 @@ def scrub_request(
         # strings (text blocks, a JSON array of chunks) leaves its signature,
         # or its density, in their letters joined together. The images
         # scrubbed above are taken out first.
-        joined = "".join(_leaf_strings(clean))
+        leaves = _leaf_strings(clean)
+        joined_all = "".join(leaves)
         for scrubbed_b64 in produced:
-            joined = joined.replace(scrubbed_b64, "")
-        if image_signature(joined):
+            joined_all = joined_all.replace(scrubbed_b64, "")
+        if image_signature(joined_all):
             raise ScrubRefused(
                 "the request holds a base64 image split across strings that "
-                "can't be scrubbed in place"
+                "can't be scrubbed in place; drop or truncate the offending "
+                "tool result to continue"
             )
-        if len(joined) >= _DENSE_WINDOW and (
-            dense_payload(joined) or low_diversity(joined)
+        is_allowed = getattr(scrub, "is_allowed_leaf", None)
+        new_leaves = (
+            [leaf for leaf in leaves if not is_allowed(leaf)]
+            if callable(is_allowed)
+            else leaves
+        )
+        # Keep spaces between separate leaf strings so ordinary short tokens or
+        # camelCase blocks in distinct tool results don't look like one blob.
+        joined_new = " ".join(new_leaves)
+        for scrubbed_b64 in produced:
+            joined_new = joined_new.replace(scrubbed_b64, "")
+        if len(joined_new) >= _DENSE_WINDOW and (
+            dense_payload(joined_new) or low_diversity(joined_new)
         ):
             # Encoded data split into strings too short for the backstop
             # one by one (an image format with no signature checked here).
             raise ScrubRefused(
                 "the request holds encoded data split across strings that "
-                "can't be scrubbed"
+                "can't be scrubbed; drop or truncate the offending tool result "
+                "to continue"
             )
+        mark_allowed = getattr(scrub, "mark_allowed_leaves", None)
+        if callable(mark_allowed):
+            mark_allowed(leaves)
         return clean
     except RecursionError:
         raise ScrubRefused("the request is nested too deeply to scrub") from None
