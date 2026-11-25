@@ -19,15 +19,32 @@ from openadapt.quickstart.everyday import (
 )
 
 try:
-    from openadapt_flow.runtime.effects.local_state import LocalStateVerifier
+    from openadapt_flow.runtime.effects.local_state import (
+        LocalStateVerifier,
+        MacOSCalendarEventSource,
+        MacOSNightShiftSource,
+        WindowsNightLightSource,
+    )
     from openadapt_flow.verify_run import VerifyConfig
-except ImportError:  # launcher CI installs released openadapt-flow without local_state
+
+    _HAS_EVERYDAY_PROBES = all(
+        cls is not None
+        for cls in (
+            LocalStateVerifier,
+            MacOSCalendarEventSource,
+            MacOSNightShiftSource,
+            WindowsNightLightSource,
+            VerifyConfig,
+        )
+    )
+except ImportError:  # launcher CI installs released openadapt-flow without everyday probes
     LocalStateVerifier = None  # type: ignore[assignment]
     VerifyConfig = None  # type: ignore[assignment]
+    _HAS_EVERYDAY_PROBES = False
 
 _REQUIRES_LOCAL_STATE = pytest.mark.skipif(
-    LocalStateVerifier is None,
-    reason="openadapt_flow.runtime.effects.local_state not in installed openadapt-flow",
+    not _HAS_EVERYDAY_PROBES,
+    reason="everyday local_state probes not in installed openadapt-flow",
 )
 
 
@@ -41,7 +58,7 @@ def test_build_night_shift_contracts_macos_and_windows_with_revert() -> None:
     assert rev_mac["effects"][0]["value"] == "false"
     assert params_mac["target_enabled"] == "true"
     assert params_mac["restore_enabled"] == "false"
-    if LocalStateVerifier is not None and VerifyConfig is not None:
+    if _HAS_EVERYDAY_PROBES:
         VerifyConfig.model_validate(fwd_mac)
         VerifyConfig.model_validate(rev_mac)
 
@@ -52,7 +69,7 @@ def test_build_night_shift_contracts_macos_and_windows_with_revert() -> None:
     assert fwd_win["effects"][0]["value"] == "false"
     assert rev_win is None
     assert params_win["revert"] is False
-    if LocalStateVerifier is not None and VerifyConfig is not None:
+    if _HAS_EVERYDAY_PROBES:
         VerifyConfig.model_validate(fwd_win)
 
     # Unreadable baseline (None) must NOT invent a revert baseline
@@ -88,7 +105,7 @@ def test_build_calendar_block_contracts_parameterized_and_revert() -> None:
     assert params["end_iso"] == "2026-11-24T14:45:00"
     assert params["duration_minutes"] == 45
     assert params["recurrence"] == "weekly"
-    if LocalStateVerifier is not None and VerifyConfig is not None:
+    if _HAS_EVERYDAY_PROBES:
         VerifyConfig.model_validate(fwd)
         VerifyConfig.model_validate(rev)
 
