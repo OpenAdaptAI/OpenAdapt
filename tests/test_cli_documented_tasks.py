@@ -63,8 +63,11 @@ def test_wrap_help_is_discovered_as_an_actual_launcher_command():
         for action in parser._actions
         if isinstance(action, argparse._SubParsersAction)
     )
+    assert "kernel" in names
+    assert cli.main.commands["kernel"] is cli.kernel
     assert "wrap" not in choices
-    assert len(names) == 17
+    assert "kernel" not in choices
+    assert len(names) == 18
 
 
 def test_review_brief_comes_from_the_unmodified_canonical_generator():

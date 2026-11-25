@@ -852,7 +852,8 @@ def test_top_level_help_lists_shared_tasks_and_native_wrap():
     ]
     names = [line.split()[0] for line in section.splitlines() if line.startswith("  ")]
     assert names == list(TASKS)
-    assert len(names) == 17
+    assert len(names) == 18
+    assert "kernel" in names
     assert "wrap" in names
     assert names[:2] == ["demo", "verify"]
 

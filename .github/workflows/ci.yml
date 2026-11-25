@@ -69,6 +69,13 @@ jobs:
         # (packages/flow/docs/FAIL_CLOSED.md). Fails only when a kind's total
         # rises above the baseline. Standard library only.
         run: python3 packages/flow/scripts/check_verdict_folds.py
+      - name: No growth in frozen legacy flow stacks
+        # New commit-boundary, staging, healing, and shadow-to-autopilot work
+        # goes in packages/kernel (openadapt-kernel). Frozen legacy stacks in
+        # packages/flow may shrink or receive bug/security fixes, but must not
+        # add new modules, new top-level CLI commands, or new launcher imports
+        # (docs/architecture/KERNEL_CONSOLIDATION.md). Standard library only.
+        run: python3 scripts/check_legacy_flow_freeze.py
       - name: No generated page was edited by hand
         # CAPABILITIES.md and llms-full.txt are generated from sources (row
         # files under capabilities/, README.md, ...). A change edits the

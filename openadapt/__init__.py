@@ -1,9 +1,10 @@
 """OpenAdapt launcher and compatibility meta-package.
 
-The active product engine is ``openadapt-flow`` and ships in the base install.
-Use ``openadapt flow ...`` for record, compile, replay, lint, and certification.
-The lazy exports below preserve compatibility with optional supporting and
-research packages:
+``openadapt-kernel`` (``openadapt kernel ...``) is the canonical minimal
+commit-boundary and shadow-to-autopilot runtime. ``openadapt-flow`` ships in
+the base install for backward-compatible workflow compilation, replay, and
+receipt verification (``openadapt flow ...``). The lazy exports below preserve
+compatibility with optional supporting and research packages:
 
     pip install openadapt              # launcher + openadapt-flow
     pip install openadapt[capture]     # native capture
@@ -95,6 +96,30 @@ def __getattr__(name: str):
                 "Install with: pip install openadapt[retrieval]"
             )
 
+    # Kernel runtime (canonical commit-boundary and shadow-to-autopilot kernel)
+    if name in (
+        "CommitInterceptor",
+        "ObligationLedger",
+        "PortalPack",
+        "ShadowObserver",
+        "run_portal_pack",
+    ):
+        try:
+            from openadapt_kernel import (  # noqa: F401
+                CommitInterceptor,
+                ObligationLedger,
+                PortalPack,
+                ShadowObserver,
+                run_portal_pack,
+            )
+
+            return locals()[name]
+        except ImportError:
+            raise ImportError(
+                f"{name} requires openadapt-kernel. "
+                "Install from packages/kernel (e.g. `pip install -e packages/kernel`)."
+            )
+
     # Demo library lives in openadapt-evals
     if name == "DemoLibrary":
         try:
@@ -112,6 +137,12 @@ def __getattr__(name: str):
 
 __all__ = [
     "__version__",
+    # From kernel (canonical runtime)
+    "CommitInterceptor",
+    "ObligationLedger",
+    "PortalPack",
+    "ShadowObserver",
+    "run_portal_pack",
     # From capture
     "Capture",
     "CaptureSession",
