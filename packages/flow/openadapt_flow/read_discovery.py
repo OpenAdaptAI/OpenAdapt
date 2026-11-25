@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import socket
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -74,8 +75,19 @@ def is_local_origin(url: str) -> bool:
     host = (urlsplit(url).hostname or "").strip().lower().rstrip(".")
     if not host:
         return False
-    if host == "localhost" or host.endswith(".localhost"):
+    if host == "localhost":
         return True
+    if host.endswith(".localhost"):
+        try:
+            infos = socket.getaddrinfo(host, None)
+        except OSError:
+            return False
+        if not infos:
+            return False
+        return all(
+            ipaddress.ip_address(info[4][0].split("%", 1)[0]).is_loopback
+            for info in infos
+        )
     try:
         return ipaddress.ip_address(host).is_loopback
     except ValueError:
