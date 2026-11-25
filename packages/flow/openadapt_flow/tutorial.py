@@ -938,6 +938,8 @@ def start_demo_app_for_replay(
     """Start MockMed for ``flow replay --demo-app`` and return ``(url, verifier, stop)``."""
     from openadapt_flow.mockmed.fault_server import (
         MOCKMED_RECORDS_READ_CONTRACT,
+    )
+    from openadapt_flow.mockmed.fault_server import (
         serve as serve_fault_demo,
     )
 
@@ -945,7 +947,8 @@ def start_demo_app_for_replay(
     url = demo_app_entry_url(base_url, workflow=workflow, drift=drift)
     verifier = None
     if need_verifier and any(
-        getattr(step, "effects", None) for step in (getattr(workflow, "steps", None) or [])
+        getattr(step, "effects", None)
+        for step in (getattr(workflow, "steps", None) or [])
     ):
         from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
 
