@@ -41,18 +41,19 @@ async function main() {
     } catch {
         data = null
     }
-    if (!data || !data.report_b64 || !data.seal_text) {
+    if (!data || !data.report_b64 || (!data.seal_text && !data.receipt_text)) {
         root.render(<Problem text="The page has no run in it. Write one with: openadapt receipt view RUN_FOLDER" />)
         return
     }
     const files = {
         report: bytes(data.report_b64),
-        sealText: data.seal_text,
+        sealText: data.seal_text ?? null,
         anchorText: data.anchor_text ?? null,
         tsaText: data.tsa_text ?? null,
         tsrBytes: data.tsr_b64 ? bytes(data.tsr_b64) : null,
         auth: data.auth ?? null,
         receiptText: data.receipt_text ?? null,
+        receiptAnchorText: data.receipt_anchor_text ?? null,
         receiptKeys: data.receipt_keys ?? null,
     }
     let props

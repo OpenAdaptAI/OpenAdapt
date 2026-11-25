@@ -653,3 +653,87 @@ def test_a_receipt_from_an_unpinned_key_is_not_verified(browser, runs, tmp_path)
         )
     finally:
         reader.close()
+
+
+def test_receipt_only_run_renders_and_verifies_without_legacy_seal(
+    browser, runs, tmp_path
+):
+    """#2479: write_seal_page and viewer render a receipt-only run without seal.json."""
+    run_dir = runs / "run-1"
+    keys = _with_receipt(run_dir, tmp_path / "home")
+    (run_dir / "seal.json").unlink()
+    page = write_seal_page(run_dir, keys=keys, program=PROGRAM)
+    data = _data(page)
+    assert data["seal_text"] is None
+    assert data["receipt_text"]
+    assert "receipt.json" in data["host"]["files"]
+    assert "seal.json" not in data["host"]["files"]
+    envelope = json.loads(data["receipt_text"])
+    receipt_key_id = envelope["signatures"][0]["keyid"]
+    receipt_sig_prefix = envelope["signatures"][0]["sig"][:24]
+
+    reader = Reader(browser, page, reduced=True)
+    try:
+        reader.verdict("Valid")
+        assert (
+            reader.page.locator("[data-signer]").inner_text().strip()
+            == "Signed by this computer"
+        )
+        reader.page.locator("[data-tab='raw']").click()
+        assert (
+            reader.page.locator("[data-format]").inner_text() == "Format: record/run/v1"
+        )
+        raw_text = reader.page.locator("#seal-panel-raw").inner_text()
+        assert receipt_key_id in raw_text
+        assert receipt_sig_prefix in raw_text
+        assert "Started" in raw_text
+        assert "Issued" not in raw_text
+        assert reader.outside() == []
+        assert reader.errors == []
+    finally:
+        reader.close()
+
+
+def test_raw_tab_shows_receipt_fields_not_legacy_seal_fields(browser, runs, tmp_path):
+    """#2479: under record/run/v1, the Raw tab shows the receipt's own fields, not seal.json's."""
+    run_dir = runs / "run-1"
+    keys = _with_receipt(run_dir, tmp_path / "home")
+    legacy_seal = json.loads((run_dir / "seal.json").read_text(encoding="utf-8"))
+    page = write_seal_page(run_dir, keys=keys, program=PROGRAM)
+    envelope = json.loads(_data(page)["receipt_text"])
+    receipt_key_id = envelope["signatures"][0]["keyid"]
+    receipt_sig_prefix = envelope["signatures"][0]["sig"][:24]
+    assert receipt_key_id != legacy_seal["key_id"]
+    assert receipt_sig_prefix != legacy_seal["signature"][:24]
+
+    reader = Reader(browser, page, reduced=True)
+    try:
+        reader.verdict("Valid")
+        reader.page.locator("[data-tab='raw']").click()
+        assert (
+            reader.page.locator("[data-format]").inner_text() == "Format: record/run/v1"
+        )
+        raw_text = reader.page.locator("#seal-panel-raw").inner_text()
+        assert receipt_key_id in raw_text
+        assert receipt_sig_prefix in raw_text
+        assert legacy_seal["key_id"] not in raw_text
+        assert legacy_seal["signature"][:24] not in raw_text
+        assert reader.errors == []
+    finally:
+        reader.close()
+
+
+def test_tampered_receipt_anchor_fails_browser_verification(browser, runs, tmp_path):
+    """#2479: receipt.anchor.json is passed to the browser and a bad anchor fails the receipt."""
+    run_dir = runs / "run-1"
+    keys = _with_receipt(run_dir, tmp_path / "home")
+    (run_dir / "receipt.anchor.json").write_text('{"schema":"bad"}', encoding="utf-8")
+    page = write_seal_page(run_dir, keys=keys, program=PROGRAM)
+    assert _data(page)["receipt_anchor_text"] == '{"schema":"bad"}'
+
+    reader = Reader(browser, page, reduced=True)
+    try:
+        assert "anchor_malformed" in reader.verdict("Fails")
+        assert reader.errors == []
+    finally:
+        reader.close()
