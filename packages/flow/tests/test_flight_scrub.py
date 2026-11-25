@@ -714,7 +714,10 @@ def test_backstops_allow_git_shas_camelcase_and_previously_allowed_turns():
 
     # 2. 150 blocks of camelCase identifiers
     camel_blocks = [
-        {"type": "text", "text": f"getUserProfile{i} updateRecordState{i} parseFormField{i}"}
+        {
+            "type": "text",
+            "text": f"getUserProfile{i} updateRecordState{i} parseFormField{i}",
+        }
         for i in range(150)
     ]
     scrub_request({"messages": [{"role": "user", "content": camel_blocks}]}, scrub)

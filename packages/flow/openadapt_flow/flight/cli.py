@@ -320,7 +320,9 @@ def cmd_flight(args: argparse.Namespace) -> int:
         except (OSError, ValueError):
             pass
     ui_allowlist = [
-        str(w).strip() for w in (getattr(args, "ui_allowlist", None) or []) if str(w).strip()
+        str(w).strip()
+        for w in (getattr(args, "ui_allowlist", None) or [])
+        if str(w).strip()
     ]
 
     usage_path = run_dir / "usage.json"

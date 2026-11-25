@@ -181,7 +181,9 @@ class Pseudonyms:
                 return "EMAIL"
             if any(tok in low for tok in ("addr", "street")):
                 return "ADDRESS"
-            if any(tok in low for tok in ("mrn", "ssn", "acct", "account", "member", "id")):
+            if any(
+                tok in low for tok in ("mrn", "ssn", "acct", "account", "member", "id")
+            ):
                 return "ID"
             return "PERSON"
 
