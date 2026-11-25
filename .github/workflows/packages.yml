@@ -897,10 +897,10 @@ jobs:
     # the group.
     if: github.event.pull_request.draft != true && (needs.scope.outputs.flow == 'true' || (github.event_name == 'merge_group' && needs.scope.outputs.verify == 'true'))
     runs-on: ubuntu-latest
-    # Push runs on main execute the full 2-shard suite (~39m on shard 2/2) and
-    # nightly/dispatch runs also measure coverage; give both 60 minutes while
-    # keeping the 4-shard PR fast lane at 40 minutes.
-    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push') && 60 || 40 }}
+    # Push runs on main and merge-queue runs execute the full 2-shard suite
+    # (up to ~42m on a shard), and nightly/dispatch runs also measure coverage;
+    # give all of them 60 minutes while keeping the 4-shard PR fast lane at 40.
+    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'merge_group') && 60 || 40 }}
     strategy:
       fail-fast: false
       matrix:
