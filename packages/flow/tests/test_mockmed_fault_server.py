@@ -11,7 +11,9 @@ import pytest
 from openadapt_flow.mockmed.fault_server import KNOWN_PATIENTS, serve
 
 
-def _post_encounter(base_url: str, payload: dict, *, fault: str = "") -> tuple[int, dict]:
+def _post_encounter(
+    base_url: str, payload: dict, *, fault: str = ""
+) -> tuple[int, dict]:
     suffix = f"?fault={fault}" if fault else ""
     req = urllib.request.Request(
         f"{base_url}api/encounter{suffix}",
@@ -32,7 +34,9 @@ def _get_db(base_url: str) -> dict:
 
 
 @pytest.mark.parametrize("bad_patient_id", ["NONEXISTENT-999", "", "p999"])
-def test_unknown_patient_encounter_rejected_and_not_persisted(bad_patient_id: str) -> None:
+def test_unknown_patient_encounter_rejected_and_not_persisted(
+    bad_patient_id: str,
+) -> None:
     url, _db, stop = serve(port=0)
     try:
         status, body = _post_encounter(
