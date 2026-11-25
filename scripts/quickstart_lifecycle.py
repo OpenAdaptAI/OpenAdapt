@@ -218,14 +218,44 @@ def _inspect_run(run: Path) -> int:
     if required < 1 or passed != required:
         raise AssertionError(f"quickstart effect coverage is {passed}/{required}")
 
+    if not (run / "REPORT.md").is_file():
+        raise AssertionError("quickstart is missing REPORT.md")
+
     receipt = _load_object(run / "receipt.json")
-    if receipt.get("outcome") != "VERIFIED":
-        raise AssertionError("quickstart receipt is not VERIFIED")
-    if receipt.get("provenance") != "synthetic-tutorial":
-        raise AssertionError("quickstart receipt has the wrong provenance")
-    for path in (run / "REPORT.md", run / "receipt.png", run / "receipt.md"):
-        if not path.is_file():
-            raise AssertionError(f"quickstart is missing {path.name}")
+    if "payloadType" in receipt and "payload" in receipt:
+        import base64
+        import hashlib
+
+        signatures = receipt.get("signatures")
+        if not isinstance(signatures, list) or not signatures:
+            raise AssertionError("quickstart receipt has no signatures")
+        try:
+            statement = json.loads(base64.b64decode(str(receipt["payload"])).decode("utf-8"))
+        except Exception as exc:
+            raise AssertionError("quickstart receipt payload is not valid JSON") from exc
+        pred_type = str(statement.get("predicateType") or "")
+        if not pred_type.startswith("https://openadapt.ai/record/run/"):
+            raise AssertionError(
+                f"quickstart receipt has unexpected predicateType {pred_type!r}"
+            )
+        subjects = {
+            item.get("name"): (item.get("digest") or {}).get("sha256")
+            for item in (statement.get("subject") or [])
+            if isinstance(item, dict)
+        }
+        report_sha = hashlib.sha256((run / "report.json").read_bytes()).hexdigest()
+        if subjects.get("report.json") != report_sha:
+            raise AssertionError("quickstart receipt does not match report.json digest")
+        if not (run / "receipt.private.json").is_file():
+            raise AssertionError("quickstart is missing receipt.private.json")
+    else:
+        if receipt.get("outcome") != "VERIFIED":
+            raise AssertionError("quickstart receipt is not VERIFIED")
+        if receipt.get("provenance") != "synthetic-tutorial":
+            raise AssertionError("quickstart receipt has the wrong provenance")
+        for path in (run / "receipt.png", run / "receipt.md"):
+            if not path.is_file():
+                raise AssertionError(f"quickstart is missing {path.name}")
     return passed
 
 

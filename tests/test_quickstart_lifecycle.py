@@ -378,3 +378,70 @@ def test_parser_defaults_to_skipping_without_an_installed_browser():
         [*base, "--require-installed-browser"]
     )
     assert flagged.require_installed_browser is True
+
+
+def test_inspector_accepts_record_run_v1_receipt_without_legacy_files(tmp_path):
+    """Issue #2473: lifecycle inspector accepts record/run/v1 receipts without receipt.png/md."""
+    import base64
+    import hashlib
+
+    lifecycle = _module()
+    run = tmp_path / "run-1"
+    run.mkdir(parents=True)
+    report_bytes = json.dumps(
+        {
+            "execution_outcome": "VERIFIED",
+            "execution_profile": "standard",
+            "transaction_outcome": "VERIFIED",
+            "model_calls": 0,
+            "outcome_envelope": {
+                "required_contracts": {"effect": 1},
+                "passed_contracts": {"effect": 1},
+            },
+        }
+    ).encode("utf-8")
+    (run / "report.json").write_bytes(report_bytes)
+    (run / "REPORT.md").write_text("# VERIFIED\n", encoding="utf-8")
+    statement = {
+        "_type": "https://in-toto.io/Statement/v1",
+        "predicateType": "https://openadapt.ai/record/run/v1",
+        "subject": [
+            {
+                "name": "report.json",
+                "digest": {"sha256": hashlib.sha256(report_bytes).hexdigest()},
+            }
+        ],
+        "predicate": {"outcome": "VERIFIED"},
+    }
+    envelope = {
+        "payloadType": "application/vnd.in-toto+json",
+        "payload": base64.b64encode(json.dumps(statement).encode("utf-8")).decode("ascii"),
+        "signatures": [{"keyid": "test-key", "sig": "test-sig"}],
+    }
+    (run / "receipt.json").write_text(json.dumps(envelope), encoding="utf-8")
+    (run / "receipt.private.json").write_text(json.dumps({"openings": []}), encoding="utf-8")
+
+    summary = lifecycle._inspect_quickstart(tmp_path)
+    assert summary["outcome"] == "VERIFIED"
+    assert summary["verified_runs"] == 1
+
+    # Missing receipt.private.json must fail.
+    (run / "receipt.private.json").unlink()
+    with pytest.raises(AssertionError, match="receipt.private.json"):
+        lifecycle._inspect_quickstart(tmp_path)
+
+
+def test_write_run_receipts_respects_openadapt_receipt_off(tmp_path, monkeypatch):
+    """Issue #2473: OPENADAPT_RECEIPT=off writes neither receipt.json nor receipt.private.json."""
+    from openadapt.quickstart.engine import write_run_receipts
+
+    run = tmp_path / "run-1"
+    run.mkdir()
+    (run / "report.json").write_text(
+        json.dumps({"execution_outcome": "VERIFIED"}), encoding="utf-8"
+    )
+    monkeypatch.setenv("OPENADAPT_RECEIPT", "off")
+    written = write_run_receipts([run])
+    assert written == 0
+    assert not (run / "receipt.json").exists()
+    assert not (run / "receipt.private.json").exists()
