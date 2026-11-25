@@ -116,11 +116,7 @@ def _private_to_this_user(path: Path) -> bool:
 
 
 def _answer_file(card: dict) -> Path:
-    return (
-        exception_queue.registry_root()
-        / card["run_ref"]
-        / f"answer-{card['card_id'][7:]}.json"
-    )
+    return exception_queue.registry_root() / card["run_ref"] / f"answer-{card['card_id'][7:]}.json"
 
 
 # -- the cards ------------------------------------------------------------------------
@@ -394,11 +390,7 @@ def test_the_phone_answers_with_the_portal_key(queue, portal_key, enclave):  # n
 
 def test_the_phone_page_knows_the_exception_cards():
     script = (
-        Path(__file__).resolve().parents[2]
-        / "openadapt_desktop"
-        / "portal"
-        / "shell"
-        / "stops.js"
+        Path(__file__).resolve().parents[2] / "openadapt_desktop" / "portal" / "shell" / "stops.js"
     ).read_text()
     assert '"exception"' in script
     assert "const MAX_BATCH = 25;" in script
