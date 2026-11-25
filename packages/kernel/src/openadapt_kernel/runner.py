@@ -12,6 +12,7 @@ from openadapt_kernel.interceptor import CommitInterceptor
 from openadapt_kernel.ledger import ObligationLedger
 from openadapt_kernel.macro import stage_form
 from openadapt_kernel.oracles import verify_cross_tab_dom, verify_pdf_readback, verify_sqlite_ro
+from openadapt_kernel.probe import probe_before_click
 
 RunMode = Literal["draft", "autopilot"]
 
@@ -172,6 +173,21 @@ def run_portal_pack(
                     outcome="ESCALATED",
                     staged_fields=staged.staged,
                     reason="autopilot_requires_commit_selector",
+                )
+
+            probe = probe_before_click(page, commit_selector)
+            if not probe.safe_to_click:
+                detail = f"commit_control_blocked:{probe.reason}"
+                if probe.top_blocker:
+                    detail = f"{detail}({probe.top_blocker})"
+                ledger.finalize("error", dirty_fields=list(interceptor.dirty_fields.keys()), error_detail=detail)
+                return RunResult(
+                    mode="autopilot",
+                    outcome="ESCALATED",
+                    staged_fields=staged.staged,
+                    commit_detected=False,
+                    readback_verified=False,
+                    reason=detail,
                 )
 
             interceptor.begin_step()

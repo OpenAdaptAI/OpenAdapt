@@ -1,5 +1,9 @@
 """openadapt-kernel: minimal commit-boundary verification and shadow-to-autopilot runtime."""
 
+from openadapt_kernel.aci import (
+    OnlineACICalibrator,
+    SessionStartNormalizer,
+)
 from openadapt_kernel.copilot import (
     MicroHandoffRequest,
     MicroHandoffSession,
@@ -55,6 +59,10 @@ from openadapt_kernel.oracles import (
     verify_pdf_readback,
     verify_sqlite_ro,
 )
+from openadapt_kernel.probe import (
+    ProbeResult,
+    probe_before_click,
+)
 from openadapt_kernel.runner import (
     RunResult,
     format_run_result_json,
@@ -75,12 +83,15 @@ __all__ = [
     "NetworkEvent",
     "Obligation",
     "ObligationLedger",
+    "OnlineACICalibrator",
     "OracleVerdict",
     "PlanStep",
     "PortalPack",
+    "ProbeResult",
     "ProvenanceViolation",
     "ReadBackProof",
     "RunResult",
+    "SessionStartNormalizer",
     "ShadowObserver",
     "ShadowTrace",
     "StageResult",
@@ -95,6 +106,7 @@ __all__ = [
     "mint_receipt",
     "observe_schema",
     "parse_extension_evidence_jsonl",
+    "probe_before_click",
     "qualify_verifier_offline",
     "replay_evidence_into_interceptor",
     "run_portal_pack",
