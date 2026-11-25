@@ -37,7 +37,7 @@ import os
 import re
 import threading
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 __all__ = [
     "TOKEN",
@@ -73,6 +73,18 @@ class Placeholders:
 
     def detokenize(self, text: str) -> str:
         return text
+
+    def seed(
+        self,
+        values: Sequence[tuple[str, str]] | Sequence[str],
+        *,
+        default_kind: str = "PERSON",
+        split_person_parts: bool = True,
+    ) -> int:
+        return 0
+
+    def seed_record(self, record: Mapping[str, Any]) -> int:
+        return 0
 
     def __len__(self) -> int:
         return 0
@@ -114,6 +126,79 @@ class Pseudonyms:
     def value(self, token: str) -> Optional[str]:
         with self._lock:
             return self._values.get(token)
+
+    def seed(
+        self,
+        values: Sequence[tuple[str, str]] | Sequence[str],
+        *,
+        default_kind: str = "PERSON",
+        split_person_parts: bool = True,
+    ) -> int:
+        """Pre-register known personal values before the first outbound request.
+
+        Accepts either ``(kind, value)`` pairs or plain strings (registered as
+        ``default_kind``). For multi-word ``PERSON`` names, each alphabetic
+        part of at least 3 characters is also registered when
+        ``split_person_parts`` is True so partial mentions are caught even if
+        NER misses them.
+        """
+        added = 0
+        for item in values:
+            if isinstance(item, tuple) and len(item) == 2:
+                kind, raw = str(item[0]).strip().upper() or default_kind, str(item[1])
+            else:
+                kind, raw = default_kind, str(item)
+            cleaned = " ".join(raw.split())
+            if len(cleaned) < 2:
+                continue
+            before = len(self)
+            self.token(kind, cleaned)
+            if len(self) > before:
+                added += 1
+            if split_person_parts and kind == "PERSON":
+                parts = cleaned.split()
+                if len(parts) > 1:
+                    for part in parts:
+                        word = part.strip(".,;:'\"()")
+                        if len(word) >= 3 and word.isalpha():
+                            b_part = len(self)
+                            self.token(kind, word)
+                            if len(self) > b_part:
+                                added += 1
+        return added
+
+    def seed_record(self, record: Mapping[str, Any]) -> int:
+        """Seed known identity values from a task/record mapping."""
+        pairs: list[tuple[str, str]] = []
+
+        def _kind_for_key(key: str) -> str:
+            low = key.casefold()
+            if any(tok in low for tok in ("dob", "birth", "date")):
+                return "DATE"
+            if any(tok in low for tok in ("phone", "tel", "mobile")):
+                return "PHONE"
+            if "mail" in low:
+                return "EMAIL"
+            if any(tok in low for tok in ("addr", "street")):
+                return "ADDRESS"
+            if any(tok in low for tok in ("mrn", "ssn", "acct", "account", "member", "id")):
+                return "ID"
+            return "PERSON"
+
+        def _walk(node: Any, key_hint: str = "") -> None:
+            if isinstance(node, Mapping):
+                for k, v in node.items():
+                    _walk(v, str(k))
+            elif isinstance(node, (list, tuple)):
+                for item in node:
+                    _walk(item, key_hint)
+            elif isinstance(node, str):
+                cleaned = " ".join(node.split())
+                if len(cleaned) >= 2:
+                    pairs.append((_kind_for_key(key_hint), cleaned))
+
+        _walk(record)
+        return self.seed(pairs)
 
     def known_spans(self, text: str) -> list[tuple[int, int, str]]:
         """Where a value already in the map occurs in ``text`` (any case,

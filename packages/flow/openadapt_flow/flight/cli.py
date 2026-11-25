@@ -129,6 +129,22 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         "with Save, Submit, Send... is refused); recorded in flight.json",
     )
     p.add_argument(
+        "--known-value",
+        action="append",
+        default=[],
+        metavar="VALUE",
+        help="a known personal value (or KIND:VALUE) to pre-seed into the run's "
+        "pseudonym map before the first request (repeatable)",
+    )
+    p.add_argument(
+        "--ui-allowlist",
+        action="append",
+        default=[],
+        metavar="WORD",
+        help="a non-personal UI word or phrase (app name, field label) to keep "
+        "readable when NER would otherwise redact it (repeatable)",
+    )
+    p.add_argument(
         "--allow-unenforced-egress",
         action="store_true",
         help="run even where the OS egress block is not available (any system but "
@@ -277,6 +293,36 @@ def cmd_flight(args: argparse.Namespace) -> int:
 
     no_block = bool(getattr(args, "no_egress_block", False))
     allow_unenforced = no_block or bool(getattr(args, "allow_unenforced_egress", False))
+    known_values: list[tuple[str, str] | str] = []
+    for raw_val in getattr(args, "known_value", None) or []:
+        text_val = str(raw_val).strip()
+        if not text_val:
+            continue
+        if ":" in text_val:
+            prefix, rest = text_val.split(":", 1)
+            if prefix.strip().isalpha() and prefix.strip().isupper() and rest.strip():
+                known_values.append((prefix.strip(), rest.strip()))
+                continue
+        known_values.append(text_val)
+    known_record: Optional[dict[str, Any]] = None
+    if args.guard_task:
+        try:
+            task_data = json.loads(Path(args.guard_task).read_text(encoding="utf-8"))
+            if isinstance(task_data, dict):
+                seed_fields = {
+                    k: v
+                    for k, v in task_data.items()
+                    if k.startswith("record_")
+                    or k in ("identity", "record", "patient", "subject")
+                }
+                if seed_fields:
+                    known_record = seed_fields
+        except (OSError, ValueError):
+            pass
+    ui_allowlist = [
+        str(w).strip() for w in (getattr(args, "ui_allowlist", None) or []) if str(w).strip()
+    ]
+
     usage_path = run_dir / "usage.json"
     egress = ScrubbedEgress(
         run_dir,
@@ -289,6 +335,9 @@ def cmd_flight(args: argparse.Namespace) -> int:
         scrubber=scrubber,
         usage_path=usage_path,
         use_block=not no_block,
+        known_values=known_values,
+        known_record=known_record,
+        ui_allowlist=ui_allowlist,
     )
     try:
         egress.__enter__()

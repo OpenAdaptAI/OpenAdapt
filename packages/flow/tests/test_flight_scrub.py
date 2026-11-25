@@ -643,3 +643,85 @@ def test_a_base64_run_in_the_place_of_a_host_is_not_kept_as_one():
 def test_prose_with_long_words_is_not_refused(text):
     images, _out = _scrubbed(text)
     assert images == 0
+
+
+def test_seeded_pseudonyms_scrub_names_ner_misses_including_partial_mentions():
+    """Issue #2520: pre-seeded record values scrub even when NER misses them."""
+    from openadapt_flow.flight.pseudonym import Pseudonyms
+
+    class BlindScrubber:
+        def scrub_text(self, text: str) -> str:
+            return text
+
+    pseudonyms = Pseudonyms()
+    pseudonyms.seed_record({"record_name": "Oren Dunleavy", "mrn": "MRN-44918"})
+    scrub = Scrub(BlindScrubber(), pseudonyms=pseudonyms)
+
+    req = {
+        "messages": [
+            {
+                "role": "user",
+                "content": "Open chart for Oren Dunleavy, also verify Dunleavy and MRN-44918.",
+            }
+        ]
+    }
+    clean = scrub_request(req, scrub)
+    out_text = clean["messages"][0]["content"]
+    assert "Oren" not in out_text
+    assert "Dunleavy" not in out_text
+    assert "MRN-44918" not in out_text
+    assert "[PERSON_" in out_text
+
+
+def test_ui_allowlist_keeps_app_name_and_field_labels_readable_while_scrubbing_real_phi():
+    """Issue #2521: allowlisted UI words stay readable when NER falsely tags them."""
+    from openadapt_flow.flight.pseudonym import Pseudonyms
+
+    class OvereagerScrubber:
+        def scrub_text(self, text: str) -> str:
+            return (
+                text.replace("MockMed", "<PERSON>")
+                .replace("Encounter Type", "<PERSON>")
+                .replace("Oren Dunleavy", "<PERSON>")
+            )
+
+    pseudonyms = Pseudonyms()
+    scrub = Scrub(
+        OvereagerScrubber(),
+        pseudonyms=pseudonyms,
+        ui_allowlist=("MockMed", "Encounter Type"),
+    )
+    out = scrub.text("MockMed screen: Encounter Type for Oren Dunleavy")
+    assert "MockMed" in out
+    assert "Encounter Type" in out
+    assert "Oren Dunleavy" not in out
+    assert "[PERSON_1]" in out
+
+
+def test_backstops_allow_git_shas_camelcase_and_previously_allowed_turns():
+    """Issue #2527: ordinary git SHAs, camelCase lists, and multi-turn history pass."""
+    from openadapt_flow.flight.pseudonym import Pseudonyms
+
+    class EchoScrubber:
+        def scrub_text(self, text: str) -> str:
+            return text
+
+    scrub = Scrub(EchoScrubber(), pseudonyms=Pseudonyms())
+
+    # 1. 30 newline-separated git SHAs (including mixed case)
+    shas = "\n".join(f"{i:04x}" + "aBcDeF0123456789" * 2 + "dead" for i in range(30))
+    scrub_request({"messages": [{"role": "user", "content": shas}]}, scrub)
+
+    # 2. 150 blocks of camelCase identifiers
+    camel_blocks = [
+        {"type": "text", "text": f"getUserProfile{i} updateRecordState{i} parseFormField{i}"}
+        for i in range(150)
+    ]
+    scrub_request({"messages": [{"role": "user", "content": camel_blocks}]}, scrub)
+
+    # 3. 40 separate tool results of 22 mixed-case characters accumulated over turns
+    history: list[dict[str, Any]] = []
+    for i in range(40):
+        token = f"aB{i:02d}cDeFgHiJkLmNoPqR"
+        history.append({"role": "user", "content": token})
+        scrub_request({"messages": list(history)}, scrub)
