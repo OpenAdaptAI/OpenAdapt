@@ -217,7 +217,7 @@ def test_producer_and_consumer_share_the_shard_count_and_current_run_artifacts()
     for step in gate["steps"][2:]:
         assert (
             step["if"]
-            == "needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'"
+            == "needs.scope.outputs.flow == 'true' || (github.event_name == 'merge_group' && needs.scope.outputs.verify == 'true')"
         )
         assert not step.get("continue-on-error")
     consumer = gate["steps"][-1]["run"]
@@ -235,7 +235,7 @@ def test_existing_required_status_and_critical_checks_still_precede_claims() -> 
     assert "RESULTS" in status["env"]
     assert 'if result not in ("success", "skipped"):' in status["run"]
     assert 'bad[name] = "skipped although selected"' in status["run"]
-    assert 'not_in_queue = {"flow-unit"}' in status["run"]
+    assert "not_in_queue = set()" in status["run"]
     critical = jobs["flow-critical"]["steps"]
     assert "skipped" in critical[-2]["run"]
     assert "tests == 0 or skipped" in critical[-2]["run"]
@@ -251,7 +251,8 @@ def test_existing_required_status_and_critical_checks_still_precede_claims() -> 
         ("pull_request", True, "failure", 1),
         ("pull_request", True, "cancelled", 1),
         ("pull_request", True, "skipped", 1),
-        ("merge_group", True, "skipped", 0),
+        ("merge_group", True, "skipped", 1),
+        ("merge_group", True, "success", 0),
         ("push", True, "skipped", 1),
         ("pull_request", False, "skipped", 0),
     ],
