@@ -42,6 +42,19 @@ from openadapt_kernel.macro import (
     observe_schema,
     stage_form,
 )
+from openadapt_kernel.mcp_server import (
+    dispatch_tool_call,
+    handle_jsonrpc_message,
+    serve_stdio,
+)
+from openadapt_kernel.oracles import (
+    OracleVerdict,
+    extract_pdf_visible_text,
+    token_boundary_check,
+    verify_cross_tab_dom,
+    verify_pdf_readback,
+    verify_sqlite_ro,
+)
 from openadapt_kernel.runner import (
     RunResult,
     format_run_result_json,
@@ -62,6 +75,7 @@ __all__ = [
     "NetworkEvent",
     "Obligation",
     "ObligationLedger",
+    "OracleVerdict",
     "PlanStep",
     "PortalPack",
     "ProvenanceViolation",
@@ -71,8 +85,11 @@ __all__ = [
     "ShadowTrace",
     "StageResult",
     "StepwiseHealer",
+    "dispatch_tool_call",
+    "extract_pdf_visible_text",
     "format_run_result_json",
     "generate_ephemeral_ed25519_keypair",
+    "handle_jsonrpc_message",
     "induce_pack_from_extension_recordings",
     "is_search_or_filter_field",
     "mint_receipt",
@@ -82,6 +99,11 @@ __all__ = [
     "replay_evidence_into_interceptor",
     "run_portal_pack",
     "sanitize_action_string",
+    "serve_stdio",
     "stage_form",
+    "token_boundary_check",
+    "verify_cross_tab_dom",
+    "verify_pdf_readback",
     "verify_receipt",
+    "verify_sqlite_ro",
 ]

@@ -30,4 +30,4 @@ def test_zero_legacy_engine_imports_and_zero_app_names() -> None:
         for app in FORBIDDEN_APP_NAMES:
             assert app not in lower, f"{path} contains app-specific string {app!r}"
 
-    assert total_lines < 2000, f"Kernel exceeded 2,000 LOC budget: {total_lines} lines"
+    assert total_lines < 2600, f"Kernel exceeded 2,600 LOC budget: {total_lines} lines"

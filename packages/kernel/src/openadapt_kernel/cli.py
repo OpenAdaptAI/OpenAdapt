@@ -19,6 +19,7 @@ from openadapt_kernel.extension_bridge import (
     induce_pack_from_extension_recordings,
     parse_extension_evidence_jsonl,
 )
+from openadapt_kernel.mcp_server import serve_stdio
 from openadapt_kernel.runner import format_run_result_json, run_portal_pack
 
 
@@ -124,6 +125,30 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return 0 if result.outcome in ("READY_FOR_HUMAN_COMMIT", "VERIFIED") else 1
 
 
+def _cmd_shadow_sync(args: argparse.Namespace) -> int:
+    root = Path(args.dir)
+    sessions = []
+    for ev_path in sorted(root.rglob("extension_evidence.jsonl")):
+        dossier_path = ev_path.parent / "dossier.json"
+        if not dossier_path.exists():
+            continue
+        dossier = json.loads(dossier_path.read_text(encoding="utf-8"))
+        sessions.append((ev_path, dossier, None))
+    if not sessions:
+        raise ValueError(f"No extension_evidence.jsonl + dossier.json pairs found under {root}")
+    pack = induce_pack_from_extension_recordings(args.pack_id, sessions)
+    out_path = Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(asdict(pack), indent=2), encoding="utf-8")
+    print(json.dumps({"pack_id": pack.pack_id, "sessions_ingested": len(sessions), "out": str(out_path)}))
+    return 0
+
+
+def _cmd_serve_mcp(_args: argparse.Namespace) -> int:
+    serve_stdio()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="openadapt-kernel")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -162,6 +187,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--episode-id", default="ep-live-1")
     p_run.add_argument("--headed", action="store_true")
     p_run.set_defaults(func=_cmd_run)
+
+    p_sync = sub.add_parser("shadow-sync", help="Scan a directory of Chrome Co-Pilot recordings and induce a PortalPack")
+    p_sync.add_argument("--dir", required=True)
+    p_sync.add_argument("--pack-id", required=True)
+    p_sync.add_argument("--out", required=True)
+    p_sync.set_defaults(func=_cmd_shadow_sync)
+
+    p_mcp = sub.add_parser("serve-mcp", help="Run the zero-dependency stdio JSON-RPC 2.0 MCP server")
+    p_mcp.set_defaults(func=_cmd_serve_mcp)
 
     return parser
 

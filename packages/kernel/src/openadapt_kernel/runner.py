@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Dict, List, Literal, Optional
 
 from openadapt_kernel.copilot import PortalPack, mint_receipt
 from openadapt_kernel.interceptor import CommitInterceptor
-from openadapt_kernel.ledger import ObligationLedger, ReadBackProof
+from openadapt_kernel.ledger import ObligationLedger
 from openadapt_kernel.macro import stage_form
+from openadapt_kernel.oracles import verify_cross_tab_dom, verify_pdf_readback, verify_sqlite_ro
 
 RunMode = Literal["draft", "autopilot"]
 
@@ -26,18 +26,6 @@ class RunResult:
     readback_verified: bool = False
     receipt_path: Optional[str] = None
     reason: str = ""
-
-
-def _token_boundary_matches(fields: Dict[str, str], text: str) -> List[str]:
-    compact = " ".join((text or "").split())
-    cited: List[str] = []
-    for val in fields.values():
-        v = str(val).strip()
-        if not v:
-            continue
-        if re.search(rf"(?<!\w){re.escape(v)}(?!\w)", compact):
-            cited.append(v)
-    return cited
 
 
 def _load_portal_pack(path: Path) -> PortalPack:
@@ -74,6 +62,12 @@ def run_portal_pack(
     url: Optional[str] = None,
     cdp_url: Optional[str] = None,
     commit_selector: Optional[str] = None,
+    popup_trigger_selector: Optional[str] = None,
+    popup_bindings: Optional[Dict[str, str]] = None,
+    popup_submit_selector: Optional[str] = None,
+    sqlite_db_path: Optional[Path] = None,
+    sqlite_query: Optional[str] = None,
+    pdf_readback_path: Optional[Path] = None,
     private_key_path: Optional[Path] = None,
     receipt_out: Optional[Path] = None,
     episode_id: str = "ep-live-1",
@@ -135,6 +129,32 @@ def run_portal_pack(
                     reason=f"stage_failed(unmatched={staged.unmatched}, mismatched={staged.mismatched})",
                 )
 
+            # Optional child popup workflow (e.g., replacement-cost estimator window)
+            if popup_trigger_selector and popup_bindings:
+                with page.expect_popup(timeout=5000) as pop_info:
+                    page.locator(popup_trigger_selector).first.click()
+                popup_page = pop_info.value
+                popup_page.wait_for_load_state("domcontentloaded")
+                pop_staged = stage_form(
+                    popup_page,
+                    popup_bindings,
+                    ledger=ledger,
+                    opaque_fields=opaque_fields,
+                    interceptor=interceptor,
+                )
+                if not pop_staged.ok:
+                    ledger.finalize("error", dirty_fields=list(interceptor.dirty_fields.keys()), error_detail="popup_stage_failed")
+                    return RunResult(
+                        mode=mode,
+                        outcome="ESCALATED",
+                        staged_fields={**staged.staged, **pop_staged.staged},
+                        reason="popup_stage_failed",
+                    )
+                staged.staged.update(pop_staged.staged)
+                if popup_submit_selector:
+                    popup_page.locator(popup_submit_selector).first.click()
+                    page.wait_for_timeout(200)
+
             if mode == "draft":
                 return RunResult(
                     mode="draft",
@@ -159,15 +179,16 @@ def run_portal_pack(
             page.wait_for_timeout(300)
             classification = interceptor.classify_step(form_submitted=True)
 
-            # Independent fresh-reload read-back against persisted server state
-            page.reload(wait_until="domcontentloaded")
-            page.wait_for_timeout(200)
-            body_text = str(page.evaluate("() => (document.body && document.body.innerText) || ''") or "")
+            # Independent post-commit read-back (SQLite RO -> PDF stream -> fresh-reload / cross-tab DOM)
             expected_vars = {k: bindings[k] for k in pack.variable_fields if k in bindings}
-            cited = _token_boundary_matches(expected_vars, body_text)
-            all_verified = bool(expected_vars) and len(cited) == len(expected_vars)
+            if sqlite_db_path and sqlite_query:
+                verdict = verify_sqlite_ro(sqlite_db_path, sqlite_query, (), expected_vars)
+            elif pdf_readback_path:
+                verdict = verify_pdf_readback(pdf_readback_path, expected_vars)
+            else:
+                verdict = verify_cross_tab_dom(page, expected_vars, reload_active=True)
 
-            if not all_verified:
+            if not verdict.verified:
                 ledger.finalize(
                     "error",
                     dirty_fields=list(interceptor.dirty_fields.keys()),
@@ -183,14 +204,7 @@ def run_portal_pack(
                 )
 
             interceptor.clear_dirty_fields()
-            ledger.mark_committed(
-                "primary_commit",
-                ReadBackProof(
-                    channel="fresh_reload",
-                    url_or_locator=str(page.url),
-                    cited_substrings=cited,
-                ),
-            )
+            ledger.mark_committed("primary_commit", verdict.to_proof())
             decision = ledger.finalize("done", dirty_fields=list(interceptor.dirty_fields.keys()))
 
             saved_receipt: Optional[str] = None
