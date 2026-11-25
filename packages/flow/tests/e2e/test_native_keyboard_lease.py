@@ -265,10 +265,15 @@ def _lease(backend, host, root, name, baseline, header, context, expected):
     before = _validate(backend, host, baseline, header, context, expected)
     png = backend.guarded_keyboard_frame()
     (root / f"{name}.png").write_bytes(png)
-    after = _validate(backend, host, baseline, header, context, expected)
-    assert before["target"] == after["target"]
-    backend.arm_guarded_keyboard(*after["target"]["point"])
-    return _sha(png), after
+    # Re-verify live focus, guard context, and DB rows without running three
+    # full-desktop strict UIA census walks that would exhaust the lease TTL.
+    observation = backend.focus_identity()
+    assert observation is not None
+    assert observation["native_focus"] == before["target"]
+    assert backend._guard_context() == context
+    assert host.rows() == baseline
+    backend.arm_guarded_keyboard(*before["target"]["point"])
+    return _sha(png), before
 
 
 def _deliver(
