@@ -895,7 +895,7 @@ jobs:
     # enter the queue only after packages-gate passed with these shards green
     # on its merge with main, and flow-critical re-checks the golden path on
     # the group.
-    if: github.event.pull_request.draft != true && (needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group')
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.flow == 'true' || (github.event_name == 'merge_group' && needs.scope.outputs.verify == 'true'))
     runs-on: ubuntu-latest
     # Push runs on main execute the full 2-shard suite (~39m on shard 2/2) and
     # nightly/dispatch runs also measure coverage; give both 60 minutes while
@@ -2161,9 +2161,9 @@ jobs:
               "flow-native-census",
               "flow-linux-atspi",
           }
-          # Skipped in the merge queue only: the pull request already passed
-          # it on its merge with main (packages-gate is required there).
-          not_in_queue = {"flow-unit"}
+          # Merge queue runs flow-unit too so semantic merge conflicts across
+          # concurrent PRs touching flow/types/verify cannot land on main.
+          not_in_queue = set()
           # PR and push-to-main only: skipped in merge queue and nightly runs.
           pr_or_push_only = {"flow-default-at-rest"}
           # PR tier only: checks a pull request's own diff.
@@ -2182,7 +2182,10 @@ jobs:
                   bad[name] = result
                   continue
               # A job missing from `selects` keeps the old rule: skipped is fine.
-              selected = name in selects and outputs.get(selects[name]) == "true"
+              selected = (
+                  (name in selects and outputs.get(selects[name]) == "true")
+                  or (queue_tier and name == "flow-unit" and outputs.get("verify") == "true")
+              )
               off_tier = (
                   ((pr_tier or queue_tier) and name in post_merge_only)
                   or (queue_tier and name in not_in_queue)
@@ -2196,33 +2199,32 @@ jobs:
           sys.exit(1 if bad else 0)
           PY
       # Unit evidence is complete only after every current-run shard passed.
-      # The merge queue deliberately rechecks critical tests, not unit shards.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        if: needs.scope.outputs.flow == 'true' || (github.event_name == 'merge_group' && needs.scope.outputs.verify == 'true')
         with:
           persist-credentials: false
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        if: needs.scope.outputs.flow == 'true' || (github.event_name == 'merge_group' && needs.scope.outputs.verify == 'true')
         with:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
-        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        if: needs.scope.outputs.flow == 'true' || (github.event_name == 'merge_group' && needs.scope.outputs.verify == 'true')
         with:
           enable-cache: true
           cache-dependency-glob: .github/ci-tools/uv.lock
           cache-suffix: flow-claims
       - name: Install the locked claims validator dependency
-        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        if: needs.scope.outputs.flow == 'true' || (github.event_name == 'merge_group' && needs.scope.outputs.verify == 'true')
         run: python scripts/ci/locked_install.py --lock .github/ci-tools:claims
       - name: Download this run's unit claim evidence
-        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        if: needs.scope.outputs.flow == 'true' || (github.event_name == 'merge_group' && needs.scope.outputs.verify == 'true')
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: flow-unit-junit-*
           path: runs/flow-unit-junit
           merge-multiple: false
       - name: Require every unit shard and validate all supported unit evidence
-        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        if: needs.scope.outputs.flow == 'true' || (github.event_name == 'merge_group' && needs.scope.outputs.verify == 'true')
         run: |
           set -euo pipefail
           python scripts/ci/merge_flow_junit.py --artifacts-dir runs/flow-unit-junit \

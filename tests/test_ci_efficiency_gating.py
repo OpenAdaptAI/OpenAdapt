@@ -334,7 +334,7 @@ def test_every_at_rest_importer_selects_flow_at_rest(tmp_path: Path) -> None:
             },
             1,
         ),
-        # Merge queue skips flow-default-at-rest cleanly (pr_only)
+        # Merge queue skips flow-default-at-rest cleanly (pr_or_push_only) while running flow-unit
         (
             "merge_group",
             {
@@ -344,7 +344,7 @@ def test_every_at_rest_importer_selects_flow_at_rest(tmp_path: Path) -> None:
                 "flow_agent_frameworks": "false",
             },
             {
-                "flow-unit": "skipped",
+                "flow-unit": "success",
                 "flow-critical": "success",
                 "flow-default-at-rest": "skipped",
                 "flow-onprem-offline": "skipped",
