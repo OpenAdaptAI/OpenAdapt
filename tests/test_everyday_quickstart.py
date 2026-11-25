@@ -19,15 +19,25 @@ from openadapt.quickstart.everyday import (
 )
 
 try:
+    from openadapt_flow.local_state_sources import (
+        MacosCalendarEventSource as _MacosCalendarEventSource,
+        MacosNightShiftSource as _MacosNightShiftSource,
+    )
     from openadapt_flow.runtime.effects.local_state import LocalStateVerifier
     from openadapt_flow.verify_run import VerifyConfig
-except ImportError:  # launcher CI installs released openadapt-flow without local_state
+except (
+    ImportError
+):  # launcher CI installs released openadapt-flow without everyday probes
+    _MacosCalendarEventSource = None  # type: ignore[assignment]
+    _MacosNightShiftSource = None  # type: ignore[assignment]
     LocalStateVerifier = None  # type: ignore[assignment]
     VerifyConfig = None  # type: ignore[assignment]
 
 _REQUIRES_LOCAL_STATE = pytest.mark.skipif(
-    LocalStateVerifier is None,
-    reason="openadapt_flow.runtime.effects.local_state not in installed openadapt-flow",
+    LocalStateVerifier is None
+    or _MacosNightShiftSource is None
+    or _MacosCalendarEventSource is None,
+    reason="everyday local_state probes not in installed openadapt-flow",
 )
 
 
