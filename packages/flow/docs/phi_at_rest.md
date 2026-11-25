@@ -309,9 +309,11 @@ recording's raw capture session.
 ## Receipts
 
 The receipt (`seal.json`), its timestamp and log proofs, `receipt.json`,
-`receipt.md`, `receipt.png` and the public card (`public-seal.json`) stay
-plaintext beside an encrypted run. They hold signatures, outcomes, counts and
-digests, never the report's contents.
+`receipt.md`, `receipt.png`, the run summary (`run-summary.json`,
+`run-summary.md`, `run-summary.png`) and the public card (`public-seal.json`)
+stay plaintext beside an encrypted run. They hold signatures, outcomes, counts
+and digests, never the report's contents. The run summary is written through
+the run's sealed set, so the run's index names it.
 
 **Every digest is over the plaintext.** The receipt's `subject_sha256` and
 the card's `report_sha256` are the SHA-256 of the plaintext `report.json`
@@ -495,7 +497,8 @@ Every file is encrypted except these structural ones: `.durable_run.claim`
 (nonce digests and times), `.attended_capability.key` (a random per-run
 secret, no recorded data), and the receipt files (`seal.json`,
 `seal.anchor.json`, `seal.tsa.json`, `seal.tsr`, `seal.publish.json`,
-`public-seal.json`, `receipt.json`, `receipt.md`, `receipt.png`; see
+`public-seal.json`, `receipt.json`, `receipt.md`, `receipt.png`,
+`run-summary.json`, `run-summary.md`, `run-summary.png`; see
 [Receipts](#receipts)). `seal.html`, the receipt page, is an export: it is
 plaintext and logged. Undo's prior record values (`undo/prior/*`) are
 encrypted with the run. The durable store's checkpoints, pauses and

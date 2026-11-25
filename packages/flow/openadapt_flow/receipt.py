@@ -1244,7 +1244,14 @@ def write_receipt(receipt: RunReceipt, out_dir: Path | str) -> dict[str, Path]:
     """Write the run summary: ``run-summary.json``, ``.md`` and ``.png``, locally.
 
     Purely local: this function performs no network I/O and never uploads.
+    Inside an encrypted run directory the files go through the run's sealed
+    set, which keeps them as allow-listed plaintext and names them in its
+    index, so sealing the run afterwards does not refuse them.
     """
+
+    import io
+
+    from openadapt_flow import sealed_set
 
     try:
         receipt = RunReceipt.model_validate(receipt.model_dump(mode="json"))
@@ -1253,9 +1260,11 @@ def write_receipt(receipt: RunReceipt, out_dir: Path | str) -> dict[str, Path]:
     directory = Path(out_dir)
     directory.mkdir(parents=True, exist_ok=True)
     json_path = directory / f"{SUMMARY_STEM}.json"
-    json_path.write_bytes(receipt.canonical_json() + b"\n")
+    sealed_set.write_bytes(json_path, receipt.canonical_json() + b"\n")
     md_path = directory / f"{SUMMARY_STEM}.md"
-    md_path.write_text(render_receipt_markdown(receipt), encoding="utf-8")
+    sealed_set.write_text(md_path, render_receipt_markdown(receipt))
     png_path = directory / f"{SUMMARY_STEM}.png"
-    render_receipt_png(receipt).save(png_path, format="PNG")
+    png = io.BytesIO()
+    render_receipt_png(receipt).save(png, format="PNG")
+    sealed_set.write_bytes(png_path, png.getvalue())
     return {"json": json_path, "markdown": md_path, "png": png_path}
