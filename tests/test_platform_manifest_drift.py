@@ -397,8 +397,8 @@ def test_runtime_requirements_come_from_selected_release_metadata(
     assert actual == expected
 
     # Launcher 1.17.0 adds its openadapt-agent edge; Flow 2.3.0 its
-    # openadapt-types edge.
-    assert len(manifest["dependency_edges"]) == 13
+    # openadapt-types edge; Launcher 1.24.0 adds its openadapt-types edge.
+    assert len(manifest["dependency_edges"]) == 14
     components = deepcopy(manifest["components"])
     components["capture"]["version"] = "0.0.1"
     edges = _dependency_edges(components, manifest["runtime_units"])
