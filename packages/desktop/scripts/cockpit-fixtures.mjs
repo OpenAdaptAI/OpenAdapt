@@ -291,9 +291,42 @@ const HALTED_STEPS = [
   { index: 5, action: 'click', target: 'Close', state: 'pending', latency_ms: null, effect: null },
 ];
 
+const VERIFIED_BEFORE_SAVE = syntheticScreen({
+  banner: '',
+  member: 'Invoice INV-2207   Northwind Clinic   Amount $420.00',
+  note: 'Reviewed — ready for billing',
+  saved: false,
+});
+
+const VERIFIED_AFTER_SAVE = syntheticScreen({
+  banner: 'Saved: Reviewed — ready for billing',
+  member: 'Invoice INV-2207   Northwind Clinic   Amount $420.00',
+  note: 'Reviewed — ready for billing',
+  saved: true,
+});
+
 const VERIFIED_STEPS = [
   ...STEPS,
-  { index: 4, action: 'click', target: 'Save', state: 'verified', latency_ms: 288, effect: 'verified' },
+  {
+    index: 4,
+    action: 'click',
+    target: 'Save',
+    state: 'verified',
+    latency_ms: 288,
+    effect: 'verified',
+    before_screenshot: {
+      data_url: VERIFIED_BEFORE_SAVE,
+      width: 1280,
+      height: 800,
+      focus: { x: 103, y: 351 },
+    },
+    after_screenshot: {
+      data_url: VERIFIED_AFTER_SAVE,
+      width: 1280,
+      height: 800,
+      focus: null,
+    },
+  },
   { index: 5, action: 'click', target: 'Close', state: 'verified', latency_ms: 154, effect: null },
 ];
 
