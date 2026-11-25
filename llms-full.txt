@@ -150,6 +150,20 @@ OpenAdapt picks the strongest check the target application supports:
 - **Level 2 (Post-action fresh-reload read-back, 0 DB required):** Reloads or opens a separate session to read back submitted fields, server confirmation IDs, or generated PDFs.
 - **Level 3 (Direct API or DB read-back, optional upgrade):** Reads the system of record directly over read-only FHIR, REST, or SQL and signs a `VERIFIED` Ed25519 receipt.
 
+### Signed Receipts and 3-Pane Receipt Viewer
+
+<p align="center">
+  <a href="https://openadapt.ai/receipts/3fb27257dbc65e58">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="media/receipt-viewer-dark.webp">
+      <source media="(prefers-color-scheme: light)" srcset="media/receipt-viewer-light.webp">
+      <img alt="OpenAdapt 3-pane Ed25519 receipt workbench showing program graph, cryptographic verdict, and step-by-step read-back evidence" src="media/receipt-viewer-light.webp" width="100%">
+    </picture>
+  </a>
+</p>
+
+*Interactive 3-pane Ed25519 receipt workbench (`openadapt seal view`): program graph, cryptographic verdict, and step-by-step read-back evidence. [Inspect live receipt →](https://openadapt.ai/receipts/3fb27257dbc65e58)*
+
 ## Packages
 
 `pip install openadapt` installs the launcher, compiler/runtime engine, and MCP server. Every package installs only what it imports ([install weight policy](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/docs/monorepo/INSTALL_WEIGHT.md)).
