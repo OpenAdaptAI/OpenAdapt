@@ -217,10 +217,11 @@ def pytest_runtest_makereport(item, call):
         return
     from tests._playwright_loop_guard import (
         clear_leaked_running_loop,
+        has_playwright_frame,
         is_pytest_timeout,
     )
 
-    if is_pytest_timeout(call.excinfo.value):
+    if is_pytest_timeout(call.excinfo.value) and has_playwright_frame(call.excinfo.tb):
         clear_leaked_running_loop()
 
 
