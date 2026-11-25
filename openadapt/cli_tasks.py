@@ -26,6 +26,7 @@ TASKS = {
 # These tasks are implemented by launcher-native commands, not the Flow parser.
 LAUNCHER_TASKS = {
     "kernel": "Run the minimal commit-boundary and shadow-to-autopilot runtime",
+    "mcpify": "Serve compiled workflow packs or JIT plans as a local MCP server",
     "wrap": "Run an agent task once, then reuse its checked compiled tool",
     "test": "Test an agent on real apps with planted faults, for CI",
 }
