@@ -1376,3 +1376,69 @@ def test_desktop_mode_frame_size_must_match_declared_viewport(
         ValueError, match=r"virtual-desktop.*1280x800.*viewport.*640x400"
     ):
         convert_capture(capture_dir, tmp_path / "recording")
+
+
+def test_convert_capture_explicit_operator_surface_binding(tmp_path: Path) -> None:
+    """Explicit operator surface binding records surface and application in meta.json (#2251)."""
+    capture_dir = make_capture(
+        tmp_path,
+        _click_rows(T0 + 1.0, 100.0, 100.0),
+        screens=app_screens()[:1],
+    )
+    out_dir = convert_capture(
+        capture_dir, tmp_path / "recording", surface="windows:notepad.exe"
+    )
+    meta = json.loads((out_dir / "meta.json").read_text(encoding="utf-8"))
+    assert meta["surface"] == "windows"
+    assert meta["surface_binding_source"] == "operator"
+    assert meta["application"] == "notepad.exe"
+
+    with pytest.raises(ValueError, match="unknown surface"):
+        convert_capture(capture_dir, tmp_path / "bad_surface", surface="bogus:app")
+
+
+def test_convert_capture_drop_with_log_trims_out_of_window_stop_click(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Opt-in drop-with-log drops out-of-window clicks with an audit record (#2253)."""
+    config = desktop_capture_config(
+        origin=[0, 0],
+        viewport=[1280, 800],
+        monitor_count=1,
+        monitors=[[0, 0, 1280, 800]],
+    )
+    rows = _click_rows(T0 + 1.0, 100.0, 100.0) + _click_rows(T0 + 2.0, 1458.0, 151.0)
+    capture_dir = make_capture(
+        tmp_path,
+        rows,
+        screens=app_screens()[:1],
+        config=config,
+    )
+    # Default policy still refuses.
+    with pytest.raises(ValueError, match="out-of-desktop input"):
+        convert_capture(capture_dir, tmp_path / "refused")
+
+    # Explicit opt-in drops the out-of-window stop click, logs a warning, and records it.
+    with caplog.at_level("WARNING"):
+        out_dir = convert_capture(
+            capture_dir,
+            tmp_path / "trimmed",
+            trim_out_of_window="drop-with-log",
+        )
+    meta = json.loads((out_dir / "meta.json").read_text(encoding="utf-8"))
+    dropped = meta["dropped_out_of_window_actions"]
+    assert len(dropped) == 1
+    assert dropped[0]["x"] == 1458.0
+    assert dropped[0]["y"] == 151.0
+    assert any("Dropping out-of-desktop input" in rec.message for rec in caplog.records)
+    events = [
+        json.loads(line)
+        for line in (out_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert len(events) == 1
+    assert events[0]["x"] == 100
+
+    with pytest.raises(ValueError, match="unknown trim_out_of_window policy"):
+        convert_capture(
+            capture_dir, tmp_path / "bad_policy", trim_out_of_window="silent"
+        )

@@ -84,6 +84,7 @@ FLOW_NAMES = {
     "materialize-approved": "compile --materialize-approved",
     "narration": "record narration",
     "no-outbound": "setup no-outbound",
+    "onboard": "setup onboard",
     "plan": "run --plan",
     "process": "run --process",
     "propose-qualification": "qualify --propose",
