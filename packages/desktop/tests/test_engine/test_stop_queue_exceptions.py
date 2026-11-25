@@ -452,6 +452,15 @@ def test_the_windows_rule_allows_only_this_user_system_and_administrators(owner,
     assert (reason is not None) is refused
 
 
+def test_the_windows_rule_refuses_administrators_owner_when_not_elevated():
+    """Issue #2539: a non-elevated Desktop refuses an Administrators-owned card."""
+    reason = exception_queue.windows_private_reason(
+        "S-1-5-32-544", _PROFILE_ACL, me=frozenset({_ME})
+    )
+    assert reason is not None
+    assert "S-1-5-32-544" in reason
+
+
 def test_the_scan_stops_at_the_cap_across_runs(monkeypatch):
     monkeypatch.setattr(exception_queue, "MAX_CARDS", 2)
     for run in ("run-a", "run-b", "run-c"):

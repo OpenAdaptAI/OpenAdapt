@@ -112,9 +112,10 @@
 ### Bug Fixes
 
 - Exception cards are checked on Windows as on macOS and Linux: a link or junction is
-  refused, and a card must be private to this user by its access control list (only this
-  user, SYSTEM and Administrators). Answers are written only where they come out private,
-  and card and answer files are read and written as raw bytes.
+  refused, and a card must be owned by this user (or Administrators when Desktop runs
+  elevated) and private by its access control list (only this user, SYSTEM and
+  Administrators). Answers are written only where they come out private, and card and
+  answer files are read and written as raw bytes.
 - Update the `url` crate to 2.5.9 (RUSTSEC-2026-0592).
 
 ## v0.31.0 (2026-11-21)
