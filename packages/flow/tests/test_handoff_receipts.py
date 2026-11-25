@@ -462,3 +462,45 @@ def test_handoff_list_signs_updates_and_shows_the_history(tmp_path, env, capsys)
     intake.check(referrals, referral.id, "REF-1", Fake(_found(birth_date="1984-03-10")))
     assert main([*argv, "--sign-updates"]) == 2
     assert not (run_dir / "receipt.update-2.json").exists()
+
+
+def test_sign_updates_signs_intermediate_transitions_in_order(tmp_path, env):
+    """Issue #2475: a handoff that differs and then matches again signs both transitions."""
+    from openadapt_flow.offline_seal import seal_home, signer_for
+    from openadapt_flow.receipt_record import receipt_after_run
+
+    run_dir = _run(tmp_path)
+    referrals = HandoffLedger(tmp_path / "referrals")
+    referral = referrals.send(
+        "REF-1",
+        FIELDS,
+        counterparty="receiving clinic",
+        system_kind="ehr",
+        follow_up_hours=24,
+        run_id=str(run_dir),
+        step=0,
+    )
+    receipt_after_run(run_dir, env)
+    signer = signer_for(seal_home(env))
+
+    # 1. Confirm as intended and sign update-1.
+    intake.check(referrals, referral.id, "REF-1", Fake(_found()))
+    first = followup.sign_updates(run_dir, [referrals], signer=signer)
+    assert first is not None and first.name == "receipt.update-1.json"
+
+    # 2. Record a differing read, then a matching read, before signing again.
+    intake.check(referrals, referral.id, "REF-1", Fake(_found(family_name="Other")))
+    intake.check(referrals, referral.id, "REF-1", Fake(_found()))
+
+    last = followup.sign_updates(run_dir, [referrals], signer=signer)
+    assert last is not None and last.name == "receipt.update-3.json"
+    assert [p.name for p in followup.updates(run_dir)] == [
+        "receipt.update-1.json",
+        "receipt.update-2.json",
+        "receipt.update-3.json",
+    ]
+    verified = followup.verify_history(run_dir, _registry(tmp_path))
+    assert verified is not None and verified.ok
+
+    # Calling sign_updates again with no new observations signs nothing.
+    assert followup.sign_updates(run_dir, [referrals], signer=signer) is None
