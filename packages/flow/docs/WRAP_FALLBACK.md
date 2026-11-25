@@ -207,6 +207,29 @@ The hold verbs:
 - `wrap-dispatch evict TASK`: sets the program aside as evidence; the next
   `openadapt wrap` run compiles afresh.
 
+## Scripted or command fallback (zero model calls)
+
+To exercise the full `wrap-dispatch` CLI fallback path without calling a hosted
+model provider (for example in offline verification or CI):
+
+1. Admit the task's bundle with `openadapt wrap` (or `openadapt-flow admit`)
+   into the `--task` configuration's cache directory and key directory.
+2. Pass `--fallback-script actions.json` (a JSON list or `{"actions": [...]}`)
+   or `--fallback-command "..."` (a local command that prints JSON actions to
+   stdout) together with `--fallback agent --fallback-max-cost-usd 0.50`:
+
+```bash
+openadapt-flow wrap-dispatch --task task.json --request-id r-118 \
+    --param note="Synthetic follow-up" \
+    --fallback agent --fallback-max-cost-usd 0.50 \
+    --fallback-script actions.json \
+    --fallback-gate item-approval --fallback-approvals-dir PORTAL_RUNS_ROOT
+```
+
+The scripted agent runs with `requires_model_key=False`, `model_calls=0`, and
+passes through the same pre-commit gate, right-record check, and read-back
+verification as a model-driven fallback.
+
 ## Not covered yet
 
 - Compiled browser runs over MCP need the worker-thread fix in

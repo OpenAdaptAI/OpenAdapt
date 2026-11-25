@@ -17,7 +17,8 @@ FLOW_ROOT = Path(__file__).resolve().parent.parent
 # as the traceback pytest keeps does on CI.
 _LEAKING_FILE = """
 import asyncio
-import time
+import socket
+import threading
 
 import pytest
 from playwright.sync_api import sync_playwright
@@ -27,14 +28,36 @@ LEAKED = []
 
 def test_0_open_a_playwright_session():
     manager = sync_playwright()
-    manager.start()
-    LEAKED.append(manager)
+    pw = manager.start()
+    LEAKED.append((manager, pw))
 
 
 @pytest.mark.timeout(1)
 def test_1_times_out_inside_a_playwright_session():
     assert LEAKED
-    time.sleep(30)
+    _, pw = LEAKED[0]
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    port = srv.getsockname()[1]
+
+    def _hold():
+        try:
+            conn, _ = srv.accept()
+            conn.settimeout(5)
+            try:
+                conn.recv(1024)
+            except OSError:
+                pass
+            conn.close()
+        except OSError:
+            pass
+        finally:
+            srv.close()
+
+    threading.Thread(target=_hold, daemon=True).start()
+    ctx = pw.request.new_context()
+    ctx.get(f"http://127.0.0.1:{port}/hang", timeout=30_000)
 
 
 def test_2_next_browser_test_starts_cleanly():
@@ -43,7 +66,7 @@ def test_2_next_browser_test_starts_cleanly():
 
 
 def test_3_stop_the_leaked_session():
-    manager = LEAKED.pop()
+    manager, _ = LEAKED.pop()
     asyncio._set_running_loop(manager._loop)
     manager.__exit__()
     asyncio._set_running_loop(None)
@@ -143,6 +166,55 @@ def test_the_guard_clears_only_a_leaked_loop() -> None:
         asyncio._set_running_loop(loop)
         assert clear_leaked_running_loop() is True
         assert asyncio._get_running_loop() is None
+    finally:
+        asyncio._set_running_loop(None)
+        loop.close()
+
+
+def test_has_playwright_frame_distinguishes_playwright_from_non_playwright_tracebacks() -> (
+    None
+):
+    from tests._playwright_loop_guard import has_playwright_frame
+
+    assert has_playwright_frame(None) is False
+
+    try:
+        raise RuntimeError("Timeout (>1.0s) from pytest-timeout.")
+    except RuntimeError as exc:
+        assert has_playwright_frame(exc.__traceback__) is False
+
+    ns = {"__name__": "playwright.sync_api._generated"}
+    exec(
+        "def _pw_call():\n    raise RuntimeError('Timeout (>1.0s) from pytest-timeout.')\n",
+        ns,
+    )
+    try:
+        ns["_pw_call"]()
+    except RuntimeError as exc:
+        assert has_playwright_frame(exc.__traceback__) is True
+
+
+def test_non_playwright_timeout_preserves_running_loop() -> None:
+    import asyncio
+    from types import SimpleNamespace
+
+    from tests.conftest import pytest_runtest_makereport
+
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio._set_running_loop(loop)
+        try:
+            raise RuntimeError("Timeout (>1.0s) from pytest-timeout.")
+        except RuntimeError as exc:
+            excinfo = SimpleNamespace(value=exc, tb=exc.__traceback__)
+        call = SimpleNamespace(when="call", excinfo=excinfo)
+        hook = pytest_runtest_makereport(item=None, call=call)
+        next(hook)
+        try:
+            next(hook)
+        except StopIteration:
+            pass
+        assert asyncio._get_running_loop() is loop
     finally:
         asyncio._set_running_loop(None)
         loop.close()

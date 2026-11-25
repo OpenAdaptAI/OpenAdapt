@@ -114,7 +114,14 @@ def record_signed(run_dir: Path, file: str, handoffs: Sequence[Handoff]) -> None
     data["records"].append(
         {
             "file": file,
-            "lines": [{"handoff": h.id, "signed": _signature(h)} for h in handoffs],
+            "lines": [
+                {
+                    "handoff": h.id,
+                    "signed": _signature(h),
+                    "observation_count": len(h.observations),
+                }
+                for h in handoffs
+            ],
         }
     )
     _write_json(run_dir / SIDECAR, data, private=True)
@@ -128,6 +135,18 @@ def last_signed(run_dir: Path) -> dict[str, dict[str, Any]]:
         for item in record["lines"]:
             latest[item["handoff"]] = item["signed"]
     return latest
+
+
+def last_signed_counts(run_dir: Path) -> dict[str, int]:
+    """Each handoff's observation count when it was last signed."""
+
+    counts: dict[str, int] = {}
+    for record in _sidecar(run_dir)["records"]:
+        for item in record["lines"]:
+            count = item.get("observation_count")
+            if isinstance(count, int):
+                counts[item["handoff"]] = count
+    return counts
 
 
 _UPDATE_NAME = re.compile(r"^receipt\.update-(.*)\.json$")
@@ -277,41 +296,68 @@ def _sign_updates_locked(
         raise ValueError("report.json is not the report the receipt signed")
     report = loads_strict(raw_report.decode("utf-8"))
     signed = last_signed(run_dir)
-    changed: list[Handoff] = []
+    signed_counts = last_signed_counts(run_dir)
+    per_handoff: list[list[Handoff]] = []
     for handoff in place(statement, handoffs_for_run(report, list(ledgers), run_dir)):
-        if signed.get(handoff.id) != _signature(handoff):
-            changed.append(handoff)
-    if not changed:
+        cur_sig = signed.get(handoff.id)
+        prev_count = signed_counts.get(handoff.id)
+        transitions: list[Handoff] = []
+        if prev_count is not None and len(handoff.observations) > prev_count:
+            for k in range(prev_count + 1, len(handoff.observations) + 1):
+                snap = handoff.model_copy(
+                    update={"observations": list(handoff.observations[:k])}
+                )
+                sig = _signature(snap)
+                if sig != cur_sig:
+                    transitions.append(snap)
+                    cur_sig = sig
+        elif cur_sig != _signature(handoff):
+            transitions.append(handoff)
+        if transitions:
+            per_handoff.append(transitions)
+    if not per_handoff:
         return None
-    sequence = len(updates(run_dir)) + 1
-    lines, openings = build_confirmations(changed)
-    follow_up = r.follow_up_statement(original, sequence, lines)
-    envelope = r.sign_statement(follow_up, [(kid, signer.sign)])
-    out = run_dir / update_file(sequence)
-    # Race class: a sequence is claimed exclusively, so two signers can't
-    # write the same update; the loser fails and signs nothing.
-    if _is_file(out):
-        raise ValueError(f"{out.name} was written by another signer")
-    # Durable before any update file: what this update is, so an
-    # interrupted publication can be completed or rolled back.
-    _write_json(
-        _pending_path(run_dir),
-        {
-            "file": out.name,
-            "private": update_private_file(sequence),
-            "lines": [{"handoff": h.id, "signed": _signature(h)} for h in changed],
-        },
-        private=True,
-    )
-    _write_json(
-        run_dir / update_private_file(sequence),
-        r.private_openings(envelope, openings),
-        private=True,
-    )
-    _write_json(out, envelope, private=False)
-    record_signed(run_dir, out.name, changed)
-    _unlink(_pending_path(run_dir))
-    return out
+    max_rounds = max(len(t) for t in per_handoff)
+    last_out: Optional[Path] = None
+    for round_idx in range(max_rounds):
+        changed = [t[round_idx] for t in per_handoff if round_idx < len(t)]
+        sequence = len(updates(run_dir)) + 1
+        lines, openings = build_confirmations(changed)
+        follow_up = r.follow_up_statement(original, sequence, lines)
+        envelope = r.sign_statement(follow_up, [(kid, signer.sign)])
+        out = run_dir / update_file(sequence)
+        # Race class: a sequence is claimed exclusively, so two signers can't
+        # write the same update; the loser fails and signs nothing.
+        if _is_file(out):
+            raise ValueError(f"{out.name} was written by another signer")
+        # Durable before any update file: what this update is, so an
+        # interrupted publication can be completed or rolled back.
+        _write_json(
+            _pending_path(run_dir),
+            {
+                "file": out.name,
+                "private": update_private_file(sequence),
+                "lines": [
+                    {
+                        "handoff": h.id,
+                        "signed": _signature(h),
+                        "observation_count": len(h.observations),
+                    }
+                    for h in changed
+                ],
+            },
+            private=True,
+        )
+        _write_json(
+            run_dir / update_private_file(sequence),
+            r.private_openings(envelope, openings),
+            private=True,
+        )
+        _write_json(out, envelope, private=False)
+        record_signed(run_dir, out.name, changed)
+        _unlink(_pending_path(run_dir))
+        last_out = out
+    return last_out
 
 
 def verify_history(run_dir: str | Path, registry: Sequence[Any]) -> Any:

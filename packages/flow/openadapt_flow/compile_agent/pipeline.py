@@ -1188,8 +1188,8 @@ class FirstRunCompiler:
         parameters (``"review"``), then the canary results (``"admit"``), and
         returns True only when they confirm each.
 
-        ``canary_params`` are the values each canary saves, one mapping per
-        canary (the last is reused). A canary is a real save on the record the
+        ``canary_params`` are the values each canary saves, one distinct
+        mapping per canary. A canary is a real save on the record the
         task names, so the operator chooses values that are safe there.
 
         Each canary also gets a verify-run receipt against the confirmed
@@ -1238,9 +1238,16 @@ class FirstRunCompiler:
                 confirm="ok",
             )
             count = 1
+        duplicate_rows = _duplicate_canary_rows(self.task, rows, count)
+        if duplicate_rows is not None:
+            return self._result("draft", duplicate_rows)
         canaries: list[dict[str, Any]] = []
         for i in range(count):
-            params = rows[min(i, len(rows) - 1)]
+            params = (
+                rows[i]
+                if getattr(self.task, "params", None)
+                else rows[min(i, len(rows) - 1)]
+            )
             values = self.task.validate(params)
             try:
                 result, receipt, path = self._governed(
@@ -1484,6 +1491,32 @@ def _repeats_run1(
                 "canary with run 1's values passes even when the program types "
                 "the demonstrated text, so choose different values"
             )
+    return None
+
+
+def _duplicate_canary_rows(
+    task: Any, rows: Sequence[Mapping[str, Any]], count: int
+) -> Optional[str]:
+    """Why multi-canary rows fail distinctness, or None when they are distinct."""
+
+    if count <= 1 or not getattr(task, "params", None):
+        return None
+    if len(rows) < count:
+        return (
+            f"pass at least {count} distinct canary value rows (received "
+            f"{len(rows)}); reusing a canary row does not prove the program "
+            "handles distinct inputs"
+        )
+    seen: dict[str, int] = {}
+    for number, row in enumerate(rows[:count], start=1):
+        validated = task.validate(row)
+        key = json.dumps(validated, sort_keys=True, default=str)
+        if key in seen:
+            return (
+                f"canary {number} repeats canary {seen[key]}'s values; choose "
+                "distinct values for each canary"
+            )
+        seen[key] = number
     return None
 
 

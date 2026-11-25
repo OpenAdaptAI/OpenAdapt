@@ -339,7 +339,15 @@ def run_program(
         and any(record.get("note") == note for record in records)
     )
     if report.execution_outcome == "VERIFIED":
-        write_receipt(_build_tutorial_receipt(report), run_dir)
+        receipt_enabled = True
+        try:
+            from openadapt_flow.receipt_record import mode_enabled
+
+            receipt_enabled = mode_enabled()
+        except ImportError:
+            pass
+        if receipt_enabled:
+            write_receipt(_build_tutorial_receipt(report), run_dir)
     facts = RunFacts(
         index=index,
         note=note,
@@ -890,20 +898,21 @@ def write_run_receipts(run_dirs: list[Path]) -> int:
     """Write each run's ``receipt.json`` (record/run/v1); returns how many exist."""
 
     try:
-        from openadapt_flow.offline_seal import seal_home, signer_for
-        from openadapt_flow.receipt_record import write_receipt_record
+        from openadapt_flow.receipt_record import mode_enabled, receipt_after_run
     except ImportError:
+        return 0
+    if not mode_enabled():
         return 0
     written = 0
     for run_dir in run_dirs:
         if not (Path(run_dir) / "report.json").is_file():
             continue
         try:
-            home = seal_home()
-            write_receipt_record(Path(run_dir), signer=signer_for(home), home=home)
+            note = receipt_after_run(Path(run_dir))
         except Exception:  # noqa: BLE001 - a receipt failure never ends the finale
             continue
-        written += 1
+        if note and note.startswith("receipt: "):
+            written += 1
     return written
 
 
