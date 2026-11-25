@@ -1,10 +1,10 @@
-"""Full-DOM schema extraction (including Shadow DOM & iframes), transactional form staging, and stepwise live-DOM healing."""
+"""Full-DOM schema extraction (including Shadow DOM & iframes), indexed live-DOM grounding, transactional form staging, and stepwise healing."""
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Sequence, Tuple
 
 from openadapt_kernel.interceptor import CommitInterceptor
 from openadapt_kernel.ledger import ObligationLedger, ProvenanceViolation
@@ -25,7 +25,6 @@ _OBSERVE_SCHEMA_JS = """() => {
   };
   walkRoot(document, false);
 
-  const items = [];
   const labelTextFor = (el, root) => {
     if (el.getAttribute('aria-label')) return el.getAttribute('aria-label').trim();
     if (el.id && root && root.querySelector) {
@@ -34,24 +33,24 @@ _OBSERVE_SCHEMA_JS = """() => {
     }
     const parentLabel = el.closest ? el.closest('label') : null;
     if (parentLabel) return (parentLabel.innerText || parentLabel.textContent || '').trim();
+    const fieldWrap = el.closest ? el.closest('.v-input, .v-field, .field, .form-group') : null;
+    if (fieldWrap) {
+      const lbl = fieldWrap.querySelector('label');
+      if (lbl) return (lbl.innerText || lbl.textContent || '').trim();
+    }
     if (el.placeholder) return el.placeholder.trim();
     const txt = (el.innerText || el.textContent || '').trim();
     return txt.slice(0, 120);
   };
-  const cssSelectorFor = (el) => {
-    const tid = el.getAttribute('data-testid');
-    if (tid) return `[data-testid="${tid.replace(/"/g, '\\\\"')}"]`;
-    const name = el.getAttribute('name');
-    if (name) return `${el.tagName.toLowerCase()}[name="${name.replace(/"/g, '\\\\"')}"]`;
-    const aria = el.getAttribute('aria-label');
-    if (aria) return `${el.tagName.toLowerCase()}[aria-label="${aria.replace(/"/g, '\\\\"')}"]`;
-    if (el.id && !/^input-\\d+$/.test(el.id)) return `#${CSS.escape(el.id)}`;
-    if (el.id) return `#${CSS.escape(el.id)}`;
-    return '';
-  };
+
   const modalRoots = Array.from(
-    document.querySelectorAll('[role="dialog"], .v-overlay--active, .v-dialog--active, .modal.show, dialog[open]')
-  );
+    document.querySelectorAll('[role="dialog"], .v-dialog, .v-overlay--active, .v-dialog--active, .modal.show, dialog[open]')
+  ).filter(r => {
+    const st = window.getComputedStyle(r);
+    const rect = r.getBoundingClientRect();
+    return st && st.display !== 'none' && st.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+  });
+
   const isInsideModal = (el) => {
     for (const mr of modalRoots) {
       if (mr.contains(el)) return true;
@@ -59,6 +58,64 @@ _OBSERVE_SCHEMA_JS = """() => {
     return false;
   };
 
+  const isEphemeralId = (id) => /^(input|v-input|checkbox|select|radio|textarea|switch|field)-\\d+$/i.test(id || '');
+
+  const visibleMatches = (root, sel) => {
+    try {
+      return Array.from(root.querySelectorAll(sel)).filter(n => {
+        const st = window.getComputedStyle(n);
+        const r = n.getBoundingClientRect();
+        return st && st.display !== 'none' && st.visibility !== 'hidden' && r.width > 0 && r.height > 0;
+      });
+    } catch (e) {
+      return [];
+    }
+  };
+
+  const durableSelectorFor = (el, root, tag, type, label, inModal) => {
+    const esc = (s) => s.replace(/\\\\/g, '\\\\\\\\').replace(/"/g, '\\\\"');
+    const tid = el.getAttribute('data-testid');
+    if (tid) {
+      const s = `[data-testid="${esc(tid)}"]`;
+      if (visibleMatches(root, s)[0] === el) return s;
+    }
+    const name = el.getAttribute('name');
+    if (name) {
+      const s = `${tag}[name="${esc(name)}"]`;
+      if (visibleMatches(root, s)[0] === el) return s;
+    }
+    const aria = el.getAttribute('aria-label');
+    if (aria) {
+      const s = `${tag}[aria-label="${esc(aria)}"]`;
+      if (visibleMatches(root, s)[0] === el) return s;
+    }
+    if (el.id && !isEphemeralId(el.id)) {
+      const s = `#${CSS.escape(el.id)}`;
+      if (visibleMatches(root, s)[0] === el) return s;
+    }
+    // Synthesize a live-verified container-scoped structural selector (avoids ephemeral #input-110 IDs!)
+    const scopes = inModal
+      ? ['[role="dialog"]', '.v-dialog--active', '.v-overlay--active .v-card', '.v-dialog .v-card', '.v-card', 'form']
+      : ['main form', 'main', 'form', 'body'];
+    const basePart = (tag === 'input' && type) ? `input[type="${esc(type)}"]`
+      : (tag === 'button' && type === 'submit') ? 'button[type="submit"]'
+      : tag;
+    for (const sc of scopes) {
+      const cand = `${sc} ${basePart}`;
+      const hits = visibleMatches(root, cand);
+      const pos = hits.indexOf(el);
+      if (pos === 0) return cand;
+      if (pos > 0) return `${cand} >> nth=${pos}`;
+    }
+    if (tag === 'button' && label && label.length <= 40) {
+      return `${inModal ? '.v-card ' : ''}button:has-text("${esc(label)}")`;
+    }
+    if (el.id) return `#${CSS.escape(el.id)}`;
+    return '';
+  };
+
+  const items = [];
+  let idx = 0;
   for (const { el, inShadow, root } of collected) {
     const st = window.getComputedStyle(el);
     if (!st || st.display === 'none' || st.visibility === 'hidden') continue;
@@ -69,26 +126,30 @@ _OBSERVE_SCHEMA_JS = """() => {
     const tag = el.tagName.toLowerCase();
     const role = (el.getAttribute('role') || '').toLowerCase();
     const inModal = isInsideModal(el);
+    const label = labelTextFor(el, root);
     const options = tag === 'select'
       ? Array.from(el.options).map(o => ({ value: o.value, text: (o.text || '').trim() }))
       : [];
+    el.setAttribute('data-oa-idx', String(idx));
     items.push({
+      control_index: idx,
       tag,
       input_type: type,
       role,
-      label: labelTextFor(el, root),
+      label,
       placeholder: (el.getAttribute('placeholder') || '').trim(),
       name: (el.getAttribute('name') || '').trim(),
       element_id: (el.id || '').trim(),
       testid: (el.getAttribute('data-testid') || '').trim(),
       in_modal: inModal,
-      selector: cssSelectorFor(el),
+      selector: durableSelectorFor(el, root, tag, type, label, inModal),
       value: tag === 'input' && (type === 'checkbox' || type === 'radio')
         ? String(Boolean(el.checked))
         : String(el.value !== undefined ? el.value : (el.getAttribute('data-value') || el.innerText || '').trim()),
       options,
       in_shadow: inShadow,
     });
+    idx += 1;
   }
   return items;
 }"""
@@ -110,6 +171,7 @@ class ControlSchema:
     options: List[Dict[str, str]] = field(default_factory=list)
     in_shadow: bool = False
     frame_index: int = -1
+    control_index: int = -1
 
 
 @dataclass
@@ -219,6 +281,13 @@ def _target_root(page: Any, ctrl: ControlSchema) -> Any:
 
 def _resolve_locator(page: Any, ctrl: ControlSchema) -> Any:
     root = _target_root(page, ctrl)
+    if ctrl.control_index >= 0 and ctrl.frame_index == -1:
+        idx_loc = root.locator(f'[data-oa-idx="{ctrl.control_index}"]').first
+        try:
+            if idx_loc.count() > 0:
+                return idx_loc
+        except Exception:
+            pass
     if ctrl.selector:
         return root.locator(ctrl.selector).first
     if ctrl.label and ctrl.tag in ("button", "a"):
@@ -309,13 +378,15 @@ def stage_form(
 
 
 class StepwiseHealer:
-    """Replays compiled plans and re-grounds broken steps against the live mounted DOM."""
+    """Replays compiled plans and re-grounds broken steps via indexed live-DOM grounding."""
 
     def __init__(
         self,
         llm_selector_fn: Optional[Callable[[PlanStep, List[ControlSchema]], Optional[str]]] = None,
+        llm_index_fn: Optional[Callable[[PlanStep, List[ControlSchema]], Optional[int]]] = None,
     ) -> None:
         self._llm_selector_fn = llm_selector_fn
+        self._llm_index_fn = llm_index_fn
 
     def _execute_step(self, page: Any, step: PlanStep, selector: str) -> None:
         loc = page.locator(selector).first
@@ -337,12 +408,33 @@ class StepwiseHealer:
         if step.wait_ms > 0 and hasattr(page, "wait_for_timeout"):
             page.wait_for_timeout(step.wait_ms)
 
-    def _heal_live_step(self, page: Any, step: PlanStep) -> Optional[str]:
+    def _heal_live_step(self, page: Any, step: PlanStep) -> Tuple[Optional[str], Optional[str]]:
+        """Return (immediate_live_selector, durable_cached_selector) grounded on live DOM."""
         controls = observe_schema(page)
+        by_idx = {c.control_index: c for c in controls if c.control_index >= 0}
+
+        # 1. Preferred: Indexed selection (zero CSS syntax hallucination possible!)
+        if self._llm_index_fn is not None:
+            picked_idx = self._llm_index_fn(step, controls)
+            if picked_idx is not None and picked_idx in by_idx:
+                ctrl = by_idx[picked_idx]
+                live_sel = f'[data-oa-idx="{ctrl.control_index}"]'
+                durable = ctrl.selector or (
+                    f"{ctrl.tag}:has-text({ctrl.label!r})" if ctrl.label and ctrl.tag in ("button", "a") else live_sel
+                )
+                return live_sel, durable
+
+        # 2. Legacy free-form selector callback (only accepted if live-verified visible on DOM!)
         if self._llm_selector_fn is not None:
             proposed = self._llm_selector_fn(step, controls)
             if proposed:
-                return proposed
+                try:
+                    if page.locator(proposed).first.is_visible(timeout=500):
+                        return proposed, proposed
+                except Exception:
+                    pass
+
+        # 3. Deterministic semantic matcher fallback
         allowed = (
             ("button", "a")
             if step.action == "click"
@@ -350,19 +442,19 @@ class StepwiseHealer:
             if step.action == "select"
             else ("input", "textarea")
         )
-        ctrl = _match_control(
+        matched_ctrl = _match_control(
             step.semantic_label,
             controls,
             prefer_modal=step.prefer_modal or any(c.in_modal for c in controls),
             allowed_tags=allowed,
         )
-        if ctrl is None:
-            return None
-        if ctrl.selector:
-            return ctrl.selector
-        if ctrl.label and ctrl.tag in ("button", "a"):
-            return f"{ctrl.tag}:has-text({ctrl.label!r})"
-        return None
+        if matched_ctrl is None:
+            return None, None
+        live_sel = f'[data-oa-idx="{matched_ctrl.control_index}"]' if matched_ctrl.control_index >= 0 else matched_ctrl.selector
+        durable = matched_ctrl.selector or (
+            f"{matched_ctrl.tag}:has-text({matched_ctrl.label!r})" if matched_ctrl.label and matched_ctrl.tag in ("button", "a") else live_sel
+        )
+        return live_sel or durable, durable
 
     def run_and_heal(
         self,
@@ -380,8 +472,8 @@ class StepwiseHealer:
                 self._execute_step(page, step, step.selector)
                 healed_plan.append(step)
             except Exception:
-                new_selector = self._heal_live_step(page, step)
-                if not new_selector:
+                live_sel, durable_sel = self._heal_live_step(page, step)
+                if not live_sel:
                     return HealResult(
                         verified=False,
                         healed_steps=healed_ids,
@@ -389,7 +481,7 @@ class StepwiseHealer:
                         failure_reason=f"could_not_reground_step:{step.step_id}",
                     )
                 try:
-                    self._execute_step(page, step, new_selector)
+                    self._execute_step(page, step, live_sel)
                 except Exception as exc:
                     return HealResult(
                         verified=False,
@@ -402,7 +494,7 @@ class StepwiseHealer:
                     PlanStep(
                         step_id=step.step_id,
                         action=step.action,
-                        selector=new_selector,
+                        selector=durable_sel or live_sel,
                         semantic_label=step.semantic_label,
                         value=step.value,
                         is_commit=step.is_commit,
