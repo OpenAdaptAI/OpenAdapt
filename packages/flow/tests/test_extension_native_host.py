@@ -141,6 +141,55 @@ def test_user_dirs_and_uninstall(tmp_path):
     assert list(target.iterdir()) == []
 
 
+def test_default_cws_extension_id_and_custom_override(tmp_path):
+    expected_id = "bcpliibliddclnibacbjbmbpgffkjefd"
+    assert install_host.DEFAULT_CWS_EXTENSION_ID == expected_id
+
+    # Static template manifest defaults to the published CWS extension ID.
+    template = json.loads(
+        (EXT / "native_host" / "com.openadapt.extension.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert template["allowed_origins"] == [f"chrome-extension://{expected_id}/"]
+
+    # Python API defaults to the published CWS extension ID when omitted.
+    default_manifest_path = install_host.install(
+        tmp_path / "hosts_default", platform="linux"
+    )
+    default_manifest = json.loads(default_manifest_path.read_text(encoding="utf-8"))
+    assert default_manifest["allowed_origins"] == [f"chrome-extension://{expected_id}/"]
+
+    if sys.platform != "win32":
+        # CLI defaults to the published CWS extension ID when --extension-id is omitted.
+        profile_default = tmp_path / "profile_default"
+        assert install_host.main(["--user-data-dir", str(profile_default)]) == 0
+        cli_default = json.loads(
+            (
+                profile_default
+                / "NativeMessagingHosts"
+                / "com.openadapt.extension.json"
+            ).read_text(encoding="utf-8")
+        )
+        assert cli_default["allowed_origins"] == [f"chrome-extension://{expected_id}/"]
+
+        # CLI still allows developers to override --extension-id for unpacked builds.
+        custom_id = "b" * 32
+        profile_custom = tmp_path / "profile_custom"
+        assert (
+            install_host.main(
+                ["--user-data-dir", str(profile_custom), "--extension-id", custom_id]
+            )
+            == 0
+        )
+        cli_custom = json.loads(
+            (
+                profile_custom / "NativeMessagingHosts" / "com.openadapt.extension.json"
+            ).read_text(encoding="utf-8")
+        )
+        assert cli_custom["allowed_origins"] == [f"chrome-extension://{custom_id}/"]
+
+
 # --- real Chromium, installed host ------------------------------------------
 
 _PAGE = b"""<!doctype html><title>native host</title>

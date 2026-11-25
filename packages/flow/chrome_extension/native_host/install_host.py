@@ -5,22 +5,23 @@ Part of OpenAdapt#1872. Chrome starts a native host only when a manifest named
 ``com.openadapt.extension.json`` sits in a directory it searches and that
 manifest's ``allowed_origins`` names the calling extension. This script writes
 that manifest plus a small launcher that runs ``openadapt_extension_host.py``
-with this Python, so an unpacked extension can reach the host without hand
-editing.
+with this Python, so the extension can reach the host without hand editing.
 
-Fail-closed rules:
+Safety rules:
 
-- ``--extension-id`` is required and must be a real 32-letter (``a``-``p``)
-  id. The manifest allows exactly that one origin; there is no wildcard.
+- ``--extension-id`` defaults to the published Chrome Web Store ID
+  (``bcpliibliddclnibacbjbmbpgffkjefd``) and must be a 32-letter (``a``-``p``)
+  id. Pass ``--extension-id <dev-id>`` for local unpacked builds. The manifest
+  allows that single origin only; there is no wildcard.
 - The launcher passes ``--recording`` only when one is given. Without it the
-  host still refuses (``no_recording_dir``) unless the environment names one.
+  host refuses (``no_recording_dir``) unless the environment names one.
 - macOS and Linux only. Windows registers hosts in the registry; that stays a
   manual step (see docs/CHROME_EXTENSION_NATIVE_HOST.md).
 
 Targets: ``--user-data-dir DIR`` registers for one Chromium profile directory
 (``DIR/NativeMessagingHosts``, what the tests use), or ``--browser
 chrome|chromium`` registers for the current user's default browser directory.
-No network, no remote endpoints, no store listing.
+No network calls and no remote endpoints.
 """
 
 from __future__ import annotations
@@ -38,6 +39,7 @@ HOST_NAME = "com.openadapt.extension"
 MANIFEST_FILE = f"{HOST_NAME}.json"
 LAUNCHER_FILE = f"{HOST_NAME}-host.sh"
 HOST_SCRIPT = Path(__file__).resolve().parent / "openadapt_extension_host.py"
+DEFAULT_CWS_EXTENSION_ID = "bcpliibliddclnibacbjbmbpgffkjefd"
 # Matched with ``fullmatch``: ``$`` alone would also accept a trailing newline.
 EXTENSION_ID = re.compile(r"[a-p]{32}")
 
@@ -112,7 +114,7 @@ def launcher_text(python: str, *, recording: Optional[Path] = None) -> str:
 
 def install(
     manifest_dir: Path | str,
-    extension_id: str,
+    extension_id: str = DEFAULT_CWS_EXTENSION_ID,
     *,
     python: str = sys.executable,
     recording: Optional[Path | str] = None,
@@ -159,7 +161,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     where = parser.add_mutually_exclusive_group(required=True)
     where.add_argument("--user-data-dir", help="Chromium profile directory")
     where.add_argument("--browser", choices=("chrome", "chromium"))
-    parser.add_argument("--extension-id", help="unpacked extension id")
+    parser.add_argument(
+        "--extension-id",
+        default=DEFAULT_CWS_EXTENSION_ID,
+        help=(
+            "Chrome extension id "
+            f"(defaults to published Chrome Web Store id {DEFAULT_CWS_EXTENSION_ID}; "
+            "override with your unpacked id for local dev builds)"
+        ),
+    )
     parser.add_argument("--recording", help="recording directory for the host")
     parser.add_argument("--uninstall", action="store_true")
     args = parser.parse_args(argv)
@@ -173,8 +183,6 @@ def main(argv: Optional[list[str]] = None) -> int:
             for path in uninstall(target):
                 print(f"removed {path}")
             return 0
-        if not args.extension_id:
-            parser.error("--extension-id is required")
         path = install(target, args.extension_id, recording=args.recording)
     except (RuntimeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
