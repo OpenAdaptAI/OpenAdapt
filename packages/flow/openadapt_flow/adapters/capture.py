@@ -640,11 +640,11 @@ def _window_viewport_timeline(
 
 
 def _parse_operator_surface(surface: str) -> tuple[str, Optional[str]]:
-    """Parse an explicit operator surface binding (e.g. 'windows' or 'windows:notepad.exe')."""
+    """Parse an explicit operator surface binding (e.g. 'windows' or 'windows:app.exe')."""
     raw = surface.strip()
     if not raw:
         raise ValueError(
-            "surface must be a non-empty surface name (e.g. 'windows' or 'windows:notepad.exe')"
+            "surface must be a non-empty surface name (e.g. 'windows' or 'windows:app.exe')"
         )
     if ":" in raw:
         kind_part, app_part = raw.split(":", 1)
