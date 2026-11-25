@@ -85,8 +85,17 @@ from openadapt_kernel.runner import (
     format_run_result_json,
     run_portal_pack,
 )
+from openadapt_kernel.zero_phi_repair import (
+    ASTVerificationResult,
+    ZeroPHIRepairResult,
+    execute_zero_phi_coding_repair,
+    export_zero_phi_dom_twin,
+    sanitize_ui_label_allowlist,
+    verify_symbolic_repair_ast,
+)
 
 __all__ = [
+    "ASTVerificationResult",
     "CapabilityToken",
     "CommitClassification",
     "CommitInterceptor",
@@ -119,8 +128,11 @@ __all__ = [
     "SignedPackEnvelope",
     "StageResult",
     "StepwiseHealer",
+    "ZeroPHIRepairResult",
     "compute_pixel_delta_ratio",
     "dispatch_tool_call",
+    "execute_zero_phi_coding_repair",
+    "export_zero_phi_dom_twin",
     "extract_pdf_visible_text",
     "format_run_result_json",
     "generate_ephemeral_ed25519_keypair",
@@ -139,6 +151,7 @@ __all__ = [
     "replay_evidence_into_interceptor",
     "run_portal_pack",
     "sanitize_action_string",
+    "sanitize_ui_label_allowlist",
     "scan_pack_for_pii",
     "serve_stdio",
     "stage_form",
@@ -148,4 +161,5 @@ __all__ = [
     "verify_pdf_readback",
     "verify_receipt",
     "verify_sqlite_ro",
+    "verify_symbolic_repair_ast",
 ]
