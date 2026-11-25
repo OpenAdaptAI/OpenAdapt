@@ -12,6 +12,12 @@ from openadapt_kernel.copilot import (
     qualify_verifier_offline,
     verify_receipt,
 )
+from openadapt_kernel.extension_bridge import (
+    ExtensionSessionSummary,
+    induce_pack_from_extension_recordings,
+    parse_extension_evidence_jsonl,
+    replay_evidence_into_interceptor,
+)
 from openadapt_kernel.interceptor import (
     CommitClassification,
     CommitInterceptor,
@@ -42,6 +48,7 @@ __all__ = [
     "CommitClassification",
     "CommitInterceptor",
     "ControlSchema",
+    "ExtensionSessionSummary",
     "FinalizationDecision",
     "HealResult",
     "MicroHandoffRequest",
@@ -59,10 +66,13 @@ __all__ = [
     "StageResult",
     "StepwiseHealer",
     "generate_ephemeral_ed25519_keypair",
+    "induce_pack_from_extension_recordings",
     "is_search_or_filter_field",
     "mint_receipt",
     "observe_schema",
+    "parse_extension_evidence_jsonl",
     "qualify_verifier_offline",
+    "replay_evidence_into_interceptor",
     "sanitize_action_string",
     "stage_form",
     "verify_receipt",
