@@ -64,10 +64,13 @@ def test_wrap_help_is_discovered_as_an_actual_launcher_command():
         if isinstance(action, argparse._SubParsersAction)
     )
     assert "kernel" in names
+    assert "mcpify" in names
     assert cli.main.commands["kernel"] is cli.kernel
+    assert cli.main.commands["mcpify"] is cli.mcpify
     assert "wrap" not in choices
     assert "kernel" not in choices
-    assert len(names) == 18
+    assert "mcpify" not in choices
+    assert len(names) == 19
 
 
 def test_review_brief_comes_from_the_unmodified_canonical_generator():
@@ -83,9 +86,15 @@ def test_review_brief_comes_from_the_unmodified_canonical_generator():
         str(ROOT / "scripts/build_capabilities.py"), run_name="capabilities_contract"
     )
     brief = generator["build"]()
-    assert generator["absolute_links"](
-        (ROOT / "README.md").read_text(encoding="utf-8").strip(), "README.md"
-    ) in brief
-    assert generator["absolute_links"](
-        capabilities["assemble"]().strip(), "CAPABILITIES.md"
-    ) in brief
+    assert (
+        generator["absolute_links"](
+            (ROOT / "README.md").read_text(encoding="utf-8").strip(), "README.md"
+        )
+        in brief
+    )
+    assert (
+        generator["absolute_links"](
+            capabilities["assemble"]().strip(), "CAPABILITIES.md"
+        )
+        in brief
+    )
