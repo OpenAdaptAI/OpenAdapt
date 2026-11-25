@@ -9,6 +9,7 @@ as the Flow release it bundles.
 
 from __future__ import annotations
 
+import os
 import tomllib
 from importlib.metadata import PackageNotFoundError, distribution
 from pathlib import Path
@@ -97,6 +98,15 @@ def test_types_range_matches_the_bundled_flow_runtime() -> None:
     desktop = _desktop_types_requirement().specifier
     installed_flow_version, flow = _bundled_flow_types_specifier()
     bundled_pin = _bundled_flow_pin()
+    if (
+        os.environ.get("OPENADAPT_DESKTOP_REQUIRE_BUNDLED_FLOW") == "1"
+        and bundled_pin is not None
+        and installed_flow_version != bundled_pin
+    ):
+        pytest.fail(
+            f"OPENADAPT_DESKTOP_REQUIRE_BUNDLED_FLOW=1 but installed {FLOW} "
+            f"{installed_flow_version} is not the bundled pin {bundled_pin}"
+        )
     if bundled_pin is None or installed_flow_version == bundled_pin:
         assert desktop == flow, (
             f"Desktop declares {TYPES}{desktop} but the bundled {FLOW} declares "

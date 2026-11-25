@@ -231,7 +231,7 @@ export function Teach({
                     Record the correct action
                   </Button>
                   <span className="page-sub">
-                    Demonstrate just this step; your correction stays on this computer.
+                    Demonstrate just this step; OpenAdapt does not upload this correction.
                   </span>
                 </>
               )}
