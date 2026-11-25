@@ -1,7 +1,7 @@
 {
  "columns": 100,
  "help": {
-  "openadapt-flow": "usage: openadapt-flow [-h] [--version] {command} ...\n\nRecord a task and compile it into a program that runs on this computer. With a record check\nconfigured, a governed run confirms each save by reading the record back, and a run that can't\nconfirm a save stops and asks a person. When the screen changes, it finds the same field again or\nstops, and a lasting fix needs a person's approval.\n\noptions:\n  -h, --help  show this help message and exit\n  --version   Show the version and exit\n\ncommands:\n  {command}\n    demo      Try the demonstration and tutorial\n    verify    Check effects, receipts, and evidence\n    record    Record a task and its narration\n    teach     Teach a correction to a stopped workflow\n    compile   Compile and prepare workflow bundles\n    run       Run, resume, and route workflows\n    approve   Review and approve paused work\n    undo      Declare and run approved undo steps\n    qualify   Qualify a workflow for its intended use\n    repair    Review, test, and promote repairs\n    inspect   Inspect workflows, runs, and reports\n    workflow  Manage reusable workflow libraries\n    services  Run local services and connectors\n    setup     Configure connections, privacy, and access\n    research  Run benchmarks and research tools\n\nNew here? Run 'openadapt-flow demo' to see a checked run and a stopped run side by side on one\npage.\n\nLegacy commands (original spellings):\n  admit\n  api\n  approve\n  approve-sanitized\n  approver-grant\n  at-rest\n  attach-seal\n  bench\n  benchmark\n  bind-record-checks\n  browser-accessibility\n  business-decisions\n  certify\n  check\n  cleanup\n  compile\n  compile-agent\n  compose\n  confirm-surfaces\n  connect\n  connector\n  console\n  countersign\n  deferred\n  demo\n  demo-record\n  disambiguate\n  emit-mcp\n  emit-skill\n  encrypt\n  exceptions\n  explain\n  fleet\n  flight\n  for-each\n  guard\n  handoff\n  hooks\n  induce\n  intake\n  item-approval\n  jit\n  known-ids\n  learn\n  ledger\n  lint\n  local-seal\n  login\n  materialize-approved\n  narration\n  no-outbound\n  plan\n  process\n  propose-qualification\n  proxy\n  pull\n  push\n  qualify\n  readiness\n  receipt\n  reconcile\n  record\n  redact-report\n  repair\n  replay\n  report-break\n  report-run\n  resume\n  review-sanitized\n  rollback\n  route\n  run\n  sanitize\n  scaffold-verifier\n  sections\n  serve-execute\n  serve-reward\n  service\n  shadow\n  silent-saves\n  skill\n  teach\n  teach-authorization\n  teach-branch\n  triage\n  tutorial\n  undo\n  validate-hosted\n  variants\n  verify-run\n  visualize\n  wrap-dispatch\n",
+  "openadapt-flow": "usage: openadapt-flow [-h] [--version] {command} ...\n\nRecord a task and compile it into a program that runs on this computer. With a record check\nconfigured, a governed run confirms each save by reading the record back, and a run that can't\nconfirm a save stops and asks a person. When the screen changes, it finds the same field again or\nstops, and a lasting fix needs a person's approval.\n\noptions:\n  -h, --help  show this help message and exit\n  --version   Show the version and exit\n\ncommands:\n  {command}\n    demo      Try the demonstration and tutorial\n    verify    Check effects, receipts, and evidence\n    record    Record a task and its narration\n    teach     Teach a correction to a stopped workflow\n    compile   Compile and prepare workflow bundles\n    run       Run, resume, and route workflows\n    approve   Review and approve paused work\n    undo      Declare and run approved undo steps\n    qualify   Qualify a workflow for its intended use\n    repair    Review, test, and promote repairs\n    inspect   Inspect workflows, runs, and reports\n    workflow  Manage reusable workflow libraries\n    services  Run local services and connectors\n    setup     Configure connections, privacy, and access\n    research  Run benchmarks and research tools\n\nNew here? Run 'openadapt-flow demo' to see a checked run and a stopped run side by side on one\npage.\n\nLegacy commands (original spellings):\n  admit\n  api\n  approve\n  approve-sanitized\n  approver-grant\n  at-rest\n  attach-seal\n  bench\n  benchmark\n  bind-record-checks\n  browser-accessibility\n  business-decisions\n  certify\n  check\n  cleanup\n  compile\n  compile-agent\n  compose\n  confirm-surfaces\n  connect\n  connector\n  console\n  countersign\n  deferred\n  demo\n  demo-record\n  disambiguate\n  emit-mcp\n  emit-skill\n  encrypt\n  exceptions\n  explain\n  fleet\n  flight\n  for-each\n  guard\n  handoff\n  hooks\n  induce\n  intake\n  item-approval\n  jit\n  known-ids\n  learn\n  ledger\n  lint\n  local-seal\n  login\n  materialize-approved\n  narration\n  no-outbound\n  onboard\n  plan\n  process\n  propose-qualification\n  proxy\n  pull\n  push\n  qualify\n  readiness\n  receipt\n  reconcile\n  record\n  redact-report\n  repair\n  replay\n  report-break\n  report-run\n  resume\n  review-sanitized\n  rollback\n  route\n  run\n  sanitize\n  scaffold-verifier\n  sections\n  serve-execute\n  serve-reward\n  service\n  shadow\n  silent-saves\n  skill\n  teach\n  teach-authorization\n  teach-branch\n  triage\n  tutorial\n  undo\n  validate-hosted\n  variants\n  verify-run\n  visualize\n  wrap-dispatch\n",
   "openadapt-flow admit": "usage: openadapt-flow admit [-h] {run,decide,status} ...\n\npositional arguments:\n  {run,decide,status}\n    run                Compile, induce, propose checks, and stop once for a person's decision (the\n                       default form: `admit <recordings...>`)\n    decide             Show a stopped admission's summary and decide it (a person, at a terminal)\n    status             Print admitted vs not-admitted for Flow from the public ledger. Never mints\n                       a signature.\n\noptions:\n  -h, --help           show this help message and exit\n\nAlso available as: openadapt-flow run --task-admit\n",
   "openadapt-flow admit decide": "usage: openadapt-flow admit decide [-h] [--by BY] admission\n\npositional arguments:\n  admission   Admission directory from `admit`\n\noptions:\n  -h, --help  show this help message and exit\n  --by BY     Your name for the record\n\nAlso available as: openadapt-flow run --task-admit decide\n",
   "openadapt-flow admit run": "usage: openadapt-flow admit run [-h] [--candidate ID] [--candidates-root CANDIDATES_ROOT] --out\n                                OUT --name NAME [--policy-pack {community,cloud,regulated}]\n                                [--by BY]\n                                [recordings ...]\n\npositional arguments:\n  recordings            Recording directories (or compiled bundles) of the same task\n\noptions:\n  -h, --help            show this help message and exit\n  --candidate ID        A shadow candidate id under --candidates-root, or its folder. Its\n                        recordings/ folder is used when no recordings are given\n  --candidates-root CANDIDATES_ROOT\n                        Where shadow candidates are kept (default: ./shadow-candidates)\n  --out OUT             New admission directory\n  --name NAME           Workflow name\n  --policy-pack {community,cloud,regulated}\n  --by BY               Your name for the record (default: your login name)\n\nAlso available as: openadapt-flow run --task-admit run\n",
@@ -164,6 +164,7 @@
   "openadapt-flow no-outbound allow derive": "usage: openadapt-flow no-outbound allow derive [-h] profile\n\npositional arguments:\n  profile     FreeRDP session JSON or .rdp file\n\noptions:\n  -h, --help  show this help message and exit\n\nAlso available as: openadapt-flow setup no-outbound allow derive\n",
   "openadapt-flow no-outbound allow list": "usage: openadapt-flow no-outbound allow list [-h] [--json]\n\noptions:\n  -h, --help  show this help message and exit\n  --json\n\nAlso available as: openadapt-flow setup no-outbound allow list\n",
   "openadapt-flow no-outbound allow remove": "usage: openadapt-flow no-outbound allow remove [-h] network\n\npositional arguments:\n  network\n\noptions:\n  -h, --help  show this help message and exit\n\nAlso available as: openadapt-flow setup no-outbound allow remove\n",
+  "openadapt-flow onboard": "usage: openadapt-flow onboard [-h] --spec SPEC --out OUT [--clean-writes CLEAN_WRITES] [--json]\n                              [--dry-run]\n\noptions:\n  -h, --help            show this help message and exit\n  --spec SPEC           Path to declarative onboard spec (YAML or JSON)\n  --out OUT             Output directory for synthesized pack, contracts, and QUALIFICATION.json\n  --clean-writes CLEAN_WRITES\n                        Optional YAML/JSON list of clean write cases (with HTTP target) to verify\n                        and receipt\n  --json                Emit structured QualificationResult JSON to stdout\n  --dry-run             Synthesize the pack without running qualification (pack is not certified)\n\nAlso available as: openadapt-flow setup onboard\n",
   "openadapt-flow plan": "usage: openadapt-flow plan [-h] {create,show,apply,undo,release,cancel,approve,status} ...\n\n``openadapt plan``: dry-run, apply and undo a batch of writes to external systems.\n\n    openadapt plan create --tx openadapt.tx.yaml --task T-1 writes.json\n    openadapt plan show PLAN\n    openadapt plan approve PLAN           # a person, at a terminal\n    openadapt plan apply PLAN\n    openadapt plan undo PLAN\n    openadapt plan release PLAN           # irreversible writes after holdback\n    openadapt plan cancel PLAN            # drop held writes before release\n    openadapt plan status\n\n``create`` reads every record the batch touches, predicts the diff (a staged\ntransaction for a database, a computed shadow for a REST API, the holdback\nqueue for email) and prints what would change. ``approve`` binds to that exact\nplan digest, once. ``apply`` refuses a plan whose records moved since, and\neach write carries an idempotency key derived from the task and the record,\nnever from the payload: a retried or regenerated write with a different\npayload is refused. ``undo`` compensates each write and proves it by reading\nevery record and the whole frame back. See ``docs/TRANSACTIONS.md``.\n\npositional arguments:\n  {create,show,apply,undo,release,cancel,approve,status}\n    create              read the baseline and print the predicted diff\n    show                print a plan\n    apply               apply an approved plan\n    undo                undo an applied plan and prove it by read-back\n    release             release held irreversible writes whose holdback passed\n    cancel              cancel held writes before release\n    approve             approve one plan digest, once (a person at a terminal)\n    status              list held writes and ledger entries\n\noptions:\n  -h, --help            show this help message and exit\n\nAlso available as: openadapt-flow run --plan\n",
   "openadapt-flow plan apply": "usage: openadapt-flow plan apply [-h] [--tx TX] [--state STATE] [--json] plan\n\npositional arguments:\n  plan           a plan digest or its prefix\n\noptions:\n  -h, --help     show this help message and exit\n  --tx TX        the tx file (default: ./openadapt.tx.yaml)\n  --state STATE  the state folder (default: $OPENADAPT_TX_STATE or ~/.openadapt/tx)\n  --json         print JSON\n\nAlso available as: openadapt-flow run --plan apply\n",
   "openadapt-flow plan approve": "usage: openadapt-flow plan approve [-h] [--as APPROVER] [--automation] [--state STATE] [--json]\n                                   plan\n\npositional arguments:\n  plan\n\noptions:\n  -h, --help     show this help message and exit\n  --as APPROVER  who approves (default: $USER)\n  --automation   record the approval as automation (lab runs; the receipt then says agent)\n  --state STATE  the state folder (default: $OPENADAPT_TX_STATE or ~/.openadapt/tx)\n  --json         print JSON\n\nAlso available as: openadapt-flow run --plan approve\n",
@@ -383,6 +384,7 @@
     "materialize-approved": [],
     "narration": [],
     "no-outbound": [],
+    "onboard": [],
     "plan": [],
     "process": [],
     "propose-qualification": [],
@@ -13868,6 +13870,97 @@
      "nargs": null,
      "options": [],
      "required": true,
+     "type": null
+    }
+   ],
+   "commands": {},
+   "exclusive": []
+  },
+  "openadapt-flow onboard": {
+   "arguments": [
+    {
+     "action": "_HelpAction",
+     "choices": null,
+     "default": "==SUPPRESS==",
+     "dest": "help",
+     "help": "show this help message and exit",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "-h",
+      "--help"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "spec",
+     "help": "Path to declarative onboard spec (YAML or JSON)",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--spec"
+     ],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "out",
+     "help": "Output directory for synthesized pack, contracts, and QUALIFICATION.json",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--out"
+     ],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "clean_writes",
+     "help": "Optional YAML/JSON list of clean write cases (with HTTP target) to verify and receipt",
+     "metavar": null,
+     "nargs": null,
+     "options": [
+      "--clean-writes"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreTrueAction",
+     "choices": null,
+     "default": false,
+     "dest": "json",
+     "help": "Emit structured QualificationResult JSON to stdout",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "--json"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreTrueAction",
+     "choices": null,
+     "default": false,
+     "dest": "dry_run",
+     "help": "Synthesize the pack without running qualification (pack is not certified)",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "--dry-run"
+     ],
+     "required": false,
      "type": null
     }
    ],
