@@ -21,6 +21,8 @@ from openadapt.quickstart.everyday import (
 try:
     from openadapt_flow.local_state_sources import (
         MacosCalendarEventSource as _MacosCalendarEventSource,
+    )
+    from openadapt_flow.local_state_sources import (
         MacosNightShiftSource as _MacosNightShiftSource,
     )
     from openadapt_flow.runtime.effects.local_state import LocalStateVerifier
