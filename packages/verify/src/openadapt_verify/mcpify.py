@@ -262,6 +262,44 @@ def load_workflow_specs(path: Union[str, Path]) -> tuple[WorkflowToolSpec, ...]:
     return specs
 
 
+def load_compiled_tools(cache_dir: Union[str, Path]) -> tuple[WorkflowToolSpec, ...]:
+    """Load all JIT ``CompiledPlan`` JSON files from ``cache_dir`` as MCP tools."""
+    from openadapt_verify.jit import COMPILED_PLAN_SCHEMA, CompiledPlan
+
+    root = Path(cache_dir).expanduser()
+    if not root.is_dir():
+        raise FileNotFoundError(f"Compiled plan directory not found: {root}")
+    resolved_root = root.resolve()
+
+    specs: list[WorkflowToolSpec] = []
+    seen: set[str] = set()
+    for path in sorted(root.glob("*.json")):
+        resolved_path = path.resolve()
+        if not resolved_path.is_relative_to(resolved_root):
+            raise ValueError(
+                f"Refusing compiled plan symlink escaping cache directory: {path}"
+            )
+        try:
+            raw = json.loads(resolved_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid JSON in compiled plan {path}: {exc}") from exc
+        if (
+            not isinstance(raw, Mapping)
+            or raw.get("schema_version") != COMPILED_PLAN_SCHEMA
+        ):
+            continue
+        plan = CompiledPlan.from_dict(raw)
+        spec = plan.to_workflow_tool_spec()
+        if spec.name in seen:
+            raise ValueError(f"Duplicate compiled tool name in {root}: {spec.name}")
+        seen.add(spec.name)
+        specs.append(spec)
+
+    if not specs:
+        raise ValueError(f"No compiled JIT plans found in {root}")
+    return tuple(specs)
+
+
 @dataclass(frozen=True)
 class ReadbackResult:
     """Outcome from the independent system-of-record read-back oracle."""
@@ -1292,10 +1330,16 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     serve_cmd = sub.add_parser("serve", help="Run the live stdio MCP server.")
-    serve_cmd.add_argument(
+    serve_source = serve_cmd.add_mutually_exclusive_group(required=True)
+    serve_source.add_argument(
         "--spec",
-        required=True,
+        default=None,
         help="Path to the compiled workflow pack JSON (.oapack.json).",
+    )
+    serve_source.add_argument(
+        "--from-compiled",
+        default=None,
+        help="Directory of JIT CompiledPlan JSON files (.openadapt/compiled) to expose as MCP tools.",
     )
     serve_cmd.add_argument(
         "--server-name",
@@ -1312,10 +1356,16 @@ def _build_parser() -> argparse.ArgumentParser:
         "config",
         help="Print a copy-paste mcpServers JSON snippet for an MCP client.",
     )
-    config_cmd.add_argument(
+    config_source = config_cmd.add_mutually_exclusive_group(required=True)
+    config_source.add_argument(
         "--spec",
-        required=True,
+        default=None,
         help="Path to the compiled workflow pack JSON (.oapack.json).",
+    )
+    config_source.add_argument(
+        "--from-compiled",
+        default=None,
+        help="Directory of JIT CompiledPlan JSON files (.openadapt/compiled).",
     )
     config_cmd.add_argument(
         "--client",
@@ -1352,7 +1402,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "serve":
-        specs = load_workflow_specs(args.spec)
+        specs = (
+            load_compiled_tools(args.from_compiled)
+            if args.from_compiled
+            else load_workflow_specs(args.spec)
+        )
         server_name = args.server_name or specs[0].name
         signing_key = load_signing_key(args.signing_key) if args.signing_key else None
         server = McpifyServer(specs, server_name=server_name, signing_key=signing_key)
@@ -1371,12 +1425,37 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
 
     if args.command == "config":
-        snippet = generate_mcp_client_config(
-            args.spec,
-            server_name=args.server_name,
-            client=args.client,
-            signing_key_path=args.signing_key,
-        )
+        if args.from_compiled:
+            resolved_dir = Path(args.from_compiled).expanduser().resolve()
+            specs = load_compiled_tools(resolved_dir)
+            effective_name = args.server_name or specs[0].name
+            cmd_args = [
+                "-m",
+                "openadapt_verify.mcpify",
+                "serve",
+                "--from-compiled",
+                str(resolved_dir),
+                "--server-name",
+                effective_name,
+            ]
+            if args.signing_key:
+                cmd_args.extend(
+                    [
+                        "--signing-key",
+                        str(Path(args.signing_key).expanduser().resolve()),
+                    ]
+                )
+            entry: dict[str, Any] = {"command": sys.executable, "args": cmd_args}
+            if args.client == "cursor":
+                entry["type"] = "stdio"
+            snippet = {"mcpServers": {effective_name: entry}}
+        else:
+            snippet = generate_mcp_client_config(
+                args.spec,
+                server_name=args.server_name,
+                client=args.client,
+                signing_key_path=args.signing_key,
+            )
         print(json.dumps(snippet, indent=2))
         return 0
 
