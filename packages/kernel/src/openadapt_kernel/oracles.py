@@ -23,7 +23,9 @@ from typing import Any, Dict, List, Optional, Sequence
 from openadapt_kernel.ledger import ReadBackProof
 
 _STREAM_RE = re.compile(rb"stream\r?\n(.*?)\r?\nendstream", re.DOTALL)
-_TOKEN_RE = re.compile(r"\((?:\\.|[^\\()])*\)|\[(?:\\.|[^\[\]])*\]\s*TJ|\b\d+\s+Tr\b")
+_TOKEN_RE = re.compile(
+    r"\((?:\\.|[^\\()])*\)|\[(?:\\.|[^\\\[\]])*\]\s*TJ|\b\d+\s+Tr\b"
+)
 
 
 @dataclass
