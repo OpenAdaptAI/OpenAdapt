@@ -41,7 +41,11 @@ A receipt names its outcome with one word, chosen by :func:`outcome_word`
 from the level and the basis (who produced the evidence, not its type):
 
 - ``VERIFIED``: levels 3 and 4 only, always with a basis. Level 3 has basis
-  ``separate_session``. Level 4 has ``system_api`` (a cache-bypassed,
+  ``separate_session`` or ``fresh_reload`` (a new navigation in the acting
+  session that is proven to have fetched from the server: the request was
+  sent with the cache bypassed and the response shows no cache, with the
+  request kept as evidence). A reopen without that proof is level 2,
+  ``SHOWN``. Level 4 has ``system_api`` (a cache-bypassed,
   version-checked API read), ``activity_log`` (the system's own log),
   ``db_frame`` (a database read of the record and its frame) or
   ``owned_connection`` (a connection the verifier owns, such as its own SQL
@@ -242,6 +246,7 @@ def to_effect_strength(level: CheckLevel) -> Optional[str]:
 #: Who produced the evidence for a ``VERIFIED`` read-back.
 Basis = Literal[
     "separate_session",
+    "fresh_reload",
     "system_api",
     "activity_log",
     "db_frame",
@@ -249,6 +254,7 @@ Basis = Literal[
 ]
 BASES: tuple[Basis, ...] = (
     "separate_session",
+    "fresh_reload",
     "system_api",
     "activity_log",
     "db_frame",
@@ -256,6 +262,7 @@ BASES: tuple[Basis, ...] = (
 )
 _BASIS_LEVEL: dict[str, CheckLevel] = {
     "separate_session": CheckLevel.SEPARATE_SESSION,
+    "fresh_reload": CheckLevel.SEPARATE_SESSION,
     "system_api": CheckLevel.SYSTEM_OF_RECORD,
     "activity_log": CheckLevel.SYSTEM_OF_RECORD,
     "db_frame": CheckLevel.SYSTEM_OF_RECORD,
