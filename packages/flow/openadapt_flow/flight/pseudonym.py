@@ -76,7 +76,7 @@ class Placeholders:
 
     def seed(
         self,
-        values: Sequence[tuple[str, str]] | Sequence[str],
+        values: Sequence[tuple[str, str] | str],
         *,
         default_kind: str = "PERSON",
         split_person_parts: bool = True,
@@ -129,7 +129,7 @@ class Pseudonyms:
 
     def seed(
         self,
-        values: Sequence[tuple[str, str]] | Sequence[str],
+        values: Sequence[tuple[str, str] | str],
         *,
         default_kind: str = "PERSON",
         split_person_parts: bool = True,
