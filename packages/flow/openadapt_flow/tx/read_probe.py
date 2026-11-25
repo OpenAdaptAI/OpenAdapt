@@ -216,6 +216,21 @@ def _constant_fields(samples: list[_Sample]) -> Optional[tuple[tuple[str, str], 
     )
 
 
+def _shares_body_schema(samples: list[_Sample]) -> bool:
+    """True when all samples share at least one non-credential body key or all are empty."""
+    key_sets: list[set[str]] = []
+    for sample in samples:
+        fields = _top_level_body_fields(sample.body, sample.headers)
+        if fields is None:
+            return False
+        key_sets.append({k for k in fields if not _CREDENTIAL_KEY_RE.search(k)})
+    if not key_sets:
+        return False
+    if all(not ks for ks in key_sets):
+        return True
+    return bool(set.intersection(*key_sets))
+
+
 def _replay(
     base_url: str,
     sample: _Sample,
@@ -295,7 +310,7 @@ def probe_read_routes(
         body_equals = _constant_fields(samples)
         path_only = False
         if body_equals is None:
-            if _is_read_verb_path(path):
+            if _is_read_verb_path(path) and all(not s.body.strip() for s in samples):
                 body_equals = ()
                 path_only = True
             else:
@@ -310,7 +325,7 @@ def probe_read_routes(
                 )
                 continue
         elif not body_equals:
-            if _is_read_verb_path(path):
+            if _is_read_verb_path(path) and _shares_body_schema(samples):
                 path_only = True
             else:
                 probes.append(
