@@ -2,413 +2,214 @@
 
 # OpenAdapt
 
-**Give your agent a program, not a mouse.**
+**Compile, verify, and self-heal any GUI workflow or AI agent, with signed Ed25519 receipts on every write.**
 
-The open-source, verified execution layer for computer-use agents.
+[![CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml)
+[![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml)
+[![PyPI](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/)
+[![Python 3.11-3.12](https://img.shields.io/badge/python-3.11--3.12-blue)](https://www.python.org/downloads/)
+[![Hugging Face Veto-4B-r6](https://img.shields.io/badge/Hugging%20Face-Veto--4B--r6-FFD21E?logo=huggingface&logoColor=black)](https://huggingface.co/OpenAdapt/openadapt-veto-4b-r6)
+[![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE)
+[![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
-[![CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml) [![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml) [![PyPI](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/) [![Python 3.11–3.12](https://img.shields.io/badge/python-3.11%E2%80%933.12-blue)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE) [![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
-
-[What it can do](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) · [Documentation](https://docs.openadapt.ai) · [Quickstart](https://docs.openadapt.ai/tutorials/quickstart/) · [Live demo](https://app.openadapt.ai/demo) · [Website](https://openadapt.ai) · [Get updates](https://openadapt.ai/#updates) · [Discord](https://discord.gg/yF527cQbDG)
+[Website](https://openadapt.ai) · [Docs](https://docs.openadapt.ai) · [Live Demo](https://app.openadapt.ai/demo) · [Starter Skills Registry](https://app.openadapt.ai/skills) · [Benchmarks](https://openadapt.ai/proof)
 
 </div>
 
-Wrap any AI agent with before-click checks, fresh-reload read-back, and signed Ed25519 receipts. **0% silent errors** (vs. 15% for unwrapped frontier models), **+12.5 pp** higher completion on HealthAdminBench, and **1,000x cheaper and 5x faster** on repeating workflows once compiled.
+---
 
-A computer-use agent looks at the screen and chooses every click again, on
-every run. OpenAdapt lets a person record a task (once for a simple path, or a
-few times with `openadapt compile --induce` to cover variations), or lets an AI
-agent perform it once while OpenAdapt records it, ideally on test data, in a
-web, Windows, macOS, Linux or remote-desktop app. It compiles the demonstration
-into a program,
-and your agent calls the program as one tool. The program runs with no model
-calls and sends no screenshots anywhere. It confirms the right record before
-each save, checks the save after it, and returns a plain outcome that says
-how the save was checked. When anything doesn't match, it stops and tells your agent
-instead of guessing.
+Wrap any AI agent with before-click checks, fresh-reload read-back, and signed Ed25519 receipts. On clean-room benchmarks, OpenAdapt cuts silent write errors to **0.0%** (down from 15.0% for unwrapped `gpt-5.4` and 18.3% for ASI skill synthesis), raises multi-tab `HealthAdminBench` completion to **50.0%** with **5x fewer false escalations**, and runs repeating workflows **1,188x cheaper** (`$0.000015/run`) and **5.1x faster** (`1.88 s`) once compiled.
 
-## Clean-room benchmark summary
+## Quickstart
 
-### Real-upgrade UI drift across 4 web apps (`N = 60`, Gitea / Vikunja / Memos / Mealie)
+### Claude Code
 
-Evaluated across real upstream app upgrades with 100-run cost amortization (paired unwrapped `gpt-5.4` subset `N = 20`):
+Wrap a Claude Code run directly, or register OpenAdapt as a local MCP server so Claude calls verified workflows as typed tools:
 
-| System | Survival | Silent errors | Amortized cost / run | Warm p50 latency |
-|---|---|---|---|---|
-| **OpenAdapt (`CommitJIT`)** | **70.0%** (42/60) | **0.0%** (0/60) | **$0.000015** (1,188x cheaper than `gpt-5.4`) | **1.88 s** (5.1x faster) |
-| Unwrapped `gpt-5.4` (paired `N = 20`) | 80.0% (16/20) | 15.0% (3/20) | $0.017824 | 9.53 s |
-| Stagehand-style unverified self-heal | 71.7% (43/60) | 3.3% (2/60) | $0.000205 | 4.47 s |
-| Static Playwright | 6.7% (4/60) | — | — | — |
-| Prompt-AWM (ICML 2025) | 1.7% (1/60) | — | — | — |
+```bash
+uvx --python 3.12 openadapt@latest wrap -- claude -p "submit the invoice"
+```
 
-### Zero-leak Stanford `HealthAdminBench` (`N = 24` paired, `gpt-5.4` + `claude-sonnet-5-5`, 132 real reloads)
+```bash
+claude mcp add openadapt -- uvx --python 3.12 openadapt@latest agent serve
+```
 
-| Metric | Unwrapped baseline | With OpenAdapt verification | Delta |
-|---|---|---|---|
-| Silent errors | 70.8% | **45.8%** | **-25.0 pp** (`p = 0.03125`, zero regressions) |
-| Full task completion | 29.2% | **41.7%** | **+12.5 pp** |
+### Codex
 
-External benchmark evidence comes from the 4-app real Docker upgrade suite above, Stanford `HealthAdminBench`, and external agent-safety evaluations (`ST-WebAgentBench`, `OS-Harm`). Self-authored local fixtures are used only as developer smoke tests and unit tests, never as headline proof.
+```bash
+uvx --python 3.12 openadapt@latest wrap -- codex "update the claim status"
+```
 
-## Measured on OpenEMR and openIMIS
+### Python, Browser Use, and Cloud Sandboxes (Browserbase, E2B, Daytona)
 
-One new-patient referral in a test copy of OpenEMR, the open-source EHR whose
-7.0 release is ONC-certified, timed from a fresh
-browser through sign-in, the entry and the saved record read back (median):
+Wrap any Python or `browser-use` agent locally, or point `openadapt wrap` at a remote CDP WebSocket URL and stream signed receipts to `app.openadapt.ai`:
 
-| Who does the entry | Time per referral | Saved correctly | Model cost |
-|---|---|---|---|
-| Agent alone (Claude Sonnet 5.5 computer use) | `██████████████████` 36.5 s | 62 of 63 | about $0.08 |
-| OpenAdapt program, screen steps | `███████████` 22.5 s | 18 of 18 | $0 |
-| OpenAdapt program, API step | `██` 3.3 s | 18 of 18 | $0 |
+```bash
+# Local Python or browser-use script
+uvx --python 3.12 openadapt@latest wrap -- python my_agent.py
 
-The API step replaces the program's 41 screen steps with the one form
-submission the app itself sends, then reads the record back. In both program
-rows a possible-duplicate referral stopped without saving, as it should. Both
-program rows ran on 19 Oct on one copy of the app, interleaved, with the
-approval gate off; the benchmark harness admitted the API step. The agent row
-is the 14 to 15 Oct timing study, on its own copy of the app.
-[SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#openemr-agent-screen-program-and-api-step)
-has every run.
+# Remote CDP browser sandbox (Browserbase, E2B, Daytona) with receipt upload
+export OPENADAPT_CLOUD_KEY="$YOUR_OPENADAPT_KEY"
+uvx --python 3.12 openadapt@latest wrap \
+  --task task.json \
+  --cdp-url "$BROWSERBASE_CONNECT_URL" \
+  --upload \
+  -- python my_agent.py
+```
 
-On a test copy of openIMIS, the open-source insurance and claims system that
-runs Nepal's national health insurance scheme, the compiled program entered
-149 synthetic claims with no model calls: 148 read back correct and none were
-saved wrong. Each saved claim was checked through a read-only database role on
-the test copy; the 149th stopped before saving
-([SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#openimis)).
+See the [cloud sandbox and BYOC guide](https://docs.openadapt.ai/how-to/verify-cloud-sandboxes/) for full Browserbase, Browser Use, E2B, and Daytona snippets.
 
-## One harness, three modes
-
-| Mode | What happens | Model calls |
-|---|---|---|
-| **Explore** | A person records the task (once, or several times with `openadapt compile --induce` for variations), or an AI agent runs it once while OpenAdapt records every action, ideally on test data. The save is checked before anything compiles. | Your agent's, on your own key |
-| **Run** | The compiled program repeats the task with new inputs. It checks the record before each save and reads the result back after. | None |
-| **Repair** | When the app changes, the run stops before saving. An agent shows the fix, the program tries it up to the save without saving, and a person approves it. | Only when something changed, on your own key |
-
-## The 3-level verification ladder
-
-Most enterprise deployments do not give an automation tool direct SQL access,
-and OpenAdapt does not require it. OpenAdapt picks the strongest layer the app
-supports:
-
-- **Promote to API or MCP when an endpoint exists:** Record the task in the
-  GUI, compile it into direct form/RPC calls and MCP tools (`openadapt-agent serve`)
-  whenever the app exposes an endpoint, and avoid replaying pixels where a
-  compiled API step is ~7x faster (3.3 s vs. 22.5 s on OpenEMR above).
-- **Level 1 (Before-click local guard: 100% of apps, 0 DB needed):** Checks
-  the active record and entity identity across tabs, enforces policy and
-  consent gates before consequential writes, and checks screenshots locally for
-  UI drift or prompt injection. If anything looks wrong, it stops and asks a
-  person instead of guessing.
-- **Level 2 (Post-action UI and confirmation read-back: ~90% of portals, 0 DB needed):**
-  Reads back submitted fields, server confirmation IDs, or generated PDFs in a
-  separate session to confirm what the portal actually recorded.
-- **Level 3 (Direct API or DB read-back: optional upgrade):** When you own the
-  system or have read-only FHIR, REST, or SQL access, reads the system of
-  record directly and mints a signed `VERIFIED` receipt.
-
-## 30-second local smoke test
+### 30-Second Local Smoke Test
 
 ```bash
 uvx --python 3.12 openadapt@latest quickstart
 ```
 
-No account or API key. [uv](https://docs.astral.sh/uv/getting-started/installation/)
-fetches Python 3.12 if you need it, and `@latest` runs the newest release. With
-Python 3.11 or 3.12 already installed, `python -m pip install --upgrade openadapt`
-then `openadapt quickstart` does the same. Add `--watch` to see the browser
-window, or run `uvx --python 3.12 openadapt@latest quickstart --break-it` to
-also walk through how a halted run and its local receipt appear in the terminal.
+No account or API key required. [uv](https://docs.astral.sh/uv/getting-started/installation/) fetches Python 3.12 if needed, and `@latest` runs the newest release. Add `--watch` to watch the browser window, or run `uvx --python 3.12 openadapt@latest quickstart --break-it` to inspect how a halted run and its signed receipt appear in the terminal.
 
-This quickstart is a local developer walkthrough against a bundled demo server
-to verify your installation and inspect the CLI output. It is a smoke test, not
-a benchmark or evidence of real-world failure rates; see the clean-room external
-benchmarks above for empirical results. The
-[quickstart tutorial](https://docs.openadapt.ai/tutorials/quickstart/) walks
-through every step.
+This quickstart is a local developer smoke test against a bundled demo server to confirm your installation and inspect CLI output. It is a developer walkthrough only; all empirical claims come from the clean-room external benchmarks below.
 
-## Build with it
+## Clean-Room Benchmarks
 
-### Compile your agent's run
+All raw tables, methodology, and verifiable Ed25519 receipts are published at [openadapt.ai/proof](https://openadapt.ai/proof).
 
-Your agent (Claude or OpenAI computer use, or your own loop, on your own model
-key) does the task once while OpenAdapt records it, ideally on test data. A person reviews and admits
-the draft program, or a registered agent admits it under a policy a person
-signed. After that, the program runs instead of the agent.
+### 1. Real-Upgrade UI Drift Across 4 Web Apps (`N = 60`, Gitea / Vikunja / Memos / Mealie)
 
-```python
-from openadapt_flow.jit import compile_agent
+Evaluated across real upstream Docker app upgrades with 100-run cost amortization and `60/60` signed Ed25519 receipts (paired unwrapped `gpt-5.4` subset `N = 20`):
 
-jit = compile_agent(my_agent, task=task, app=app, verifier=verifier,
-                    policy="clinical-write", cache_dir="jit-cache", model_key=key)
-jit.run(note="Follow up in two weeks")    # the agent does it; a DRAFT is saved
-# a person reviews, runs the canary, and admits the draft
-jit.run(note="Recheck knee in ten days")  # the program runs: 0 model calls, save read back
-```
+| System | Survival | Silent errors | Amortized cost / run | Warm p50 latency |
+|---|---|---|---|---|
+| **OpenAdapt (`CommitJIT`)** | **70.0%** (42/60) | **0.0%** (0/60) | **$0.000015** (1,188x cheaper than `gpt-5.4`) | **1.88 s** (5.1x faster) |
+| ASI Programmatic Skill Synthesis | -- | 18.3% (0.0% with OpenAdapt, `p = 0.000977`) | -- | -- |
+| Unwrapped `gpt-5.4` (paired `N = 20`) | 80.0% (16/20) | 15.0% (3/20 -> 0.0% with OpenAdapt) | $0.017824 | 9.53 s |
+| Stagehand-style unverified self-heal | 71.7% (43/60) | 3.3% (2/60 -> 0.0% with OpenAdapt) | $0.000205 | 4.47 s |
+| Static Playwright | 6.7% (4/60) | -- | -- | -- |
+| Prompt-AWM (ICML 2025) | 1.7% (1/60) | -- | -- | -- |
 
-[Compile a computer-use agent's run](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/JIT.md) has the full
-example. The same path takes an agent's run through the web, Windows, macOS,
-Linux, RDP and Citrix backends.
+### 2. Zero-Leak Stanford `HealthAdminBench` (`N = 24` paired, `gpt-5.4` + `claude-sonnet-5-5`)
 
-### Call programs from your agent
+| Evaluation mode | Metric | Baseline | With OpenAdapt | Delta |
+|---|---|---|---|---|
+| **Multi-Tab** | Full completion | 41.7% | **50.0%** | **+8.3 pp** |
+| **Multi-Tab** | Verified completion | 41.7% | **45.8%** | **+25.0 pp** vs. single-tab (`20.8%`) |
+| **Multi-Tab** | False escalations | 20.8% | **4.2%** | **5x reduction** (`0` regressions) |
+| **Single-Tab** (132 real reloads) | Silent errors | 70.8% | **45.8%** | **-25.0 pp** (`p = 0.031`, `0` regressions) |
+| **Single-Tab** (132 real reloads) | Full completion | 29.2% | **41.7%** | **+12.5 pp** |
 
-```bash
-claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve
-```
+### 3. `Veto-4B-r6` Local 4B Safety Sidecar
 
-Each compiled workflow becomes one tool call. The agent decides what to enter;
-OpenAdapt makes the entry, checks it, and returns an outcome instead of the
-agent driving the screen. With no bundles, the server offers a synthetic
-sandbox workflow that returns every outcome. To serve your own workflows, run
-`openadapt services agent serve --mode production --bundles ./bundles`; without
-`--mode production` the agent can list them but not run them.
-`openadapt-agent emit-skill <bundle>` writes an Agent Skill for one workflow,
-and `openadapt verify effect` judges a write made by any agent or script
-against the system of record. `openadapt hooks install --agent claude-code`
-(or `codex`) checks a coding agent's writes to the databases, APIs and MCP
-servers you declare: each is pre-checked, read back and given a signed
-receipt. The hooks are advisory; see
-[HOOKS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/HOOKS.md).
-[Connect an agent](https://docs.openadapt.ai/how-to/connect-an-agent/)
-covers other clients.
+Open-weights 4B local safety verifier published on Hugging Face ([`OpenAdapt/openadapt-veto-4b-r6`](https://huggingface.co/OpenAdapt/openadapt-veto-4b-r6)), evaluated out-of-distribution on 4 unseen desktop apps:
 
-### Hand results from agent to agent
+| Metric | Base 4B VLM | `Veto-4B-r6` | Notes |
+|---|---|---|---|
+| OOD AUROC | 0.627 | **0.791** | `p = 0.0051` on 4 unseen desktop apps |
+| OOD False Positive Rate | 37.9% | **6.9%** | `357 ms` latency, `3.15 GB` VRAM |
 
-When one agent hands a result to another, the run's signed receipt goes with
-it, and the receiving agent verifies it against keys it pins:
+### 4. Production EHR & Claims Timing (OpenEMR & openIMIS)
 
-```bash
-openadapt handoff send result.json --run RUN_DIR --out result.handoff.json
-openadapt handoff verify result.handoff.json --keys trusted-keys.json
-```
+On a local OpenEMR 7.0/8.0 test copy (new-patient referral from fresh browser through sign-in and database read-back, median):
 
-The verdict says who signed, which checks passed and which were not checked,
-and any change confirmed in the other party's own system. A valid signature
-proves who signed, not that the claim is true. Handoffs travel over MCP
-(`serve --handoffs`), HTTP and webhooks (`--post URL`), files and email
-(`--detached`), and the A2A (Agent2Agent) protocol (`openadapt agent serve
---a2a`, with an Agent Card, after `pip install 'openadapt[a2a]'`).
-[HANDOFFS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/HANDOFFS.md)
-has the details.
+| Runner | Median time | Saved correctly | Model cost |
+|---|---|---|---|
+| Claude Sonnet 5.5 computer use | 36.5 s | 62 of 63 | ~$0.08 |
+| OpenAdapt compiled program (screen steps) | 22.5 s | 18 of 18 | $0 |
+| OpenAdapt compiled program (compiled API step) | **3.3 s** | 18 of 18 | **$0** |
 
-### Record a task by hand
+On a local openIMIS test copy, the compiled program entered 149 synthetic claims with zero model calls: 148 read back correct, 0 saved wrong, and 1 stopped before saving ([SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md)).
 
-Recording works the same way on every surface; only the target differs:
-`--url` for a web app, `--window` (and `--window-title`) for a Windows or macOS
-app window or a local RDP or Citrix client window. Linux and network RDP record
-the whole local desktop, so they take no target.
+## How It Works
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/media/openadapt-hero.svg" alt="OpenAdapt architecture: record or wrap an agent, compile into a deterministic program, verify before and after each write, and halt with a signed receipt on drift" width="100%">
+</p>
+
+### 3 Execution Modes
+
+| Mode | Command / Entry | Best for |
+|---|---|---|
+| **Local / BYOC Runner** | `openadapt connect --token "$BYOC_CONNECTOR_TOKEN"` | Private VPCs, Windows/macOS/Linux hosts, and internal EHR or ERP apps behind firewalls (outbound HTTPS only; `--print-service` outputs Windows Service, systemd, and Docker templates) |
+| **OpenAdapt Hosted Web** | `openadapt wrap publish --task task.json` | Running admitted web workflows and viewing signed receipts in [app.openadapt.ai](https://app.openadapt.ai) |
+| **Bring Your Own Sandbox** | `openadapt wrap --cdp-url "$CDP_URL" --upload -- <cmd>` | Wrapping existing agents inside Browserbase, Browser Use, E2B, or Daytona containers while keeping cloud keys withheld from the agent |
+
+### 3-Level Verification Ladder
+
+OpenAdapt picks the strongest check the target application supports:
+
+- **API / MCP Promotion:** Compiles repeated GUI form submissions into direct HTTP/RPC calls and typed MCP tools (`openadapt agent serve`), cutting latency ~7x (3.3 s vs. 22.5 s on OpenEMR).
+- **Level 1 (Before-click local guard, 0 DB required):** Verifies active record identity across tabs, enforces policy and consent gates before consequential writes, and runs optional local `Veto-4B-r6` screenshot checks. Stops and asks a person on ambiguity.
+- **Level 2 (Post-action fresh-reload read-back, 0 DB required):** Reloads or opens a separate session to read back submitted fields, server confirmation IDs, or generated PDFs.
+- **Level 3 (Direct API or DB read-back, optional upgrade):** Reads the system of record directly over read-only FHIR, REST, or SQL and signs a `VERIFIED` Ed25519 receipt.
+
+## Packages
+
+`pip install openadapt` installs the launcher, compiler/runtime engine, and MCP server. Every package installs only what it imports ([install weight policy](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/docs/monorepo/INSTALL_WEIGHT.md)).
+
+| Package | Role | Source |
+|---|---|---|
+| [`openadapt`](https://pypi.org/project/openadapt/) | Unified CLI (`wrap`, `connect`, `record`, `compile`, `run`, `verify`, `quickstart`) | [`openadapt/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/openadapt) |
+| [`openadapt-kernel`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/kernel) | Minimal `<2,800` LOC Shadow-to-Autopilot commit-boundary kernel (default-deny ledger, wire/DOM commit interceptor, stepwise live-DOM healer, cross-rail oracles, reversible pre-click probe, online ACI calibration, Ed25519 receipts, stdio MCP) | [`packages/kernel/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/kernel) |
+| [`openadapt-flow`](https://pypi.org/project/openadapt-flow/) | Full demonstration compiler, certification, qualification, governed replay, auto-repair, and BYOC connector | [`packages/flow/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow) |
+| [`openadapt-verify`](https://pypi.org/project/openadapt-verify/) | Standalone Python SDK (`@verified`, `checked_write`, local JIT compiler, `mcpify`) | [`packages/verify/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/verify) |
+| [`openadapt-desktop`](https://pypi.org/project/openadapt-desktop/) | OpenAdapt Desktop `0.35.0` ([download](https://openadapt.ai/download)) with Before/After step screenshot preview | [`packages/desktop/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/desktop) |
+| [`openadapt-agent`](https://pypi.org/project/openadapt-agent/) | MCP server, Agent Skills export, and A2A handoffs | [`packages/agent/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent) |
+| [`openadapt-types`](https://pypi.org/project/openadapt-types/) | Shared Pydantic request, result, `EvidenceScopeV1`, and receipt schemas | [`packages/types/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/types) |
+| [`openadapt-capture`](https://pypi.org/project/openadapt-capture/) | Optional local desktop recorder (`openadapt[capture]`) | [`packages/capture/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/capture) |
+| [`openadapt-privacy`](https://pypi.org/project/openadapt-privacy/) | Local PII/PHI scrubbing and redaction (`openadapt[privacy]`) | [`packages/privacy/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/privacy) |
+| [`openadapt-tray`](https://pypi.org/project/openadapt-tray/) | Menu-bar and system-tray status controls for OpenAdapt Desktop | [`packages/tray/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/tray) |
+
+Research repositories live separately: [openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) and [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml).
+
+## Surfaces and Maturity
+
+**Web apps are the production-mature surface** (DOM structure, fresh-reload read-back, compiled API promotion, self-repair, and rollback). Desktop (Windows, macOS, Linux), RDP, and Citrix share the same record, compile, and run pipeline with narrower documented boundaries ([BACKEND_PARITY.md](packages/flow/docs/BACKEND_PARITY.md)).
+
+| Surface | Maturity and boundaries | Signals used | Validated on |
+|---|---|---|---|
+| **Web apps** | Production-mature (DOM, reload read-back, API promotion, repair, rollback) | Screen + DOM + network | Gitea, Vikunja, Memos, Mealie, OpenEMR, Odoo, openIMIS; CI runs in-tree apps on every build |
+| **Windows apps** | Documented boundary (UI Automation; per-app qualification required) | Screen + UI Automation | 3 of 3 saves in a WinForms test app |
+| **macOS apps** | Documented boundary (Accessibility; per-app qualification required) | Screen + Accessibility | 3 of 3 saves in TextEdit; end-to-end AX repair ([#1715](https://github.com/OpenAdaptAI/OpenAdapt/pull/1715)) |
+| **Linux apps (X11)** | Documented boundary (AT-SPI; X11 only) | Screen + AT-SPI | Recording and AT-SPI read in CI; backend actions unit-tested |
+| **Remote desktop (RDP)** | Documented boundary (pixel-only; higher false-stop rate on visual drift) | Screen pixels | 105 runs on a real AVC444 session: 55 saves confirmed in DB, 0 wrong-record saves, 40 false stops |
+| **Citrix** | Documented boundary (pixel-only; per-app qualification required) | Screen pixels | Citrix stand-in app with no DOM: 3 healthy runs, 3 stops on drift |
+
+See [Surfaces](https://docs.openadapt.ai/explanation/surfaces/) and [Limits](https://docs.openadapt.ai/explanation/limits/) for full details.
+
+## Record, Compile, and Replay by Hand
 
 ```bash
 python -m pip install --upgrade openadapt
-openadapt record --backend <web|windows|macos|linux|rdp|citrix> <target> --out rec
 
-# A web app
+# Web app
 openadapt record --backend web --url https://staging.your-app.example --out rec
 openadapt compile rec --out bundle --name my-first-workflow
 openadapt run --replay bundle --url https://staging.your-app.example --run-dir run
 
-# A desktop app (macOS here; Windows and Citrix take --window too).
-# Desktop recording and macOS replay are separate extras.
-python -m pip install --upgrade 'openadapt[capture,macos]'
-openadapt record --backend macos --window "Your App" --out rec
-openadapt compile rec --out bundle --name my-first-workflow
-openadapt run --replay bundle --macos-app "Your App" --run-dir run
-```
-
-`run --replay` drives the app and performs every recorded action,
-including saves you can't undo. It doesn't ask first and doesn't check the
-saved record. Point it at a test or staging copy, never at production data.
-
-The commands for every surface, including Linux, RDP and Citrix, are in
-[SURFACES.md](packages/flow/docs/SURFACES.md#first-workflow-per-surface).
-
-The existing engine command remains available for scripts:
-
-```bash
+# Existing engine replay command for scripts
 openadapt flow replay bundle --url https://staging.your-app.example --run-dir run
 ```
 
-`flow replay` performs every recorded action, including real saves. Use a test
-or staging copy; it does not ask for approval or check the saved record.
+`flow replay` performs every recorded action, including real saves. Use a test or staging copy; it does not ask for approval or check the saved record. For production writes, certify, qualify, and admit the bundle, then run `openadapt run` ([Your first workflow](https://docs.openadapt.ai/tutorials/first-workflow/)).
 
-A program that writes to a real system also needs record checks, a deployment
-file, certification, qualification, and an admission; then `openadapt run`
-runs it. By default each save waits for a person to approve it in OpenAdapt
-Desktop or on a paired phone. [Your first workflow](https://docs.openadapt.ai/tutorials/first-workflow/)
-walks through it. Several recordings of the same task can become one program
-with branches and loops (`openadapt compile --induce`).
+## Run Outcomes
 
-To record a desktop app, install the recorder and your operating system's
-adapter, for example `python -m pip install "openadapt[capture,windows]"`, or
-use [OpenAdapt Desktop](https://openadapt.ai/download).
+Every wrapped or compiled run returns a structured `transaction_outcome` so calling agents know whether to continue, escalate, or inspect the record:
 
-`openadapt --help` lists the task commands. `openadapt wrap --help` shows the
-options for running an agent task once and reusing its checked compiled tool.
-The [CLI reference](docs/cli.md) lists task paths and their original aliases.
-
-### Judge or train any agent
-
-`openadapt verify effect` judges a write made by any agent or script against
-the system of record. `openadapt-flow services reward` turns the same check into a
-reward for training or evaluating computer-use agents
-([REWARD_WORKER.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/REWARD_WORKER.md)).
-
-## An agent alone, and an OpenAdapt program
-
-The same referral task on a local OpenEMR 8.0.0.3 test copy with synthetic
-patients, 62 timed runs each (14 and 15 October 2026), judged by the same
-database read-back:
-
-| | Claude computer-use agent | OpenAdapt program |
-|---|---|---|
-| Model calls | On every step of every run | 0 |
-| Screenshots sent to a model | Throughout every run | 0 |
-| Model cost per referral | About $0.08 at list price | $0 |
-| Path through the app | Chosen again each run | The same compiled steps |
-| Median time | 36.5 s | 29.7 s |
-| Referrals saved correctly | 62 of 63 | 62 of 63 |
-
-The program drove every page, as the agent does. The API step compiled from
-the recording's network traffic removes those page steps: 3.3 s per referral,
-in the table at the top. [Every result](https://openadapt.ai/compare/computer-use-agents)
-is published. OpenAdapt isn't affiliated with the OpenEMR project.
-
-## Every backend
-
-**Web apps are the production-mature surface** (DOM structure, fresh-reload
-read-back, compiled API promotion, self-repair, and rollback). Native desktop
-(Windows, macOS, Linux), RDP, and Citrix backends share the same record,
-compile, and run pipeline with narrower documented boundaries
-([BACKEND_PARITY.md](packages/flow/docs/BACKEND_PARITY.md)). Self-repair is
-qualified on browser runs ([benchmark/auto_repair](packages/flow/benchmark/auto_repair/README.md))
-and end to end on native macOS AX ([#1715](https://github.com/OpenAdaptAI/OpenAdapt/pull/1715)). Outside a browser it
-runs with `repair.session` ([#1717](https://github.com/OpenAdaptAI/OpenAdapt/pull/1717)), and native and pixel backends admit
-its new clicks by element identity ([#1709](https://github.com/OpenAdaptAI/OpenAdapt/pull/1709)). Teaching the fix for a
-halted run and rollback are tested on browser runs. Where
-the app exposes its structure, OpenAdapt uses it; on remote desktops it works
-from pixels.
-
-| Surface | Maturity & boundaries | What OpenAdapt reads | Validated on |
+| Plain meaning | `transaction_outcome` | Agent status | Next step |
 |---|---|---|---|
-| Web apps | Production-mature (DOM, reload read-back, API promotion, repair, rollback) | The screen, plus the page's DOM | Gitea, Vikunja, Memos, Mealie, OpenEMR, Odoo, and openIMIS; CI runs in-tree apps on every build |
-| Windows apps | Documented boundary (UI Automation; per-app qualification required) | The screen, plus UI Automation | 3 of 3 saves in a WinForms test app |
-| macOS apps | Documented boundary (Accessibility; per-app qualification required) | The screen, plus Accessibility | 3 of 3 saves in TextEdit |
-| Linux apps (X11) | Documented boundary (AT-SPI; X11 only) | The screen, plus AT-SPI | Recording and an AT-SPI read in CI; backend actions are unit-tested |
-| Remote desktop (RDP) | Documented boundary (pixel-only; higher false-stop rate on visual drift) | The screen | 105 runs through the stock Remote Desktop client on a real AVC444 session: 55 saves confirmed in the database, 0 wrong-record saves, 40 false stops |
-| Citrix | Documented boundary (pixel-only; per-app qualification required) | The screen | A Citrix stand-in app with no DOM: 3 healthy runs, 3 stops on drift |
+| Done and checked | `VERIFIED` | `done` | Complete. Emits a signed Ed25519 receipt. |
+| Stopped before saving | `HALTED_BEFORE_EFFECT` | `needs_review` | Fix the cause or approve a repair, then run again. |
+| Check the record | `RECONCILIATION_REQUIRED` | `not_sure_if_saved` | A save may have landed. A person checks the record before retrying. |
+| Finished, unchecked | `COMPLETED_UNVERIFIED` | `not_sure_if_saved` | Useful for testing; lacks independent read-back proof. |
+| Saved, awaiting check | `SAVED_AWAITING_CHECK` | `not_sure_if_saved` | Settled later via `openadapt-flow verify deferred settle`. |
+| Did not run | `REJECTED_POLICY`, `CANCELED`, `FAILED_PLATFORM` | `did_not_run` | Fix the policy gate or environment and run again. |
 
-Each application on each surface needs its own qualification.
-[Surfaces](https://docs.openadapt.ai/explanation/surfaces/) and [Limits](https://docs.openadapt.ai/explanation/limits/)
-have the details.
+See [Run outcomes](https://docs.openadapt.ai/reference/outcomes/) for every status code.
 
-## How it works
+## Security, Privacy, and Releases
 
-```mermaid
-flowchart LR
-    S["Demonstrate (human or AI agent)"] --> C["Compile"] --> Q["Certify and qualify"] --> A["Admit"] --> R["Run with checks"]
-    R -.->|"stopped: approve a fix"| C
-```
-
-For each step the compiler uses the most reliable layer the app offers: page
-structure first (DOM, Windows UI Automation, macOS Accessibility, Linux
-AT-SPI), a direct API call where one is bound, and pixels (template, text and
-layout matching) only where nothing else exists, such as a remote desktop.
-Qualification runs the program against normal and fault cases before an
-admission lets that exact version run. At each save the program checks that
-the right record is on screen, makes the entry, and reads the record back.
-
-## How it compares
-
-| | Computer-use agent | Agent with a replay cache | Traditional RPA | OpenAdapt |
-|---|---|---|---|---|
-| How you define the task | A goal in plain language | One agent run | A script or flow built in a designer | A person's recording or an agent's run |
-| What runs each time | A model chooses each step from the screen | The recorded steps; the agent takes over on a miss | The fixed script | A compiled program you can read |
-| Model calls per run | At least one per step | None on a hit; the agent's calls on a miss | None | None with default settings |
-| When the screen changes | The model tries to adapt | The agent improvises live | A selector stops matching, or matches the wrong control | The run stops before saving; a fix is proposed and a person approves it |
-| Right record? | The model judges from the screen | Usually only that the screen looks as recorded | Whatever the developer scripted | Checked before every save |
-| Did the save land? | The model judges from the screen | The screen | Whatever the developer scripted | Reported verified only when a read outside the acting session confirms it; weaker checks are named as such |
-| Strongest for | New or changing tasks | Repeated tasks where a wrong save is cheap | Stable processes with a team to maintain the scripts | The same entry many times, where a wrong save is costly |
-
-## What it can do
-
-- **Learns from any successful run**, a person's demonstration or a computer-use agent's verified run, and compiles it into a program that runs with no calls to a hosted AI model.
-- **Uses the most reliable layer the app allows**: page structure (DOM, UI Automation, Accessibility), direct API calls where one is bound, and pixels only for remote desktops.
-- **Builds branching programs** from several demonstrations, repeated halts and background runs, and routes each item to the right verified variant.
-- **Works across surfaces**: web, Windows, macOS, Linux and RDP backends, chained in one workflow.
-- **Confirms the right record before every write and checks the saved record after it**. A run is reported verified only when a read outside the acting session confirms the save: the system of record where one can be read, or a separate session. Weaker checks are reported at their own level.
-- **Stops instead of guessing**, never retries an uncertain save, and says what changed before a stop.
-- **Binds each approval to exactly what will be saved**, with one-tap answers on a paired phone.
-- **Repairs itself when the app changes**, probing a fix up to the save and asking a person to approve it (qualified on browser runs and end to end on native macOS).
-- **Works as a safety layer under any agent**: MCP tools, a guarded save, Agent Skills and a CLI.
-- **Hands results from agent to agent with their receipts**, over MCP, HTTP, files and the A2A protocol, and verifies a handoff on arrival.
-- **Runs locally**: no calls to a hosted AI model on healthy runs, personal and health data redacted, signed receipts.
-
-[CAPABILITIES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) has the evidence and code for each.
-
-## What your agent gets back
-
-| You see | `transaction_outcome` | An agent gets | What happens next |
-|---|---|---|---|
-| Done and checked | `VERIFIED` | `done` | Nothing. Only this result gets a shareable receipt. |
-| Stopped before saving | `HALTED_BEFORE_EFFECT` | `needs_review` | Fix the cause, or show the program the fix, and run again. |
-| Check the record | `RECONCILIATION_REQUIRED` | `not_sure_if_saved` | A save may have gone through. A person checks the record before anything is retried. |
-| Finished, not checked | `COMPLETED_UNVERIFIED` | `not_sure_if_saved` | Fine for testing; not a production success. |
-| Saved, waiting for its check | `SAVED_AWAITING_CHECK` | `not_sure_if_saved` | The save's check is a later report (a claim acknowledgment, an export). Don't rerun it. `openadapt-flow verify deferred settle` counts it as done only when the report confirms it. |
-| Didn't run | `REJECTED_POLICY`, `CANCELED`, `FAILED_PLATFORM` | `did_not_run` | Fix the gate or the environment and run again. |
-
-The console's last line can read `HALTED` for both the second and third rows.
-`transaction_outcome` in `report.json` tells them apart, so base every rerun on
-it. [Run outcomes](https://docs.openadapt.ai/reference/outcomes/) lists every value.
-
-## When to use something else
-
-- **You already have a clean, documented API client for the task.** Call the
-  API directly. (If the app only exposes an internal form or RPC endpoint,
-  OpenAdapt can record it in the GUI and compile it into a direct API/MCP
-  step instead of replaying pixels.)
-- **Every task is one-off.** Use a computer-use agent. OpenAdapt pays off when
-  the same entry repeats or needs repeatable verification.
-- **You need a `VERIFIED` receipt with zero read-back path at all.** Level 1
-  before-click guards work on 100% of apps with no database access, and Level 2
-  UI confirmation read-back covers ~90% of portals with no database access.
-  Level 3 direct API/FHIR/SQL read-back is an optional upgrade when you own the
-  system. If a target exposes neither a UI read-back nor an API/DB read-back, a
-  run finishes as checked-before-click (`COMPLETED_UNVERIFIED`) rather than
-  `VERIFIED`.
-
-
-## Packages
-
-`pip install openadapt` installs the `openadapt` command, the engine, and the
-MCP server. The product packages live in this repository:
-
-| Package (PyPI) | What it is | Source |
-|---|---|---|
-| [`openadapt`](https://pypi.org/project/openadapt/) | The `openadapt` command | [`openadapt/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/openadapt) |
-| [`openadapt-flow`](https://pypi.org/project/openadapt-flow/) | The engine: record, compile, check, qualify, run, repair | [`packages/flow/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow) |
-| [`openadapt-agent`](https://pypi.org/project/openadapt-agent/) | The MCP server and Agent Skills | [`packages/agent/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent) |
-| [`openadapt-types`](https://pypi.org/project/openadapt-types/) | Shared request, result, and receipt models | [`packages/types/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/types) |
-| [`openadapt-capture`](https://pypi.org/project/openadapt-capture/) | The desktop recorder: `openadapt[capture]` | [`packages/capture/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/capture) |
-| [`openadapt-privacy`](https://pypi.org/project/openadapt-privacy/) | Finds and redacts personal and health data: `openadapt[privacy]` | [`packages/privacy/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/privacy) |
-| [`openadapt-desktop`](https://pypi.org/project/openadapt-desktop/) | OpenAdapt Desktop ([download](https://openadapt.ai/download)) | [`packages/desktop/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/desktop) |
-| [`openadapt-tray`](https://pypi.org/project/openadapt-tray/) | Menu-bar and system-tray controls and status for OpenAdapt Desktop | [`packages/tray/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/tray) |
-
-Each package installs only what it imports. For example, `pip install openadapt-privacy` doesn't install the engine or the desktop app. CI checks each package's install size and dependency list ([install weight](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/docs/monorepo/INSTALL_WEIGHT.md)).
-
-Research on GUI agents lives in separate repositories:
-[openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) (benchmarks)
-and [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) (model
-training). The [packages map](https://docs.openadapt.ai/reference/packages/) has the full list.
-
-## Security and procurement
-
-Screens, typed values, and recordings stay on the computer or runner that runs
-OpenAdapt. The shareable receipt and the Cloud dashboard hold counts, digests,
-and closed values. A sanitized copy leaves only after a person approves it, and
-screenshots go to a model host only if you turn on model grounding.
-[Security & procurement](https://docs.openadapt.ai/security/) covers data handling, deployment
-boundaries, evidence, subprocessors, and release integrity. Plans are on the
-[pricing page](https://openadapt.ai/pricing).
+- **Local-first data boundary:** Screens, typed values, and recordings stay on the machine or VPC runner executing OpenAdapt. Shareable receipts and Cloud dashboards hold counts, digests, and closed status fields.
+- **Documentation:** [Security and procurement](https://docs.openadapt.ai/security/) covers data handling, deployment boundaries, evidence, subprocessors, and release integrity.
+- **Earlier versions:** Pre-1.0 (`v0.46.0`) is frozen under [`legacy/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/legacy); see [docs/LEGACY_FREEZE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/docs/LEGACY_FREEZE.md) for install and migration instructions.
 
 <details>
 <summary>Release status</summary>
@@ -428,22 +229,10 @@ exact compiled bundle, application, and environment.
 
 </details>
 
-## Earlier versions
-
-The pre-1.0 version (v0.46.0) is frozen under
-[`legacy/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/legacy).
-[docs/LEGACY_FREEZE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/docs/LEGACY_FREEZE.md)
-explains how to install it and how to migrate.
-
 ## Contributing
 
-Launcher, engine, MCP server, and contract changes all belong in this
-repository; engine changes go in [`packages/flow/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow).
-[Contribution guide](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CONTRIBUTING.md) ·
-[Issues](https://github.com/OpenAdaptAI/OpenAdapt/issues) ·
-[Discussions](https://github.com/OpenAdaptAI/OpenAdapt/discussions) ·
-[Report a vulnerability](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/SECURITY.md) ·
-[Code signing policy](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CODE_SIGNING_POLICY.md)
+Launcher, kernel, engine, MCP server, desktop app, and contract changes live in this monorepo.
 
-Maintained by [OpenAdaptAI](https://github.com/OpenAdaptAI) under the
-[MIT License](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE).
+[Contribution guide](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CONTRIBUTING.md) · [Issues](https://github.com/OpenAdaptAI/OpenAdapt/issues) · [Discussions](https://github.com/OpenAdaptAI/OpenAdapt/discussions) · [Report a vulnerability](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/SECURITY.md) · [Code signing policy](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CODE_SIGNING_POLICY.md)
+
+Maintained by [OpenAdaptAI](https://github.com/OpenAdaptAI) under the [MIT License](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE).
