@@ -230,9 +230,13 @@ def _inspect_run(run: Path) -> int:
         if not isinstance(signatures, list) or not signatures:
             raise AssertionError("quickstart receipt has no signatures")
         try:
-            statement = json.loads(base64.b64decode(str(receipt["payload"])).decode("utf-8"))
+            statement = json.loads(
+                base64.b64decode(str(receipt["payload"])).decode("utf-8")
+            )
         except Exception as exc:
-            raise AssertionError("quickstart receipt payload is not valid JSON") from exc
+            raise AssertionError(
+                "quickstart receipt payload is not valid JSON"
+            ) from exc
         pred_type = str(statement.get("predicateType") or "")
         if not pred_type.startswith("https://openadapt.ai/record/run/"):
             raise AssertionError(

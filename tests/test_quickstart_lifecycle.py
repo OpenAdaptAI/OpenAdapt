@@ -415,11 +415,15 @@ def test_inspector_accepts_record_run_v1_receipt_without_legacy_files(tmp_path):
     }
     envelope = {
         "payloadType": "application/vnd.in-toto+json",
-        "payload": base64.b64encode(json.dumps(statement).encode("utf-8")).decode("ascii"),
+        "payload": base64.b64encode(json.dumps(statement).encode("utf-8")).decode(
+            "ascii"
+        ),
         "signatures": [{"keyid": "test-key", "sig": "test-sig"}],
     }
     (run / "receipt.json").write_text(json.dumps(envelope), encoding="utf-8")
-    (run / "receipt.private.json").write_text(json.dumps({"openings": []}), encoding="utf-8")
+    (run / "receipt.private.json").write_text(
+        json.dumps({"openings": []}), encoding="utf-8"
+    )
 
     summary = lifecycle._inspect_quickstart(tmp_path)
     assert summary["outcome"] == "VERIFIED"
