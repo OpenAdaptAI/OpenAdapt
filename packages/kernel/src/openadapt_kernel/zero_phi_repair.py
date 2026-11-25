@@ -135,12 +135,13 @@ def _safe_selector(sel: str) -> str:
 
 
 def _find_stripped_var_control_idx(controls: Sequence[ControlSchema], private_vars: Dict[str, str], preferred_var: str = "") -> Tuple[Optional[int], str]:
+    scoped = [x for x in controls if x.in_modal] or list(controls)
     pairs = [(preferred_var, private_vars[preferred_var])] if preferred_var in private_vars else list(private_vars.items())
     for var_key, secret_val in pairs:
         toks = [t.lower() for t in _WORD_RE.findall(secret_val) if len(t) >= 3]
         if len(toks) < 2:
             continue
-        for c in controls:
+        for c in scoped:
             cand_raw = f"{c.label} {c.value}".strip() if c.tag not in ("textarea", "button") else ""
             if not cand_raw or secret_val in cand_raw:
                 continue
