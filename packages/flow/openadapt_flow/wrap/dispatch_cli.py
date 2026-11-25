@@ -311,7 +311,9 @@ class _ScriptedFallbackAgent:
 
     def _load_actions(self, request: Any) -> list[dict[str, Any]]:
         if self.script_path:
-            raw = json.loads(Path(self.script_path).expanduser().read_text(encoding="utf-8"))
+            raw = json.loads(
+                Path(self.script_path).expanduser().read_text(encoding="utf-8")
+            )
         else:
             import shlex
             import subprocess

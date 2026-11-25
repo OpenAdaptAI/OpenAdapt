@@ -716,9 +716,9 @@ def test_scripted_fallback_cli_path_with_forced_drift_and_item_approval_gate(
 
     # Exercise CLI parsing + _fallback_agent building a zero-model scripted agent
     # and dispatching through a forced drift + item-approval gate.
-    gate_calls: list[Any] = []
+    gate_calls: list[object] = []
 
-    def approve_gate(req: Any) -> bool:
+    def approve_gate(req: object) -> bool:
         gate_calls.append(req)
         return True
 
