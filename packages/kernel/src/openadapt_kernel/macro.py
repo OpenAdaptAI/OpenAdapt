@@ -10,7 +10,7 @@ from openadapt_kernel.interceptor import CommitInterceptor
 from openadapt_kernel.ledger import ObligationLedger, ProvenanceViolation
 
 _OBSERVE_SCHEMA_JS = """() => {
-  const selectorQuery = 'input, textarea, select, button, a[href], [role="button"], [role="textbox"], [role="combobox"], [role="checkbox"]';
+  const selectorQuery = 'input, textarea, select, button, a[href], [contenteditable="true"], [role="button"], [role="textbox"], [role="combobox"], [role="checkbox"], [role="option"]';
   const collected = [];
   const walkRoot = (root, inShadow) => {
     const all = root.querySelectorAll('*');
@@ -44,7 +44,7 @@ _OBSERVE_SCHEMA_JS = """() => {
   };
 
   const modalRoots = Array.from(
-    document.querySelectorAll('[role="dialog"], .v-dialog, .v-overlay--active, .v-dialog--active, .modal.show, dialog[open]')
+    document.querySelectorAll('[role="dialog"], .v-dialog, .v-overlay--active, .v-dialog--active, .menuable__content__active, .modal.show, dialog[open]')
   ).filter(r => {
     const st = window.getComputedStyle(r);
     const rect = r.getBoundingClientRect();
@@ -94,11 +94,15 @@ _OBSERVE_SCHEMA_JS = """() => {
       if (visibleMatches(root, s)[0] === el) return s;
     }
     // Synthesize a live-verified container-scoped structural selector (avoids ephemeral #input-110 IDs!)
+    const isEditable = el.getAttribute('contenteditable') === 'true';
+    const rawRole = (el.getAttribute('role') || '').toLowerCase();
     const scopes = inModal
       ? ['[role="dialog"]', '.v-dialog--active', '.v-overlay--active .v-card', '.v-dialog .v-card', '.v-card', 'form']
       : ['main form', 'main', 'form', 'body'];
-    const basePart = (tag === 'input' && type) ? `input[type="${esc(type)}"]`
+    const basePart = isEditable ? `${tag}[contenteditable="true"]`
+      : (tag === 'input' && type) ? `input[type="${esc(type)}"]`
       : (tag === 'button' && type === 'submit') ? 'button[type="submit"]'
+      : (rawRole === 'combobox' || rawRole === 'option') ? `[role="${esc(rawRole)}"]`
       : tag;
     for (const sc of scopes) {
       const cand = `${sc} ${basePart}`;
@@ -124,7 +128,7 @@ _OBSERVE_SCHEMA_JS = """() => {
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) continue;
     const tag = el.tagName.toLowerCase();
-    const role = (el.getAttribute('role') || '').toLowerCase();
+    const role = (el.getAttribute('role') || (el.getAttribute('contenteditable') === 'true' ? 'textbox' : '')).toLowerCase();
     const inModal = isInsideModal(el);
     const label = labelTextFor(el, root);
     const options = tag === 'select'
