@@ -116,11 +116,7 @@ def _private_to_this_user(path: Path) -> bool:
 
 
 def _answer_file(card: dict) -> Path:
-    return (
-        exception_queue.registry_root()
-        / card["run_ref"]
-        / f"answer-{card['card_id'][7:]}.json"
-    )
+    return exception_queue.registry_root() / card["run_ref"] / f"answer-{card['card_id'][7:]}.json"
 
 
 # -- the cards ------------------------------------------------------------------------
@@ -394,11 +390,7 @@ def test_the_phone_answers_with_the_portal_key(queue, portal_key, enclave):  # n
 
 def test_the_phone_page_knows_the_exception_cards():
     script = (
-        Path(__file__).resolve().parents[2]
-        / "openadapt_desktop"
-        / "portal"
-        / "shell"
-        / "stops.js"
+        Path(__file__).resolve().parents[2] / "openadapt_desktop" / "portal" / "shell" / "stops.js"
     ).read_text()
     assert '"exception"' in script
     assert "const MAX_BATCH = 25;" in script
@@ -450,6 +442,15 @@ def test_the_windows_rule_allows_only_this_user_system_and_administrators(owner,
     me = frozenset({_ME, "S-1-5-32-544"} if owner == "S-1-5-32-544" else {_ME})
     reason = exception_queue.windows_private_reason(owner, aces, me=me)
     assert (reason is not None) is refused
+
+
+def test_the_windows_rule_refuses_administrators_owner_when_not_elevated():
+    """Issue #2539: a non-elevated Desktop refuses an Administrators-owned card."""
+    reason = exception_queue.windows_private_reason(
+        "S-1-5-32-544", _PROFILE_ACL, me=frozenset({_ME})
+    )
+    assert reason is not None
+    assert "S-1-5-32-544" in reason
 
 
 def test_the_scan_stops_at_the_cap_across_runs(monkeypatch):
