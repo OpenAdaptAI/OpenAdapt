@@ -675,7 +675,7 @@ def _workflow_provenance_errors(
     return errors
 
 
-def _trusted_workflow_source_errors(
+def _verified_workflow_source_errors(
     api: Any, *, workflow_sha: str, current_main_sha: str
 ) -> list[str]:
     """Require the recorded trusted workflow source to belong to current main.
@@ -827,7 +827,7 @@ def _passed_pr_head_verdict(
     )
     if isinstance(source_sha, str) and isinstance(main_sha, str):
         errors.extend(
-            _trusted_workflow_source_errors(
+            _verified_workflow_source_errors(
                 api, workflow_sha=source_sha, current_main_sha=main_sha
             )
         )

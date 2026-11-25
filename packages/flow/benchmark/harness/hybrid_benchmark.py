@@ -472,7 +472,7 @@ class SpendLedger:
         self.total_cap = total_cap
         self.spent = 0.0
         self.aborted: Optional[str] = None
-        self._consecutive_billing_errors = 0
+        self._consecutive_quota_errors = 0
 
     def can_start(self) -> bool:
         """True when a new paid run may start under the ceiling."""
@@ -497,15 +497,15 @@ class SpendLedger:
         """
         self.spent += cost_usd
         if error and _looks_like_billing_error(error):
-            self._consecutive_billing_errors += 1
-            if self._consecutive_billing_errors >= BILLING_ABORT_AFTER:
+            self._consecutive_quota_errors += 1
+            if self._consecutive_quota_errors >= BILLING_ABORT_AFTER:
                 self.aborted = (
                     f"paid spending aborted after "
-                    f"{self._consecutive_billing_errors} consecutive "
+                    f"{self._consecutive_quota_errors} consecutive "
                     f"auth/billing errors — last error: {error}"
                 )
         else:
-            self._consecutive_billing_errors = 0
+            self._consecutive_quota_errors = 0
 
 
 # -- hybrid run (arm D) ----------------------------------------------------------

@@ -124,9 +124,7 @@ ApprovalMode = Literal["each_item", "problems_only", "not_gated"]
 #: Who answered, as Flow's item approval records it (decided_by).
 ApproverKind = Literal["person", "agent", "none"]
 
-Role = Literal[
-    "this_computer", "customer_key", "openadapt_cloud", "public_log", "demo"
-]
+Role = Literal["this_computer", "customer_key", "openadapt_cloud", "public_log", "demo"]
 ROLES: Final[tuple[str, ...]] = Role.__args__  # type: ignore[attr-defined]
 
 ReceiptRefusal = Literal[
@@ -392,7 +390,9 @@ def _check_confirmation(c: Confirmation, steps: set[int]) -> Optional[str]:
 
 def _check_approval(a: Approval) -> Optional[str]:
     for key, value in a.commitments.items():
-        if not _APPROVAL_KEY.fullmatch(key) or not re.fullmatch(_SHA256_HEX[1:-1], value):
+        if not _APPROVAL_KEY.fullmatch(key) or not re.fullmatch(
+            _SHA256_HEX[1:-1], value
+        ):
             return f"approval commitment {key!r} is not a known field"
     if a.mode == "not_gated" and a.approver_kind != "none":
         return "a not_gated run names no approver"
@@ -559,7 +559,10 @@ def confirmation_path(index: int, key: str) -> str:
 def _value_problem(path: str, value: Any) -> Optional[str]:
     approval = _APPROVAL_PATH.fullmatch(path)
     if approval:
-        if not (isinstance(value, str) and _APPROVAL_VALUES[approval.group(1)].fullmatch(value)):
+        if not (
+            isinstance(value, str)
+            and _APPROVAL_VALUES[approval.group(1)].fullmatch(value)
+        ):
             return f"{path!r} does not match its field's pattern"
         return None
     found = _CONFIRMATION_PATH.fullmatch(path)
@@ -585,16 +588,36 @@ def _value_problem(path: str, value: Any) -> Optional[str]:
 # -- embedded content --------------------------------------------------------
 
 _DATA_URI = re.compile(r"data:[a-z]+/", re.IGNORECASE)
-_URL = re.compile(r"[a-z][a-z0-9+.-]*://", re.IGNORECASE)
 _BASE64_RUN = re.compile(r"[A-Za-z0-9+/_-]{96,}={0,2}")
 _IMAGE_MAGIC = ("iVBORw0KGgo", "/9j/", "R0lGOD", "UklGR", "PHN2Zy")
+_URL_SCHEME_EXTRA = frozenset("+.-")
+
+
+def _has_url(text: str) -> bool:
+    """Linear-time check equivalent to ``re.search(r'[a-z][a-z0-9+.-]*://', text, re.I)``."""
+    pos = text.find("://")
+    while pos != -1:
+        i = pos - 1
+        has_alpha = False
+        while (
+            i >= 0
+            and text[i].isascii()
+            and (text[i].isalnum() or text[i] in _URL_SCHEME_EXTRA)
+        ):
+            if text[i].isalpha():
+                has_alpha = True
+            i -= 1
+        if has_alpha:
+            return True
+        pos = text.find("://", pos + 3)
+    return False
 
 
 def _embedded(text: str) -> bool:
     return bool(
         len(text) > 256
         or _DATA_URI.search(text)
-        or _URL.search(text)
+        or _has_url(text)
         or _BASE64_RUN.search(text)
         or any(text.startswith(magic) for magic in _IMAGE_MAGIC)
         or "<svg" in text.lower()
@@ -679,7 +702,10 @@ def jcs(value: Any) -> str:
         keys = sorted(value, key=lambda k: str(k).encode("utf-16-be"))
         return (
             "{"
-            + ",".join(f"{json.dumps(str(k), ensure_ascii=False)}:{jcs(value[k])}" for k in keys)
+            + ",".join(
+                f"{json.dumps(str(k), ensure_ascii=False)}:{jcs(value[k])}"
+                for k in keys
+            )
             + "}"
         )
     raise ValueError(f"{type(value).__name__} has no JSON form")
@@ -706,11 +732,15 @@ def report_subject_match(
         for s in statement.get("subject", [])
         if isinstance(s, Mapping)
     }
-    if file_bytes is not None and subjects.get("report.json") == hashlib.sha256(
-        file_bytes
-    ).hexdigest():
+    if (
+        file_bytes is not None
+        and subjects.get("report.json") == hashlib.sha256(file_bytes).hexdigest()
+    ):
         return "report.json"
-    if canonical_sha256 is not None and subjects.get("report.canonical") == canonical_sha256:
+    if (
+        canonical_sha256 is not None
+        and subjects.get("report.canonical") == canonical_sha256
+    ):
         return "report.canonical"
     return None
 
@@ -759,7 +789,9 @@ def sign_statement(
     return envelope
 
 
-def add_signature(envelope: Mapping[str, Any], kid: str, sign: Signer) -> dict[str, Any]:
+def add_signature(
+    envelope: Mapping[str, Any], kid: str, sign: Signer
+) -> dict[str, Any]:
     """Add one signature (a countersignature) over the same payload bytes."""
     if not _KEY_ID_RE.fullmatch(kid):
         raise ValueError("a key id is seal-ed25519-<16 hex>")
@@ -841,7 +873,9 @@ def parse_registry(data: Any) -> list[RoleKey]:
     (``unknown_role``), so a typo can't make a key trusted.
     """
     if not isinstance(data, Mapping) or data.get("schema") != REGISTRY_SCHEMA:
-        raise RegistryError("unknown_schema", "not an openadapt.receipt-keys/v1 registry")
+        raise RegistryError(
+            "unknown_schema", "not an openadapt.receipt-keys/v1 registry"
+        )
     entries = data.get("keys")
     if not isinstance(entries, list):
         raise RegistryError("malformed", "a registry has a keys list")
@@ -866,9 +900,13 @@ def parse_registry(data: Any) -> list[RoleKey]:
             status == "revoked"
             and not (isinstance(revoked_at, str) and _ISO_SECONDS.fullmatch(revoked_at))
         ):
-            raise RegistryError("malformed", "a key is active, or revoked with revoked_at")
+            raise RegistryError(
+                "malformed", "a key is active, or revoked with revoked_at"
+            )
         org = entry.get("org")
-        if role == "customer_key" and not (isinstance(org, str) and _ORG.fullmatch(org)):
+        if role == "customer_key" and not (
+            isinstance(org, str) and _ORG.fullmatch(org)
+        ):
             raise RegistryError("malformed", "a customer key names its org")
         keys.append(
             RoleKey(
@@ -1016,7 +1054,9 @@ def verify_receipt(
         "payload",
         "signatures",
     }:
-        return _refuse("malformed", "a DSSE envelope has payloadType, payload, signatures")
+        return _refuse(
+            "malformed", "a DSSE envelope has payloadType, payload, signatures"
+        )
     if envelope.get("payloadType") != PAYLOAD_TYPE:
         return _refuse("unknown_schema", "the payload is not an in-toto statement")
     try:
@@ -1106,7 +1146,9 @@ def verify_receipt(
         }:
             return _refuse("malformed", "a private openings file has three fields")
         if openings.get("schema") != OPENINGS_SCHEMA:
-            return _refuse("unknown_schema", "not an openadapt.receipt-openings/v1 file")
+            return _refuse(
+                "unknown_schema", "not an openadapt.receipt-openings/v1 file"
+            )
         if openings.get("payload_sha256") != hashlib.sha256(payload).hexdigest():
             return _refuse("opening_mismatch", "the openings belong to another receipt")
         result = _check_openings(openings.get("openings"), commitments, None)
@@ -1118,7 +1160,8 @@ def verify_receipt(
             reason = disclosed.get(confirmation_path(index, "reason"))
             if reason is not None and reason not in REASONS_FOR_STATE[c.state]:
                 return _refuse(
-                    "inconsistent", f"a {c.state} confirmation can't have reason {reason}"
+                    "inconsistent",
+                    f"a {c.state} confirmation can't have reason {reason}",
                 )
     ordered = sorted(
         checks,
@@ -1134,7 +1177,9 @@ def verify_receipt(
         if bound is None:
             return _refuse("payload_not_bound", "the receipt names no payload")
         if bound.digest.sha256 != hashlib.sha256(received).hexdigest():
-            return _refuse("payload_mismatch", "the bytes received aren't the payload signed")
+            return _refuse(
+                "payload_mismatch", "the bytes received aren't the payload signed"
+            )
         payload_bound = True
     confirmations = statement.predicate.confirmations
     return ReceiptVerification(
