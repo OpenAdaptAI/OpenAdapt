@@ -518,3 +518,14 @@ def test_fast_checks_classifier_selection(tmp_path: Path) -> None:
         _run_classifier(["README.md"], "pull_request", tmp_path)["fast_checks"]
         == "false"
     )
+
+
+def test_flow_unit_gets_the_long_timeout_wherever_it_runs_the_full_suite() -> None:
+    """Merge-queue and main-push runs execute the 2-shard suite, which takes
+    up to ~42 minutes a shard; a 40-minute cap cancels them and ejects queue
+    groups. Only the 4-shard PR fast lane keeps 40 minutes."""
+    jobs = _load("packages.yml")["jobs"]
+    timeout = str(jobs["flow-unit"]["timeout-minutes"])
+    for event in ("push", "merge_group", "schedule", "workflow_dispatch"):
+        assert f"github.event_name == '{event}'" in timeout, (event, timeout)
+    assert "&& 60 || 40" in timeout, timeout
