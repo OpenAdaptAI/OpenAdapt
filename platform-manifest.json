@@ -1,7 +1,7 @@
 {
   "manifest_kind": "openadapt-platform-release-manifest",
   "schema_version": "2.0.0",
-  "generated_at": "2026-11-25T02:37:15+00:00",
+  "generated_at": "2026-11-25T03:20:36+00:00",
   "generation": {
     "files": [
       {
@@ -15,8 +15,16 @@
     ]
   },
   "release_selection": {
-    "mode": "latest-published",
-    "component_versions": {}
+    "mode": "explicit-published",
+    "component_versions": {
+      "agent": "2.2.4",
+      "capture": "1.4.0",
+      "desktop": "0.33.1",
+      "flow": "4.0.0",
+      "launcher": "1.24.0",
+      "privacy": "1.1.4",
+      "types": "0.24.2"
+    }
   },
   "components": {
     "launcher": {
