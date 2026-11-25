@@ -16,9 +16,6 @@ required-markers = [
     "python_full_version < '3.12' and sys_platform == 'win32'",
 ]
 
-[manifest]
-constraints = [{ name = "cbor2", specifier = ">=5.6,<6" }]
-
 [[package]]
 name = "a2a-sdk"
 version = "1.3.1"
@@ -1030,6 +1027,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/d9/e3/49afa1bc180e0d28008ec6bcdf82a4072d1c7a41032b5b759b60814ca4b0/culsans-0.11.0.tar.gz", hash = "sha256:0b43d0d05dce6106293d114c86e3fb4bfc63088cfe8ff08ed3fe36891447fe33", size = 107546, upload-time = "2025-12-31T23:15:38.196Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e0/5d/9fb19fb38f6d6120422064279ea5532e22b84aa2be8831d49607194feda3/culsans-0.11.0-py3-none-any.whl", hash = "sha256:278d118f63fc75b9db11b664b436a1b83cc30d9577127848ba41420e66eb5a47", size = 21811, upload-time = "2025-12-31T23:15:37.189Z" },
+]
+
+[[package]]
+name = "cwt"
+version = "3.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cbor2" },
+    { name = "cryptography" },
+    { name = "pyhpke" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d5/7e/4d4e9bff3b12a39a06da913ad9835a6cc844ec573a8957fceec41f89db56/cwt-3.3.0.tar.gz", hash = "sha256:407d6bde19f8d584093904df8c8a3a7b1312db077fb534091d8899b16614eb3b", size = 239271, upload-time = "2026-07-16T05:36:40.774Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/15/b8/be71b74139ca0da69f137361b5f89fc9cf5f0f2d752992d25e093bc60802/cwt-3.3.0-py3-none-any.whl", hash = "sha256:37547b286e84942e89c02b1ebcbe8f3e4b2a40c22c9b5837391175bcb8437146", size = 72861, upload-time = "2026-07-16T05:36:42.282Z" },
 ]
 
 [[package]]
@@ -2931,6 +2942,8 @@ core = [
 ]
 dev = [
     { name = "build" },
+    { name = "cbor2", marker = "python_full_version < '3.13'" },
+    { name = "cwt", marker = "python_full_version < '3.13'" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -2976,7 +2989,9 @@ requires-dist = [
     { name = "a2a-sdk", extras = ["http-server"], marker = "python_full_version < '3.13' and extra == 'a2a'", specifier = ">=1.3.1,<2" },
     { name = "anthropic", marker = "python_full_version < '3.13' and extra == 'wrap'", specifier = ">=0.40" },
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.2.0" },
+    { name = "cbor2", marker = "python_full_version < '3.13' and extra == 'dev'", specifier = ">=5.6,<6" },
     { name = "click", specifier = ">=8.0.0" },
+    { name = "cwt", marker = "python_full_version < '3.13' and extra == 'dev'", specifier = ">=3.3,<4" },
     { name = "openadapt", extras = ["browser", "core", "grounding", "retrieval", "privacy", "flow", "windows", "rdp", "agent"], marker = "extra == 'all'" },
     { name = "openadapt", extras = ["capture", "ml", "evals", "viewer"], marker = "extra == 'core'" },
     { name = "openadapt", extras = ["linux"], marker = "sys_platform == 'linux' and extra == 'all'" },
@@ -4010,6 +4025,18 @@ dependencies = [
     { name = "pycairo" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/da/61/978c5fbca34f10a90df362502fbb5a005637909e7b5a0e9212349ea9d010/pygobject-3.56.3.tar.gz", hash = "sha256:12760e4a0e3d04b6eb95e06f7a27e362c826d567ea613373a92c003b6c70d2d6", size = 1411853, upload-time = "2026-05-08T20:46:39.904Z" }
+
+[[package]]
+name = "pyhpke"
+version = "0.6.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bd/81/692a67c409e0a81423941791f875313e7ebcf1493180363eec8051acc767/pyhpke-0.6.5.tar.gz", hash = "sha256:8dac22eb143cd83b8066213b8ad0ecc9d5326ef41f930197197f3bbb5c99cb93", size = 1639080, upload-time = "2026-07-16T04:22:59.589Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/04/31/2a0edff785b15d700199fed77186b3d070724cafd02fccfffb187e450d83/pyhpke-0.6.5-py3-none-any.whl", hash = "sha256:e8d794724e43053fe04e8971be55033225d6da904effc748b303cece763a3f3c", size = 24435, upload-time = "2026-07-16T04:22:57.832Z" },
+]
 
 [[package]]
 name = "pyjwt"

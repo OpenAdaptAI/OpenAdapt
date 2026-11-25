@@ -175,6 +175,8 @@ all = [
 ]
 dev = [
     "build>=1.2.0",
+    "cbor2>=5.6,<6; python_version < '3.13'",
+    "cwt>=3.3,<4; python_version < '3.13'",
     "pytest>=8.0.0",
     "ruff>=0.1.0",
 ]
@@ -233,12 +235,6 @@ required-environments = [
     "python_version == '3.11' and sys_platform == 'linux'",
     "python_version == '3.11' and sys_platform == 'darwin'",
     "python_version == '3.11' and sys_platform == 'win32'",
-]
-# Match openadapt-flow[receipts]'s cbor2<6 cap so COSE_Sign1 decoding in
-# openadapt_flow.receipt_log receives CBORTag.value as a list (cbor2 6.x
-# broke list-vs-tuple decoding when pulled transitively by modal).
-constraint-dependencies = [
-    "cbor2>=5.6,<6",
 ]
 
 [tool.ruff]
