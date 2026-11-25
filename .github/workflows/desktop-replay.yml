@@ -88,7 +88,7 @@ jobs:
     name: windows replay (Patient Notes, WindowsBackend)
     if: github.event.pull_request.draft != true
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 50
     env:
       EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     defaults:

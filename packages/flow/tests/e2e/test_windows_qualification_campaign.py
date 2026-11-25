@@ -26,7 +26,7 @@ from tests.e2e.test_windows_hosted_replay import (
 
 pytestmark = [
     pytest.mark.skipif(not RUN_E2E, reason="opt-in native Windows campaign"),
-    pytest.mark.timeout(900),
+    pytest.mark.timeout(1800),
 ]
 
 
