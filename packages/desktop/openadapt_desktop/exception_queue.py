@@ -19,8 +19,9 @@ Windows has no permission bits or ``O_NOFOLLOW``, so there the same rules are
 checked another way: a card that is a link or any other reparse point (a
 symlink, a junction) is refused before it is opened, the opened file must be
 the one that was checked, and its owner and access control list are read from
-the open handle. The owner must be this user, and only this user, SYSTEM and
-Administrators (what a user's profile folder grants by default) may hold any
+the open handle. The owner must be this user (or Administrators when Desktop
+runs elevated, matching the token's default owner), and only this user, SYSTEM
+and Administrators (what a user's profile folder grants by default) may hold any
 right on it (OWNER RIGHTS, which means the owner, too). When that can't be
 read, no card is shown.
 
