@@ -8,7 +8,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from openadapt_flow.tx.induce import _HarExchange, _infer_effect_routes, _shows_item_route
+from openadapt_flow.tx.induce import (
+    _HarExchange,
+    _infer_effect_routes,
+    _shows_item_route,
+)
 from openadapt_flow.tx.judge import FrameAndIntentJudge
 from openadapt_flow.tx.read_probe import probe_read_routes
 from openadapt_flow.tx.wire_tap import ReadRoute, matches_read_route
@@ -88,7 +92,9 @@ def test_probe_read_routes_learns_rpc_fetch_without_constant_body_field() -> Non
                         "request": {
                             "method": "POST",
                             "url": f"{base}/ws/rest/Partner/42/fetch",
-                            "headers": [{"name": "Content-Type", "value": "application/json"}],
+                            "headers": [
+                                {"name": "Content-Type", "value": "application/json"}
+                            ],
                             "postData": {"text": json.dumps({"fields": ["name"]})},
                         },
                         "response": {"status": 200},
@@ -97,7 +103,9 @@ def test_probe_read_routes_learns_rpc_fetch_without_constant_body_field() -> Non
                         "request": {
                             "method": "POST",
                             "url": f"{base}/ws/rest/Partner/42/fetch",
-                            "headers": [{"name": "Content-Type", "value": "application/json"}],
+                            "headers": [
+                                {"name": "Content-Type", "value": "application/json"}
+                            ],
                             "postData": {"text": json.dumps({"fields": ["email"]})},
                         },
                         "response": {"status": 200},
@@ -106,7 +114,9 @@ def test_probe_read_routes_learns_rpc_fetch_without_constant_body_field() -> Non
                         "request": {
                             "method": "POST",
                             "url": f"{base}/ws/meta/view",
-                            "headers": [{"name": "Content-Type", "value": "application/json"}],
+                            "headers": [
+                                {"name": "Content-Type", "value": "application/json"}
+                            ],
                             "postData": {"text": json.dumps({"name": "partner-form"})},
                         },
                         "response": {"status": 200},
@@ -115,7 +125,9 @@ def test_probe_read_routes_learns_rpc_fetch_without_constant_body_field() -> Non
                         "request": {
                             "method": "POST",
                             "url": f"{base}/ws/meta/view",
-                            "headers": [{"name": "Content-Type", "value": "application/json"}],
+                            "headers": [
+                                {"name": "Content-Type", "value": "application/json"}
+                            ],
                             "postData": {"text": json.dumps({"name": "order-form"})},
                         },
                         "response": {"status": 200},

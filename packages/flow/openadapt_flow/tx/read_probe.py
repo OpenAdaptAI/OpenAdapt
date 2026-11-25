@@ -61,7 +61,18 @@ _REPLAYED_HEADERS = frozenset({"content-type", "accept", "x-requested-with"})
 
 
 _READ_VERB_SEGMENTS = frozenset(
-    {"fetch", "search", "query", "list", "get", "find", "read", "view", "lookup", "count"}
+    {
+        "fetch",
+        "search",
+        "query",
+        "list",
+        "get",
+        "find",
+        "read",
+        "view",
+        "lookup",
+        "count",
+    }
 )
 _ID_SEG_RE = re.compile(
     r"^(?:\d+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{16,})$",
@@ -76,7 +87,9 @@ def _is_read_verb_path(path: str) -> bool:
 
 def _generalize_read_path_regex(path: str) -> str:
     parts = path.split("/")
-    out = ["[^/]+" if seg and _ID_SEG_RE.match(seg) else re.escape(seg) for seg in parts]
+    out = [
+        "[^/]+" if seg and _ID_SEG_RE.match(seg) else re.escape(seg) for seg in parts
+    ]
     return "/".join(out)
 
 

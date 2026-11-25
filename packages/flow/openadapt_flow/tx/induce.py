@@ -767,11 +767,7 @@ def _match_item_route_id(
         return None
     if len(segments) >= 2 and segments[-1] == rid:
         return segments[:-1], rid
-    if (
-        len(segments) >= 3
-        and segments[-2] == rid
-        and segments[-1].isalpha()
-    ):
+    if len(segments) >= 3 and segments[-2] == rid and segments[-1].isalpha():
         return segments[:-2], rid
     return None
 

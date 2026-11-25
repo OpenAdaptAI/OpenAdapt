@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, NamedTuple, Optional, cast
 from urllib.parse import parse_qsl, unquote, urljoin, urlsplit
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from openadapt_flow.secret_redaction import MASK, credential_header, mask_header
 from openadapt_flow.tx.receipt import write_private_record
