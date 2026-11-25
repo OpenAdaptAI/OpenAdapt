@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.35.0 (2026-11-24)
+
+### Features
+
+- **desktop**: add local Before/After step screenshot preview to WatchRun
+- **desktop**: redesign desktop app UI for modern native-grade clarity and polish
+
+### Bug Fixes
+
+- **desktop**: use official OpenAdapt mark in desktop brand header
+
+
+
 ## v0.34.0 (2026-11-24)
 
 ### Features
