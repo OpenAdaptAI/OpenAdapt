@@ -516,3 +516,82 @@ def compile_policy_rules_to_table(
         "grounding_required": grounding_required,
     }
     return table, gate_config
+
+
+def evaluate_reactive_policy_on_dossier_update(
+    policy_table: PolicyDecisionTable,
+    *,
+    pre_step_config: Mapping[str, Any],
+    updated_dossier: Mapping[str, str],
+    proposed_action: str,
+    target_url: str = "",
+    target_value: str = "",
+    field_name: str = "",
+    field_type: FieldType = "casefold_ws",
+) -> PreStepPolicyResult:
+    """Re-evaluate compiled policy table and gate predicates mid-trajectory at zero LLM calls."""
+    if target_url:
+        nav_res = evaluate_pre_step_policy(
+            stage="pre_navigation",
+            target_url=target_url,
+            allow_patterns=pre_step_config.get("allow_patterns") or (),
+            deny_patterns=pre_step_config.get("deny_patterns") or (),
+        )
+        if not nav_res.allowed:
+            return nav_res
+
+    norm_action = _norm_policy_str(proposed_action)
+    for irrev in pre_step_config.get("irreversible_actions") or ():
+        n_irrev = _norm_policy_str(str(irrev))
+        if n_irrev and (norm_action == n_irrev or n_irrev in norm_action or norm_action in n_irrev):
+            return PreStepPolicyResult(
+                False,
+                "PREPARE_ASK",
+                "irreversible_action_requires_confirmation",
+                detail=f"Action {proposed_action!r} matches irreversible rule {irrev!r}",
+            )
+
+    norm_dossier = {_norm_policy_str(k): _norm_policy_str(v) for k, v in updated_dossier.items()}
+    for trig in pre_step_config.get("ask_user_triggers") or ():
+        n_trig = _norm_policy_str(str(trig))
+        if n_trig and (
+            n_trig in norm_action
+            or norm_dossier.get(n_trig) in ("true", "yes", "1")
+        ):
+            return PreStepPolicyResult(
+                False,
+                "PREPARE_ASK",
+                "ask_user_trigger_fired",
+                detail=f"Mid-trajectory trigger fired: {trig!r}",
+            )
+
+    if policy_table.rules:
+        facts = {**{str(k): str(v) for k, v in updated_dossier.items()}, "action": proposed_action}
+        dec = evaluate_policy_decision(policy_table, facts, proposed_action)
+        if not dec.allowed and dec.reason == "policy_disposition_mismatch":
+            return PreStepPolicyResult(
+                False,
+                "REFUSE",
+                "reactive_policy_contradiction",
+                detail=f"Action {proposed_action!r} conflicts with {dec.matched_rule_id!r} (expected {dec.expected_disposition!r})",
+            )
+        if not dec.allowed and dec.requires_prepare:
+            return PreStepPolicyResult(
+                False,
+                "PREPARE_ASK",
+                dec.reason,
+                detail="Uncodified mid-trajectory facts require PREPARE",
+            )
+
+    if target_value and pre_step_config.get("grounding_required", True):
+        fill_res = evaluate_pre_step_policy(
+            stage="pre_fill",
+            field_name=field_name or proposed_action,
+            proposed_value=target_value,
+            field_type=field_type,
+            dossier=updated_dossier,
+        )
+        if not fill_res.allowed:
+            return fill_res
+
+    return PreStepPolicyResult(True, "ALLOW", "reactive_policy_passed")

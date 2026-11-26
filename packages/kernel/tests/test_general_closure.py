@@ -28,10 +28,14 @@ from openadapt_kernel import (
     ReadBackProof,
     RubberStampViolationError,
     UnresolvedSlot,
+    bind_derived_calculation,
     calibrate_critic_decision,
+    compile_freetext_template,
     compile_policy_rules_to_table,
+    evaluate_derived_calculation,
     evaluate_policy_decision,
     evaluate_pre_step_policy,
+    evaluate_reactive_policy_on_dossier_update,
     extract_dossier_facts,
     inspect_outbound_payload,
     is_ephemeral_selector,
@@ -41,6 +45,7 @@ from openadapt_kernel import (
     resume_from_prepare_card,
     verify_completion_closure,
     verify_freetext_fact_coverage,
+    verify_query_view_preconditions,
     verify_readonly_answer_provenance,
 )
 
@@ -999,3 +1004,208 @@ def test_real_schema_and_hybrid_policy_compiler_and_critic_guard() -> None:
     )
     assert overridden.action == "ALLOW_COMPLETE"
     assert overridden.overrode_false_escalation is True
+
+
+def test_split_brain_prose_overlap_entailment_and_template_compilation() -> None:
+    facts = {
+        "code:dx:0": "H35.32",
+        "currency:amt:1": "$1,250.00",
+        "policy_clause:note:2": "documentation gap rather than a clinical dispute",
+        "routing_clause:route:3": "delegation arrangement requires rerouting to specialty group",
+    }
+    ftypes: Dict[str, FieldType] = {"code:dx:0": "code_prefix", "currency:amt:1": "currency"}
+
+    # Paraphrased prose passes via content-word overlap (>= 0.65), while atomic code/currency stay strict
+    paraphrased_ok = verify_freetext_fact_coverage(
+        "Case H35.32 billed 1250.00 reflects a documentation gap instead of clinical dispute; "
+        "delegation arrangement requires rerouting to the specialty team.",
+        facts,
+        field_types=ftypes,
+    )
+    assert paraphrased_ok.covered is True
+
+    # Missing atomic code MUST still fail even if prose overlaps 100%
+    missing_atomic = verify_freetext_fact_coverage(
+        "Case billed $1,250.00 is a documentation gap rather than a clinical dispute; "
+        "delegation arrangement requires rerouting to specialty group.",
+        facts,
+        field_types=ftypes,
+    )
+    assert missing_atomic.covered is False
+    assert missing_atomic.missing_facts == ("code:dx:0",)
+
+    # Pluggable entailment_fn handles true synonyms on prose while NOT bypassing atomic code checks
+    synonym_cov = verify_freetext_fact_coverage(
+        "Case H35.32 for $1,250.00 needs paperwork fixes only and transfer to outside unit.",
+        facts,
+        field_types=ftypes,
+        entailment_fn=lambda draft, claim: "paperwork" in draft or "transfer" in draft,
+    )
+    assert synonym_cov.covered is True
+
+    atomic_not_bypassed = verify_freetext_fact_coverage(
+        "Case for $1,250.00 needs paperwork fixes only.",
+        {"code:dx:0": "H35.32"},
+        field_types={"code:dx:0": "code_prefix"},
+        entailment_fn=lambda _draft, _claim: True,
+    )
+    assert atomic_not_bypassed.covered is False
+
+    # Deterministic prose template compilation converts repeatable notes into PutGet
+    rendered, missing = compile_freetext_template(
+        "Diagnosis: $code. Finding: $finding. Follow-up: $followup_date.",
+        {"code": "H35.32", "finding": "3+ nuclear sclerosis opacity"},
+        required_keys=("$code", "$followup_date"),
+    )
+    assert rendered == "Diagnosis: H35.32. Finding: 3+ nuclear sclerosis opacity. Follow-up: $followup_date."
+    assert missing == ["followup_date"]
+
+    rendered_full, missing_full = compile_freetext_template(
+        "Diagnosis: $code. Finding: $finding.",
+        {"code": "H35.32", "finding": "3+ nuclear sclerosis opacity"},
+    )
+    assert rendered_full == "Diagnosis: H35.32. Finding: 3+ nuclear sclerosis opacity."
+    assert missing_full == []
+
+
+def test_sandboxed_ast_derived_calculator_and_closure_binding() -> None:
+    dosage = evaluate_derived_calculation(
+        "annual_dosage", "dose_mg * cycles_per_year", {"dose_mg": 2, "cycles_per_year": 6}, unit="mg"
+    )
+    assert dosage.value == 12
+    assert dosage.formatted_value == "12mg"
+    assert dosage.provenance == "derived_calc"
+
+    visits = evaluate_derived_calculation("total_visits", "round(months * 2.5)", {"months": 6})
+    assert visits.value == 15
+    assert visits.formatted_value == "15"
+
+    deadline = evaluate_derived_calculation(
+        "appeal_deadline", "add_days(notice_date, 60)", {"notice_date": "2026-03-01"}
+    )
+    assert deadline.formatted_value == "2026-04-30"
+
+    # Rejects unsafe AST nodes / arbitrary calls
+    for bad_expr in (
+        "__import__('os').system('echo pwn')",
+        "eval('1+1')",
+        "(1).__class__",
+        "[x for x in [1, 2]]",
+        "2 ** 1000",
+    ):
+        with pytest.raises(ValueError):
+            evaluate_derived_calculation("unsafe", bad_expr, {})
+
+    # Bind derived calculation into dossier and enforce exact presence in closure
+    base_dossier = {"primary_code": "H35.32"}
+    updated_dossier = bind_derived_calculation(base_dossier, dosage)
+    assert updated_dossier["annual_dosage"] == "12mg"
+    assert "annual_dosage" not in base_dossier
+
+    ledger = ObligationLedger("calc-ep-1", subject_key="CASE-12")
+    ledger.add_obligation("submit_auth", "Submit authorization note")
+    ledger.mark_committed(
+        "submit_auth", ReadBackProof("api_read", "https://portal.example/auth/12", ["CASE-12", "12mg"])
+    )
+
+    wrong_math = verify_completion_closure(
+        ledger,
+        step_idx=3,
+        max_steps=10,
+        freetext_notes="Annual dosage requested: 10mg for H35.32.",
+        extracted_facts=(ExtractedFact("derived_calc", dosage.formatted_value, "calc", True),),
+    )
+    assert wrong_math.passed is False
+    assert wrong_math.reason == "missing_freetext_facts"
+
+    exact_math = verify_completion_closure(
+        ledger,
+        step_idx=4,
+        max_steps=10,
+        freetext_notes="Annual dosage requested: 12mg for H35.32.",
+        extracted_facts=(ExtractedFact("derived_calc", dosage.formatted_value, "calc", True),),
+    )
+    assert exact_math.passed is True
+
+
+def test_query_view_preconditions_and_reactive_mid_trajectory_policy() -> None:
+    # Query-view precondition check blocks wrong-filter read-only answers
+    wrong_view = verify_query_view_preconditions(
+        {"status": "open", "assignee": "alex", "tab": "billing"},
+        current_url="https://tracker.example/issues?status=closed&assignee=alex",
+        active_filter_chips=["Status: Closed", "Assignee: Alex"],
+        active_tab="Billing",
+    )
+    assert wrong_view.passed is False
+    assert wrong_view.missing_filters == ("status=open",)
+
+    right_view = verify_query_view_preconditions(
+        {"status": "open", "assignee": "alex", "sort": "newest", "tab": "billing"},
+        current_url="https://tracker.example/issues?status=open&sort=newest",
+        active_filter_chips=["Assignee: Alex"],
+        active_tab="Billing",
+    )
+    assert right_view.passed is True
+    assert not right_view.missing_filters
+
+    # Mid-trajectory dossier-reactive policy re-evaluation (0 LLM calls)
+    specs: List[Dict[str, Any]] = [
+        {"kind": "access_management", "deny_patterns": ["*/admin/*"]},
+        {
+            "kind": "policy_contradiction",
+            "rule_id": "external_domain_block",
+            "when": {"recipient_scope": "external"},
+            "then": "block_export",
+        },
+        {"kind": "irreversible_actions", "actions": ["wire_transfer"]},
+    ]
+    table, cfg = compile_policy_rules_to_table(specs, table_id="reactive_v1")
+
+    # Discovered external recipient on page 3 -> blocks send_report immediately
+    refused = evaluate_reactive_policy_on_dossier_update(
+        table,
+        pre_step_config=cfg,
+        updated_dossier={"recipient_scope": "external", "account_id": "ACC-1"},
+        proposed_action="send_report",
+    )
+    assert refused.allowed is False
+    assert refused.action == "REFUSE"
+    assert refused.reason == "reactive_policy_contradiction"
+
+    # Irreversible action triggers PREPARE_ASK mid-trajectory
+    irrev = evaluate_reactive_policy_on_dossier_update(
+        table,
+        pre_step_config=cfg,
+        updated_dossier={"account_id": "ACC-1"},
+        proposed_action="wire_transfer",
+    )
+    assert irrev.allowed is False
+    assert irrev.action == "PREPARE_ASK"
+    assert irrev.reason == "irreversible_action_requires_confirmation"
+
+    # Ungrounded target_value mid-trajectory triggers VETO
+    vetoed = evaluate_reactive_policy_on_dossier_update(
+        PolicyDecisionTable("empty", (), require_human_if_unmatched=False),
+        pre_step_config={**cfg, "grounding_required": True},
+        updated_dossier={"account_id": "ACC-1", "balance": "$500.00"},
+        proposed_action="fill_balance",
+        target_value="$999.00",
+        field_name="balance",
+        field_type="currency",
+    )
+    assert vetoed.allowed is False
+    assert vetoed.action == "VETO"
+
+    # Clean allowed mid-trajectory action
+    allowed = evaluate_reactive_policy_on_dossier_update(
+        PolicyDecisionTable("empty", (), require_human_if_unmatched=False),
+        pre_step_config=cfg,
+        updated_dossier={"account_id": "ACC-1", "balance": "$500.00"},
+        proposed_action="fill_balance",
+        target_url="https://crm.example/accounts/ACC-1",
+        target_value="500.00",
+        field_name="balance",
+        field_type="currency",
+    )
+    assert allowed.allowed is True
+    assert allowed.action == "ALLOW"

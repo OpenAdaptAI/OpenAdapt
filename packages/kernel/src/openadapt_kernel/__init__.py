@@ -91,6 +91,7 @@ from openadapt_kernel.fsm import (
     compile_policy_rules_to_table,
     evaluate_policy_decision,
     evaluate_pre_step_policy,
+    evaluate_reactive_policy_on_dossier_update,
     verify_fsm_safety,
 )
 from openadapt_kernel.interceptor import (
@@ -105,17 +106,22 @@ from openadapt_kernel.ledger import (
     ClosureVerdict,
     CriticCalibrationAction,
     CriticCalibrationVerdict,
+    DerivedCalculation,
     ExtractedFact,
     FactCoverageReport,
     FinalizationDecision,
     Obligation,
     ObligationLedger,
     ProvenanceViolation,
+    QueryViewPreconditionReport,
     ReadBackProof,
+    bind_derived_calculation,
     calibrate_critic_decision,
+    evaluate_derived_calculation,
     extract_dossier_facts,
     verify_completion_closure,
     verify_freetext_fact_coverage,
+    verify_query_view_preconditions,
     verify_readonly_answer_provenance,
 )
 from openadapt_kernel.lifecycle import (
@@ -133,6 +139,7 @@ from openadapt_kernel.macro import (
     PlanStep,
     StageResult,
     StepwiseHealer,
+    compile_freetext_template,
     is_ephemeral_selector,
     lift_cold_trace_to_pack,
     lift_distilled_repair_to_pack,
@@ -249,4 +256,6 @@ __all__ = [
     "MacOSAXDriver", "OpenAICompatHTTPProvider", "OptionalDependencyError", "ProviderRegistry", "ProviderSpec",
     "WindowsUIADriver", "export_lora_training_records", "get_desktop_driver", "is_loopback_url",
     "run_self_healing_lifecycle", "verify_egress_ledger_file",
+    "DerivedCalculation", "QueryViewPreconditionReport", "bind_derived_calculation", "compile_freetext_template",
+    "evaluate_derived_calculation", "evaluate_reactive_policy_on_dossier_update", "verify_query_view_preconditions",
 ]

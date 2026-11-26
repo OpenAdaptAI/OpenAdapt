@@ -8,11 +8,12 @@ exits deterministically resolve to ESCALATED.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import re
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -25,7 +26,10 @@ from typing import (
     Mapping,
     Optional,
     Sequence,
+    Tuple,
+    Union,
 )
+from urllib.parse import parse_qs, urlparse
 
 if TYPE_CHECKING:
     from openadapt_kernel.canonical import FieldType
@@ -553,30 +557,229 @@ def _evidence_cited_in_text(expected: str, summary_text: str, ftype: FieldType) 
     return False
 
 
+_ATOMIC_FACT_CATEGORIES = frozenset({"code", "date", "currency", "masked_id", "phone", "derived_calc"})
+_PROSE_FACT_CATEGORIES = frozenset({"policy_clause", "routing_clause", "kv_finding"})
+_PROSE_STOP_WORDS = frozenset(
+    "a an the is was are were be been being of to in on for with by at from as that this it its "
+    "and or but if then than into onto per via have has had do does did will would should could may might".split()
+)
+
+
+def _infer_fact_category(key: str, fact_categories: Mapping[str, str]) -> str:
+    if key in fact_categories:
+        return fact_categories[key].strip().lower()
+    if ":" in key:
+        return key.split(":", 1)[0].strip().lower()
+    return ""
+
+
 def verify_freetext_fact_coverage(
     text: str,
     required_facts: Mapping[str, str],
     *,
     field_types: Optional[Mapping[str, FieldType]] = None,
+    fact_categories: Optional[Mapping[str, str]] = None,
+    min_content_overlap: float = 0.65,
+    entailment_fn: Optional[Callable[[str, str], bool]] = None,
 ) -> FactCoverageReport:
-    """Verify free-text notes/justifications cover every required dossier fact (canonical or token-group)."""
+    """Verify free-text notes cover required facts: strict for atomic values, overlap/entailment for prose."""
     ftypes = field_types or {}
+    fcats = fact_categories or {}
     text_tokens = set(re.findall(r"[a-z0-9]+", (text or "").lower()))
     matched: List[str] = []
     missing: List[str] = []
     for k, exp in required_facts.items():
         ftype: FieldType = _lookup_key(ftypes, k) or "casefold_ws"
+        cat = _infer_fact_category(k, fcats)
+        is_atomic = cat in _ATOMIC_FACT_CATEGORIES or ftype in ("exact", "date", "currency", "phone", "masked_id", "code_prefix")
         if _evidence_cited_in_text(exp, text, ftype):
             matched.append(k)
-        elif ftype == "casefold_ws":
-            exp_tokens = re.findall(r"[a-z0-9]+", (exp or "").lower())
-            if len(exp_tokens) >= 2 and all(tok in text_tokens for tok in exp_tokens):
-                matched.append(k)
-            else:
-                missing.append(k)
-        else:
+            continue
+        if is_atomic:
             missing.append(k)
+            continue
+        exp_tokens = re.findall(r"[a-z0-9]+", (exp or "").lower())
+        if len(exp_tokens) >= 2 and all(tok in text_tokens for tok in exp_tokens):
+            matched.append(k)
+            continue
+        content_words = [t for t in exp_tokens if t not in _PROSE_STOP_WORDS and len(t) >= 2]
+        if (cat in _PROSE_FACT_CATEGORIES or len(content_words) >= 3) and content_words:
+            overlap = sum(1 for t in content_words if t in text_tokens) / len(content_words)
+            if overlap >= min_content_overlap:
+                matched.append(k)
+                continue
+        if entailment_fn is not None and bool(entailment_fn(text, exp)):
+            matched.append(k)
+            continue
+        missing.append(k)
     return FactCoverageReport(not missing, tuple(matched), tuple(missing))
+
+
+@dataclass(frozen=True)
+class DerivedCalculation:
+    slot_name: str
+    expression: str
+    value: Union[int, float, str]
+    formatted_value: str
+    unit: str = ""
+    provenance: str = "derived_calc"
+
+
+def _safe_add_days(iso_date: Any, days: Any) -> str:
+    from openadapt_kernel import canonical as _can
+
+    parsed = _can.parse_canonical_date(str(iso_date))
+    if parsed is None:
+        raise ValueError(f"invalid_date_for_add_days:{iso_date!r}")
+    base = date(parsed[0], parsed[1], parsed[2])
+    return (base + timedelta(days=int(days))).isoformat()
+
+
+def _eval_calc_ast(node: ast.AST, env: Mapping[str, Any]) -> Union[int, float, str]:
+    if isinstance(node, ast.Expression):
+        return _eval_calc_ast(node.body, env)
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, bool) or not isinstance(node.value, (int, float, str)):
+            raise ValueError(f"disallowed_constant:{type(node.value).__name__}")
+        return node.value
+    if isinstance(node, ast.Name):
+        clean = node.id.lstrip("$")
+        if node.id in env:
+            val = env[node.id]
+        elif clean in env:
+            val = env[clean]
+        elif f"${clean}" in env:
+            val = env[f"${clean}"]
+        else:
+            raise ValueError(f"unknown_variable:{node.id}")
+        if isinstance(val, bool) or not isinstance(val, (int, float, str)):
+            raise ValueError(f"unsupported_variable_type:{node.id}")
+        return val
+    if isinstance(node, ast.UnaryOp):
+        operand = _eval_calc_ast(node.operand, env)
+        if not isinstance(operand, (int, float)):
+            raise ValueError("unary_op_requires_number")
+        if isinstance(node.op, ast.UAdd):
+            return +operand
+        if isinstance(node.op, ast.USub):
+            return -operand
+        raise ValueError(f"disallowed_unary_op:{type(node.op).__name__}")
+    if isinstance(node, ast.BinOp):
+        left = _eval_calc_ast(node.left, env)
+        right = _eval_calc_ast(node.right, env)
+        if not isinstance(left, (int, float)) or not isinstance(right, (int, float)):
+            raise ValueError("binary_op_requires_numbers")
+        if isinstance(node.op, ast.Add):
+            return left + right
+        if isinstance(node.op, ast.Sub):
+            return left - right
+        if isinstance(node.op, ast.Mult):
+            return left * right
+        if isinstance(node.op, ast.Div):
+            return left / right
+        if isinstance(node.op, ast.FloorDiv):
+            return left // right
+        if isinstance(node.op, ast.Mod):
+            return left % right
+        if isinstance(node.op, ast.Pow):
+            if abs(right) > 100:
+                raise ValueError("exponent_out_of_bounds")
+            return float(left**right)
+        raise ValueError(f"disallowed_bin_op:{type(node.op).__name__}")
+    if isinstance(node, ast.Call):
+        if not isinstance(node.func, ast.Name) or node.keywords:
+            raise ValueError("disallowed_call_form")
+        fname = node.func.id
+        args = [_eval_calc_ast(a, env) for a in node.args]
+        if fname == "abs" and len(args) == 1 and isinstance(args[0], (int, float)):
+            return abs(args[0])
+        if fname == "round" and len(args) in (1, 2) and isinstance(args[0], (int, float)):
+            return round(args[0]) if len(args) == 1 else round(args[0], int(args[1]))
+        if fname == "min" and args and all(isinstance(a, (int, float)) for a in args):
+            return min(a for a in args if isinstance(a, (int, float)))
+        if fname == "max" and args and all(isinstance(a, (int, float)) for a in args):
+            return max(a for a in args if isinstance(a, (int, float)))
+        if fname == "add_days" and len(args) == 2:
+            return _safe_add_days(args[0], args[1])
+        raise ValueError(f"disallowed_function:{fname}")
+    raise ValueError(f"disallowed_ast_node:{type(node).__name__}")
+
+
+def evaluate_derived_calculation(
+    slot_name: str,
+    expression: str,
+    variables: Mapping[str, Any],
+    *,
+    unit: str = "",
+    precision: int = 2,
+) -> DerivedCalculation:
+    """Evaluate a pure arithmetic or add_days expression via a strict Python AST whitelist."""
+    tree = ast.parse((expression or "").strip(), mode="eval")
+    val = _eval_calc_ast(tree, variables)
+    if isinstance(val, str):
+        formatted = val
+    elif isinstance(val, int) or (isinstance(val, float) and val.is_integer()):
+        formatted = f"{int(val)}{unit}"
+    else:
+        formatted = f"{round(val, precision):.{precision}f}".rstrip("0").rstrip(".") + unit
+    return DerivedCalculation(slot_name, expression, val, formatted, unit=unit, provenance="derived_calc")
+
+
+def bind_derived_calculation(dossier: Mapping[str, str], calc: DerivedCalculation) -> Dict[str, str]:
+    """Return an updated dossier copy containing the derived calculation's formatted value."""
+    updated = dict(dossier)
+    updated[calc.slot_name] = calc.formatted_value
+    return updated
+
+
+@dataclass(frozen=True)
+class QueryViewPreconditionReport:
+    passed: bool
+    matched_filters: Tuple[str, ...]
+    missing_filters: Tuple[str, ...]
+    reason: str = ""
+
+
+def verify_query_view_preconditions(
+    required_filters: Mapping[str, str],
+    *,
+    current_url: str,
+    active_filter_chips: Sequence[str] = (),
+    active_tab: str = "",
+) -> QueryViewPreconditionReport:
+    """Verify required task filter predicates appear in active URL query params, filter chips, or active tab."""
+    qs_raw = parse_qs(urlparse(current_url or "").query)
+    qs_map: Dict[str, set[str]] = {
+        k.strip().lower(): {" ".join(v.strip().split()).casefold() for v in vals}
+        for k, vals in qs_raw.items()
+    }
+    chips_norm = [" ".join(str(c).strip().split()).casefold() for c in active_filter_chips if str(c).strip()]
+    tab_norm = " ".join(str(active_tab or "").strip().split()).casefold()
+
+    matched: List[str] = []
+    missing: List[str] = []
+    for fkey, fval in required_filters.items():
+        nk = fkey.strip().lower()
+        nv = " ".join(str(fval).strip().split()).casefold()
+        label = f"{fkey}={fval}"
+        in_url = nk in qs_map and nv in qs_map[nk]
+        in_tab = nk in ("tab", "view", "section") and bool(tab_norm) and (
+            tab_norm == nv or bool(re.search(rf"(?<![a-z0-9]){re.escape(nv)}(?![a-z0-9])", tab_norm))
+        )
+        in_chips = any(
+            chip == nv
+            or f"{nk}:{nv}" in chip
+            or f"{nk}={nv}" in chip
+            or f"{nk}: {nv}" in chip
+            or (
+                bool(re.search(rf"(?<![a-z0-9]){re.escape(nk)}(?![a-z0-9])", chip))
+                and bool(re.search(rf"(?<![a-z0-9]){re.escape(nv)}(?![a-z0-9])", chip))
+            )
+            for chip in chips_norm
+        )
+        (matched if (in_url or in_tab or in_chips) else missing).append(label)
+    reason = "all_query_view_filters_verified" if not missing else f"missing_query_view_filters:{missing}"
+    return QueryViewPreconditionReport(not missing, tuple(matched), tuple(missing), reason)
 
 
 def extract_dossier_facts(
@@ -749,6 +952,8 @@ def verify_completion_closure(
     freetext_notes: str = "",
     required_freetext_facts: Optional[Mapping[str, str]] = None,
     extracted_facts: Sequence[ExtractedFact] = (),
+    min_content_overlap: float = 0.65,
+    entailment_fn: Optional[Callable[[str, str], bool]] = None,
 ) -> ClosureVerdict:
     """Enforce non-waivable step-limit default-deny, post-commit chains, dossier keys, triage & freetext facts."""
     from openadapt_kernel.canonical import canonical_equal
@@ -792,7 +997,7 @@ def verify_completion_closure(
         return ClosureVerdict("ESCALATED", False, "uncited_triage_evidence", uncited_triage_keys=uncited)
 
     merged_freetext_facts: Dict[str, str] = dict(required_freetext_facts or {})
-    cat_to_type: Dict[str, FieldType] = {"date": "date", "currency": "currency", "code": "code_prefix"}
+    cat_to_type: Dict[str, FieldType] = {"date": "date", "currency": "currency", "code": "code_prefix", "derived_calc": "exact"}
     for idx, ef in enumerate(extracted_facts):
         if ef.required_in_freetext:
             fkey = f"{ef.category}:{ef.source_key}:{idx}"
@@ -800,7 +1005,13 @@ def verify_completion_closure(
             if ef.category in cat_to_type:
                 ftypes.setdefault(fkey, cat_to_type[ef.category])
     if merged_freetext_facts:
-        cov = verify_freetext_fact_coverage(freetext_notes, merged_freetext_facts, field_types=ftypes)
+        cov = verify_freetext_fact_coverage(
+            freetext_notes,
+            merged_freetext_facts,
+            field_types=ftypes,
+            min_content_overlap=min_content_overlap,
+            entailment_fn=entailment_fn,
+        )
         if not cov.covered:
             ledger.status, ledger.escalation_reason = "ESCALATED", f"missing_freetext_facts: {list(cov.missing_facts)}"
             return ClosureVerdict("ESCALATED", False, "missing_freetext_facts", missing_freetext_facts=list(cov.missing_facts))

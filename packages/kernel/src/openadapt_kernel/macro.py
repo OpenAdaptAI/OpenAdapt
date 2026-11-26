@@ -722,3 +722,38 @@ def lift_distilled_repair_to_pack(
         verified_repair_steps=repair_steps,
         prune_exploratory_prefix_before_repair=True,
     )
+
+
+_TEMPLATE_VAR_RE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def compile_freetext_template(
+    template_str: str,
+    dossier: Mapping[str, str],
+    *,
+    required_keys: Sequence[str] = (),
+) -> Tuple[str, List[str]]:
+    """Deterministically render a $var prose template from dossier slots, returning (rendered_text, missing_keys)."""
+    missing: List[str] = []
+
+    def _lookup(var_name: str) -> Optional[str]:
+        for cand in (var_name, f"${var_name}"):
+            if cand in dossier and str(dossier[cand]).strip():
+                return str(dossier[cand]).strip()
+        return None
+
+    def _replace(match: re.Match[str]) -> str:
+        name = match.group(1)
+        val = _lookup(name)
+        if val is None:
+            if name not in missing:
+                missing.append(name)
+            return match.group(0)
+        return val
+
+    rendered = _TEMPLATE_VAR_RE.sub(_replace, template_str or "")
+    for rk in required_keys:
+        clean = str(rk).lstrip("$").strip()
+        if clean and _lookup(clean) is None and clean not in missing:
+            missing.append(clean)
+    return rendered, missing
