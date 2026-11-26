@@ -37,6 +37,8 @@ from openadapt_kernel.dgm_pr import (
     KernelPRProposal,
     cluster_pack_failures,
     draft_kernel_pr_proposal,
+    make_cli_coding_agent,
+    run_dgm_pr_coding_agent,
     validate_kernel_pr_safety,
 )
 from openadapt_kernel.digital_twin import (
@@ -168,6 +170,7 @@ from openadapt_kernel.stateful_twin import (
     TwinRouteSpec,
     project_a11y_tree_to_zero_phi_twin,
     self_heal_multipage_in_twin,
+    synthesize_twin_with_coding_agent,
     synthesize_zero_phi_stateful_twin,
 )
 from openadapt_kernel.zero_phi_repair import (
@@ -208,5 +211,7 @@ __all__ = [
     "verify_fsm_safety", "verify_pdf_readback", "verify_readonly_answer_provenance", "verify_receipt", "verify_semantic_slot_bindings",
     "verify_sqlite_ro", "verify_symbolic_repair_ast", "verify_warm_pack_putget",
     "A11yNodeSpec", "A11yScreenSpec", "FailureCluster", "FailureRecord", "KernelPRProposal", "StatefulTwinApp", "TwinPageSpec", "TwinRouteSpec",
-    "cluster_pack_failures", "draft_kernel_pr_proposal", "project_a11y_tree_to_zero_phi_twin", "self_heal_multipage_in_twin", "synthesize_zero_phi_stateful_twin", "validate_kernel_pr_safety",
+    "cluster_pack_failures", "draft_kernel_pr_proposal", "make_cli_coding_agent", "project_a11y_tree_to_zero_phi_twin",
+    "run_dgm_pr_coding_agent", "self_heal_multipage_in_twin", "synthesize_twin_with_coding_agent",
+    "synthesize_zero_phi_stateful_twin", "validate_kernel_pr_safety",
 ]

@@ -3,11 +3,24 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, FrozenSet, List, Optional, Sequence, Tuple
+from pathlib import Path
+from typing import Any, Callable, Dict, FrozenSet, List, Optional, Sequence, Tuple, Union
 
-from openadapt_kernel.egress_guard import EgressPolicy
+from openadapt_kernel.egress_guard import (
+    EgressBlockedError,
+    EgressPolicy,
+    LocalEgressGuard,
+    inspect_outbound_payload,
+)
 from openadapt_kernel.zero_phi_repair import sanitize_ui_label_allowlist
 
 _WORD_RE = re.compile(r"[A-Za-z0-9_]+")
@@ -284,3 +297,312 @@ def draft_kernel_pr_proposal(
         requires_human_merge=True,
         auto_merge_allowed=False,
     )
+
+
+_API_KEY_ENV_VARS: Tuple[str, ...] = (
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+)
+
+_DGM_EXTRA_TOKENS: FrozenSet[str] = frozenset(
+    "cluster cluster_id failure failure_category json normalized_signature occurrence_count "
+    "pack pack_ids patch proposal regression sample_tokens signature unified diff".split()
+)
+
+
+def _extract_json_block(raw_text: str) -> Optional[Dict[str, Any]]:
+    text = (raw_text or "").strip()
+    if not text:
+        return None
+    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    candidates = [fenced.group(1)] if fenced else []
+    candidates.append(text)
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end > start:
+        candidates.append(text[start : end + 1])
+    for cand in candidates:
+        try:
+            parsed = json.loads(cand)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            continue
+    return None
+
+
+def make_cli_coding_agent(
+    binary: str = "claude",
+    *,
+    extra_args: Sequence[str] = ("-p", "--output-format", "json", "--tools", ""),
+    command_template: Optional[Sequence[str]] = None,
+    timeout_s: float = 120.0,
+    egress_guard: Optional[LocalEgressGuard] = None,
+    egress_policy: Optional[EgressPolicy] = None,
+    strip_api_key_env: bool = True,
+) -> Callable[[str], str]:
+    """Build a pluggable CLI coding-agent callable (claude, codex, gemini, etc.) with pre-spawn egress gating."""
+    cmd = list(command_template) if command_template else [binary, *extra_args]
+    dest = f"cli:{Path(cmd[0]).name}"
+
+    def _invoke(prompt: str) -> str:
+        if egress_guard is not None:
+            verdict = egress_guard.check_and_record(prompt, destination=dest)
+            if not verdict.allowed:
+                raise EgressBlockedError(verdict)
+        elif egress_policy is not None:
+            verdict = inspect_outbound_payload(prompt, egress_policy)
+            if not verdict.allowed:
+                raise EgressBlockedError(verdict)
+        else:
+            # Always block raw images/base64 blobs even when no custom policy is supplied.
+            bin_check = inspect_outbound_payload(prompt, EgressPolicy())
+            if bin_check.reason == "binary_or_image_blocked":
+                raise EgressBlockedError(bin_check)
+
+        env = dict(os.environ)
+        if strip_api_key_env:
+            for key in _API_KEY_ENV_VARS:
+                env.pop(key, None)
+
+        proc = subprocess.run(
+            cmd,
+            input=prompt,
+            text=True,
+            capture_output=True,
+            timeout=float(timeout_s),
+            env=env,
+            check=False,
+        )
+        if proc.returncode != 0:
+            err_tail = (proc.stderr or proc.stdout or "").strip()[:300]
+            raise RuntimeError(f"coding_agent_cli_failed:{proc.returncode}:{err_tail}")
+
+        out = (proc.stdout or "").strip()
+        if not out:
+            return ""
+        try:
+            parsed = json.loads(out)
+            if isinstance(parsed, dict):
+                for field_name in ("result", "text", "output", "content", "response"):
+                    val = parsed.get(field_name)
+                    if isinstance(val, str):
+                        return val.strip()
+        except json.JSONDecodeError:
+            pass
+        return out
+
+    return _invoke
+
+
+def _apply_agent_patch_in_worktree(worktree_dir: Path, raw_response: str) -> None:
+    parsed = _extract_json_block(raw_response)
+    if parsed is not None and isinstance(parsed.get("files"), list):
+        root_resolved = worktree_dir.resolve()
+        for entry in parsed["files"]:
+            if not isinstance(entry, dict):
+                continue
+            rel = str(entry.get("path", "")).strip()
+            content = entry.get("content")
+            if not rel or not isinstance(content, str):
+                continue
+            target = (root_resolved / rel).resolve()
+            if root_resolved not in target.parents and target != root_resolved:
+                raise ValueError(f"Patch path escapes worktree: {rel!r}")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+        return
+
+    diff_text = raw_response.strip()
+    fenced_diff = re.search(r"```(?:diff|patch)?\s*(.*?)```", diff_text, re.DOTALL)
+    if fenced_diff:
+        diff_text = fenced_diff.group(1).strip()
+    if diff_text:
+        proc = subprocess.run(
+            ["git", "-C", str(worktree_dir), "apply", "--whitespace=nowarn", "-"],
+            input=diff_text + "\n",
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"git_apply_failed:{proc.stderr.strip()[:300]}")
+
+
+def run_dgm_pr_coding_agent(
+    cluster: FailureCluster,
+    *,
+    repo_root: Union[str, Path],
+    coding_agent_fn: Callable[[str], str],
+    base_ref: str = "HEAD",
+    open_draft_pr: bool = False,
+    run_checks: bool = True,
+    egress_policy: Optional[EgressPolicy] = None,
+    ledger_path: Optional[Union[str, Path]] = None,
+    check_commands: Optional[Sequence[Sequence[str]]] = None,
+) -> KernelPRProposal:
+    """Run the outer-loop coding agent in an isolated git worktree and return a human-gated KernelPRProposal."""
+    repo_path = Path(repo_root).resolve()
+    base_pol = egress_policy or EgressPolicy()
+    pol = EgressPolicy(
+        allowed_tokens=base_pol.allowed_tokens,
+        include_html_aria_vocab=base_pol.include_html_aria_vocab,
+        include_clinical_vocab=base_pol.include_clinical_vocab,
+        extra_allowed_tokens=base_pol.extra_allowed_tokens | _DGM_EXTRA_TOKENS,
+        allowed_var_keys=base_pol.allowed_var_keys,
+    )
+    if ledger_path is None:
+        ledger_file = Path(tempfile.mkdtemp(prefix="oa_dgm_egress_")) / "outbound_egress_ledger.jsonl"
+    else:
+        ledger_file = Path(ledger_path)
+    guard = LocalEgressGuard(ledger_file, policy=pol)
+
+    cluster_payload: Dict[str, Any] = {
+        "failure_category": cluster.failure_category,
+        "normalized_signature": cluster.normalized_signature,
+        "occurrence_count": cluster.occurrence_count,
+        "sample_tokens": list(cluster.sample_tokens),
+    }
+    verdict = guard.check_and_record(cluster_payload, destination="dgm_pr_coding_agent")
+    if not verdict.allowed:
+        raise EgressBlockedError(verdict)
+
+    prompt = (
+        "Generate a minimal, general kernel fix and a regression test for this anonymized recurring failure cluster.\n"
+        "Rules: never weaken verifier or egress checks, include at least one test file under tests/test_*.py, "
+        "never reference specific app names, and never import legacy engines.\n"
+        "Respond ONLY with JSON: {\"files\": [{\"path\": \"relative/path.py\", \"content\": \"...\"}], \"summary\": \"...\"} "
+        "or a unified git diff.\n"
+        f"Cluster JSON: {json.dumps(cluster_payload, sort_keys=True)}\n"
+    )
+
+    tmp_parent = Path(tempfile.mkdtemp(prefix="oa_dgm_worktree_"))
+    wt_dir = tmp_parent / "wt"
+    branch_name = f"dgm-pr/{cluster.cluster_id[:12]}-{int(time.time())}"
+    pushed_branch = False
+
+    add_proc = subprocess.run(
+        ["git", "-C", str(repo_path), "worktree", "add", "-b", branch_name, str(wt_dir), base_ref],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if add_proc.returncode != 0:
+        shutil.rmtree(tmp_parent, ignore_errors=True)
+        raise RuntimeError(f"git_worktree_add_failed:{add_proc.stderr.strip()[:300]}")
+
+    try:
+        raw_reply = coding_agent_fn(prompt)
+        _apply_agent_patch_in_worktree(wt_dir, raw_reply)
+
+        subprocess.run(["git", "-C", str(wt_dir), "add", "-A"], check=True, capture_output=True, text=True)
+        diff_proc = subprocess.run(
+            ["git", "-C", str(wt_dir), "diff", "--cached"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        names_proc = subprocess.run(
+            ["git", "-C", str(wt_dir), "diff", "--cached", "--name-only"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        diff_text = diff_proc.stdout
+        changed_files = [ln.strip() for ln in names_proc.stdout.splitlines() if ln.strip()]
+
+        safety_ok, violations = validate_kernel_pr_safety(diff_text, changed_files=changed_files)
+        check_results: List[Dict[str, Any]] = []
+        checks_passed = not run_checks
+
+        if run_checks and safety_ok:
+            pkg_dir = wt_dir / "packages" / "kernel"
+            check_cwd = pkg_dir if pkg_dir.exists() else wt_dir
+            cmds: Sequence[Sequence[str]] = (
+                check_commands
+                if check_commands is not None
+                else ([sys.executable, "-m", "pytest", "-q"],)
+            )
+            checks_passed = True
+            for c_args in cmds:
+                c_env = dict(os.environ)
+                src_dir = check_cwd / "src"
+                if src_dir.exists():
+                    c_env["PYTHONPATH"] = str(src_dir)
+                c_proc = subprocess.run(
+                    list(c_args),
+                    cwd=str(check_cwd),
+                    env=c_env,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                ok_cmd = c_proc.returncode == 0
+                check_results.append(
+                    {
+                        "cmd": list(c_args),
+                        "returncode": c_proc.returncode,
+                        "ok": ok_cmd,
+                        "output_tail": (c_proc.stdout + "\n" + c_proc.stderr).strip()[-400:],
+                    }
+                )
+                if not ok_cmd:
+                    checks_passed = False
+
+        verification_summary: Dict[str, Any] = {
+            "egress_ledger_entry_sha256": verdict.entry_sha256,
+            "egress_payload_sha256": verdict.payload_sha256,
+            "checks_ran": bool(run_checks and safety_ok),
+            "checks_passed": bool(checks_passed),
+            "check_results": check_results,
+            "branch": branch_name,
+            "draft_pr_url": "",
+        }
+        proposal = draft_kernel_pr_proposal(
+            cluster,
+            patch_diff=diff_text,
+            changed_files=changed_files,
+            verification_summary=verification_summary,
+        )
+
+        if open_draft_pr and proposal.safety_ok and checks_passed:
+            subprocess.run(
+                ["git", "-C", str(wt_dir), "commit", "-m", proposal.title],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(wt_dir), "push", "-u", "origin", branch_name],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            pushed_branch = True
+            pr_proc = subprocess.run(
+                ["gh", "pr", "create", "--draft", "--title", proposal.title, "--body", proposal.summary],
+                cwd=str(wt_dir),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            if pr_proc.returncode == 0:
+                verification_summary["draft_pr_url"] = pr_proc.stdout.strip()
+        return proposal
+    finally:
+        subprocess.run(
+            ["git", "-C", str(repo_path), "worktree", "remove", "--force", str(wt_dir)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if not pushed_branch:
+            subprocess.run(
+                ["git", "-C", str(repo_path), "branch", "-D", branch_name],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        shutil.rmtree(tmp_parent, ignore_errors=True)

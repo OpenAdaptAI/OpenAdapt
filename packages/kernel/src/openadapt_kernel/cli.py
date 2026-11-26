@@ -15,12 +15,19 @@ from openadapt_kernel.copilot import (
     qualify_verifier_offline,
     verify_receipt,
 )
+from openadapt_kernel.dgm_pr import (
+    FailureRecord,
+    cluster_pack_failures,
+    make_cli_coding_agent,
+    run_dgm_pr_coding_agent,
+)
 from openadapt_kernel.extension_bridge import (
     induce_pack_from_extension_recordings,
     parse_extension_evidence_jsonl,
 )
 from openadapt_kernel.mcp_server import serve_stdio
 from openadapt_kernel.runner import format_run_result_json, run_portal_pack
+from openadapt_kernel.stateful_twin import synthesize_twin_with_coding_agent
 
 
 def _token_boundary_verifier(fields: Dict[str, str], text: str) -> bool:
@@ -149,6 +156,71 @@ def _cmd_serve_mcp(_args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_twin_synthesize(args: argparse.Namespace) -> int:
+    trace_data = json.loads(Path(args.trace).read_text(encoding="utf-8"))
+    agent_fn = make_cli_coding_agent(binary=args.binary, timeout_s=float(args.timeout))
+    twin = synthesize_twin_with_coding_agent(
+        trace_data,
+        coding_agent_fn=agent_fn,
+        ledger_path=Path(args.ledger) if args.ledger else None,
+    )
+    summary = {
+        "base_url": twin.base_url,
+        "pages": sorted(twin.pages.keys()),
+        "route_count": len(twin.route_specs),
+        "egress_audit": twin.egress_audit(),
+    }
+    if args.out:
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(
+                {
+                    **summary,
+                    "page_html": {k: v.sanitized_html for k, v in twin.pages.items()},
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+    print(json.dumps(summary, indent=2))
+    return 0
+
+
+def _cmd_dgm_propose(args: argparse.Namespace) -> int:
+    raw_items = json.loads(Path(args.failures).read_text(encoding="utf-8"))
+    records = [
+        FailureRecord(
+            pack_id=str(item.get("pack_id", "pack")),
+            failure_category=str(item.get("failure_category", "unknown")),
+            signature_tokens=tuple(str(t) for t in (item.get("signature_tokens") or [])),
+            error_message=str(item.get("error_message", "")),
+            tenant_id=str(item.get("tenant_id", "")),
+        )
+        for item in raw_items
+    ]
+    clusters = cluster_pack_failures(records, min_cluster_size=int(args.min_cluster_size))
+    if not clusters:
+        print(json.dumps({"proposals": [], "reason": "no_recurring_clusters"}))
+        return 1
+    agent_fn = make_cli_coding_agent(binary=args.binary, timeout_s=float(args.timeout))
+    proposal = run_dgm_pr_coding_agent(
+        clusters[0],
+        repo_root=Path(args.repo),
+        coding_agent_fn=agent_fn,
+        base_ref=args.base_ref,
+        open_draft_pr=bool(args.open_draft_pr),
+        run_checks=not bool(args.skip_checks),
+    )
+    payload = asdict(proposal)
+    if args.out:
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    print(json.dumps(payload, indent=2))
+    return 0 if proposal.safety_ok else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="openadapt-kernel")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -196,6 +268,26 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_mcp = sub.add_parser("serve-mcp", help="Run the zero-dependency stdio JSON-RPC 2.0 MCP server")
     p_mcp.set_defaults(func=_cmd_serve_mcp)
+
+    p_twin = sub.add_parser("twin-synthesize", help="Synthesize a Zero-PHI StatefulTwinApp via a coding agent CLI")
+    p_twin.add_argument("--trace", required=True, help="Path to sanitized workflow summary JSON")
+    p_twin.add_argument("--binary", default="claude")
+    p_twin.add_argument("--timeout", type=float, default=120.0)
+    p_twin.add_argument("--ledger")
+    p_twin.add_argument("--out")
+    p_twin.set_defaults(func=_cmd_twin_synthesize)
+
+    p_dgm = sub.add_parser("dgm-propose", help="Run the outer-loop DGM-PR coding agent in an isolated worktree")
+    p_dgm.add_argument("--failures", required=True, help="Path to JSON array of FailureRecord dicts")
+    p_dgm.add_argument("--repo", default=".")
+    p_dgm.add_argument("--binary", default="claude")
+    p_dgm.add_argument("--base-ref", default="HEAD")
+    p_dgm.add_argument("--min-cluster-size", type=int, default=2)
+    p_dgm.add_argument("--timeout", type=float, default=120.0)
+    p_dgm.add_argument("--open-draft-pr", action="store_true")
+    p_dgm.add_argument("--skip-checks", action="store_true")
+    p_dgm.add_argument("--out")
+    p_dgm.set_defaults(func=_cmd_dgm_propose)
 
     return parser
 

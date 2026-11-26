@@ -32,7 +32,7 @@ from openadapt_kernel.zero_phi_repair import (
 )
 
 _TWIN_EXTRA_TOKENS: FrozenSet[str] = frozenset(
-    "api collection count get href last_record location multipage oa patch path put rec redirect response route routes store twin".split()
+    "api collection count fields get href last_record location multipage oa pages patch path put rec redirect response route routes screens store trace transitions twin".split()
 )
 
 _SKIP_CONTENT_TAGS: FrozenSet[str] = frozenset(
@@ -824,5 +824,99 @@ def project_a11y_tree_to_zero_phi_twin(
         api_routes=all_routes,
         egress_policy=final_policy,
         ledger_path=ledger_path,
+        base_url=base_url,
+    )
+
+
+def _extract_twin_spec_json(raw_text: str) -> Dict[str, Any]:
+    text = (raw_text or "").strip()
+    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    candidates = [fenced.group(1)] if fenced else []
+    candidates.append(text)
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end > start:
+        candidates.append(text[start : end + 1])
+    for cand in candidates:
+        try:
+            parsed = json.loads(cand)
+            if isinstance(parsed, dict) and isinstance(parsed.get("pages"), list):
+                return parsed
+        except json.JSONDecodeError:
+            continue
+    raise ValueError("coding_agent_invalid_twin_json")
+
+
+def synthesize_twin_with_coding_agent(
+    sanitized_trace_summary: Union[Dict[str, Any], str],
+    *,
+    coding_agent_fn: Callable[[str], str],
+    egress_policy: Optional[EgressPolicy] = None,
+    ledger_path: Optional[Union[str, Path]] = None,
+    base_url: str = "http://twin.local",
+) -> StatefulTwinApp:
+    """Audit a sanitized trace summary via LocalEgressGuard and synthesize a StatefulTwinApp via a coding agent."""
+    policy = _default_twin_policy(egress_policy)
+    if ledger_path is None:
+        ledger_file = Path(tempfile.mkdtemp(prefix="oa_agent_twin_")) / "outbound_egress_ledger.jsonl"
+    else:
+        ledger_file = Path(ledger_path)
+    guard = LocalEgressGuard(ledger_file, policy=policy)
+
+    verdict = guard.check_and_record(sanitized_trace_summary, destination="coding_agent_twin_synthesizer")
+    if not verdict.allowed:
+        raise EgressBlockedError(verdict)
+
+    trace_json = (
+        sanitized_trace_summary
+        if isinstance(sanitized_trace_summary, str)
+        else json.dumps(sanitized_trace_summary, sort_keys=True)
+    )
+    prompt = (
+        "Synthesize an offline zero-PHI multi-page HTML5 Digital Twin specification reproducing this workflow.\n"
+        "Respond ONLY with a valid JSON object matching this exact schema (no prose, no markdown):\n"
+        '{"pages":[{"url_path":"/search","html":"<form method=\\"post\\" action=\\"/submit\\">...</form>"},'
+        '{"url_path":"/record","html":"<div data-oa-twin-store=\\"records\\"></div>"}],'
+        '"api_routes":[{"method":"POST","path_pattern":"/submit","mutates_collection":"records",'
+        '"response_template":{"status":"ok"},"status_code":303,"redirect_to":"/record"}]}\n'
+        "Rules:\n"
+        "- Use ONLY standard HTML5 form/table/link elements (<form>, <input>, <select>, <option>, <button>, <label>, <a>, <div>, <h1>).\n"
+        "- NO <script>, NO <img>, NO external URLs, NO personal/patient names or numbers.\n"
+        "- Include <div data-oa-twin-store=\"records\"></div> on the read-back page so POSTed records render.\n"
+        f"Sanitized workflow summary:\n{trace_json}\n"
+    )
+    raw_reply = coding_agent_fn(prompt)
+    spec = _extract_twin_spec_json(raw_reply)
+
+    page_specs: List[TwinPageSpec] = []
+    for raw_page in spec.get("pages", []):
+        if not isinstance(raw_page, dict):
+            continue
+        url_path = str(raw_page.get("url_path", "/")).strip() or "/"
+        html_body = str(raw_page.get("html") or raw_page.get("sanitized_html") or "")
+        page_specs.append(TwinPageSpec(url_path=url_path, sanitized_html=html_body))
+    if not page_specs:
+        raise ValueError("coding_agent_empty_twin_pages")
+
+    route_specs: List[TwinRouteSpec] = []
+    for raw_route in spec.get("api_routes", []) or []:
+        if not isinstance(raw_route, dict):
+            continue
+        route_specs.append(
+            TwinRouteSpec(
+                method=str(raw_route.get("method", "GET")).upper(),
+                path_pattern=str(raw_route.get("path_pattern", "/")),
+                response_template=raw_route.get("response_template", {"status": "ok"}),
+                mutates_collection=str(raw_route.get("mutates_collection", "")),
+                status_code=int(raw_route.get("status_code", 200)),
+                redirect_to=str(raw_route.get("redirect_to", "")),
+            )
+        )
+
+    return synthesize_zero_phi_stateful_twin(
+        page_specs,
+        api_routes=route_specs,
+        egress_policy=policy,
+        ledger_path=ledger_file,
         base_url=base_url,
     )

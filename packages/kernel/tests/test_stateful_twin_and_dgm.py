@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -14,8 +16,11 @@ from openadapt_kernel.dgm_pr import (
     KernelPRProposal,
     cluster_pack_failures,
     draft_kernel_pr_proposal,
+    make_cli_coding_agent,
+    run_dgm_pr_coding_agent,
     validate_kernel_pr_safety,
 )
+from openadapt_kernel.egress_guard import EgressBlockedError, LocalEgressGuard
 from openadapt_kernel.stateful_twin import (
     A11yNodeSpec,
     A11yScreenSpec,
@@ -23,6 +28,7 @@ from openadapt_kernel.stateful_twin import (
     TwinRouteSpec,
     project_a11y_tree_to_zero_phi_twin,
     self_heal_multipage_in_twin,
+    synthesize_twin_with_coding_agent,
     synthesize_zero_phi_stateful_twin,
 )
 from openadapt_kernel.zero_phi_repair import (
@@ -521,3 +527,198 @@ def test_control_signature_first_distilled_replay_survives_shifted_modal_ordinal
             assert ok is True
         finally:
             browser.close()
+
+
+def test_make_cli_coding_agent_egress_blocks_phi_before_spawning_subprocess(tmp_path: Path) -> None:
+    """make_cli_coding_agent audits outbound prompt via LocalEgressGuard and parses CLI JSON cleanly."""
+    ledger = tmp_path / "cli_egress.jsonl"
+    guard = LocalEgressGuard(ledger)
+
+    # Pluggable command_template using python3 to simulate a JSON-emitting coding CLI.
+    cli_agent = make_cli_coding_agent(
+        command_template=(
+            sys.executable,
+            "-c",
+            'import json, sys; txt = sys.stdin.read(); print(json.dumps({"result": "ok:" + txt.strip()}))',
+        ),
+        egress_guard=guard,
+    )
+
+    assert cli_agent("save form") == "ok:save form"
+    with pytest.raises(EgressBlockedError):
+        cli_agent("Patient Maria Gonzalez 123-45-6789")
+    assert guard.verify_ledger_integrity() is True
+
+
+def test_synthesize_twin_with_coding_agent_e2e_offline_playwright(tmp_path: Path) -> None:
+    """synthesize_twin_with_coding_agent audits trace, parses agent JSON, and runs offline Playwright."""
+    ledger = tmp_path / "agent_twin_egress.jsonl"
+
+    # PHI-poisoned trace summary is hard-blocked before coding_agent_fn is ever called.
+    called = False
+
+    def fail_if_called(prompt: str) -> str:
+        nonlocal called
+        called = True
+        return "{}"
+
+    with pytest.raises(EgressBlockedError):
+        synthesize_twin_with_coding_agent(
+            {"steps": ["fill Maria Gonzalez 123-45-6789"]},
+            coding_agent_fn=fail_if_called,
+            ledger_path=ledger,
+        )
+    assert called is False
+
+    # Clean sanitized trace summary synthesizes a runnable multi-page StatefulTwinApp.
+    def stub_coding_agent(prompt: str) -> str:
+        assert "Maria" not in prompt
+        return json.dumps(
+            {
+                "pages": [
+                    {
+                        "url_path": "/form",
+                        "html": (
+                            '<form method="post" action="/submit">'
+                            '<label>Title</label><input type="text" name="title" required />'
+                            '<button type="submit">Save</button></form>'
+                        ),
+                    },
+                    {
+                        "url_path": "/record",
+                        "html": '<h1>Record</h1><div data-oa-twin-store="records"></div>',
+                    },
+                ],
+                "api_routes": [
+                    {
+                        "method": "POST",
+                        "path_pattern": "/submit",
+                        "mutates_collection": "records",
+                        "response_template": {"status": "ok"},
+                        "status_code": 303,
+                        "redirect_to": "/record",
+                    }
+                ],
+            }
+        )
+
+    clean_ledger = tmp_path / "clean_agent_twin_egress.jsonl"
+    twin_app = synthesize_twin_with_coding_agent(
+        {"workflow": "create record", "pages": ["form", "record"]},
+        coding_agent_fn=stub_coding_agent,
+        ledger_path=clean_ledger,
+    )
+
+    res = self_heal_multipage_in_twin(
+        twin_app,
+        failing_steps=["submit form"],
+        repair_fn=lambda payload, turn: (
+            "def repair(ui, vars):\n"
+            '    ui.fill(0, vars["$title"])\n'
+            "    ui.click(1)\n"
+        ),
+        readback_check=lambda page, app: (
+            page.wait_for_load_state("domcontentloaded") is None
+            and "/record" in page.url
+            and "Quarterly Review" in page.locator("body").inner_text()
+            and len(app.store.get("records", [])) == 1
+        ),
+        max_turns=2,
+        start_path="/form",
+        var_map={"$title": "Quarterly Review"},
+    )
+    assert res["verified"] is True
+    assert res["live_network_requests_attempted"] == 0
+    assert res["egress_audit"]["sha256_chain_integrity_verified"] is True
+
+
+def test_run_dgm_pr_coding_agent_isolated_worktree_safe_and_unsafe(tmp_path: Path) -> None:
+    """run_dgm_pr_coding_agent runs in an isolated git worktree, approves safe fixes, blocks unsafe diffs."""
+    repo = tmp_path / "mini_repo"
+    (repo / "src").mkdir(parents=True)
+    (repo / "tests").mkdir(parents=True)
+    (repo / "src" / "egress_guard.py").write_text(
+        "def check(ok: bool) -> bool:\n    assert ok\n    return True\n",
+        encoding="utf-8",
+    )
+    (repo / "tests" / "test_basic.py").write_text(
+        "from src.egress_guard import check\n\ndef test_ok() -> None:\n    assert check(True)\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.com"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-m", "init"], check=True, capture_output=True)
+
+    clusters = cluster_pack_failures(
+        [
+            FailureRecord("p1", "css_allowlist_miss", ("style", "border"), "error"),
+            FailureRecord("p2", "css_allowlist_miss", ("style", "border"), "error"),
+        ],
+        min_cluster_size=2,
+    )
+    cluster = clusters[0]
+
+    # 1. Safe fix + regression test passes safety validation and pytest inside isolated worktree.
+    def safe_agent(_prompt: str) -> str:
+        return json.dumps(
+            {
+                "files": [
+                    {
+                        "path": "src/helper.py",
+                        "content": "def normalize(val: str) -> str:\n    return val.strip().lower()\n",
+                    },
+                    {
+                        "path": "tests/test_helper_regression.py",
+                        "content": (
+                            "from src.helper import normalize\n\n"
+                            "def test_normalize() -> None:\n"
+                            "    assert normalize(' Border ') == 'border'\n"
+                        ),
+                    },
+                ],
+                "summary": "Add normalize helper and regression test",
+            }
+        )
+
+    safe_prop = run_dgm_pr_coding_agent(
+        cluster,
+        repo_root=repo,
+        coding_agent_fn=safe_agent,
+        run_checks=True,
+        check_commands=([sys.executable, "-m", "pytest", "-q"],),
+    )
+    assert safe_prop.safety_ok is True
+    assert safe_prop.requires_human_merge is True
+    assert safe_prop.auto_merge_allowed is False
+    assert safe_prop.verification_summary["checks_passed"] is True
+    assert not (repo / "src" / "helper.py").exists()
+
+    # 2. Unsafe verifier-weakening patch is hard-blocked by validate_kernel_pr_safety.
+    def unsafe_agent(_prompt: str) -> str:
+        return json.dumps(
+            {
+                "files": [
+                    {
+                        "path": "src/egress_guard.py",
+                        "content": "def check(ok: bool) -> bool:\n    return True  # bypass\n",
+                    },
+                    {
+                        "path": "tests/test_bypass.py",
+                        "content": "def test_dummy() -> None:\n    assert True\n",
+                    },
+                ],
+                "summary": "Remove assert check",
+            }
+        )
+
+    unsafe_prop = run_dgm_pr_coding_agent(
+        cluster,
+        repo_root=repo,
+        coding_agent_fn=unsafe_agent,
+        run_checks=True,
+    )
+    assert unsafe_prop.safety_ok is False
+    assert any("weakened_verifier_or_egress_check" in v for v in unsafe_prop.safety_violations)
+    assert unsafe_prop.requires_human_merge is True
