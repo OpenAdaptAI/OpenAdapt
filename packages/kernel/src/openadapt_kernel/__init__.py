@@ -148,6 +148,16 @@ from openadapt_kernel.macro import (
     stage_form,
 )
 from openadapt_kernel.mcp_server import dispatch_tool_call, handle_jsonrpc_message, serve_stdio
+from openadapt_kernel.nav_graph import (
+    AppNavigationGraph,
+    NavEdge,
+    NavNode,
+    ReconciliationWatcher,
+    StuckLoopDetector,
+    StuckLoopStatus,
+    WatchedReconciliationItem,
+    sanitize_url_to_view_pattern,
+)
 from openadapt_kernel.oracles import (
     OracleVerdict,
     extract_pdf_visible_text,
@@ -258,4 +268,6 @@ __all__ = [
     "run_self_healing_lifecycle", "verify_egress_ledger_file",
     "DerivedCalculation", "QueryViewPreconditionReport", "bind_derived_calculation", "compile_freetext_template",
     "evaluate_derived_calculation", "evaluate_reactive_policy_on_dossier_update", "verify_query_view_preconditions",
+    "AppNavigationGraph", "NavEdge", "NavNode", "ReconciliationWatcher", "StuckLoopDetector", "StuckLoopStatus",
+    "WatchedReconciliationItem", "sanitize_url_to_view_pattern",
 ]
