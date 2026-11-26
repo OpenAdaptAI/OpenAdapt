@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, FrozenSet, List, Optional, Sequence, Tuple
 
-from openadapt_kernel.macro import ControlSchema, observe_schema
+from openadapt_kernel.macro import ControlSchema, ControlSignature, observe_schema
 
 _FROZEN_UI_VOCAB: FrozenSet[str] = frozenset(
     "add advanced all amount and apply auth authorization back bind body button cancel "
@@ -81,6 +81,9 @@ class DistilledRepairStep:
     arg: Any = None
     is_stripped_target: bool = False
     ctrl_sig: Tuple[str, str, str, str] = ("", "", "", "")
+    control_signature: Optional[ControlSignature] = None
+    semantic_role: str = ""
+    semantic_label: str = ""
 
 
 def verify_symbolic_repair_ast(code_str: str, allowed_vars: FrozenSet[str]) -> ASTVerificationResult:
@@ -229,7 +232,45 @@ class _ZeroPhiUIProxy:
         c = self._by_idx.get(int(idx))
         is_strip = idx >= 0 and self._stripped_idx is not None and int(idx) == self._stripped_idx
         sig = (c.tag, c.input_type, c.role, sanitize_ui_label_allowlist(f"{c.label} {c.placeholder}")) if c else ("", "", "", "")
-        self.recorded_steps.append(DistilledRepairStep(method, _safe_selector(c.selector) if c else "", self._modal_ords.get(int(idx), -1), var_key or (self._stripped_var if is_strip else ""), arg, is_strip, sig))
+        ctrl_signature: Optional[ControlSignature] = None
+        sem_role = ""
+        sem_label = ""
+        if c is not None:
+            safe_lbl_toks = tuple(t for t in sanitize_ui_label_allowlist(c.label).split() if t != "<OPAQUE>")
+            safe_ph_toks = tuple(t for t in sanitize_ui_label_allowlist(c.placeholder).split() if t != "<OPAQUE>")
+            sem_role = c.role or (
+                "button" if c.tag == "button" or c.input_type in ("submit", "button") else
+                "checkbox" if c.input_type == "checkbox" else
+                "radio" if c.input_type == "radio" else
+                "combobox" if c.tag == "select" else
+                "textbox" if c.tag in ("input", "textarea") else ""
+            )
+            sem_label = " ".join(safe_lbl_toks)
+            ctrl_signature = ControlSignature(
+                in_modal=bool(c.in_modal),
+                tag=c.tag.lower(),
+                input_type=c.input_type.lower(),
+                role=sem_role,
+                name="",
+                placeholder=" ".join(safe_ph_toks),
+                label_tokens=tuple(sorted(safe_lbl_toks)),
+                text_tokens=(),
+                ordinal=self._modal_ords.get(int(idx), 0),
+            )
+        self.recorded_steps.append(
+            DistilledRepairStep(
+                method,
+                _safe_selector(c.selector) if c else "",
+                self._modal_ords.get(int(idx), -1),
+                var_key or (self._stripped_var if is_strip else ""),
+                arg,
+                is_strip,
+                sig,
+                ctrl_signature,
+                sem_role,
+                sem_label,
+            )
+        )
 
     def click(self, idx: int) -> None:
         loc, is_dis = self._raw_loc(idx), "el => Boolean(el.disabled || el.getAttribute('aria-disabled') === 'true')"
@@ -465,6 +506,67 @@ def execute_zero_phi_coding_repair(page: Any, *, private_vars: Dict[str, str], s
     return ZeroPHIRepairResult(False, "\n\n# --- turn ---\n".join(executed_codes), twin, last_ast_violations, "readback_refuted_repair", len(history), history)
 
 
+def _resolve_target_idx_by_control_signature(
+    page: Any,
+    step: DistilledRepairStep,
+    controls: Sequence[ControlSchema],
+) -> Optional[int]:
+    """Resolve a distilled step target by semantic role/label (get_by_role/get_by_label) before ordinal fallback."""
+    cs = step.control_signature
+    role = (step.semantic_role or (cs.role if cs is not None else "")).strip().lower()
+    label = (step.semantic_label or (" ".join(cs.label_tokens) if cs is not None and cs.label_tokens else "")).strip()
+    in_modal = bool(cs.in_modal) if cs is not None else (step.modal_ordinal >= 0)
+
+    scope: Any = page
+    if in_modal and hasattr(page, "locator"):
+        try:
+            dlg = page.locator('[role="dialog"], dialog[open]').first
+            if dlg.count() > 0:
+                scope = dlg
+        except Exception:
+            scope = page
+
+    if role and label and hasattr(scope, "get_by_role"):
+        try:
+            pat = re.compile(rf"^\s*{re.escape(label)}\s*$", re.IGNORECASE)
+            loc = scope.get_by_role(role, name=pat)
+            if loc.count() == 0:
+                loc = scope.get_by_role(role, name=re.compile(re.escape(label), re.IGNORECASE))
+            if loc.count() == 1:
+                raw_idx = loc.first.get_attribute("data-oa-idx")
+                if raw_idx and raw_idx.isdigit():
+                    return int(raw_idx)
+        except Exception:
+            pass
+
+    if label and hasattr(scope, "get_by_label"):
+        try:
+            loc = scope.get_by_label(re.compile(re.escape(label), re.IGNORECASE))
+            if loc.count() == 1:
+                raw_idx = loc.first.get_attribute("data-oa-idx")
+                if raw_idx and raw_idx.isdigit():
+                    return int(raw_idx)
+        except Exception:
+            pass
+
+    if cs is not None and cs.label_tokens:
+        want_tokens = set(cs.label_tokens)
+        candidates = [c for c in controls if (not in_modal or c.in_modal) and c.role != "option"]
+        exact_matches: List[ControlSchema] = []
+        for c in candidates:
+            c_tokens = {t for t in sanitize_ui_label_allowlist(c.label).split() if t != "<OPAQUE>"}
+            tag_ok = not cs.tag or c.tag.lower() == cs.tag
+            type_ok = not cs.input_type or c.input_type.lower() == cs.input_type
+            if tag_ok and type_ok and want_tokens.issubset(c_tokens):
+                exact_matches.append(c)
+        if len(exact_matches) == 1:
+            return exact_matches[0].control_index
+        if exact_matches:
+            return min(exact_matches, key=lambda c: abs(c.control_index - cs.ordinal)).control_index
+
+    return None
+
+
 def replay_distilled_zero_phi_repair(
     page: Any, distilled_steps: Sequence[DistilledRepairStep], *,
     private_vars: Dict[str, str], readback_oracle: Callable[[Any], bool],
@@ -481,6 +583,8 @@ def replay_distilled_zero_phi_repair(
             proxy.click_first_option()
             continue
         target_idx: Optional[int] = stripped_idx if (step.is_stripped_target and stripped_idx is not None) else None
+        if target_idx is None and (step.control_signature is not None or step.semantic_role or step.semantic_label):
+            target_idx = _resolve_target_idx_by_control_signature(page, step, controls)
         if target_idx is None and step.modal_ordinal >= 0:
             modal_ctrls = [c for c in controls if c.in_modal and c.role != "option"]
             csig = lambda x: (x.tag, x.input_type, x.role, sanitize_ui_label_allowlist(f"{x.label} {x.placeholder}"))  # noqa: E731

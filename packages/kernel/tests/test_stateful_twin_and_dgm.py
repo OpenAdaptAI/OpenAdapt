@@ -17,10 +17,18 @@ from openadapt_kernel.dgm_pr import (
     validate_kernel_pr_safety,
 )
 from openadapt_kernel.stateful_twin import (
+    A11yNodeSpec,
+    A11yScreenSpec,
     TwinPageSpec,
     TwinRouteSpec,
+    project_a11y_tree_to_zero_phi_twin,
     self_heal_multipage_in_twin,
     synthesize_zero_phi_stateful_twin,
+)
+from openadapt_kernel.zero_phi_repair import (
+    DistilledRepairStep,
+    execute_zero_phi_coding_repair,
+    replay_distilled_zero_phi_repair,
 )
 
 TINY_PNG_B64 = (
@@ -320,3 +328,196 @@ def test_validate_kernel_pr_safety_and_draft_proposal() -> None:
             safety_ok=True,
             requires_human_merge=False,
         )
+
+
+def test_project_a11y_tree_desktop_and_citrix_to_zero_phi_twin_e2e(tmp_path: Path) -> None:
+    """Project native UIA/Citrix screen-graph into Zero-PHI StatefulTwinApp and self-heal offline."""
+    screens = [
+        A11yScreenSpec(
+            screen_id="claim_entry",
+            url_path="/form",
+            nodes=(
+                A11yNodeSpec("tab_1", "TabItem", "Claim", bbox=(0, 0, 120, 32), platform="uia"),
+                A11yNodeSpec(
+                    "ed_1",
+                    "Edit",
+                    "Patient Name",
+                    value="Maria Gonzalez",
+                    bbox=(10, 40, 260, 32),
+                    platform="uia",
+                ),
+                A11yNodeSpec(
+                    "cb_1",
+                    "ComboBox",
+                    "Plan",
+                    bbox=(10, 84, 200, 32),
+                    expanded=False,
+                    platform="citrix_box",
+                    options=("Select", "Primary", "Secondary"),
+                ),
+                A11yNodeSpec(
+                    "chk_1",
+                    "CheckBox",
+                    "Confirm",
+                    checked=False,
+                    bbox=(10, 128, 24, 24),
+                    platform="macos_ax",
+                ),
+                A11yNodeSpec(
+                    "grid_1",
+                    "DataGrid",
+                    "History",
+                    value="MRN-994821 123-45-6789",
+                    bbox=(10, 160, 320, 80),
+                    platform="at_spi",
+                ),
+                A11yNodeSpec("btn_1", "Button", "Save", bbox=(10, 252, 100, 36), platform="uia"),
+            ),
+            transitions=(
+                TwinRouteSpec(
+                    method="POST",
+                    path_pattern="/submit",
+                    mutates_collection="records",
+                    status_code=303,
+                    redirect_to="/record",
+                ),
+            ),
+        ),
+        A11yScreenSpec(
+            screen_id="claim_summary",
+            url_path="/record",
+            nodes=(
+                A11yNodeSpec("hdr_1", "Text", "Record Summary", bbox=(0, 0, 200, 28), platform="uia"),
+            ),
+            store_collection="records",
+        ),
+    ]
+
+    ledger_path = tmp_path / "a11y_twin_egress.jsonl"
+    twin_app = project_a11y_tree_to_zero_phi_twin(screens, ledger_path=ledger_path)
+
+    form_html = twin_app.pages["/form"].sanitized_html
+    ledger_text = ledger_path.read_text(encoding="utf-8")
+    for secret in ("Maria", "Gonzalez", "MRN-994821", "123-45-6789"):
+        assert secret not in form_html
+        assert secret not in ledger_text
+    assert "$var_1" in form_html
+    assert 'role="tab"' in form_html
+    assert "<table" in form_html
+    assert "width:260px" in form_html
+    assert twin_app.egress_audit()["sha256_chain_integrity_verified"] is True
+
+    def repair_desktop_flow(outbound_payload: Dict[str, Any], turn_idx: int) -> str:
+        return (
+            "def repair(ui, vars):\n"
+            '    ui.fill(1, vars["$patient"])\n'
+            '    ui.select(2, vars["$plan"])\n'
+            "    ui.check(3, True)\n"
+            "    ui.click(4)\n"
+        )
+
+    def readback_check(page: Any, app: Any) -> bool:
+        page.wait_for_load_state("domcontentloaded")
+        if "/record" not in page.url:
+            return False
+        body = page.locator("body").inner_text()
+        return "David Chen" in body and "Primary" in body and len(app.store.get("records", [])) == 1
+
+    res = self_heal_multipage_in_twin(
+        twin_app,
+        failing_steps=["desktop submit form"],
+        repair_fn=repair_desktop_flow,
+        readback_check=readback_check,
+        max_turns=2,
+        start_path="/form",
+        var_map={"$patient": "David Chen", "$plan": "Primary"},
+    )
+    assert res["verified"] is True
+    assert res["live_network_requests_attempted"] == 0
+    assert len(res["store_snapshot"]["records"]) == 1
+    assert res["egress_audit"]["sha256_chain_integrity_verified"] is True
+
+
+def test_control_signature_first_distilled_replay_survives_shifted_modal_ordinal() -> None:
+    """ControlSignature-first replay resolves semantic role/label even when modal ordinals shift."""
+    base_modal_html = """<!doctype html><html><body>
+    <div role="dialog" style="display:block;width:520px;height:320px;">
+      <label for="nm">Cookbook Name</label><input id="nm" type="text" />
+      <label for="pub">Public</label><input id="pub" type="checkbox" />
+      <button id="save" type="submit">Save</button>
+    </div>
+    <div id="out"></div>
+    <script>
+      document.getElementById('save').addEventListener('click', () => {
+        document.getElementById('out').innerText =
+          'SAVED:' + document.getElementById('nm').value + ':' + document.getElementById('pub').checked;
+      });
+    </script></body></html>"""
+
+    shifted_modal_html = """<!doctype html><html><body>
+    <div role="dialog" style="display:block;width:560px;height:420px;">
+      <label for="adv">Advanced</label><input id="adv" type="checkbox" />
+      <label for="flt">Filter</label><input id="flt" type="text" />
+      <button id="clr" type="button">Clear</button>
+      <label for="nm2">Cookbook Name</label><input id="nm2" type="text" />
+      <label for="pub2">Public</label><input id="pub2" type="checkbox" />
+      <button id="save2" type="submit">Save</button>
+    </div>
+    <div id="out"></div>
+    <script>
+      document.getElementById('save2').addEventListener('click', () => {
+        document.getElementById('out').innerText =
+          'SAVED:' + document.getElementById('nm2').value + ':' + document.getElementById('pub2').checked;
+      });
+    </script></body></html>"""
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            page.set_content(base_modal_html)
+            cold = execute_zero_phi_coding_repair(
+                page,
+                private_vars={"$title": "Holiday Menu"},
+                structural_error="submit disabled",
+                coding_agent_fn=lambda twin, vkeys, err: (
+                    "def repair(ui, vars):\n"
+                    '    ui.fill(0, vars["$title"])\n'
+                    "    ui.check(1, True)\n"
+                    "    ui.click(2)\n"
+                ),
+                readback_oracle=lambda p: "SAVED:Holiday Menu:true" in p.locator("#out").inner_text(),
+            )
+            assert cold.verified is True
+            assert len(cold.distilled_steps) == 3
+            assert all(s.control_signature is not None for s in cold.distilled_steps)
+
+            # Strip selectors so resolution MUST use ControlSignature (get_by_role / get_by_label),
+            # while modal_ordinal (0, 1, 2) now points at the WRONG shifted controls (Advanced, Filter, Clear).
+            sig_only_steps = [
+                DistilledRepairStep(
+                    method=s.method,
+                    selector="",
+                    modal_ordinal=s.modal_ordinal,
+                    var_key=s.var_key,
+                    arg=s.arg,
+                    is_stripped_target=s.is_stripped_target,
+                    ctrl_sig=("", "", "", ""),
+                    control_signature=s.control_signature,
+                    semantic_role=s.semantic_role,
+                    semantic_label=s.semantic_label,
+                )
+                for s in cold.distilled_steps
+            ]
+
+            shifted_page = browser.new_page()
+            shifted_page.set_content(shifted_modal_html)
+            ok = replay_distilled_zero_phi_repair(
+                shifted_page,
+                sig_only_steps,
+                private_vars={"$title": "Winter Feast"},
+                readback_oracle=lambda p: "SAVED:Winter Feast:true" in p.locator("#out").inner_text(),
+            )
+            assert ok is True
+        finally:
+            browser.close()

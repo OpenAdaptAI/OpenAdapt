@@ -48,10 +48,12 @@ _SAFE_INPUT_TYPES: FrozenSet[str] = frozenset(
     {"text", "checkbox", "radio", "submit", "button", "number", "date", "email", "tel", "password", "search"}
 )
 _SAFE_ROLES: FrozenSet[str] = frozenset(
-    {"dialog", "button", "textbox", "combobox", "checkbox", "radio", "listbox", "option", "menu", "menuitem", "form", "main", "region", "alert"}
+    {"dialog", "button", "textbox", "combobox", "checkbox", "radio", "listbox", "option", "menu", "menuitem", "form", "main", "region", "alert", "tab", "table"}
 )
 _SAFE_FORM_METHODS: FrozenSet[str] = frozenset({"get", "post"})
 _SAFE_PATH_RE = re.compile(r"^/[A-Za-z0-9_/-]*$")
+_VAR_PLACEHOLDER_RE = re.compile(r"^\$var_\d+$")
+_SAFE_PLATFORMS: FrozenSet[str] = frozenset({"uia", "macos_ax", "at_spi", "citrix_box"})
 _STORE_MARKER_RE = re.compile(
     r'(<div\b[^>]*\bdata-oa-twin-store="([A-Za-z0-9_]+)"[^>]*>)(</div>)',
     re.IGNORECASE,
@@ -156,9 +158,17 @@ class _ZeroPhiHTMLSanitizer(HTMLParser):
 
         for text_attr in ("placeholder", "aria-label"):
             if text_attr in attr_map:
-                proj = self._projector.project(attr_map[text_attr])
+                raw_attr = attr_map[text_attr].strip()
+                if text_attr == "placeholder" and _VAR_PLACEHOLDER_RE.fullmatch(raw_attr):
+                    proj = raw_attr
+                else:
+                    proj = self._projector.project(raw_attr)
                 if proj:
                     rendered.append(f'{text_attr}="{html.escape(proj, quote=True)}"')
+
+        style = attr_map.get("style", "").strip()
+        if style and re.fullmatch(r"[A-Za-z0-9:;.% -]+", style):
+            rendered.append(f'style="{style}"')
 
         if safe_tag == "option":
             raw_val = attr_map.get("value", "")
@@ -194,9 +204,19 @@ class _ZeroPhiHTMLSanitizer(HTMLParser):
             return
         if not data or not data.strip():
             return
-        projected = self._projector.project(data)
-        if projected:
-            self._out.append(html.escape(projected, quote=False))
+        chunks = re.split(r"(\$var_\d+)", data)
+        out_parts: List[str] = []
+        for chunk in chunks:
+            if not chunk or not chunk.strip():
+                continue
+            if _VAR_PLACEHOLDER_RE.fullmatch(chunk):
+                out_parts.append(chunk)
+            else:
+                proj = self._projector.project(chunk)
+                if proj:
+                    out_parts.append(proj)
+        if out_parts:
+            self._out.append(html.escape(" ".join(out_parts), quote=False))
 
     def get_sanitized_html(self) -> str:
         body = "".join(self._out)
@@ -610,3 +630,199 @@ def self_heal_multipage_in_twin(
         "egress_ledger_entry_sha256": last_entry_sha,
         "turn_history": turn_history,
     }
+
+
+@dataclass(frozen=True)
+class A11yNodeSpec:
+    """Platform-neutral desktop or Citrix accessibility node for Zero-PHI twin projection."""
+
+    node_id: str
+    role: str
+    name: str
+    value: str = ""
+    bbox: Tuple[int, int, int, int] = (0, 0, 0, 0)
+    enabled: bool = True
+    checked: Optional[bool] = None
+    expanded: Optional[bool] = None
+    platform: str = "uia"
+    options: Tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class A11yScreenSpec:
+    """Desktop or Citrix screen specification with accessibility nodes and state transitions."""
+
+    screen_id: str
+    url_path: str
+    nodes: Tuple[A11yNodeSpec, ...] = ()
+    transitions: Tuple[TwinRouteSpec, ...] = ()
+    store_collection: str = ""
+
+
+def _normalize_a11y_role(raw_role: str) -> str:
+    low = re.sub(r"[^a-z0-9]+", "", (raw_role or "").lower())
+    for prefix in ("controltype", "ax", "role"):
+        if low.startswith(prefix) and len(low) > len(prefix):
+            low = low[len(prefix):]
+    if low in ("button", "pushbutton", "submit", "submitbutton"):
+        return "button"
+    if low in ("edit", "textbox", "textfield", "textarea", "text", "entry", "input"):
+        return "edit"
+    if low in ("combobox", "popupbutton", "dropdown", "select", "listbox"):
+        return "combobox"
+    if low in ("checkbox", "check", "togglebutton"):
+        return "checkbox"
+    if low in ("datagrid", "table", "grid"):
+        return "table"
+    if low in ("tabitem", "tab", "pagetab"):
+        return "tab"
+    return "static"
+
+
+def _bbox_style(bbox: Tuple[int, int, int, int]) -> str:
+    x, y, w, h = bbox
+    parts = ["position:relative"]
+    if w > 0:
+        parts.append(f"width:{min(max(int(w), 1), 4000)}px")
+    if h > 0:
+        parts.append(f"height:{min(max(int(h), 1), 4000)}px")
+    if x > 0:
+        parts.append(f"left:{min(int(x), 4000)}px")
+    if y > 0:
+        parts.append(f"top:{min(int(y), 4000)}px")
+    return ";".join(parts)
+
+
+def project_a11y_tree_to_zero_phi_twin(
+    screens: Sequence[A11yScreenSpec],
+    *,
+    egress_policy: Optional[EgressPolicy] = None,
+    ledger_path: Optional[Union[str, Path]] = None,
+    base_url: str = "http://twin.local",
+) -> StatefulTwinApp:
+    """Project native desktop (UIA/macOS AX/AT-SPI) or Citrix screen trees into a Zero-PHI StatefulTwinApp."""
+    base_policy = _default_twin_policy(egress_policy)
+    vocab = base_policy.effective_tokens()
+    projector = _CanaryProjector(vocab)
+    var_keys_used: List[str] = []
+    var_counter = 0
+
+    def _next_var_placeholder() -> str:
+        nonlocal var_counter
+        var_counter += 1
+        vk = f"$var_{var_counter}"
+        var_keys_used.append(vk)
+        return vk
+
+    def _safe_field_name(raw: str, fallback: str) -> str:
+        for tok in re.findall(r"[A-Za-z0-9_]+", raw or ""):
+            if tok.lower() in vocab:
+                return tok.lower()
+        return fallback
+
+    page_specs: List[TwinPageSpec] = []
+    all_routes: List[TwinRouteSpec] = []
+
+    for screen in screens:
+        post_route = next((r for r in screen.transitions if r.method.upper() == "POST"), None)
+        form_action = _sanitize_url_path(post_route.path_pattern, vocab) if post_route else ""
+        parts: List[str] = []
+        if form_action:
+            parts.append(f'<form method="post" action="{form_action}">')
+
+        for idx, node in enumerate(screen.nodes):
+            if node.platform not in _SAFE_PLATFORMS:
+                raise ValueError(f"Unsupported desktop platform: {node.platform!r}")
+            norm_role = _normalize_a11y_role(node.role)
+            safe_name = projector.project(node.name) or norm_role
+            style_attr = f' style="{_bbox_style(node.bbox)}"' if any(v > 0 for v in node.bbox) else ""
+            dis_attr = " disabled" if not node.enabled else ""
+            exp_attr = f' aria-expanded="{"true" if node.expanded else "false"}"' if node.expanded is not None else ""
+            idx_attr = f' data-oa-idx="{idx}"'
+
+            if norm_role == "button":
+                is_submit = bool(form_action) and any(
+                    w in (node.name or "").lower()
+                    for w in ("save", "submit", "create", "confirm", "apply", "continue", "add", "ok")
+                )
+                btype = "submit" if is_submit else "button"
+                parts.append(
+                    f'<button type="{btype}"{idx_attr}{dis_attr}{exp_attr}{style_attr}>'
+                    f"{html.escape(safe_name, quote=False)}</button>"
+                )
+            elif norm_role == "edit":
+                fname = _safe_field_name(node.name, "field")
+                ph = _next_var_placeholder() if node.value else safe_name
+                parts.append(
+                    f"<label>{html.escape(safe_name, quote=False)}</label>"
+                    f'<input type="text" name="{fname}" aria-label="{html.escape(safe_name, quote=True)}" '
+                    f'placeholder="{html.escape(ph, quote=True)}"{idx_attr}{dis_attr}{style_attr}>'
+                )
+            elif norm_role == "combobox":
+                fname = _safe_field_name(node.name, "option")
+                opts = list(node.options) if node.options else ["Select", "Primary"]
+                opt_html = []
+                for oi, opt in enumerate(opts):
+                    safe_opt = projector.project(opt) or "option"
+                    val_str = "" if (oi == 0 and opt.strip().lower() in ("", "select")) else safe_opt
+                    opt_html.append(
+                        f'<option value="{html.escape(val_str, quote=True)}">{html.escape(safe_opt, quote=False)}</option>'
+                    )
+                parts.append(
+                    f"<label>{html.escape(safe_name, quote=False)}</label>"
+                    f'<select name="{fname}" aria-label="{html.escape(safe_name, quote=True)}"'
+                    f"{idx_attr}{dis_attr}{exp_attr}{style_attr}>{''.join(opt_html)}</select>"
+                )
+            elif norm_role == "checkbox":
+                fname = _safe_field_name(node.name, "check")
+                chk = " checked" if node.checked is True else ""
+                parts.append(
+                    f"<label>{html.escape(safe_name, quote=False)}</label>"
+                    f'<input type="checkbox" name="{fname}" aria-label="{html.escape(safe_name, quote=True)}"'
+                    f"{idx_attr}{dis_attr}{chk}{style_attr}>"
+                )
+            elif norm_role == "table":
+                cell_val = _next_var_placeholder() if node.value else "item"
+                parts.append(
+                    f'<table role="table" aria-label="{html.escape(safe_name, quote=True)}"{style_attr}>'
+                    f"<tbody><tr><td>{html.escape(cell_val, quote=False)}</td></tr></tbody></table>"
+                )
+            elif norm_role == "tab":
+                parts.append(
+                    f'<button type="button" role="tab"{idx_attr}{dis_attr}{exp_attr}{style_attr}>'
+                    f"{html.escape(safe_name, quote=False)}</button>"
+                )
+            else:
+                display_txt = safe_name
+                if node.value:
+                    display_txt = f"{safe_name} {_next_var_placeholder()}"
+                parts.append(f"<div{style_attr}>{html.escape(display_txt, quote=False)}</div>")
+
+        if form_action:
+            parts.append("</form>")
+
+        if screen.store_collection and screen.store_collection.lower() in vocab:
+            parts.append(f'<div data-oa-twin-store="{screen.store_collection.lower()}"></div>')
+
+        page_specs.append(
+            TwinPageSpec(
+                url_path=screen.url_path,
+                sanitized_html=f"<div>{''.join(parts)}</div>",
+                route_specs=screen.transitions,
+            )
+        )
+
+    final_policy = EgressPolicy(
+        allowed_tokens=base_policy.allowed_tokens,
+        include_html_aria_vocab=base_policy.include_html_aria_vocab,
+        include_clinical_vocab=base_policy.include_clinical_vocab,
+        extra_allowed_tokens=base_policy.extra_allowed_tokens,
+        allowed_var_keys=base_policy.allowed_var_keys | frozenset(var_keys_used),
+    )
+    return synthesize_zero_phi_stateful_twin(
+        page_specs,
+        api_routes=all_routes,
+        egress_policy=final_policy,
+        ledger_path=ledger_path,
+        base_url=base_url,
+    )

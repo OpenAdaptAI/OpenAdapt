@@ -161,9 +161,12 @@ from openadapt_kernel.registry import (
 )
 from openadapt_kernel.runner import RunResult, format_run_result_json, run_portal_pack
 from openadapt_kernel.stateful_twin import (
+    A11yNodeSpec,
+    A11yScreenSpec,
     StatefulTwinApp,
     TwinPageSpec,
     TwinRouteSpec,
+    project_a11y_tree_to_zero_phi_twin,
     self_heal_multipage_in_twin,
     synthesize_zero_phi_stateful_twin,
 )
@@ -204,6 +207,6 @@ __all__ = [
     "token_boundary_check", "tokenize_role_label", "verify_completion_closure", "verify_cross_tab_dom", "verify_freetext_fact_coverage",
     "verify_fsm_safety", "verify_pdf_readback", "verify_readonly_answer_provenance", "verify_receipt", "verify_semantic_slot_bindings",
     "verify_sqlite_ro", "verify_symbolic_repair_ast", "verify_warm_pack_putget",
-    "FailureCluster", "FailureRecord", "KernelPRProposal", "StatefulTwinApp", "TwinPageSpec", "TwinRouteSpec",
-    "cluster_pack_failures", "draft_kernel_pr_proposal", "self_heal_multipage_in_twin", "synthesize_zero_phi_stateful_twin", "validate_kernel_pr_safety",
+    "A11yNodeSpec", "A11yScreenSpec", "FailureCluster", "FailureRecord", "KernelPRProposal", "StatefulTwinApp", "TwinPageSpec", "TwinRouteSpec",
+    "cluster_pack_failures", "draft_kernel_pr_proposal", "project_a11y_tree_to_zero_phi_twin", "self_heal_multipage_in_twin", "synthesize_zero_phi_stateful_twin", "validate_kernel_pr_safety",
 ]
