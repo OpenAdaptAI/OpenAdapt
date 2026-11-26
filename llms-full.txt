@@ -1,4 +1,4 @@
-# OpenAdapt: review brief for openadapt-flow 4.0.0
+# OpenAdapt: review brief for openadapt-flow 4.0.1
 
 This file describes the current OpenAdapt release. It is generated from the repository (scripts/build_llms_full.py) and refreshed with every release. Pages, posts and repositories that describe earlier versions are outdated; where they disagree with this file, this file is current.
 
@@ -17,12 +17,13 @@ Source: https://github.com/OpenAdaptAI/OpenAdapt
 [![CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml)
 [![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml)
 [![PyPI](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-OpenAdapt%20Co--Pilot-4285F4?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/openadapt-co-pilot/bcpliibliddclnibacbjbmbpgffkjefd)
 [![Python 3.11-3.12](https://img.shields.io/badge/python-3.11--3.12-blue)](https://www.python.org/downloads/)
 [![Hugging Face Veto-4B-r6](https://img.shields.io/badge/Hugging%20Face-Veto--4B--r6-FFD21E?logo=huggingface&logoColor=black)](https://huggingface.co/OpenAdapt/openadapt-veto-4b-r6)
 [![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
-[Website](https://openadapt.ai) · [Docs](https://docs.openadapt.ai) · [Live Demo](https://app.openadapt.ai/demo) · [Starter Skills Registry](https://app.openadapt.ai/skills) · [Benchmarks](https://openadapt.ai/proof)
+[Website](https://openadapt.ai) · [Docs](https://docs.openadapt.ai) · [Chrome Extension](https://chromewebstore.google.com/detail/openadapt-co-pilot/bcpliibliddclnibacbjbmbpgffkjefd) · [Live Demo](https://app.openadapt.ai/demo) · [Starter Skills Registry](https://app.openadapt.ai/skills) · [Benchmarks](https://openadapt.ai/proof)
 
 </div>
 
@@ -81,7 +82,7 @@ This quickstart is a local developer smoke test against a bundled demo server to
 
 ## Clean-Room Benchmarks
 
-All raw tables, methodology, and verifiable Ed25519 receipts are published at [openadapt.ai/proof](https://openadapt.ai/proof).
+All raw tables, methodology, and verifiable Ed25519 receipts are published at [openadapt.ai/proof](https://openadapt.ai/proof). Sanitized per-run JSON ledgers and exact 95% Clopper-Pearson confidence intervals are committed in [`benchmarks/public-runs/`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/benchmarks/public-runs/).
 
 ### 1. Real-Upgrade UI Drift Across 4 Web Apps (`N = 60`, Gitea / Vikunja / Memos / Mealie)
 
@@ -241,13 +242,15 @@ See [Run outcomes](https://docs.openadapt.ai/reference/outcomes/) for every stat
 The block below is generated from the signed public lifecycle record.
 
 <!-- BEGIN PRODUCTION LIFECYCLE -->
-The signed ledger has seven active target admissions. Their evidence class
-is `remote-safe-synthetic`, not MockMed `production_acceptance`. They remain
-valid until revoked; there's no expiry date. `pip install openadapt` is the
-admitted runtime (launcher 1.16.0, Flow 1.35.1). Desktop's admitted artifact
-is the 0.16.0 wheel. Native Mac DMGs stay ad-hoc signed 0.15.0; don't treat
-those as admitted. A Production run still needs a workflow admission for the
-exact compiled bundle, application, and environment.
+The last signed lifecycle snapshot (September 2026) has seven active target admissions.
+Their evidence class is `remote-safe-synthetic`, not MockMed `production_acceptance`.
+They remain valid until revoked; there's no expiry date. The admitted versions in that
+snapshot are launcher 1.16.0, Flow 1.35.1, and Desktop's 0.16.0 wheel (`pip install openadapt`
+installs the latest PyPI release; see [GitHub Releases](https://github.com/OpenAdaptAI/OpenAdapt/releases)
+and [PyPI](https://pypi.org/project/openadapt/) for current package versions, which have not
+yet been re-admitted to the signed ledger). Native Mac DMGs from that snapshot stay ad-hoc
+signed 0.15.0; don't treat those as admitted. A Production run still needs a workflow admission
+for the exact compiled bundle, application, and environment.
 [Check the live signed Production record](https://docs.openadapt.ai/production-lifecycle.json).
 <!-- END PRODUCTION LIFECYCLE -->
 
@@ -2391,234 +2394,94 @@ automation into an independently certified transaction system.
 
 ---
 
-<!-- Changelog: openadapt-flow 4.0.0 -->
+<!-- Changelog: openadapt-flow 4.0.1 -->
 
-## What changed in openadapt-flow 4.0.0
+## What changed in openadapt-flow 4.0.1
 
-### Breaking Changes
+### Native Windows qualification
 
-- **Encryption at rest is now enabled by default** (`#2423`): recordings,
-  compiled bundles, and run directories are written as sealed-set v3
-  encrypted containers unless `OPENADAPT_ENCRYPT_AT_REST=0` or `--no-encrypt`
-  is set. Released `openadapt` launcher `1.23.0` (`openadapt-flow<4`) reads
-  run files via plain paths, so this major bump keeps `1.23.0` on Flow 3.4.0
-  while pairing Flow 4.0.0 with `openadapt 1.24.0` (`>=4.0.0,<5.0.0`).
-- **Requires `openadapt-types>=0.24.2,<0.25.0`.** Flow 4.0.0 imports
-  modules and names that first ship in types 0.24.2 (`evidence_scope`,
-  `run_ledger`, `receipt`, `exception_card`, and new `check_level` names). The old `>=0.24.0` floor let an install resolve
-  types 0.24.0 and fail on import.
+- Native Windows qualification campaigns use the observed Windows environment
+  and opt-in, authenticated UIA/physical fault staging. Fault overlays are
+  bounded, have no application write handlers and are cleaned up after trials.
+  This keeps the existing machine/OS qualification binding; it does not make
+  admissions portable across fresh workers.
+- Qualification read-back checks complete before/after row multisets for
+  inserts and declared field updates. A changed sibling, extra or missing
+  row, duplicate row, undeclared field change or unavailable read refuses.
 
-### Encryption at rest by default
-
-- Recordings (web, the quickstart and tutorial, and desktop once converted),
-  compiled bundles and every run directory (report, step screenshots, crops,
-  frames, evidence, `REPORT.md`) are now encrypted at rest by default, with
-  no setup, as sealed-set version 3: a data key per set, wrapped with HPKE
-  (P-256, HKDF-SHA256, AES-256-GCM) to a per-set bucket key, and files as
-  Tink AES-256-GCM-HKDF 1 MiB streams. The bucket key is wrapped to the
-  device runtime key (only while the set is written; bundles keep it), the
-  device viewer key, organization keys and a recovery key.
-- Organization mode, from a machine policy (MDM profile, Group Policy, a
-  root-owned `/etc/openadapt/policy.json`): organization recipients (P-256
-  or RSA-OAEP-3072) and a key archive are required, and recording stops
-  without them. Solo users can make a recovery key
-  (`openadapt-flow at-rest recovery create`).
-- `openadapt-flow at-rest status` shows the keys and policy;
-  `at-rest shred` destroys a set's tracked bucket-key copies.
-- The device key is a software P-256 key in the OS keychain through
-  `keyring` (a 0600 file with a warning where there is none). Secure
-  Enclave, TPM, Touch ID and Windows Hello providers are interfaces with test
-  doubles, not built yet.
-- A configured `OPENADAPT_BUNDLE_KEY` or `OPENADAPT_RECORDING_KEY` still wins
-  outside organization mode (deprecated), and `~/.openadapt/keys/at-rest.key`
-  keeps working. Version 1 and 2 sets and plaintext folders still read.
-- `OPENADAPT_ENCRYPT_AT_REST=0`, or `--no-encrypt` on `record`, `compile`,
-  `run` and `replay`, turns it off with a one-line warning and a ledger line.
-- Receipts (`seal.json`, `receipt.*`, `public-seal.json`) stay plaintext and
-  are now written for encrypted runs too; their digests are over the
-  plaintext `report.json`. `seal verify`, `inspect report-run`, the receipt
-  page and the quickstart read encrypted runs. The receipt page embeds the
-  report, so beside an encrypted run it is logged as a plaintext copy.
-- Core dependency: `cryptography>=50` (HPKE). The keychain store uses `keyring`, which `pip install openadapt` includes; a bare `openadapt-flow` install needs the `keychain` extra, and otherwise keeps the device key in a 0600 file with a warning.
-- Fail-closed key lifecycle: an organization key archive counts as
-  reachable only with its `.openadapt-key-archive` marker, each record and
-  header names the archive it went to, and shredding authenticates the
-  header first and reports complete only once every tracked copy and store
-  file is gone. Organization mode requires `records: archive`. Durable
-  checkpoints in an encrypted run are keyed from the run's own data key.
-  `--no-encrypt` lasts for one command, and the Python recorders follow the
-  at-rest policy by default. A solo set opens silently only with the device
-  key that wrote it; a backup that only the recovery code opens needs
-  `openadapt-flow at-rest restore DIR --yes`. Rollback records in an
-  encrypted run stay inside its sealed set.
-
-
-### Features
-
-- One verification ladder on every path. `openadapt_types.check_level` is
-  the only source of check levels; `verify-run`, the runtime's report and
-  the `tx` engine derive their tables from it and name each check with one
-  receipt word: `VERIFIED` (levels 3 and 4 only, always with a basis:
-  `separate_session`, `system_api`, `activity_log`, `db_frame` or
-  `owned_connection`), `SHOWN`, `CONFIRMED`, `ATTESTED` or `RECORDED`.
-  Run receipts (`record/run/v1`), `verify-run` and `tx` receipts carry an
-  additive `evidence_scope` block
-  (`openadapt.evidence-scope/v1`) that states the level, basis, wire scope,
-  read-back time, recheck window and what the check did not cover. Receipts
-  without the block still verify. A run receipt whose report shows a save
-  checked below level 3 is `UNKNOWN` (`below_verified_level`), never
-  `VERIFIED`; no built-in profile produces such a run.
-- Links, tabs and menu items can be steps (`openadapt_flow.gui.steps`). Each
-  demonstrated click gets its role from what the backend counted: a commit
-  when it wrote, a navigation when the screen changed with no write. A live
-  commit holds only on exactly the demonstrated writes. `openadapt_flow.gui`
-  is a neutral view of a screen (role, name, state, containers) with adapters
-  for a browser page, an accessibility tree and a `form_tx` snapshot.
-- One verdict kernel, `openadapt_flow.verdict`, for every check that turns
-  evidence into held, refuted or not checked. It fixes the obligations from
-  the plan first, settles results against them, and never passes an empty
-  set, a truncated or short read, a probe that raised, a result bound to
-  another run, two results that disagree, or a code nobody listed.
-  `Result.nothing_else` holds a "nothing else changed" claim only on a
-  complete read. Functions marked `@verdict_site` are run by a fail-open
-  harness (`tests/failopen`) with 15 generic mutations, which checks the
-  verdict at three levels (refuted, not checked, held), not as one bit. It
-  flags 14 fail-open bugs rebuilt from this repository's history (pinned
-  pre-fix copies) and one live connector site, and passes their fixes.
-  `scripts/check_verdict_folds.py` fails CI when the repository-wide count of
-  a hand-written fold kind rises, including a broad `except` that logs and
-  falls through and a "nothing else changed" test over a set that may be a
-  partial read. See `docs/FAIL_CLOSED.md`.
-- The hard-invariant layer, the frame's version check, `verify-run`'s effect
-  folds and the receipt's line judge and tally are built on the kernel.
-- A sign-in that asks for a second factor (a code by text message or email,
-  an authenticator code, or a push approval) no longer has to stop the
-  program. A `second_factor` step (`one_time` is `code` or `approval`) waits
-  for a person through the configured source (`OPENADAPT_SECOND_FACTOR_URL`
-  for a hosted or customer-run runner's control plane, or a local
-  `OPENADAPT_SECOND_FACTOR_COMMAND`). Before anyone is asked, the focused
-  field must be an empty `autocomplete="one-time-code"` input, and the page
-  is made to draw it as dots. After the answer the same field must still have
-  focus and be empty. The code is then filled once into that element, never
-  retried, and kept nowhere: not in a model's page listing, a screenshot, a
-  log, a receipt or the recording. No source, an answer after the deadline, a
-  decline, a multi-line or malformed answer, a field that changed while the
-  person answered, an API binding on the step, or a backend that can't bind
-  the field stops the step before typing, with a closed `second_factor_*`
-  code. The action is new, so an older runtime refuses the bundle instead of
-  skipping an approval. Over the control plane the code is sealed in the
-  person's browser to a one-step P-256 key, and a cached run's child process
-  gets the run token only with the control-plane URL. The wrap recorder turns
-  a field marked `autocomplete="one-time-code"` into such a step. A code-only
-  form's submit counts as a sign-in only once, right after a
-  username-and-password sign-in. A field split into one box per character
-  is refused. See docs/SECOND_FACTOR.md.
-- An interactive run (a terminal on stdin and stderr) asks for a sign-in's
-  second factor at that terminal when no control plane or command is set. A
-  code is read without echo, under the step's deadline, in the calling
-  thread; echo comes back on when the read ends, including on a timeout, and
-  input typed before the prompt is discarded. On Windows the console is read
-  one key at a time with `msvcrt.getwch`, which never echoes, under the same
-  deadline and discard rules. A run without a terminal never
-  prompts and still stops before typing. `OPENADAPT_SECOND_FACTOR_PROMPT=off`
-  turns the prompt off.
-- Effect locations (`openadapt.effect-location/v1`,
-  `openadapt_flow/effect_location/`): the place a careful person would look
-  again to see an intended value, stored as pack data. Each record holds the
-  demonstration path and start condition (`same_screen`, `fresh_navigation`,
-  `new_session`, `other_channel`), a locator (label, row key or region), the
-  expected value, a codec (including a `template` codec that reads one
-  summary row as two values and a `split_date` codec), the expected count
-  and an optional baseline. `evaluate_all` judges every planned value as
-  `held`, `refuted` or `not_checked`. A location that can't be reached,
-  found or read is `not_checked`, never a pass. The check level comes from
-  the start condition; the receipt word comes from
-  `check_level.outcome_word` when it is available. The engine holds no
-  application vocabulary: month names, yes and no words, currency signs and
-  tables come from the pack. See docs/EFFECT_LOCATION.md.
-
-### Changes
-
-- Network captures no longer write raw bodies by default. `record
-  --capture-network` keeps only the `--param` and `--identifier` values of
-  each request and response body, plus a per-capture keyed hash of every
-  other value and of each HTML, text or binary body; undeclared URL query
-  values are hashed too. `dump_har` and `save_har` do the same with the wire
-  policy's id and version fields. `--capture-network-bodies raw` (and
-  `raw_bodies=True`) keeps the redacted bodies, which API step and undo
-  proposals need, and is refused unless the recording is encrypted or
-  `OPENADAPT_FLOW_PLAINTEXT_AT_REST` explicitly allows plaintext. Binary
-  bodies, files and non-text responses are sized and hashed from their
-  bytes as sent; the recording's `app_url` query is minimized too; an
-  explicit `application/octet-stream` body is never parsed as JSON (a
-  missing content type still is); and `load_har` refuses a HAR marked
-  minimized that carries a raw body.
 ### Fixes
 
-- `verify-run` with `minimum_effect_strength: independent_session` now
-  verifies on a separate-session read (check level 3), as the runtime
-  already did. Before, the two disagreed and verify-run never verified on
-  it. The default minimum is unchanged (`independent_system_of_record`).
-- The `tx` engine no longer caps every verdict at `UNCERTAIN` without a
-  SQLite row authority. A post-commit API read sent with cache-bypass
-  headers, showing no cache in its response, and whose record version is
-  exactly one past the before-image's is `CONFIRMED` with basis
-  `system_api`. Anything else stays `UNCERTAIN`.
-- `verify-run`: an effect list that is empty, or tiers that don't pair one to
-  one with the effects, is `INDETERMINATE`, `unknown` and `unchecked`, not
-  `CONFIRMED`, `present` and `independent_readback`. The receipt model already
-  refuses an empty list, so no run changes outcome today.
-- `verify-run`: the effect folds settle against the planned effects, so a
-  planned effect with no verdict is `INDETERMINATE`, and an observed-effect
-  code nobody listed is `unknown` rather than `present`.
-- The frame's version check: a duplicate version row, a version history
-  that lost a row, or a changed target with no new version no longer hides a
-  version saved by another user. The frame is refuted instead of not checked.
-- Receipts: a line check nobody listed keeps the run from `VERIFIED` and is
-  counted as not checked, so the three line counts add up to the lines.
-- The form transaction layer (`form_tx`, an unreleased prototype until this
-  release) reads back every field it typed, selected or kept. Each one gets
-  a `passed`, `failed` or `not_checked` verdict; a field it cannot read back
-  (no read-back declared, the summary control missing or ambiguous, a failed
-  lookup, a value entered only in a popup) is `not_checked` and never
-  passed. A submit with any `not_checked` field ends `readback_incomplete`,
-  never `verified_done`, and gets no receipt. Before, fields typed in a popup
-  estimator had no verdict at all and such a run could end verified.
-  Popup inputs are also re-read just before the popup's apply button, and a
-  mismatch stops the run before apply. The side panel shows refuted and
-  incomplete runs as needing action. Measured on four held-out synthetic
-  quote portals: `benchmark/form_tx_heldout_run/RESULTS.md`.
-- A wrapped sign-in no longer compiles a pixel check that freezes a withheld
-  credential field. The recorder blacks out a withheld field in every frame
-  that still shows it, so a `REGION_STABLE` crop that overlapped one held a
-  black rectangle that never matched the unredacted screenshot at replay
-  time, failing a step whose region overlapped a credential box during the
-  run, for example the click into the password field. Such a check is now
-  clipped to the part of its region clear of the box and re-cropped from the
-  same frame. When no usable part is left, it is dropped and recorded in
-  `param_hygiene.json`. This applies to mined checks and to the
-  focused-field pass.
-- A FHIR searchset Bundle's `OperationOutcome` entry (`search.mode:
-  outcome`) is no longer read as a marker match. Packs can declare
-  `search_match` on the entry parent (Medplum uses `path: search.mode`,
-  `equals: match`). A non-informational outcome is an error, not a
-  found id, so recovery cannot adopt a write that never landed and an
-  outcome id does not count toward `duplicate_write`.
-- File, document, document-hash and email checks no longer claim
-  `system_of_record` (tier 1) for every file. Their strength now follows who
-  produced the artifact, set by the new `effects.artifact_producer`:
-  `acting_session` and the default, `unknown`, are at most `same_screen`;
-  `separate_session` is at most `separate_session`; `system_of_record` keeps
-  tier 1. A store that overlaps `effects.acting_roots`, the user's Downloads
-  folder or a Playwright download folder is graded as the acting session's.
-  Under a declared `separate_session` or `system_of_record` producer, a scan
-  that lists a file in a Playwright download folder beneath the store, or a
-  file whose real path leaves the store, is refused:
-  the verdict is INDETERMINATE and names why. Each verdict records the
-  producer, and whether it was declared or observed, in
-  `read_evidence.provenance`. Breaking: a deployment that relied on the old
-  tier 1 for these kinds must now declare `artifact_producer:
-  system_of_record` (one line in its `effects:` or `verifier:` section,
-  including a `record --verify` file); until it does, runs that need a
-  separate-session or system-of-record check are not `VERIFIED`. Verifier
-  identities of configs that leave both new fields unset are unchanged.
+- `openadapt quickstart` no longer exits 1 on a fresh machine with encryption
+  at rest on, the default since 4.0.0 (#2682). The tutorial wrote its run
+  summary (`run-summary.json`, `.md`, `.png`) in plaintext into the encrypted
+  run folder, outside the folder's sealed index, so sealing the run failed
+  with `report_unreadable` ("holds run-summary.json in plaintext, outside its
+  sealed index"). `write_receipt` now writes the summary through the run's
+  sealed set, and the run inventory names the three summary files as
+  allow-listed plaintext, as it already did for their pre-3.5 names
+  (`receipt.md`, `receipt.png`). Any other plaintext file in a sealed run
+  still makes it refuse. The OpenEMR quickstart driver's halted-run screenshot
+  is also written through the set.
+- Native approval and structural field reads require exact UIA values to agree
+  with independent native extent/full reads under the same control identity.
+  Missing, sensitive, incomplete or disagreeing values refuse the observation;
+  an advertised native approval channel does not fall back to OCR. Empty
+  complete values remain values. A container cannot hide unread descendants
+  ([#2291](https://github.com/OpenAdaptAI/OpenAdapt/pull/2291)).
+- Value reads negotiate independent client/server read-v3 declarations and
+  require the separate helper proof-v3 contract before any preview or value
+  getter. Incompatible consumers refuse before provider access; versioned
+  refusal-parser imports reject mixed local modules. One
+  current sensitivity guard protects values, previews and capability probes.
+  Failed/unknown capability probes cannot become caption masks. Structural
+  previews and unqualified row inventories do not authorize effect checks.
+- Unavailable native form projections return a closed request-local refusal
+  receipt with stage/channel/reason and already-known numeric metadata. A
+  closed property/guard-phase/result category locates raw-boolean failures;
+  the first unknown stops later probes. Partial fields, names, values, raw COM
+  objects and provider exceptions are excluded. No
+  additional source read, global last-error state, fallback or retry is added.
+- Approval form state reads proven values separately from the remaining OCR
+  pixels, so caret/title-bar display noise need not alter an unchanged field's
+  value digest ([#2189](https://github.com/OpenAdaptAI/OpenAdapt/issues/2189)).
+  Current complete-value approval/structural qualification is pending. The
+  native observation fixture excludes a full Flow save; earlier short-note
+  governed evidence does not qualify this new source or unbounded values.
+- `openadapt verify draft` fix-forward for #2438. A clean admission case whose
+  recheck crashed (for example `database is locked`) now records the recheck
+  as `ERROR` and fails, instead of passing with no recheck. Trace and column
+  masking uses the shared token matcher in `openadapt_flow.secret_field_names`,
+  so `totp`, `otpCode`, `userPin`, `mfa_code`, a `cookie` key and the `code`,
+  `sig` and `X-Amz-Signature` query parameters are masked, and `author`,
+  `author_id` and `session_count` are not. The shared vocabulary gains
+  `token`, `jwt`, `bearer`, `credential(s)`, `cred`, `csrf`, `xsrf`,
+  `cookie`, `signature`, `session id`, `sessionid`, `private key`,
+  `access key`, `apikey`, `salt`, `hash`, `tfa`, `session key`,
+  `jsessionid`, `sessid`, `phpsessid`, `oauth verifier` and `authn`, plus
+  exact names (`code`, `sig`, `sid`, `refresh`, `session`, `authorization`)
+  and suffix names (`session`, `authorization`), so `JSESSIONID`,
+  `sso_session` and `proxy-authorization` stay masked as they were; the
+  Chrome extension copies follow. The earlier substring pattern stays as a
+  floor (so `sessionkey`, `pwdhash` and `authz` stay masked), with an
+  explicit list of false positives (`author`, `session_count`,
+  `authorization_id` ...) sent in clear. The admission
+  record is now signed with this computer's key, and `--check` refuses an
+  unsigned record, an edited record, or one no pinned key signed (`--keys`
+  pins another machine's key). `--check` no longer requires `--trace`,
+  `--task`, `--sandbox` and `--out`.
+
+- Checkbox attestations (`openadapt_flow.gui.attestations`) are declared in
+  pack data with the digest of their statement and ticked only on an
+  `AttestationGrant` from the person who attests. A grant is its own type, so
+  no intake value or derived fact can tick one. An undeclared box, changed
+  wording, a missing grant or an attestation bound to a field stops the run
+  before any box is ticked.
+- Hub pages of section dialogs (`openadapt_flow.gui.hub`). A dialog holding
+  an editable control is a form, never a confirmation. Each section is opened,
+  filled and saved, and its completion is read from its card on the hub after
+  the save, with the demonstrated number of writes.
+- Repeating structures (`openadapt_flow.gui.repeating`). An "add another"
+  group is learned from a demonstration. A run adds instances until the count
+  matches the intake, fills them in order and reads each one back by the
+  container it was written into. It never deletes an instance and stops on a
+  prefilled one.
