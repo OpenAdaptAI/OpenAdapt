@@ -2264,6 +2264,8 @@ FLIGHT_VALUE_OPTIONS = frozenset(
         "--guard-task",
         "--max-cost-usd",
         "--safe-label",
+        "--known-value",
+        "--ui-allowlist",
     }
 )
 FLIGHT_FLAGS = frozenset(
