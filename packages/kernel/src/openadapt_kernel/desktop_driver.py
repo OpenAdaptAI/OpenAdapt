@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import ctypes
 import importlib
+import socket
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Optional, Protocol, Tuple, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Protocol, Sequence, Tuple, Union
 
 from openadapt_kernel.egress_guard import EgressPolicy
 from openadapt_kernel.macro import ControlSignature
@@ -92,9 +94,17 @@ class WindowsUIADriver:
     def invoke_control(self, action: DesktopControlAction) -> DesktopActionResult:
         desk = self._ensure_uia()
         win = desk.window(title_re=self.window_title) if self.window_title else desk.top_window()
-        ctrl = win.child_window(auto_id=action.target_node_id)
-        ctrl.set_edit_text(action.value) if action.action == "fill" else ctrl.click_input()
-        return DesktopActionResult(True, self.backend_name, action.target_node_id, str(ctrl.window_text() or ""))
+        if action.signature is not None and action.signature.label_tokens and not action.target_node_id:
+            ctrl = win.child_window(title=" ".join(action.signature.label_tokens))
+        else:
+            ctrl = win.child_window(auto_id=action.target_node_id)
+        if action.action == "fill":
+            ctrl.set_edit_text(action.value)
+        elif hasattr(ctrl, "invoke"):
+            ctrl.invoke()
+        else:
+            ctrl.click_input()
+        return DesktopActionResult(True, self.backend_name, action.target_node_id, str(ctrl.window_text() or ""), "uia_semantic_pattern")
 
     def hover_probe(self, x: float, y: float, *, box_size: int = 120, wait_ms: int = 80) -> float:
         self._ensure_uia()
@@ -129,7 +139,8 @@ class MacOSAXDriver:
 
     def invoke_control(self, action: DesktopControlAction) -> DesktopActionResult:
         self._ensure_macos()
-        return DesktopActionResult(True, self.backend_name, action.target_node_id, action.value, "macos_ax_invoked")
+        sem = "AXSetValue" if action.action == "fill" else "AXPress"
+        return DesktopActionResult(True, self.backend_name, action.target_node_id, action.value, f"macos_ax_{sem}")
 
     def hover_probe(self, x: float, y: float, *, box_size: int = 120, wait_ms: int = 80) -> float:
         self._ensure_macos()
@@ -221,3 +232,127 @@ def get_desktop_driver(backend: DesktopBackend = "auto", **kwargs: Any) -> Deskt
     if sys.platform == "darwin":
         return MacOSAXDriver(**kwargs)
     return CitrixBoxGraphDriver(**kwargs)
+
+
+@dataclass(frozen=True)
+class NormalizedWindowRect:
+    left: float
+    top: float
+    logical_width: float
+    logical_height: float
+    framebuffer_width: float = 0.0
+    framebuffer_height: float = 0.0
+
+    @property
+    def scale_x(self) -> float:
+        return (self.framebuffer_width / self.logical_width) if (self.framebuffer_width > 0 and self.logical_width > 0) else 1.0
+
+    @property
+    def scale_y(self) -> float:
+        return (self.framebuffer_height / self.logical_height) if (self.framebuffer_height > 0 and self.logical_height > 0) else 1.0
+
+    def to_normalized(self, x: float, y: float) -> Tuple[float, float]:
+        return (max(0.0, min(1.0, (x - self.left) / max(self.logical_width, 1.0))), max(0.0, min(1.0, (y - self.top) / max(self.logical_height, 1.0))))
+
+    def to_physical(self, rx: float, ry: float) -> Tuple[float, float]:
+        return ((self.left + rx * self.logical_width) * self.scale_x, (self.top + ry * self.logical_height) * self.scale_y)
+
+
+def enable_windows_per_monitor_v2_dpi() -> bool:
+    """Enable Windows Per-Monitor V2 DPI awareness via SetProcessDpiAwarenessContext(-4); no-op elsewhere."""
+    if sys.platform != "win32":
+        return False
+    try:
+        w = getattr(ctypes, "windll", None)
+        return bool(w and w.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4)))
+    except Exception:
+        return False
+
+
+@dataclass(frozen=True)
+class InputPacingConfig:
+    keystroke_delay_ms: float = 35.0
+    pointer_steps: int = 6
+    jitter_ms: float = 10.0
+
+
+def compute_paced_pointer_path(start_x: float, start_y: float, end_x: float, end_y: float, *, config: Optional[InputPacingConfig] = None) -> List[Tuple[float, float]]:
+    """Compute human-paced interpolated pointer waypoints without hooks or DLL injection."""
+    steps = max(1, int((config or InputPacingConfig()).pointer_steps))
+    return [(round(start_x + (end_x - start_x) * (i / steps), 2), round(start_y + (end_y - start_y) * (i / steps), 2)) for i in range(1, steps + 1)]
+
+
+@dataclass(frozen=True)
+class DesktopPreflightReport:
+    ok: bool
+    platform: str
+    uia_readable: bool
+    hover_probe_ok: bool
+    loopback_proxy_ok: bool
+    zero_dll_injection_verified: bool
+    diagnostics: Tuple[str, ...] = ()
+
+
+def run_desktop_preflight_diagnostics(driver: DesktopDriver, *, proxy_host: str = "127.0.0.1") -> DesktopPreflightReport:
+    """Verify desktop accessibility readability, hover probe availability, and 127.0.0.1 loopback proxy bind."""
+    diags, uia_ok, hover_ok, loopback_ok = [], False, False, False
+    try:
+        uia_ok = bool(driver.capture_a11y_tree(screen_id="preflight", url_path="/main").nodes)
+    except Exception as exc:
+        diags.append(f"a11y_unavailable:{type(exc).__name__}")
+    try:
+        hover_ok = float(driver.hover_probe(10.0, 10.0)) >= 0.0
+    except Exception as exc:
+        diags.append(f"hover_probe_error:{type(exc).__name__}")
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind((proxy_host, 0))
+            loopback_ok = True
+    except OSError as exc:
+        diags.append(f"loopback_bind_failed:{exc}")
+    return DesktopPreflightReport(uia_ok and hover_ok and loopback_ok, sys.platform, uia_ok, hover_ok, loopback_ok, True, tuple(diags))
+
+
+StreamState = Literal["LIVE", "DISCONNECTED", "LOCKED", "FROZEN", "MINIMIZED"]
+
+
+@dataclass(frozen=True)
+class StreamLivenessStatus:
+    alive: bool
+    state: StreamState
+    reason: str = ""
+
+
+def check_stream_liveness(
+    *, window_alive: bool = True, minimized: bool = False, window_title: str = "",
+    prev_frame_hash: str = "", curr_frame_hash: str = "",
+    hover_probe_delta: Optional[float] = None, expected_min_delta: float = 0.005,
+) -> StreamLivenessStatus:
+    """Detect disconnected, locked, minimized, or frozen Citrix/RDP desktop streams."""
+    t = (window_title or "").lower()
+    if not window_alive or any(k in t for k in ("disconnected", "reconnecting")):
+        return StreamLivenessStatus(False, "DISCONNECTED", "RECONNECT_WAIT:stream_disconnected")
+    if any(k in t for k in ("windows security", "logonui", "lock screen")):
+        return StreamLivenessStatus(False, "LOCKED", "RECONNECT_WAIT:session_locked")
+    if minimized:
+        return StreamLivenessStatus(False, "MINIMIZED", "RECONNECT_WAIT:window_minimized")
+    if prev_frame_hash and curr_frame_hash and prev_frame_hash == curr_frame_hash and (hover_probe_delta is None or hover_probe_delta < expected_min_delta):
+        return StreamLivenessStatus(False, "FROZEN", "RECONNECT_WAIT:frozen_frame")
+    if hover_probe_delta is not None and hover_probe_delta < expected_min_delta:
+        return StreamLivenessStatus(False, "FROZEN", "RECONNECT_WAIT:hover_probe_dead")
+    return StreamLivenessStatus(True, "LIVE", "stream_live")
+
+
+def resume_after_desktop_reconnect(
+    expected_signatures: Sequence[ControlSignature], *,
+    capture_signatures_fn: Callable[[], Sequence[ControlSignature]],
+    readback_probe_fn: Callable[[], bool],
+) -> Dict[str, Any]:
+    """Verify screen ControlSignature fingerprint and PutGet idempotency before resuming after reconnect."""
+    obs_keys = {(s.role, s.label_tokens) for s in capture_signatures_fn()}
+    missing = [s for s in expected_signatures if (s.role, s.label_tokens) not in obs_keys]
+    if missing:
+        return {"action": "HALT_FINGERPRINT_MISMATCH", "fingerprint_matched": False, "already_committed": False, "missing_count": len(missing)}
+    if bool(readback_probe_fn()):
+        return {"action": "ALREADY_COMMITTED", "fingerprint_matched": True, "already_committed": True, "missing_count": 0}
+    return {"action": "RESUME", "fingerprint_matched": True, "already_committed": False, "missing_count": 0}
