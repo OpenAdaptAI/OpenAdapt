@@ -5,10 +5,12 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import signal
 import sys
+import threading
 from dataclasses import asdict
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from openadapt_kernel.copilot import (
     generate_ephemeral_ed25519_keypair,
@@ -21,11 +23,19 @@ from openadapt_kernel.dgm_pr import (
     make_cli_coding_agent,
     run_dgm_pr_coding_agent,
 )
+from openadapt_kernel.egress_guard import LocalEgressGuard
 from openadapt_kernel.extension_bridge import (
     induce_pack_from_extension_recordings,
     parse_extension_evidence_jsonl,
 )
 from openadapt_kernel.mcp_server import serve_stdio
+from openadapt_kernel.prepare import (
+    PrepareCard,
+    PrepareResumeResponse,
+    RubberStampViolationError,
+    UnresolvedSlot,
+    resume_from_prepare_card,
+)
 from openadapt_kernel.runner import format_run_result_json, run_portal_pack
 from openadapt_kernel.stateful_twin import synthesize_twin_with_coding_agent
 
@@ -221,6 +231,108 @@ def _cmd_dgm_propose(args: argparse.Namespace) -> int:
     return 0 if proposal.safety_ok else 1
 
 
+def _cmd_egress_proxy(args: argparse.Namespace) -> int:
+    guard = LocalEgressGuard(Path(args.ledger))
+    stop_event = threading.Event()
+
+    def _on_signal(_signum: int, _frame: Any) -> None:
+        stop_event.set()
+
+    prev_int = signal.getsignal(signal.SIGINT)
+    prev_term = signal.getsignal(signal.SIGTERM)
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGINT, _on_signal)
+        signal.signal(signal.SIGTERM, _on_signal)
+
+    try:
+        with guard.serve_http(host=args.host, port=int(args.port)) as url:
+            print(
+                json.dumps(
+                    {"status": "listening", "url": url, "ledger": str(guard.ledger_path)}
+                ),
+                flush=True,
+            )
+            if args.max_seconds is not None:
+                stop_event.wait(timeout=float(args.max_seconds))
+            else:
+                stop_event.wait()
+    finally:
+        if threading.current_thread() is threading.main_thread():
+            signal.signal(signal.SIGINT, prev_int)
+            signal.signal(signal.SIGTERM, prev_term)
+    return 0
+
+
+def _cmd_prepare_inbox(args: argparse.Namespace) -> int:
+    raw_card = json.loads(Path(args.card).read_text(encoding="utf-8"))
+    slots = [
+        UnresolvedSlot(
+            control_idx=int(s.get("control_idx", i)),
+            control_label=str(s.get("control_label", "")),
+            reason=str(s.get("reason", "unresolved")),
+            candidate_vars=tuple(str(v) for v in (s.get("candidate_vars") or [])),
+            allowed_enum_options=tuple(str(o) for o in (s.get("allowed_enum_options") or [])),
+            expected_field_type=s.get("expected_field_type", "casefold_ws"),
+        )
+        for i, s in enumerate(raw_card.get("unresolved_slots") or [])
+    ]
+    card = PrepareCard(
+        card_id=str(raw_card["card_id"]),
+        portal_origin=str(raw_card.get("portal_origin", "")),
+        staged_bindings={int(k): str(v) for k, v in (raw_card.get("staged_bindings") or {}).items()},
+        unresolved_slots=slots,
+        control_labels={int(k): str(v) for k, v in (raw_card.get("control_labels") or {}).items()},
+        control_selectors={int(k): str(v) for k, v in (raw_card.get("control_selectors") or {}).items()},
+    )
+    dossier = json.loads(Path(args.dossier).read_text(encoding="utf-8")) if args.dossier else {}
+    raw_resp = (
+        json.loads(Path(args.response).read_text(encoding="utf-8"))
+        if args.response
+        else json.loads(sys.stdin.read())
+    )
+    response = PrepareResumeResponse(
+        card_id=str(raw_resp.get("card_id", card.card_id)),
+        operator_id=str(raw_resp.get("operator_id", "operator")),
+        parameter_values={str(k): str(v) for k, v in (raw_resp.get("parameter_values") or {}).items()},
+        confirmed_fields={str(k): str(v) for k, v in (raw_resp.get("confirmed_fields") or {}).items()},
+        slot_bindings={int(k): str(v) for k, v in (raw_resp.get("slot_bindings") or {}).items()},
+        approve_all=bool(raw_resp.get("approve_all", False)),
+        rejected=bool(raw_resp.get("rejected", False)),
+        timed_out=bool(raw_resp.get("timed_out", False)),
+        rejection_reason=str(raw_resp.get("rejection_reason", "")),
+    )
+    required_params = [s.control_label for s in slots if s.control_label]
+    try:
+        res = resume_from_prepare_card(card, response, dossier, required_params=required_params)
+    except RubberStampViolationError as exc:
+        print(
+            json.dumps(
+                {
+                    "status": "HALT",
+                    "reason": str(exc),
+                    "rubber_stamp_blocked": True,
+                    "updated_dossier": dossier,
+                },
+                indent=2,
+            )
+        )
+        return 1
+
+    print(
+        json.dumps(
+            {
+                "status": res.status,
+                "reason": res.reason,
+                "rubber_stamp_blocked": False,
+                "updated_dossier": res.updated_dossier,
+                "missing_params": res.missing_params,
+            },
+            indent=2,
+        )
+    )
+    return 0 if res.status == "RESUME" else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="openadapt-kernel")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -288,6 +400,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_dgm.add_argument("--skip-checks", action="store_true")
     p_dgm.add_argument("--out")
     p_dgm.set_defaults(func=_cmd_dgm_propose)
+
+    p_proxy = sub.add_parser("egress-proxy", help="Run standalone customer-hostable LocalEgressGuard HTTP proxy")
+    p_proxy.add_argument("--host", default="127.0.0.1")
+    p_proxy.add_argument("--port", type=int, default=8765)
+    p_proxy.add_argument("--ledger", required=True, help="Path to append-only SHA-256 JSONL compliance ledger")
+    p_proxy.add_argument("--max-seconds", type=float, default=None)
+    p_proxy.set_defaults(func=_cmd_egress_proxy)
+
+    p_prep = sub.add_parser("prepare-inbox", help="Validate operator PREPARE response and emit RESUME/HALT verdict")
+    p_prep.add_argument("--card", required=True, help="Path to PrepareCard JSON")
+    p_prep.add_argument("--response", help="Path to PrepareResumeResponse JSON (reads stdin if omitted)")
+    p_prep.add_argument("--dossier", help="Optional path to existing dossier JSON")
+    p_prep.set_defaults(func=_cmd_prepare_inbox)
 
     return parser
 
