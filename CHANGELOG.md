@@ -2,12 +2,22 @@
 
 <!-- version list -->
 
-## Unreleased
+## v1.24.1 (2026-11-25)
 
+### Requirements
+
+- Requires `openadapt-flow>=4.0.1,<5.0.0` (includes the #2683 `LocalSealError`
+  fix for encrypted quickstart runs; `openadapt doctor`'s supported Flow range
+  is now `>=4.0.1,<5.0.0`).
+
+### Fixes
+
+- `openadapt quickstart` writes `receipt.json` and `receipt.private.json` for
+  encrypted runs and supports `--yes` / CI non-interactive mode (#2703).
 - `openadapt quickstart --app openemr` writes its `quickstart-readback.json`
   through the encrypted run folder's sealed set instead of in plaintext, so
   the halted run can still be sealed. The MockMed quickstart fix for
-  encryption at rest is in openadapt-flow (see its changelog).
+  encryption at rest is in `openadapt-flow 4.0.1` (#2683).
 
 ## v1.24.0 (2026-11-24)
 
