@@ -2896,7 +2896,7 @@ wheels = [
 
 [[package]]
 name = "openadapt"
-version = "1.24.0"
+version = "1.24.1"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -3000,15 +3000,15 @@ requires-dist = [
     { name = "openadapt-agent", marker = "python_full_version < '3.13' and extra == 'agent'", specifier = ">=2.2.4,<3" },
     { name = "openadapt-capture", marker = "extra == 'capture'", specifier = ">=1.2.0,<2.0.0" },
     { name = "openadapt-evals", marker = "extra == 'evals'", specifier = ">=0.1.0" },
-    { name = "openadapt-flow", extras = ["browser"], marker = "python_full_version < '3.13' and extra == 'browser'", specifier = ">=4.0.0,<5.0.0" },
-    { name = "openadapt-flow", extras = ["browser", "hosted"], marker = "python_full_version < '3.13'", specifier = ">=4.0.0,<5.0.0" },
-    { name = "openadapt-flow", extras = ["capture"], marker = "python_full_version < '3.13' and extra == 'capture'", specifier = ">=4.0.0,<5.0.0" },
-    { name = "openadapt-flow", extras = ["linux"], marker = "python_full_version < '3.13' and sys_platform == 'linux' and extra == 'linux'", specifier = ">=4.0.0,<5.0.0" },
-    { name = "openadapt-flow", extras = ["macos"], marker = "python_full_version < '3.13' and sys_platform == 'darwin' and extra == 'macos'", specifier = ">=4.0.0,<5.0.0" },
-    { name = "openadapt-flow", extras = ["privacy"], marker = "python_full_version < '3.13' and extra == 'privacy'", specifier = ">=4.0.0,<5.0.0" },
-    { name = "openadapt-flow", extras = ["rdp"], marker = "python_full_version < '3.13' and extra == 'rdp'", specifier = ">=4.0.0,<5.0.0" },
-    { name = "openadapt-flow", extras = ["vision"], marker = "python_full_version < '3.13' and extra == 'flow'", specifier = ">=4.0.0,<5.0.0" },
-    { name = "openadapt-flow", extras = ["windows"], marker = "python_full_version < '3.13' and extra == 'windows'", specifier = ">=4.0.0,<5.0.0" },
+    { name = "openadapt-flow", extras = ["browser"], marker = "python_full_version < '3.13' and extra == 'browser'", specifier = ">=4.0.1,<5.0.0" },
+    { name = "openadapt-flow", extras = ["browser", "hosted"], marker = "python_full_version < '3.13'", specifier = ">=4.0.1,<5.0.0" },
+    { name = "openadapt-flow", extras = ["capture"], marker = "python_full_version < '3.13' and extra == 'capture'", specifier = ">=4.0.1,<5.0.0" },
+    { name = "openadapt-flow", extras = ["linux"], marker = "python_full_version < '3.13' and sys_platform == 'linux' and extra == 'linux'", specifier = ">=4.0.1,<5.0.0" },
+    { name = "openadapt-flow", extras = ["macos"], marker = "python_full_version < '3.13' and sys_platform == 'darwin' and extra == 'macos'", specifier = ">=4.0.1,<5.0.0" },
+    { name = "openadapt-flow", extras = ["privacy"], marker = "python_full_version < '3.13' and extra == 'privacy'", specifier = ">=4.0.1,<5.0.0" },
+    { name = "openadapt-flow", extras = ["rdp"], marker = "python_full_version < '3.13' and extra == 'rdp'", specifier = ">=4.0.1,<5.0.0" },
+    { name = "openadapt-flow", extras = ["vision"], marker = "python_full_version < '3.13' and extra == 'flow'", specifier = ">=4.0.1,<5.0.0" },
+    { name = "openadapt-flow", extras = ["windows"], marker = "python_full_version < '3.13' and extra == 'windows'", specifier = ">=4.0.1,<5.0.0" },
     { name = "openadapt-grounding", marker = "extra == 'grounding'", specifier = ">=0.1.0" },
     { name = "openadapt-ml", marker = "extra == 'ml'", specifier = ">=0.2.0" },
     { name = "openadapt-retrieval", marker = "extra == 'retrieval'", specifier = ">=0.1.0" },
@@ -3104,7 +3104,7 @@ wheels = [
 
 [[package]]
 name = "openadapt-flow"
-version = "4.0.0"
+version = "4.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
@@ -3114,9 +3114,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/80/06/9a3d0c59b7292a81b30b880ad3fc45acbaa6fe771b006b484c436ab77f5d/openadapt_flow-4.0.0.tar.gz", hash = "sha256:56ad29293a2541f08418157b498df69fc8161384db68689732afd38764fea6e2", size = 65673409, upload-time = "2026-11-25T00:32:08.404Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e7/5a/743d5f3a9df1938896580dfee07779a1bdb94ab8ee058c8cd1fd827c8766/openadapt_flow-4.0.1.tar.gz", hash = "sha256:bee1fdd3447016d1c63e23873b71366b988010e4f1f47480ff17088d201d3535", size = 65826602, upload-time = "2026-11-26T02:37:09.532Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/be/74/4f709793b3685197ef5b513a50d6ce9ffd884f3c5eebca9987fe4fcab939/openadapt_flow-4.0.0-py3-none-any.whl", hash = "sha256:0328cf84babb8fa6397b36763c71ac55087e4227cdf113ff714c3f45191bb1bf", size = 6451554, upload-time = "2026-11-25T00:32:04.943Z" },
+    { url = "https://files.pythonhosted.org/packages/72/a2/3f0c6fde0854249c2a1f22c76d850a0f08880c8901ad21581a3cb27d565b/openadapt_flow-4.0.1-py3-none-any.whl", hash = "sha256:0069dec7db761d53064ffab39cd2086e9eee2af1c807b0bbc94c41f1a40ff9ed", size = 6525803, upload-time = "2026-11-26T02:37:05.605Z" },
 ]
 
 [package.optional-dependencies]
