@@ -10,13 +10,22 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Literal, Optional, Sequence
 
 ObligationState = Literal["PENDING", "COMMITTED", "EXEMPT", "ESCALATED"]
-EpisodeOutcome = Literal["UNVERIFIED", "VERIFIED", "ESCALATED", "AWAITING_MICRO_HANDOFF"]
+EpisodeOutcome = Literal[
+    "UNVERIFIED",
+    "VERIFIED",
+    "ESCALATED",
+    "HALTED",
+    "FAILED",
+    "PREPARE_REQUIRED",
+    "AWAITING_MICRO_HANDOFF",
+]
 CapabilityKind = Literal["consent", "ssa_literal", "constraint"]
 
 
@@ -86,8 +95,8 @@ class FinalizationDecision:
 class ObligationLedger:
     """Tracks step-0 obligations, typed capabilities, SSA provenance, and Saga state."""
 
-    def __init__(self, episode_id: str, subject_key: Optional[str] = None) -> None:
-        self.episode_id = episode_id
+    def __init__(self, episode_id: Optional[str] = None, subject_key: Optional[str] = None) -> None:
+        self.episode_id = episode_id if (episode_id and episode_id.strip()) else f"ep-{uuid.uuid4()}"
         self.subject_key = subject_key
         self.status: EpisodeOutcome = "UNVERIFIED"
         self.obligations: Dict[str, Obligation] = {}
@@ -293,66 +302,32 @@ class ObligationLedger:
             if ob.readback_proof and ob.readback_proof.external_ref
         }
 
+        def _escalate(reason: str, pending_ids: Optional[List[str]] = None) -> FinalizationDecision:
+            self.status = "ESCALATED"
+            self.escalation_reason = reason
+            return FinalizationDecision(
+                outcome="ESCALATED",
+                reason=reason,
+                pending_obligations=pending if pending_ids is None else pending_ids,
+                dirty_fields=dirty,
+                committed_refs=refs,
+            )
+
         if trigger != "done":
-            self.status = "ESCALATED"
             detail = f": {error_detail}" if error_detail else ""
-            self.escalation_reason = f"default_deny_{trigger}{detail}"
-            return FinalizationDecision(
-                outcome="ESCALATED",
-                reason=self.escalation_reason,
-                pending_obligations=pending,
-                dirty_fields=dirty,
-                committed_refs=refs,
-            )
-
+            return _escalate(f"default_deny_{trigger}{detail}")
         if not self.obligations:
-            self.status = "ESCALATED"
-            self.escalation_reason = "no_declared_obligations_verified"
-            return FinalizationDecision(
-                outcome="ESCALATED",
-                reason=self.escalation_reason,
-                pending_obligations=pending,
-                dirty_fields=dirty,
-                committed_refs=refs,
-            )
-
+            return _escalate("no_declared_obligations_verified")
         if dirty:
-            self.status = "ESCALATED"
-            self.escalation_reason = f"uncommitted_dirty_fields: {dirty}"
-            return FinalizationDecision(
-                outcome="ESCALATED",
-                reason=self.escalation_reason,
-                pending_obligations=pending,
-                dirty_fields=dirty,
-                committed_refs=refs,
-            )
-
+            return _escalate(f"uncommitted_dirty_fields: {dirty}")
         if pending:
-            self.status = "ESCALATED"
-            self.escalation_reason = f"unverified_obligations: {pending}"
-            return FinalizationDecision(
-                outcome="ESCALATED",
-                reason=self.escalation_reason,
-                pending_obligations=pending,
-                dirty_fields=dirty,
-                committed_refs=refs,
-            )
-
+            return _escalate(f"unverified_obligations: {pending}")
         unproven = [
-            oid
-            for oid, ob in self.obligations.items()
+            oid for oid, ob in self.obligations.items()
             if ob.readback_proof is None or not ob.readback_proof.is_valid()
         ]
         if unproven:
-            self.status = "ESCALATED"
-            self.escalation_reason = f"missing_readback_proof: {unproven}"
-            return FinalizationDecision(
-                outcome="ESCALATED",
-                reason=self.escalation_reason,
-                pending_obligations=unproven,
-                dirty_fields=dirty,
-                committed_refs=refs,
-            )
+            return _escalate(f"missing_readback_proof: {unproven}", pending_ids=unproven)
 
         self.status = "VERIFIED"
         self.escalation_reason = ""

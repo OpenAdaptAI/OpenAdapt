@@ -8,6 +8,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Literal, Optional, Sequence, Tuple
+from urllib.parse import urlparse
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
@@ -131,6 +132,10 @@ def qualify_verifier_offline(
     Mutant 3 (Single-Field Perturbation): corrupt one expected field in post-write text -> must REFUTE.
     Mutant 4 (Theme / Whitespace / Codec Jitter): nuisance wrapper/whitespace change -> must VERIFY.
     """
+    if not isinstance(pre_write_text, str) or not pre_write_text.strip():
+        raise ValueError("pre_write_text must be a non-empty captured pre-write DOM snapshot")
+    if not isinstance(post_write_text, str) or not post_write_text.strip():
+        raise ValueError("post_write_text must be a non-empty captured post-write DOM snapshot")
     reasons: List[str] = []
 
     pre_write_refuted = not verifier_fn(expected_fields, pre_write_text)
@@ -238,37 +243,73 @@ def generate_ephemeral_ed25519_keypair() -> Tuple[bytes, bytes]:
     return priv_pem, pub_pem
 
 
+TERMINAL_RECEIPT_OUTCOMES = frozenset(
+    {"VERIFIED", "HALTED", "FAILED", "PREPARE_REQUIRED", "ESCALATED", "READY_FOR_HUMAN_COMMIT"}
+)
+
+
+def _origin_host_only(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    parsed = urlparse(raw)
+    if parsed.hostname:
+        return parsed.hostname.lower()
+    if parsed.scheme:
+        return parsed.scheme.lower()
+    return "local" if raw.startswith("/") else raw
+
+
+def _sha256_hex(val: str) -> str:
+    return hashlib.sha256(str(val).encode("utf-8")).hexdigest()
+
+
 def mint_receipt(
     ledger: ObligationLedger,
     workflow_name: str,
     private_key_pem: bytes,
     *,
     allow_escalation_receipt: bool = False,
+    include_plaintext_values: bool = False,
+    outcome_override: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Mint an Ed25519-signed openadapt.kernel.receipt/v1 artifact.
+    """Mint an Ed25519-signed openadapt.kernel.receipt/v1 artifact (zero-PHI redacted by default)."""
+    outcome = outcome_override or ledger.status
+    if outcome not in TERMINAL_RECEIPT_OUTCOMES and not allow_escalation_receipt:
+        raise ValueError(f"Cannot mint receipt for non-terminal outcome {outcome!r}")
 
-    Refuses to mint a VERIFIED receipt unless ledger.status == 'VERIFIED'.
-    """
-    if ledger.status != "VERIFIED" and not allow_escalation_receipt:
-        raise ValueError(
-            f"Cannot mint VERIFIED receipt when ledger.status is {ledger.status!r}"
-        )
+    obligations_payload: Dict[str, Any] = {}
+    for oid, ob in ledger.obligations.items():
+        if ob.readback_proof is None:
+            proof_obj: Optional[Dict[str, Any]] = None
+        elif include_plaintext_values:
+            proof_obj = asdict(ob.readback_proof)
+        else:
+            proof_obj = {
+                "channel": ob.readback_proof.channel,
+                "origin_host": _origin_host_only(ob.readback_proof.url_or_locator),
+                "cited_value_sha256": [_sha256_hex(s) for s in ob.readback_proof.cited_substrings],
+                "external_ref_sha256": (
+                    _sha256_hex(ob.readback_proof.external_ref) if ob.readback_proof.external_ref else None
+                ),
+                "observed_at_utc": ob.readback_proof.observed_at_utc,
+            }
+        target_sys = ob.target_system if include_plaintext_values else _origin_host_only(ob.target_system)
+        obligations_payload[oid] = {
+            "state": ob.state,
+            "target_system": target_sys,
+            "proof": proof_obj,
+        }
 
     payload = {
         "schema": "openadapt.kernel.receipt/v1",
         "episode_id": ledger.episode_id,
         "workflow_name": workflow_name,
-        "outcome": ledger.status,
+        "outcome": outcome,
+        "redacted": not include_plaintext_values,
         "escalation_reason": ledger.escalation_reason,
         "issued_at_utc": _utc_now(),
-        "obligations": {
-            oid: {
-                "state": ob.state,
-                "target_system": ob.target_system,
-                "proof": asdict(ob.readback_proof) if ob.readback_proof else None,
-            }
-            for oid, ob in ledger.obligations.items()
-        },
+        "obligations": obligations_payload,
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     digest = hashlib.sha256(canonical).hexdigest()

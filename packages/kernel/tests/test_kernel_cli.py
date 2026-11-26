@@ -48,7 +48,7 @@ def test_cli_induce_qualify_keygen_and_verify_receipt(tmp_path: Path) -> None:
     assert pack["static_defaults"] == {"region": "ON"}
     assert pack["provenance_map"] == {"policy_id": "src_policy"}
 
-    assert main(["qualify", "--pack", str(pack_path), "--evidence", str(ev1)]) == 0
+    assert main(["qualify", "--pack", str(pack_path), "--evidence", str(ev1), "--pre-text", "Quote form before submission"]) == 0
 
     priv_path = tmp_path / "priv.pem"
     pub_path = tmp_path / "pub.pem"

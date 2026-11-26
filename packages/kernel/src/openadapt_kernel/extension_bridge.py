@@ -25,6 +25,7 @@ class ExtensionSessionSummary:
     readback_url: str
     readback_text: str
     secret_fields_skipped: int = 0
+    pre_write_text: str = ""
 
 
 def parse_extension_evidence_jsonl(path: Path) -> ExtensionSessionSummary:
@@ -34,6 +35,7 @@ def parse_extension_evidence_jsonl(path: Path) -> ExtensionSessionSummary:
     mutating_requests: List[NetworkEvent] = []
     readback_url = ""
     readback_text = ""
+    pre_write_text = ""
     secret_skipped = 0
 
     for raw_line in path.read_text(encoding="utf-8").splitlines():
@@ -77,6 +79,9 @@ def parse_extension_evidence_jsonl(path: Path) -> ExtensionSessionSummary:
             ):
                 continue
             submitted_fields[fname] = val
+        elif kind in ("pre_write", "pre_commit", "pre_write_snapshot"):
+            if ev.get("text"):
+                pre_write_text = str(ev["text"])
         elif kind in ("readback", "confirmation", "page_summary"):
             if ev.get("url"):
                 readback_url = str(ev["url"])
@@ -90,6 +95,7 @@ def parse_extension_evidence_jsonl(path: Path) -> ExtensionSessionSummary:
         readback_url=readback_url,
         readback_text=readback_text,
         secret_fields_skipped=secret_skipped,
+        pre_write_text=pre_write_text,
     )
 
 

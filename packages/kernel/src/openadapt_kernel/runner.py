@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Dict, List, Literal, Optional
 
+from openadapt_kernel.aci import OnlineACICalibrator
 from openadapt_kernel.copilot import PortalPack, mint_receipt
 from openadapt_kernel.interceptor import CommitInterceptor
 from openadapt_kernel.ledger import ObligationLedger
@@ -21,12 +22,30 @@ RunMode = Literal["draft", "autopilot"]
 class RunResult:
     mode: RunMode
     outcome: str
+    episode_id: str = ""
     staged_fields: Dict[str, str] = field(default_factory=dict)
     provenance_violations: List[str] = field(default_factory=list)
     commit_detected: bool = False
     readback_verified: bool = False
     receipt_path: Optional[str] = None
     reason: str = ""
+    aci_alpha_t: Optional[float] = None
+    aci_threshold: Optional[float] = None
+
+
+def _sign_terminal_receipt(
+    ledger: ObligationLedger, pack_id: str, private_key_path: Optional[Path], receipt_out: Optional[Path],
+    *, outcome_override: Optional[str] = None, include_plaintext_values: bool = False,
+) -> Optional[str]:
+    if not private_key_path or not receipt_out:
+        return None
+    receipt = mint_receipt(
+        ledger, pack_id, private_key_path.read_bytes(),
+        include_plaintext_values=include_plaintext_values, outcome_override=outcome_override,
+    )
+    receipt_out.parent.mkdir(parents=True, exist_ok=True)
+    receipt_out.write_text(json.dumps(receipt, indent=2), encoding="utf-8")
+    return str(receipt_out)
 
 
 def _load_portal_pack(path: Path) -> PortalPack:
@@ -71,8 +90,11 @@ def run_portal_pack(
     pdf_readback_path: Optional[Path] = None,
     private_key_path: Optional[Path] = None,
     receipt_out: Optional[Path] = None,
-    episode_id: str = "ep-live-1",
+    episode_id: Optional[str] = None,
     headless: bool = True,
+    settle_timeout_ms: int = 5000,
+    aci_calibrator: Optional[OnlineACICalibrator] = None,
+    include_plaintext_values: bool = False,
 ) -> RunResult:
     """Execute a PortalPack in Draft-to-Commit (stop before save) or Verified Autopilot mode."""
     from playwright.sync_api import sync_playwright
@@ -80,13 +102,33 @@ def run_portal_pack(
     pack = _load_portal_pack(pack_path)
     bindings = _compute_bindings(pack, dossier)
     opaque_fields = sorted(pack.provenance_map.keys())
+    calibrator = aci_calibrator if aci_calibrator is not None else OnlineACICalibrator()
 
     ledger = ObligationLedger(episode_id=episode_id)
+    ep_id = ledger.episode_id
     ledger.add_obligation("primary_commit", f"Execute {pack.pack_id}", target_system=pack.portal_origin)
     for k, v in dossier.items():
         ledger.record_ssa_literal(k, str(v), source_window="dossier", turn=0)
 
     interceptor = CommitInterceptor()
+
+    def _finish(
+        outcome: str, *, staged_fields: Optional[Dict[str, str]] = None,
+        provenance_violations: Optional[List[str]] = None, commit_detected: bool = False,
+        readback_verified: bool = False, reason: str = "",
+        receipt_outcome: Optional[str] = None, with_aci: bool = False,
+    ) -> RunResult:
+        rpath = _sign_terminal_receipt(
+            ledger, pack.pack_id, private_key_path, receipt_out,
+            outcome_override=receipt_outcome, include_plaintext_values=include_plaintext_values,
+        )
+        return RunResult(
+            mode=mode, outcome=outcome, episode_id=ep_id, staged_fields=staged_fields or {},
+            provenance_violations=provenance_violations or [], commit_detected=commit_detected,
+            readback_verified=readback_verified, receipt_path=rpath, reason=reason,
+            aci_alpha_t=calibrator.alpha_t if with_aci else None,
+            aci_threshold=calibrator.threshold() if with_aci else None,
+        )
 
     with sync_playwright() as pw:
         if cdp_url:
@@ -104,6 +146,14 @@ def run_portal_pack(
             if url:
                 page.goto(url, wait_until="domcontentloaded")
 
+            target_origin = pack.portal_origin or str(getattr(page, "url", "") or "")
+            expected_vars = {k: bindings[k] for k in pack.variable_fields if k in bindings}
+            pre_present = False
+            if not sqlite_db_path and not pdf_readback_path and expected_vars:
+                pre_present = verify_cross_tab_dom(
+                    page, expected_vars, reload_active=False, target_origin=target_origin
+                ).verified
+
             staged = stage_form(
                 page,
                 bindings,
@@ -113,24 +163,19 @@ def run_portal_pack(
             )
             if staged.provenance_violations:
                 ledger.finalize("error", error_detail="ssa_provenance_violation")
-                return RunResult(
-                    mode=mode,
-                    outcome="ESCALATED",
-                    provenance_violations=[
-                        f"{v.field_name}: {v.reason}" for v in staged.provenance_violations
-                    ],
+                return _finish(
+                    "ESCALATED",
+                    provenance_violations=[f"{v.field_name}: {v.reason}" for v in staged.provenance_violations],
                     reason="ssa_provenance_violation",
                 )
             if not staged.ok:
                 ledger.finalize("error", dirty_fields=list(interceptor.dirty_fields.keys()), error_detail="stage_mismatch")
-                return RunResult(
-                    mode=mode,
-                    outcome="ESCALATED",
+                return _finish(
+                    "ESCALATED",
                     staged_fields=staged.staged,
                     reason=f"stage_failed(unmatched={staged.unmatched}, mismatched={staged.mismatched})",
                 )
 
-            # Optional child popup workflow (e.g., replacement-cost estimator window)
             if popup_trigger_selector and popup_bindings:
                 with page.expect_popup(timeout=5000) as pop_info:
                     page.locator(popup_trigger_selector).first.click()
@@ -145,9 +190,8 @@ def run_portal_pack(
                 )
                 if not pop_staged.ok:
                     ledger.finalize("error", dirty_fields=list(interceptor.dirty_fields.keys()), error_detail="popup_stage_failed")
-                    return RunResult(
-                        mode=mode,
-                        outcome="ESCALATED",
+                    return _finish(
+                        "ESCALATED",
                         staged_fields={**staged.staged, **pop_staged.staged},
                         reason="popup_stage_failed",
                     )
@@ -157,52 +201,61 @@ def run_portal_pack(
                     page.wait_for_timeout(200)
 
             if mode == "draft":
-                return RunResult(
-                    mode="draft",
-                    outcome="READY_FOR_HUMAN_COMMIT",
+                return _finish(
+                    "READY_FOR_HUMAN_COMMIT",
                     staged_fields=staged.staged,
-                    commit_detected=False,
-                    readback_verified=False,
                     reason="draft_staged_awaiting_operator_submit",
+                    receipt_outcome="PREPARE_REQUIRED",
                 )
 
             if not commit_selector:
                 ledger.finalize("error", dirty_fields=list(interceptor.dirty_fields.keys()), error_detail="missing_commit_selector")
-                return RunResult(
-                    mode="autopilot",
-                    outcome="ESCALATED",
-                    staged_fields=staged.staged,
-                    reason="autopilot_requires_commit_selector",
-                )
+                return _finish("ESCALATED", staged_fields=staged.staged, reason="autopilot_requires_commit_selector")
 
             probe = probe_before_click(page, commit_selector)
-            if not probe.safe_to_click:
+            if not probe.safe_to_click or not probe.focus_responded:
                 detail = f"commit_control_blocked:{probe.reason}"
                 if probe.top_blocker:
                     detail = f"{detail}({probe.top_blocker})"
                 ledger.finalize("error", dirty_fields=list(interceptor.dirty_fields.keys()), error_detail=detail)
-                return RunResult(
-                    mode="autopilot",
-                    outcome="ESCALATED",
-                    staged_fields=staged.staged,
-                    commit_detected=False,
-                    readback_verified=False,
-                    reason=detail,
-                )
+                return _finish("ESCALATED", staged_fields=staged.staged, reason=detail)
 
             interceptor.begin_step()
             page.locator(commit_selector).first.click()
-            page.wait_for_timeout(300)
-            classification = interceptor.classify_step(form_submitted=True)
+            interceptor.wait_for_commit_settle(
+                page, target_origin=target_origin, timeout_ms=settle_timeout_ms
+            )
+            has_2xx_mut = interceptor.has_target_origin_2xx_mutation(target_origin)
 
-            # Independent post-commit read-back (SQLite RO -> PDF stream -> fresh-reload / cross-tab DOM)
-            expected_vars = {k: bindings[k] for k in pack.variable_fields if k in bindings}
+            # Independent post-commit read-back (SQLite RO -> PDF stream -> target-origin DOM)
             if sqlite_db_path and sqlite_query:
                 verdict = verify_sqlite_ro(sqlite_db_path, sqlite_query, (), expected_vars)
             elif pdf_readback_path:
                 verdict = verify_pdf_readback(pdf_readback_path, expected_vars)
             else:
-                verdict = verify_cross_tab_dom(page, expected_vars, reload_active=True)
+                verdict = verify_cross_tab_dom(
+                    page, expected_vars, reload_active=True, target_origin=target_origin
+                )
+
+            has_transition = (not pre_present) and verdict.verified
+            commit_confirmed = has_2xx_mut or has_transition
+
+            # Online ACI update from Level-2/3 read-back ground truth Y_t
+            anomaly_score = 0.0 if (has_2xx_mut and probe.focus_responded) else (1.0 if has_transition else 3.0)
+            flagged = calibrator.should_flag(anomaly_score)
+            realized_error = flagged != (not (verdict.verified and commit_confirmed))
+            calibrator.update_from_readback(anomaly_score, realized_error=realized_error)
+
+            if not commit_confirmed:
+                ledger.finalize("error", dirty_fields=list(interceptor.dirty_fields.keys()), error_detail="commit_not_observed")
+                return _finish(
+                    "ESCALATED",
+                    staged_fields=staged.staged,
+                    commit_detected=False,
+                    readback_verified=verdict.verified,
+                    reason="commit_not_observed",
+                    with_aci=True,
+                )
 
             if not verdict.verified:
                 ledger.finalize(
@@ -210,34 +263,25 @@ def run_portal_pack(
                     dirty_fields=list(interceptor.dirty_fields.keys()),
                     error_detail="readback_refuted_persistence",
                 )
-                return RunResult(
-                    mode="autopilot",
-                    outcome="ESCALATED",
+                return _finish(
+                    "ESCALATED",
                     staged_fields=staged.staged,
-                    commit_detected=classification.is_commit,
+                    commit_detected=commit_confirmed,
                     readback_verified=False,
                     reason="readback_refuted_persistence",
+                    with_aci=True,
                 )
 
             interceptor.clear_dirty_fields()
             ledger.mark_committed("primary_commit", verdict.to_proof())
             decision = ledger.finalize("done", dirty_fields=list(interceptor.dirty_fields.keys()))
-
-            saved_receipt: Optional[str] = None
-            if decision.outcome == "VERIFIED" and private_key_path and receipt_out:
-                receipt = mint_receipt(ledger, pack.pack_id, private_key_path.read_bytes())
-                receipt_out.parent.mkdir(parents=True, exist_ok=True)
-                receipt_out.write_text(json.dumps(receipt, indent=2), encoding="utf-8")
-                saved_receipt = str(receipt_out)
-
-            return RunResult(
-                mode="autopilot",
-                outcome=decision.outcome,
+            return _finish(
+                decision.outcome,
                 staged_fields=staged.staged,
-                commit_detected=classification.is_commit,
+                commit_detected=commit_confirmed,
                 readback_verified=True,
-                receipt_path=saved_receipt,
                 reason=decision.reason,
+                with_aci=True,
             )
         finally:
             if close_browser:

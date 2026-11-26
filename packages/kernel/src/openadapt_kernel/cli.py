@@ -63,12 +63,17 @@ def _cmd_induce(args: argparse.Namespace) -> int:
 
 def _cmd_qualify(args: argparse.Namespace) -> int:
     summary = parse_extension_evidence_jsonl(Path(args.evidence))
+    pre_text = args.pre_text if args.pre_text is not None else summary.pre_write_text
+    if not pre_text or not pre_text.strip():
+        raise ValueError(
+            "qualify requires a captured pre-write DOM snapshot (--pre-text or pre_write event in evidence)"
+        )
     pack_data = json.loads(Path(args.pack).read_text(encoding="utf-8"))
     var_fields: List[str] = list(pack_data.get("variable_fields") or summary.submitted_fields.keys())
     expected = {k: summary.submitted_fields[k] for k in var_fields if k in summary.submitted_fields}
     report = qualify_verifier_offline(
         expected_fields=expected,
-        pre_write_text=args.pre_text,
+        pre_write_text=pre_text,
         post_write_text=summary.readback_text,
         verifier_fn=_token_boundary_verifier,
     )
@@ -162,7 +167,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_qual = sub.add_parser("qualify", help="Run 4-mutant offline qualification on a recorded trace")
     p_qual.add_argument("--pack", required=True)
     p_qual.add_argument("--evidence", required=True)
-    p_qual.add_argument("--pre-text", default="Draft form before submission")
+    p_qual.add_argument("--pre-text", default=None)
     p_qual.set_defaults(func=_cmd_qualify)
 
     p_key = sub.add_parser("keygen", help="Generate an Ed25519 keypair for receipt signing")
@@ -184,7 +189,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--commit-selector")
     p_run.add_argument("--priv")
     p_run.add_argument("--receipt-out")
-    p_run.add_argument("--episode-id", default="ep-live-1")
+    p_run.add_argument("--episode-id", default=None)
     p_run.add_argument("--headed", action="store_true")
     p_run.set_defaults(func=_cmd_run)
 

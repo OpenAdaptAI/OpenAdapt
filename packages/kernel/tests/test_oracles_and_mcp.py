@@ -220,6 +220,7 @@ def test_shadow_sync_and_stdio_mcp_server_roundtrip(tmp_path: Path) -> None:
                     "arguments": {
                         "pack_path": str(pack_path),
                         "evidence_path": str(rec_root / "run_1" / "extension_evidence.jsonl"),
+                        "pre_text": "Quote form before submission",
                     },
                 },
             }

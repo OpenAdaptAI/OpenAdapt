@@ -120,12 +120,17 @@ def dispatch_tool_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
 
     if name == "kernel_qualify_offline":
         summary = parse_extension_evidence_jsonl(Path(arguments["evidence_path"]))
+        pre_text = arguments.get("pre_text") if arguments.get("pre_text") is not None else summary.pre_write_text
+        if not str(pre_text or "").strip():
+            raise ValueError(
+                "kernel_qualify_offline requires a captured pre-write DOM snapshot via pre_text or pre_write event"
+            )
         pack_data = json.loads(Path(arguments["pack_path"]).read_text(encoding="utf-8"))
         var_fields = list(pack_data.get("variable_fields") or summary.submitted_fields.keys())
         expected = {k: summary.submitted_fields[k] for k in var_fields if k in summary.submitted_fields}
         report = qualify_verifier_offline(
             expected_fields=expected,
-            pre_write_text=str(arguments.get("pre_text") or "Draft form before submission"),
+            pre_write_text=str(pre_text),
             post_write_text=summary.readback_text,
             verifier_fn=_token_boundary_verifier,
         )
@@ -141,7 +146,7 @@ def dispatch_tool_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
             commit_selector=arguments.get("commit_selector"),
             private_key_path=Path(arguments["private_key_path"]) if arguments.get("private_key_path") else None,
             receipt_out=Path(arguments["receipt_out"]) if arguments.get("receipt_out") else None,
-            episode_id=str(arguments.get("episode_id") or "ep-mcp-1"),
+            episode_id=arguments.get("episode_id") or None,
             headless=True,
         )
         return {"ok": res.outcome in ("READY_FOR_HUMAN_COMMIT", "VERIFIED"), "result": asdict(res)}
