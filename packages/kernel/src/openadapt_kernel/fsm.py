@@ -13,11 +13,16 @@ before any click is executed:
 
 from __future__ import annotations
 
+import fnmatch
+import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import TYPE_CHECKING, Dict, List, Literal, Mapping, Optional, Sequence, Set, Tuple
 
 from openadapt_kernel.copilot import ShadowTrace
 from openadapt_kernel.ledger import ObligationLedger
+
+if TYPE_CHECKING:
+    from openadapt_kernel.canonical import FieldType
 
 
 @dataclass(frozen=True)
@@ -245,3 +250,93 @@ def evaluate_policy_decision(
     if table.require_human_if_unmatched:
         return PolicyDecisionResult(False, "uncodified_judgment_requires_prepare", requires_prepare=True)
     return PolicyDecisionResult(True, "no_matching_policy_rule_allowed")
+
+
+PreStepAction = Literal["ALLOW", "PREPARE_ASK", "REFUSE", "VETO"]
+
+
+@dataclass(frozen=True)
+class PreStepPolicyResult:
+    allowed: bool
+    action: PreStepAction
+    reason: str
+    missing_params: Tuple[str, ...] = ()
+    detail: str = ""
+
+
+def _url_matches_pattern(url: str, pattern: str) -> bool:
+    if fnmatch.fnmatchcase(url, pattern):
+        return True
+    try:
+        return bool(re.search(pattern, url))
+    except re.error:
+        return False
+
+
+def _lookup_dossier_param(mapping: Mapping[str, str], key: str) -> Optional[str]:
+    clean = key.lstrip("$")
+    for cand in (key, clean, f"${clean}"):
+        if cand in mapping:
+            return mapping[cand]
+    return None
+
+
+def evaluate_pre_step_policy(
+    *,
+    stage: Literal["step_0", "pre_navigation", "pre_fill"],
+    required_params: Sequence[str] = (),
+    dossier: Optional[Mapping[str, str]] = None,
+    policy_table: Optional[PolicyDecisionTable] = None,
+    observed_facts: Optional[Mapping[str, str]] = None,
+    task_disposition: Optional[str] = None,
+    target_url: str = "",
+    allow_patterns: Sequence[str] = (),
+    deny_patterns: Sequence[str] = (),
+    field_name: str = "",
+    proposed_value: str = "",
+    field_type: FieldType = "casefold_ws",
+    grounded_values: Optional[Mapping[str, str]] = None,
+) -> PreStepPolicyResult:
+    """Enforce Step-0 param/contradiction checks, pre-navigation access control, and pre-fill grounding."""
+    dos = dossier or {}
+    if stage == "step_0":
+        missing = tuple(p for p in required_params if not str(_lookup_dossier_param(dos, p) or "").strip())
+        if missing:
+            return PreStepPolicyResult(False, "PREPARE_ASK", "missing_required_params", missing, f"Missing: {list(missing)}")
+        if policy_table is not None and task_disposition:
+            res = evaluate_policy_decision(policy_table, observed_facts or {}, task_disposition)
+            if not res.allowed and res.reason == "policy_disposition_mismatch":
+                return PreStepPolicyResult(
+                    False, "REFUSE", "policy_contradiction",
+                    detail=f"Disposition {task_disposition!r} conflicts with {res.matched_rule_id!r} ({res.expected_disposition!r})",
+                )
+            if not res.allowed and res.requires_prepare:
+                return PreStepPolicyResult(False, "PREPARE_ASK", res.reason, detail="Uncodified policy judgment")
+        return PreStepPolicyResult(True, "ALLOW", "step_0_passed")
+
+    if stage == "pre_navigation":
+        url = (target_url or "").strip()
+        if any(_url_matches_pattern(url, pat) for pat in deny_patterns):
+            return PreStepPolicyResult(False, "REFUSE", "access_denied_by_denylist", detail=f"Blocked: {url!r}")
+        if allow_patterns and not any(_url_matches_pattern(url, pat) for pat in allow_patterns):
+            return PreStepPolicyResult(False, "REFUSE", "access_denied_outside_allowlist", detail=f"Disallowed: {url!r}")
+        return PreStepPolicyResult(True, "ALLOW", "navigation_allowed")
+
+    # stage == "pre_fill"
+    from openadapt_kernel import canonical as _can
+
+    val = str(proposed_value or "")
+    if not val.strip():
+        return PreStepPolicyResult(False, "VETO", "empty_proposed_value", detail=f"Empty fill for {field_name!r}")
+    sources: Dict[str, str] = {**dos, **(grounded_values or {})}
+    norm_val = _can.normalize_casefold_ws(val)
+    for src_val in sources.values():
+        if not src_val:
+            continue
+        if _can.canonical_equal(src_val, val, field_type):
+            return PreStepPolicyResult(True, "ALLOW", "grounded_value_verified")
+        if field_type == "casefold_ws" and len(norm_val) >= 3:
+            norm_src = _can.normalize_casefold_ws(src_val)
+            if norm_val == norm_src or re.search(rf"(?<![a-z0-9]){re.escape(norm_val)}(?![a-z0-9])", norm_src):
+                return PreStepPolicyResult(True, "ALLOW", "grounded_value_verified")
+    return PreStepPolicyResult(False, "VETO", "ungrounded_fill_value", detail=f"Ungrounded value {val!r} for {field_name!r}")

@@ -53,6 +53,8 @@ class Obligation:
     readback_proof: Optional[ReadBackProof] = None
     exempt_reason: Optional[str] = None
     committed_at_utc: Optional[str] = None
+    dependent_on: Optional[str] = None
+    is_post_commit: bool = False
 
 
 @dataclass
@@ -105,14 +107,34 @@ class ObligationLedger:
         obligation_id: str,
         description: str,
         target_system: str = "default",
+        *,
+        dependent_on: Optional[str] = None,
+        is_post_commit: bool = False,
     ) -> Obligation:
+        if dependent_on is not None and dependent_on not in self.obligations:
+            raise KeyError(f"Unknown dependent_on obligation_id: {dependent_on}")
         ob = Obligation(
             obligation_id=obligation_id,
             description=description,
             target_system=target_system,
+            dependent_on=dependent_on,
+            is_post_commit=is_post_commit,
         )
         self.obligations[obligation_id] = ob
         return ob
+
+    def add_post_commit_obligation(
+        self,
+        obligation_id: str,
+        description: str,
+        *,
+        dependent_on: str,
+        target_system: str = "default",
+    ) -> Obligation:
+        """Declare an ordered post-commit follow-up obligation dependent on a prior obligation."""
+        return self.add_obligation(
+            obligation_id, description, target_system=target_system, dependent_on=dependent_on, is_post_commit=True
+        )
 
     def mark_committed(self, obligation_id: str, proof: ReadBackProof) -> None:
         if obligation_id not in self.obligations:
@@ -120,6 +142,8 @@ class ObligationLedger:
         if not proof.is_valid():
             raise ValueError(f"ReadBackProof for {obligation_id} lacks locator or verbatim citations")
         ob = self.obligations[obligation_id]
+        if ob.dependent_on is not None and not self.is_committed(ob.dependent_on):
+            raise ValueError(f"Cannot commit {obligation_id!r} before dependency {ob.dependent_on!r}")
         ob.state = "COMMITTED"
         ob.readback_proof = proof
         ob.committed_at_utc = _utc_now()
@@ -402,10 +426,19 @@ class ObligationLedger:
                 readback_proof=proof,
                 exempt_reason=ob_d.get("exempt_reason"),
                 committed_at_utc=ob_d.get("committed_at_utc"),
+                dependent_on=ob_d.get("dependent_on"),
+                is_post_commit=bool(ob_d.get("is_post_commit", False)),
             )
         for tok_d in data.get("capabilities", []):
             ledger.capabilities.append(CapabilityToken(**tok_d))
         return ledger
+
+
+@dataclass(frozen=True)
+class FactCoverageReport:
+    covered: bool
+    matched_facts: tuple[str, ...]
+    missing_facts: tuple[str, ...]
 
 
 @dataclass
@@ -416,6 +449,7 @@ class ClosureVerdict:
     missing_dossier_keys: List[str] = field(default_factory=list)
     uncited_triage_keys: List[str] = field(default_factory=list)
     pending_obligations: List[str] = field(default_factory=list)
+    missing_freetext_facts: List[str] = field(default_factory=list)
 
 
 _DATE_SCAN_RE = re.compile(
@@ -454,26 +488,63 @@ def _evidence_cited_in_text(expected: str, summary_text: str, ftype: FieldType) 
     return False
 
 
+def verify_freetext_fact_coverage(
+    text: str,
+    required_facts: Mapping[str, str],
+    *,
+    field_types: Optional[Mapping[str, FieldType]] = None,
+) -> FactCoverageReport:
+    """Verify free-text notes/justifications cover every required dossier fact (canonical or token-group)."""
+    ftypes = field_types or {}
+    text_tokens = set(re.findall(r"[a-z0-9]+", (text or "").lower()))
+    matched: List[str] = []
+    missing: List[str] = []
+    for k, exp in required_facts.items():
+        ftype: FieldType = _lookup_key(ftypes, k) or "casefold_ws"
+        if _evidence_cited_in_text(exp, text, ftype):
+            matched.append(k)
+        elif ftype == "casefold_ws":
+            exp_tokens = re.findall(r"[a-z0-9]+", (exp or "").lower())
+            if len(exp_tokens) >= 2 and all(tok in text_tokens for tok in exp_tokens):
+                matched.append(k)
+            else:
+                missing.append(k)
+        else:
+            missing.append(k)
+    return FactCoverageReport(not missing, tuple(matched), tuple(missing))
+
+
 def verify_completion_closure(
     ledger: ObligationLedger, *, step_idx: int, max_steps: int, required_dossier_keys: Sequence[str] = (),
     readback_values: Optional[Mapping[str, str]] = None, dossier_values: Optional[Mapping[str, str]] = None,
     field_types: Optional[Mapping[str, FieldType]] = None, triage_summary_text: str = "",
     required_triage_evidence: Optional[Mapping[str, str]] = None,
+    post_commit_obligations: Sequence[str] = (),
+    freetext_notes: str = "",
+    required_freetext_facts: Optional[Mapping[str, str]] = None,
 ) -> ClosureVerdict:
-    """Enforce non-waivable step-limit default-deny, dossier key coverage, and triage citation."""
+    """Enforce non-waivable step-limit default-deny, post-commit chains, dossier keys, triage & freetext facts."""
     from openadapt_kernel.canonical import canonical_equal
 
     rb, dos, ftypes, triage_req = readback_values or {}, dossier_values or {}, field_types or {}, required_triage_evidence or {}
     pending = ledger.pending_ids()
     unproven = [oid for oid, ob in ledger.obligations.items() if ob.readback_proof is None or not ob.readback_proof.is_valid()]
-    all_obs_verified = bool(ledger.obligations) and not pending and not unproven
+    unverified_post = [
+        oid for oid in post_commit_obligations
+        if oid not in ledger.obligations or not ledger.is_committed(oid)
+        or (proof := ledger.obligations[oid].readback_proof) is None or not proof.is_valid()
+    ]
+    all_obs_verified = bool(ledger.obligations) and not pending and not unproven and not unverified_post
     uncited = [
         k for k, exp in triage_req.items()
         if not _evidence_cited_in_text(exp, triage_summary_text, _lookup_key(ftypes, k) or "casefold_ws")
     ]
     if step_idx >= max_steps and ((ledger.obligations and not all_obs_verified) or (not ledger.obligations and (not triage_req or bool(uncited)))):
         ledger.status, ledger.escalation_reason = "ESCALATED", f"default_deny_step_limit: step_idx={step_idx}>=max_steps={max_steps}"
-        return ClosureVerdict("ESCALATED", False, "default_deny_step_limit", uncited_triage_keys=uncited, pending_obligations=pending or unproven)
+        return ClosureVerdict("ESCALATED", False, "default_deny_step_limit", uncited_triage_keys=uncited, pending_obligations=pending or unproven or unverified_post)
+    if unverified_post:
+        ledger.status, ledger.escalation_reason = "ESCALATED", f"unverified_post_commit_obligations: {unverified_post}"
+        return ClosureVerdict("ESCALATED", False, "unverified_post_commit_obligations", pending_obligations=unverified_post)
     if ledger.obligations and not all_obs_verified:
         ledger.status, ledger.escalation_reason = "ESCALATED", f"unverified_obligations: {pending or unproven}"
         return ClosureVerdict("ESCALATED", False, "unverified_obligations", pending_obligations=pending or unproven)
@@ -492,5 +563,10 @@ def verify_completion_closure(
     if uncited:
         ledger.status, ledger.escalation_reason = "ESCALATED", f"uncited_triage_evidence: {uncited}"
         return ClosureVerdict("ESCALATED", False, "uncited_triage_evidence", uncited_triage_keys=uncited)
+    if required_freetext_facts:
+        cov = verify_freetext_fact_coverage(freetext_notes, required_freetext_facts, field_types=ftypes)
+        if not cov.covered:
+            ledger.status, ledger.escalation_reason = "ESCALATED", f"missing_freetext_facts: {list(cov.missing_facts)}"
+            return ClosureVerdict("ESCALATED", False, "missing_freetext_facts", missing_freetext_facts=list(cov.missing_facts))
     ledger.status, ledger.escalation_reason = "VERIFIED", ""
     return ClosureVerdict("VERIFIED", True, "closure_verified")

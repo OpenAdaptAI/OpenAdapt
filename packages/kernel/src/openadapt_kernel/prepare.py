@@ -60,6 +60,7 @@ PrepareOutcome = Literal[
     "REFUSED_PRE_COMMIT",
     "ESCALATED",
 ]
+PrepareResumeStatus = Literal["RESUME", "HALT"]
 
 
 def _utc_now() -> str:
@@ -171,6 +172,71 @@ class PrepareCard:
                 merged[cidx] = chosen
 
         return merged
+
+
+@dataclass(frozen=True)
+class PrepareResumeResponse:
+    card_id: str
+    operator_id: str
+    parameter_values: Dict[str, str] = field(default_factory=dict)
+    confirmed_fields: Dict[str, str] = field(default_factory=dict)
+    slot_bindings: Dict[int, str] = field(default_factory=dict)
+    approve_all: bool = False
+    rejected: bool = False
+    timed_out: bool = False
+    rejection_reason: str = ""
+
+
+@dataclass
+class PrepareResumeResult:
+    status: PrepareResumeStatus
+    reason: str
+    updated_dossier: Dict[str, str] = field(default_factory=dict)
+    provenance: Dict[str, str] = field(default_factory=dict)
+    missing_params: List[str] = field(default_factory=list)
+
+
+def resume_from_prepare_card(
+    card: PrepareCard,
+    response: PrepareResumeResponse,
+    dossier: Mapping[str, str],
+    *,
+    required_params: Sequence[str] = (),
+) -> PrepareResumeResult:
+    """Validate an interactive PrepareCard response and bind user inputs into a resumed dossier."""
+    if response.card_id != card.card_id:
+        raise RubberStampViolationError(f"Response card_id {response.card_id!r} does not match {card.card_id!r}")
+    if response.timed_out:
+        return PrepareResumeResult("HALT", "prepare_card_timed_out", updated_dossier=dict(dossier))
+    if response.rejected:
+        return PrepareResumeResult("HALT", response.rejection_reason or "prepare_card_rejected", updated_dossier=dict(dossier))
+    if response.approve_all:
+        raise RubberStampViolationError("approve_all=True is forbidden; supply explicit parameter_values or confirmed_fields.")
+    if not response.operator_id.strip():
+        raise RubberStampViolationError("operator_id is required for PrepareResumeResponse")
+    for slot in card.unresolved_slots:
+        if slot.control_idx not in response.slot_bindings or not str(response.slot_bindings[slot.control_idx]).strip():
+            raise RubberStampViolationError(f"Missing explicit binding for unresolved slot {slot.control_idx}")
+    if not response.parameter_values and not response.confirmed_fields and not response.slot_bindings:
+        raise RubberStampViolationError("Blank PrepareResumeResponse is forbidden")
+
+    updated: Dict[str, str] = dict(dossier)
+    provenance: Dict[str, str] = {}
+    for src in (response.parameter_values, response.confirmed_fields):
+        for k, v in src.items():
+            sval = str(v).strip()
+            if not sval:
+                raise RubberStampViolationError(f"Blank value supplied for {k!r}")
+            updated[k] = sval
+            provenance[k] = "user_prepare_card"
+
+    still_missing = [
+        p for p in required_params
+        if not str(updated.get(p) or updated.get(p.lstrip("$")) or updated.get(f"${p.lstrip('$')}") or "").strip()
+    ]
+    if still_missing:
+        return PrepareResumeResult("HALT", "missing_required_params_after_prepare", updated, provenance, still_missing)
+    return PrepareResumeResult("RESUME", "prepare_resumed_with_user_bindings", updated, provenance)
 
 
 @dataclass(frozen=True)

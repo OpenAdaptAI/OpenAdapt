@@ -8,7 +8,10 @@ ERP, insurance underwriting, clinical triage, and SaaS UI frameworks.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict, List
+
+import pytest
 
 from openadapt_kernel import (
     ControlSchema,
@@ -17,12 +20,19 @@ from openadapt_kernel import (
     ObligationLedger,
     PolicyDecisionTable,
     PolicyRule,
+    PrepareCard,
+    PrepareResumeResponse,
     ReadBackProof,
+    RubberStampViolationError,
+    UnresolvedSlot,
     evaluate_policy_decision,
+    evaluate_pre_step_policy,
     is_ephemeral_selector,
     lift_cold_trace_to_pack,
     parameterize_value_against_dossier,
+    resume_from_prepare_card,
     verify_completion_closure,
+    verify_freetext_fact_coverage,
 )
 
 
@@ -341,3 +351,244 @@ def test_ephemeral_selector_detection_and_cold_trace_lifting() -> None:
     assert s4.selector == '[data-testid="save-record"]'
     assert s4.stripped_ephemeral_selector is None
     assert s4.control_signature is not None and s4.control_signature.text_tokens == ("record", "save")
+
+
+def test_pre_step_policy_gate_ecommerce_and_crm() -> None:
+    # Step 0: missing required params -> PREPARE_ASK before opening any page
+    missing_res = evaluate_pre_step_policy(
+        stage="step_0",
+        required_params=("order_id", "$refund_reason"),
+        dossier={"order_id": "ORD-7741"},
+    )
+    assert missing_res.allowed is False
+    assert missing_res.action == "PREPARE_ASK"
+    assert missing_res.missing_params == ("$refund_reason",)
+
+    # Step 0: policy contradiction -> REFUSE before step 1
+    refund_policy = PolicyDecisionTable(
+        table_id="ecommerce_refund_rules",
+        rules=(
+            PolicyRule(
+                rule_id="expired_window_deny",
+                conditions={"return_window": "expired"},
+                required_disposition="deny_refund",
+            ),
+        ),
+    )
+    contradiction = evaluate_pre_step_policy(
+        stage="step_0",
+        required_params=("order_id",),
+        dossier={"order_id": "ORD-7741"},
+        policy_table=refund_policy,
+        observed_facts={"return_window": "expired"},
+        task_disposition="issue_full_refund",
+    )
+    assert contradiction.allowed is False
+    assert contradiction.action == "REFUSE"
+    assert contradiction.reason == "policy_contradiction"
+
+    # Pre-navigation: access management allowlist / denylist
+    denied_admin = evaluate_pre_step_policy(
+        stage="pre_navigation",
+        target_url="https://crm.example/admin/delete-account",
+        allow_patterns=("https://crm.example/*",),
+        deny_patterns=("*/admin/*", "*/billing/delete*"),
+    )
+    assert denied_admin.allowed is False
+    assert denied_admin.action == "REFUSE"
+    assert denied_admin.reason == "access_denied_by_denylist"
+
+    outside_allow = evaluate_pre_step_policy(
+        stage="pre_navigation",
+        target_url="https://external.example/export",
+        allow_patterns=("https://crm.example/accounts/*",),
+    )
+    assert outside_allow.allowed is False
+    assert outside_allow.action == "REFUSE"
+    assert outside_allow.reason == "access_denied_outside_allowlist"
+
+    allowed_nav = evaluate_pre_step_policy(
+        stage="pre_navigation",
+        target_url="https://crm.example/accounts/ACC-901",
+        allow_patterns=("https://crm.example/accounts/*",),
+        deny_patterns=("*/admin/*",),
+    )
+    assert allowed_nav.allowed is True
+    assert allowed_nav.action == "ALLOW"
+
+    # Pre-fill: grounded value verification via canonical_equal and substring grounding
+    dossier = {
+        "order_date": "2026-04-15",
+        "order_total": "$249.50",
+        "account_name": "Northwind Supplies LLC",
+    }
+    assert evaluate_pre_step_policy(
+        stage="pre_fill", field_name="order_date", proposed_value="04/15/2026", field_type="date", dossier=dossier
+    ).action == "ALLOW"
+    assert evaluate_pre_step_policy(
+        stage="pre_fill", field_name="order_total", proposed_value="249.50", field_type="currency", dossier=dossier
+    ).action == "ALLOW"
+    assert evaluate_pre_step_policy(
+        stage="pre_fill", field_name="account_name", proposed_value="Northwind Supplies", dossier=dossier
+    ).action == "ALLOW"
+
+    vetoed = evaluate_pre_step_policy(
+        stage="pre_fill", field_name="order_total", proposed_value="999.99", field_type="currency", dossier=dossier
+    )
+    assert vetoed.allowed is False
+    assert vetoed.action == "VETO"
+    assert vetoed.reason == "ungrounded_fill_value"
+
+
+def test_interactive_prepare_card_resume_loop() -> None:
+    card = PrepareCard(
+        card_id="prep-crm-42",
+        portal_origin="https://crm.example",
+        staged_bindings={0: "$account_id"},
+        unresolved_slots=[
+            UnresolvedSlot(control_idx=1, control_label="Priority", reason="enum_required", allowed_enum_options=("High", "Normal"))
+        ],
+    )
+    base_dossier = {"account_id": "ACC-901"}
+
+    # Anti-rubber-stamping rejects approve_all=True and blank responses
+    with pytest.raises(RubberStampViolationError):
+        resume_from_prepare_card(
+            card, PrepareResumeResponse(card_id="prep-crm-42", operator_id="op1", approve_all=True), base_dossier
+        )
+    with pytest.raises(RubberStampViolationError):
+        resume_from_prepare_card(
+            card, PrepareResumeResponse(card_id="prep-crm-42", operator_id="op1"), base_dossier
+        )
+
+    # Rejection and timeout return HALT without mutating base_dossier
+    halted_rej = resume_from_prepare_card(
+        card,
+        PrepareResumeResponse(card_id="prep-crm-42", operator_id="op1", rejected=True, rejection_reason="customer_cancelled"),
+        base_dossier,
+    )
+    assert halted_rej.status == "HALT"
+    assert halted_rej.reason == "customer_cancelled"
+    assert base_dossier == {"account_id": "ACC-901"}
+
+    halted_to = resume_from_prepare_card(
+        card, PrepareResumeResponse(card_id="prep-crm-42", operator_id="op1", timed_out=True), base_dossier
+    )
+    assert halted_to.status == "HALT"
+    assert halted_to.reason == "prepare_card_timed_out"
+
+    # Valid response binds user parameter + confirmation with provenance and unblocks Step 0
+    resumed = resume_from_prepare_card(
+        card,
+        PrepareResumeResponse(
+            card_id="prep-crm-42",
+            operator_id="op1",
+            parameter_values={"refund_reason": "Damaged in transit"},
+            confirmed_fields={"priority": "High"},
+            slot_bindings={1: "High"},
+        ),
+        base_dossier,
+        required_params=("account_id", "refund_reason"),
+    )
+    assert resumed.status == "RESUME"
+    assert resumed.updated_dossier["refund_reason"] == "Damaged in transit"
+    assert resumed.updated_dossier["priority"] == "High"
+    assert resumed.provenance == {"refund_reason": "user_prepare_card", "priority": "user_prepare_card"}
+    assert "refund_reason" not in base_dossier
+
+    step0_after = evaluate_pre_step_policy(
+        stage="step_0", required_params=("account_id", "refund_reason"), dossier=resumed.updated_dossier
+    )
+    assert step0_after.allowed is True
+    assert step0_after.action == "ALLOW"
+
+
+def test_post_commit_obligation_chains_and_freetext_fact_coverage(tmp_path: Path) -> None:
+    ledger = ObligationLedger("issue-chain-1", subject_key="INC-501")
+    ledger.add_obligation("submit_ticket_fix", "Deploy patch ticket", target_system="issue_tracker")
+    ledger.add_post_commit_obligation(
+        "record_confirmation_in_crm",
+        "Log ticket confirmation ID in customer CRM",
+        dependent_on="submit_ticket_fix",
+        target_system="crm",
+    )
+
+    proof_primary = ReadBackProof(
+        channel="api_read",
+        url_or_locator="https://tracker.example/issues/INC-501",
+        cited_substrings=["INC-501", "CONF-8821"],
+        external_ref="CONF-8821",
+    )
+    proof_followup = ReadBackProof(
+        channel="fresh_reload",
+        url_or_locator="https://crm.example/cases/501",
+        cited_substrings=["CONF-8821", "Closed"],
+        external_ref="CRM-501",
+    )
+
+    # Ordering enforced: dependent post-commit obligation cannot commit before parent
+    with pytest.raises(ValueError, match="before dependency"):
+        ledger.mark_committed("record_confirmation_in_crm", proof_followup)
+
+    ledger.mark_committed("submit_ticket_fix", proof_primary)
+
+    # Completion refused until post-commit follow-up obligation is verified
+    blocked_chain = verify_completion_closure(
+        ledger,
+        step_idx=4,
+        max_steps=15,
+        post_commit_obligations=("record_confirmation_in_crm",),
+    )
+    assert blocked_chain.allowed is False
+    assert blocked_chain.outcome == "ESCALATED"
+    assert blocked_chain.reason == "unverified_post_commit_obligations"
+    assert blocked_chain.pending_obligations == ["record_confirmation_in_crm"]
+
+    ledger.mark_committed("record_confirmation_in_crm", proof_followup)
+
+    # Saga persistence preserves dependency chain metadata
+    saga_path = tmp_path / "chain_saga.json"
+    ledger.save_saga(saga_path)
+    reloaded = ObligationLedger.load_saga(saga_path)
+    assert reloaded.obligations["record_confirmation_in_crm"].dependent_on == "submit_ticket_fix"
+    assert reloaded.obligations["record_confirmation_in_crm"].is_post_commit is True
+
+    # Free-text fact coverage blocks notes that omit retrieved dossier facts
+    required_facts = {
+        "confirmation_id": "CONF-8821",
+        "service_date": "2026-04-15",
+        "denial_reason": "prior authorization expired",
+    }
+    ftypes: Dict[str, FieldType] = {"confirmation_id": "code_prefix", "service_date": "date"}
+
+    cov_missing = verify_freetext_fact_coverage(
+        "Logged confirmation CONF-8821 on Apr 15, 2026.", required_facts, field_types=ftypes
+    )
+    assert cov_missing.covered is False
+    assert cov_missing.missing_facts == ("denial_reason",)
+
+    blocked_note = verify_completion_closure(
+        reloaded,
+        step_idx=6,
+        max_steps=15,
+        post_commit_obligations=("record_confirmation_in_crm",),
+        field_types=ftypes,
+        freetext_notes="Logged confirmation CONF-8821 on Apr 15, 2026.",
+        required_freetext_facts=required_facts,
+    )
+    assert blocked_note.allowed is False
+    assert blocked_note.reason == "missing_freetext_facts"
+    assert blocked_note.missing_freetext_facts == ["denial_reason"]
+
+    verified_all = verify_completion_closure(
+        reloaded,
+        step_idx=7,
+        max_steps=15,
+        post_commit_obligations=("record_confirmation_in_crm",),
+        field_types=ftypes,
+        freetext_notes="Closed CONF-8821 on Apr 15, 2026: authorization expired prior to service.",
+        required_freetext_facts=required_facts,
+    )
+    assert verified_all.allowed is True
+    assert verified_all.outcome == "VERIFIED"
+    assert reloaded.status == "VERIFIED"
