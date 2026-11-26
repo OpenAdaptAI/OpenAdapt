@@ -603,10 +603,10 @@ A test fails when a command has no file or this list is out of date.
   [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back).
 - **openIMIS claims.** On a test copy of openIMIS, the open-source insurance
   and claims system that runs Nepal's national health insurance scheme, the
-  compiled program entered 149 synthetic claims with no model calls: 148 read
-  back correct and none were saved wrong. Each saved claim was read back by
-  SQL through a read-only database role on the test copy; the 149th stopped
-  before saving:
+  compiled program ran 200 synthetic claims: 148 completed and verified with no
+  model calls, 50 paused for human review, 2 stopped, and 0 saved wrong. Each
+  saved claim was read back by SQL through a read-only database role on the
+  test copy:
   [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#openimis).
 
 The systems each result ran on are listed in

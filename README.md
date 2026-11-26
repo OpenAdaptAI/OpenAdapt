@@ -116,7 +116,7 @@ On a local OpenEMR 7.0/8.0 test copy (new-patient referral from fresh browser th
 | OpenAdapt compiled program (screen steps) | 22.5 s | 18 of 18 | $0 |
 | OpenAdapt compiled program (compiled API step) | **3.3 s** | 18 of 18 | **$0** |
 
-On a local openIMIS test copy, the compiled program entered 149 synthetic claims with zero model calls: 148 read back correct, 0 saved wrong, and 1 stopped before saving ([SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md)).
+On a local openIMIS test copy, the compiled program ran 200 synthetic claims: 148 completed and verified with no model calls, 50 paused for human review, 2 stopped, and 0 saved wrong ([SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md)).
 
 ## How It Works
 
