@@ -4,6 +4,8 @@
 'use strict';
 
 (function () {
+  const ONBOARDING_DISMISSED_KEY = 'openadapt_copilot_onboarding_dismissed';
+
   const ACTION_META = {
     provide_value: { label: 'Submit Value & Continue', className: 'btn-primary' },
     accept_portal_prefill: { label: 'Accept Portal Prefill', className: 'btn-warning' },
@@ -15,20 +17,21 @@
   };
 
   const HALT_KIND_LABELS = {
-    ungrounded_required_field: 'Ungrounded Required Field',
-    prefill_value_conflict: 'Prefill Value Conflict',
-    prefill_entity_conflict: 'Prefill Entity Conflict',
-    ambiguous_option_or_target: 'Ambiguous Option / Target',
-    portal_validation_blocked: 'Portal Validation Blocked',
-    popup_contract_failed: 'Popup Subroutine Blocked',
-    modal_confirmation_required: 'Modal Confirmation Required',
-    auth_wall_detected: 'Authentication Required',
-    mutation_budget_exceeded: 'Mutation Budget Exceeded',
+    ungrounded_required_field: 'Needs your pick',
+    prefill_value_conflict: 'Value mismatch',
+    prefill_entity_conflict: 'Extra portal row',
+    ambiguous_option_or_target: 'Choose matching option',
+    portal_validation_blocked: 'Portal validation error',
+    popup_contract_failed: 'Pop-up step paused',
+    modal_confirmation_required: 'Confirm dialog',
+    auth_wall_detected: 'Sign-in required',
+    mutation_budget_exceeded: 'Safety limit reached',
   };
 
   const statusPillEl = document.getElementById('status-pill');
   const recordBtnEl = document.getElementById('record-btn');
   const refreshBtnEl = document.getElementById('refresh-btn');
+  const progressPanelEl = document.getElementById('progress-panel');
   const progressCounterEl = document.getElementById('progress-counter');
   const progressTrackEl = document.getElementById('progress-track');
   const progressFillEl = document.getElementById('progress-bar-fill');
@@ -41,12 +44,53 @@
   const haltsContainerEl = document.getElementById('halts-container');
   const emptyStateEl = document.getElementById('empty-state');
 
+  const onboardingCardEl = document.getElementById('onboarding-card');
+  const dismissOnboardingBtnEl = document.getElementById('dismiss-onboarding-btn');
+  const stepConnectEl = document.getElementById('step-connect');
+  const stepConnectBadgeEl = document.getElementById('step-connect-badge');
+  const connectionStatusBadgeEl = document.getElementById('connection-status-badge');
+  const tabDesktopEl = document.getElementById('tab-desktop');
+  const tabCliEl = document.getElementById('tab-cli');
+  const panelDesktopEl = document.getElementById('panel-desktop');
+  const panelCliEl = document.getElementById('panel-cli');
+  const cliInstallCmdEl = document.getElementById('cli-install-cmd');
+  const copyCliBtnEl = document.getElementById('copy-cli-btn');
+  const checkConnectionBtnEl = document.getElementById('check-connection-btn');
+  const connectionFeedbackEl = document.getElementById('connection-feedback');
+  const stepInspectEl = document.getElementById('step-inspect');
+  const stepInspectBadgeEl = document.getElementById('step-inspect-badge');
+  const stepInspectPillEl = document.getElementById('step-inspect-pill');
+
+  const inspectCardEl = document.getElementById('inspect-card');
+  const activeTabHostEl = document.getElementById('active-tab-host');
+  const inspectPageBtnEl = document.getElementById('inspect-page-btn');
+  const inspectResultEl = document.getElementById('inspect-result');
+
   let currentState = null;
   let currentAuthPause = null;
   let currentPopupState = null;
   let isRecording = false;
+  let hostConnected = false;
+  let sawDisconnectedSession = false;
+  let onboardingDismissed = false;
+  let hasInspectedPage = false;
   let lastRenderedStateKey = '__uninitialized__';
   let syncInFlight = false;
+
+  function isHostDisconnectedError(errorMsg) {
+    if (!errorMsg) return false;
+    const text = String(errorMsg).toLowerCase();
+    return (
+      text.includes('native messaging host not found') ||
+      text.includes('native_host_unavailable') ||
+      text.includes('native_host_disconnected') ||
+      text.includes('native_host_timeout') ||
+      text.includes('native_post_failed') ||
+      text.includes('copilot_sync_failed') ||
+      text === 'unavailable' ||
+      text === 'runtime_unavailable'
+    );
+  }
 
   function sendRuntimeMessage(message) {
     return new Promise((resolve) => {
@@ -75,6 +119,40 @@
     });
   }
 
+  function loadOnboardingPreference() {
+    return new Promise((resolve) => {
+      try {
+        if (
+          chrome &&
+          chrome.storage &&
+          chrome.storage.local &&
+          typeof chrome.storage.local.get === 'function'
+        ) {
+          chrome.storage.local.get([ONBOARDING_DISMISSED_KEY], (data) => {
+            onboardingDismissed = Boolean(data && data[ONBOARDING_DISMISSED_KEY]);
+            resolve(onboardingDismissed);
+          });
+          return;
+        }
+      } catch (e) {}
+      resolve(false);
+    });
+  }
+
+  function saveOnboardingDismissed(dismissed) {
+    onboardingDismissed = Boolean(dismissed);
+    try {
+      if (
+        chrome &&
+        chrome.storage &&
+        chrome.storage.local &&
+        typeof chrome.storage.local.set === 'function'
+      ) {
+        chrome.storage.local.set({ [ONBOARDING_DISMISSED_KEY]: onboardingDismissed });
+      }
+    } catch (e) {}
+  }
+
   function deriveStatusBadge(state, authPause) {
     if (authPause && authPause.paused) {
       return { text: 'Sign-In Paused', status: 'auth_paused' };
@@ -82,6 +160,9 @@
     if (!state) {
       if (isRecording) {
         return { text: 'Recording', status: 'running' };
+      }
+      if (!hostConnected) {
+        return { text: 'Standalone', status: 'standalone' };
       }
       return { text: 'Idle', status: 'idle' };
     }
@@ -180,7 +261,7 @@
     portalBox.setAttribute('data-role', 'portal-prefilled');
     const portalTitle = document.createElement('div');
     portalTitle.className = 'conflict-box-title';
-    portalTitle.textContent = 'Portal Prefilled';
+    portalTitle.textContent = 'On this page';
     const portalBody = document.createElement('div');
     portalBody.className = 'conflict-box-body';
     portalBody.appendChild(createStructuredValueNode(halt.portal_value, '(empty)'));
@@ -192,7 +273,7 @@
     dossierBox.setAttribute('data-role', 'grounded-dossier');
     const dossierTitle = document.createElement('div');
     dossierTitle.className = 'conflict-box-title';
-    dossierTitle.textContent = 'Grounded Dossier';
+    dossierTitle.textContent = 'In your record';
     const dossierBody = document.createElement('div');
     dossierBody.className = 'conflict-box-body';
     dossierBody.appendChild(
@@ -206,7 +287,7 @@
     return grid;
   }
 
-  function renderOperatorInputBlock(halt) {
+  function renderOperatorInputBlock(halt, cardEl) {
     const block = document.createElement('div');
     block.className = 'operator-input-block';
     block.setAttribute('data-role', 'ungrounded-field-controls');
@@ -218,7 +299,7 @@
     labelEl.setAttribute('for', inputId);
 
     if (options.length > 0) {
-      labelEl.textContent = 'Select grounded option';
+      labelEl.textContent = 'Pick an option';
       const selectEl = document.createElement('select');
       selectEl.id = inputId;
       selectEl.className = 'operator-select';
@@ -239,13 +320,19 @@
       block.appendChild(labelEl);
       block.appendChild(selectEl);
     } else {
-      labelEl.textContent = 'Operator value';
+      labelEl.textContent = 'Enter value';
       const inputEl = document.createElement('input');
       inputEl.type = 'text';
       inputEl.id = inputId;
       inputEl.className = 'operator-text-input';
-      inputEl.placeholder = 'Enter grounded value...';
+      inputEl.placeholder = 'Type a value...';
       inputEl.setAttribute('data-role', 'operator-input');
+      inputEl.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' && cardEl) {
+          ev.preventDefault();
+          void submitDecisionForHalt(cardEl, halt, 'provide_value');
+        }
+      });
       block.appendChild(labelEl);
       block.appendChild(inputEl);
     }
@@ -257,7 +344,7 @@
     checkbox.className = 'candidate-rule-checkbox';
     checkbox.setAttribute('data-role', 'remember-as-candidate-rule');
     const ruleText = document.createElement('span');
-    ruleText.textContent = 'Save pattern as candidate rule';
+    ruleText.textContent = 'Remember this choice for next time';
     ruleRow.appendChild(checkbox);
     ruleRow.appendChild(ruleText);
     block.appendChild(ruleRow);
@@ -278,7 +365,7 @@
 
   async function submitDecisionForHalt(cardEl, halt, action) {
     if (!currentState || !currentState.binding) {
-      showCardFeedback(cardEl, 'No active operator session. Refresh the panel.', true);
+      showCardFeedback(cardEl, 'No active session. Click Refresh to reconnect.', true);
       return;
     }
     const binding = currentState.binding;
@@ -289,7 +376,7 @@
       if (!rawVal.trim()) {
         showCardFeedback(
           cardEl,
-          'Select or enter a value before submitting.',
+          'Select or enter a value before continuing.',
           true
         );
         return;
@@ -339,7 +426,7 @@
     if (!resp || !resp.ok) {
       showCardFeedback(
         cardEl,
-        `Submission failed: ${(resp && resp.error) || 'unknown error'}`,
+        `Could not save choice: ${(resp && resp.error) || 'unknown error'}`,
         true
       );
       return;
@@ -349,11 +436,11 @@
     cardEl.dataset.acceptedNew = String(Boolean(resp.accepted_new));
     const actionLabel = (ACTION_META[action] && ACTION_META[action].label) || action;
     if (resp.accepted_new) {
-      showCardFeedback(cardEl, `Decision recorded: ${actionLabel}.`, false);
+      showCardFeedback(cardEl, `Saved: ${actionLabel}.`, false);
     } else {
       showCardFeedback(
         cardEl,
-        `Already recorded (${actionLabel}); duplicate ignored.`,
+        `Already saved (${actionLabel}); duplicate ignored.`,
         false
       );
     }
@@ -374,7 +461,7 @@
     const kindBadge = document.createElement('span');
     kindBadge.className = 'halt-kind-badge';
     kindBadge.textContent =
-      HALT_KIND_LABELS[halt.kind] || String(halt.kind || 'Halt');
+      HALT_KIND_LABELS[halt.kind] || String(halt.kind || 'Needs review');
     badgeRow.appendChild(kindBadge);
 
     const contextParts = [halt.screen_id, halt.section_text].filter(Boolean);
@@ -417,7 +504,7 @@
       (halt.kind !== 'prefill_entity_conflict' &&
         allowedActions.includes('provide_value'))
     ) {
-      card.appendChild(renderOperatorInputBlock(halt));
+      card.appendChild(renderOperatorInputBlock(halt, card));
     }
 
     const actionsRow = document.createElement('div');
@@ -462,7 +549,7 @@
     const badge = document.createElement('span');
     badge.className = 'receipt-badge';
     badge.textContent = state.receipt_verified
-      ? 'Ed25519 Verified'
+      ? 'Signed Receipt'
       : 'Verified Done';
     header.appendChild(title);
     header.appendChild(badge);
@@ -490,14 +577,14 @@
     outputsWrap.setAttribute('data-role', 'receipt-outputs');
     const outputsHeading = document.createElement('div');
     outputsHeading.className = 'receipt-outputs-heading';
-    outputsHeading.textContent = 'Extracted Outputs';
+    outputsHeading.textContent = 'Captured Summary';
     outputsWrap.appendChild(outputsHeading);
 
     if (outputEntries.length > 0) {
       outputsWrap.appendChild(createStructuredValueNode(outputs, '—'));
     } else {
       const noneEl = document.createElement('span');
-      noneEl.textContent = 'No extracted output fields';
+      noneEl.textContent = 'No extracted summary fields';
       outputsWrap.appendChild(noneEl);
     }
     card.appendChild(outputsWrap);
@@ -524,7 +611,7 @@
     for (const sub of subs) {
       const chip = document.createElement('span');
       chip.className = 'meta-chip';
-      chip.textContent = `subroutine: ${sub}`;
+      chip.textContent = `step: ${sub}`;
       runMetaEl.appendChild(chip);
     }
     runMetaEl.hidden = false;
@@ -550,9 +637,9 @@
     const hostAcked = Boolean(authPause.hostAcked);
     badge.textContent = hostAcked
       ? authPause.kind === 'mfa'
-        ? 'MFA Capture Paused'
+        ? '2FA Capture Paused'
         : 'Sign-In Capture Paused'
-      : 'Sign-In Notice (Local Only)';
+      : 'Sign-In Protected (Local)';
     header.appendChild(badge);
     card.appendChild(header);
 
@@ -564,8 +651,8 @@
     const body = document.createElement('p');
     body.className = 'auth-pause-copy';
     body.textContent = hostAcked
-      ? 'Browser evidence and network capture are paused on this tab, and the local OpenAdapt host recorded the sign-in pause. Complete sign-in in Chrome, then click Resume.'
-      : 'Browser evidence and network capture are paused locally on this tab (the local OpenAdapt host is not attached). Sign in normally in Chrome, then dismiss or reconnect.';
+      ? 'Capture is paused on this tab while you sign in. Passwords and one-time codes are never read. Click Resume once you are signed in.'
+      : 'Capture is paused locally on this tab while you sign in. Passwords and one-time codes are never read.';
     card.appendChild(body);
 
     const actions = document.createElement('div');
@@ -586,7 +673,7 @@
       if (!resp || resp.ok !== true) {
         showCardFeedback(
           card,
-          `Could not resume: ${(resp && resp.error) || 'native host rejected resume'}`,
+          `Could not resume: ${(resp && resp.error) || 'local engine rejected resume'}`,
           true
         );
         return;
@@ -619,14 +706,14 @@
 
     const title = document.createElement('div');
     title.className = 'popup-banner-title';
-    title.textContent = 'Estimator / Child Pop-Up Active';
+    title.textContent = 'Pop-Up Window Active';
     card.appendChild(title);
 
     const copy = document.createElement('p');
     copy.className = 'popup-banner-copy';
     const originText = popupState.childOrigin ? ` (${popupState.childOrigin})` : '';
     copy.textContent =
-      `Tracking child window${originText}. Closing it returns focus to your parent quoting tab automatically.`;
+      `Tracking child window${originText}. Closing it returns focus to your main tab automatically.`;
     card.appendChild(copy);
 
     const actions = document.createElement('div');
@@ -654,6 +741,48 @@
     popupBannerContainerEl.hidden = false;
   }
 
+  function updateOnboardingSteps() {
+    if (stepConnectEl) {
+      stepConnectEl.setAttribute('data-done', hostConnected ? 'true' : 'false');
+    }
+    if (stepConnectBadgeEl) {
+      stepConnectBadgeEl.textContent = hostConnected ? '\u2713' : '2';
+    }
+    if (connectionStatusBadgeEl) {
+      connectionStatusBadgeEl.setAttribute(
+        'data-connected',
+        hostConnected ? 'true' : 'false'
+      );
+      connectionStatusBadgeEl.textContent = hostConnected
+        ? '\u2713 Connected'
+        : 'Not connected';
+    }
+    if (checkConnectionBtnEl) {
+      checkConnectionBtnEl.setAttribute(
+        'data-state',
+        hostConnected ? 'connected' : 'idle'
+      );
+      checkConnectionBtnEl.textContent = hostConnected
+        ? 'Connected \u2713'
+        : 'Check connection';
+    }
+    if (dismissOnboardingBtnEl) {
+      dismissOnboardingBtnEl.hidden = !hostConnected;
+    }
+    if (stepInspectEl) {
+      stepInspectEl.setAttribute('data-done', hasInspectedPage ? 'true' : 'false');
+    }
+    if (stepInspectBadgeEl) {
+      stepInspectBadgeEl.textContent = hasInspectedPage ? '\u2713' : '3';
+    }
+    if (stepInspectPillEl) {
+      stepInspectPillEl.textContent = hasInspectedPage ? 'Done' : 'Works now';
+      stepInspectPillEl.className = hasInspectedPage
+        ? 'step-pill step-pill-done'
+        : 'step-pill';
+    }
+  }
+
   function renderState(state, extras) {
     const authPause = extras && extras.authPause ? extras.authPause : null;
     const popupState = extras && extras.popupState ? extras.popupState : null;
@@ -662,6 +791,10 @@
       authPause,
       popupState,
       isRecording,
+      hostConnected,
+      sawDisconnectedSession,
+      onboardingDismissed,
+      hasInspectedPage,
     });
     if (serialized === lastRenderedStateKey) {
       return;
@@ -685,10 +818,15 @@
 
     statusLineEl.textContent =
       currentAuthPause && currentAuthPause.paused
-        ? 'Capture paused on sign-in / MFA screen. Sign in in Chrome, then click Resume.'
+        ? 'Capture paused on sign-in screen. Sign in in Chrome, then click Resume.'
         : currentState
           ? String(currentState.status_line || '')
-          : 'Waiting for an active local form session.';
+          : 'Ready for a local form session. Everything stays staged before Submit.';
+
+    // Hide progress bar when in pure standalone mode (no local host yet)
+    if (progressPanelEl) {
+      progressPanelEl.hidden = !hostConnected && !currentState;
+    }
 
     renderRunMeta(currentState);
     renderAuthPauseCard(currentAuthPause);
@@ -703,27 +841,142 @@
     }
 
     const hasAuthPause = Boolean(currentAuthPause && currentAuthPause.paused);
-    const hasPopup = Boolean(currentPopupState && Number.isInteger(currentPopupState.childTabId));
-    const showEmpty =
-      halts.length === 0 &&
-      !hasAuthPause &&
-      !hasPopup &&
-      (!currentState || currentState.outcome !== 'verified_done');
+    const hasPopup = Boolean(
+      currentPopupState && Number.isInteger(currentPopupState.childTabId)
+    );
+    const hasActiveWorkflow =
+      halts.length > 0 ||
+      hasAuthPause ||
+      hasPopup ||
+      Boolean(currentState && currentState.outcome === 'verified_done');
+
+    updateOnboardingSteps();
+
+    if (onboardingCardEl) {
+      const showOnboarding =
+        !hasActiveWorkflow &&
+        (!hostConnected || (sawDisconnectedSession && !onboardingDismissed));
+      onboardingCardEl.hidden = !showOnboarding;
+    }
+
+    if (inspectCardEl) {
+      inspectCardEl.hidden = hasActiveWorkflow;
+    }
+
+    const showEmpty = hostConnected && !hasActiveWorkflow;
     emptyStateEl.hidden = !showEmpty;
   }
 
   function setErrorBanner(errorMsg) {
-    if (!errorMsg || errorMsg === 'no_recording_dir') {
+    if (!errorMsg || errorMsg === 'no_recording_dir' || isHostDisconnectedError(errorMsg)) {
       errorBannerEl.hidden = true;
       errorBannerEl.textContent = '';
       return;
     }
-    errorBannerEl.textContent = `Native channel notice: ${errorMsg}`;
+    errorBannerEl.textContent = `Notice: ${errorMsg}`;
     errorBannerEl.hidden = false;
   }
 
+  async function syncActiveTab() {
+    if (!activeTabHostEl) return;
+    const resp = await sendRuntimeMessage({ type: 'COPILOT_GET_ACTIVE_TAB' });
+    if (resp && resp.ok && resp.hostname) {
+      activeTabHostEl.textContent = resp.hostname;
+    } else {
+      activeTabHostEl.textContent = 'No web page open';
+    }
+  }
+
+  function renderInspectionResult(inspection) {
+    if (!inspectResultEl) return;
+    inspectResultEl.textContent = '';
+    inspectResultEl.hidden = false;
+
+    const fieldCount = Number(inspection.fieldCount || 0);
+    const submitCount = Number(inspection.submitCount || 0);
+    const secretCount = Number(inspection.secretCount || 0);
+    const labels = Array.isArray(inspection.sampleLabels)
+      ? inspection.sampleLabels
+      : [];
+
+    const summary = document.createElement('div');
+    summary.className = 'inspect-summary-line';
+    if (fieldCount > 0) {
+      inspectResultEl.setAttribute('data-tone', 'ready');
+      const fieldWord = fieldCount === 1 ? 'form field' : 'form fields';
+      const submitWord = submitCount === 1 ? 'Submit button' : 'Submit buttons';
+      summary.textContent =
+        `${fieldCount} ${fieldWord} \u00b7 ${submitCount} ${submitWord} detected \u00b7 Ready for Stage-Only`;
+    } else {
+      inspectResultEl.removeAttribute('data-tone');
+      summary.textContent =
+        'No form fields detected on this page. Open a web form or try the sample portal.';
+    }
+    inspectResultEl.appendChild(summary);
+
+    if (secretCount > 0) {
+      const note = document.createElement('div');
+      note.className = 'inspect-subnote';
+      const word = secretCount === 1 ? 'sign-in / secret field' : 'sign-in / secret fields';
+      note.textContent = `${secretCount} ${word} automatically protected (never read).`;
+      inspectResultEl.appendChild(note);
+    }
+
+    if (labels.length > 0) {
+      const chips = document.createElement('div');
+      chips.className = 'inspect-chips';
+      for (const lbl of labels) {
+        const chip = document.createElement('span');
+        chip.className = 'inspect-chip';
+        chip.textContent = String(lbl);
+        chips.appendChild(chip);
+      }
+      inspectResultEl.appendChild(chips);
+    }
+  }
+
+  function renderInspectionError(message) {
+    if (!inspectResultEl) return;
+    inspectResultEl.textContent = '';
+    inspectResultEl.removeAttribute('data-tone');
+    inspectResultEl.hidden = false;
+    const line = document.createElement('div');
+    line.className = 'inspect-summary-line';
+    line.textContent = message;
+    inspectResultEl.appendChild(line);
+  }
+
+  async function inspectCurrentPage() {
+    if (!inspectPageBtnEl) return;
+    inspectPageBtnEl.disabled = true;
+    const originalText = inspectPageBtnEl.textContent;
+    inspectPageBtnEl.textContent = 'Inspecting...';
+    try {
+      const resp = await sendRuntimeMessage({ type: 'COPILOT_INSPECT_PAGE' });
+      if (resp && resp.ok && resp.inspection) {
+        if (resp.inspection.hostname && activeTabHostEl) {
+          activeTabHostEl.textContent = resp.inspection.hostname;
+        }
+        hasInspectedPage = true;
+        renderInspectionResult(resp.inspection);
+        updateOnboardingSteps();
+      } else if (resp && resp.error === 'no_web_page') {
+        renderInspectionError(
+          'Open any http/https web form tab (or try the sample portal), then click Inspect this page.'
+        );
+      } else {
+        renderInspectionError(
+          'Reload this tab once so Co-Pilot can inspect its form structure locally.'
+        );
+      }
+    } finally {
+      inspectPageBtnEl.disabled = false;
+      inspectPageBtnEl.textContent = originalText;
+    }
+  }
+
   async function syncState(options) {
-    if (syncInFlight) return;
+    if (syncInFlight) return { connected: hostConnected };
     syncInFlight = true;
     const forceScroll = Boolean(options && options.forceScroll);
     try {
@@ -737,16 +990,27 @@
       };
       if (!resp || !resp.ok) {
         if (resp && resp.error === 'no_recording_dir') {
+          hostConnected = true;
           setErrorBanner('');
           renderState(null, extras);
-        } else {
-          setErrorBanner((resp && resp.error) || 'unavailable');
-          renderState(currentState, extras);
+          return { connected: true };
         }
-        return;
+        const errText = (resp && resp.error) || 'unavailable';
+        if (isHostDisconnectedError(errText)) {
+          hostConnected = false;
+          sawDisconnectedSession = true;
+          setErrorBanner('');
+          renderState(null, extras);
+          return { connected: false };
+        }
+        setErrorBanner(errText);
+        renderState(currentState, extras);
+        return { connected: hostConnected };
       }
+      hostConnected = true;
       setErrorBanner('');
       renderState(resp.state || null, extras);
+      return { connected: true };
     } finally {
       syncInFlight = false;
     }
@@ -759,8 +1023,16 @@
       recordBtnEl.setAttribute('aria-pressed', isRecording ? 'true' : 'false');
     }
     if (!currentState && !(currentAuthPause && currentAuthPause.paused) && statusPillEl) {
-      statusPillEl.textContent = isRecording ? 'Recording' : 'Idle';
-      statusPillEl.dataset.status = isRecording ? 'running' : 'idle';
+      if (isRecording) {
+        statusPillEl.textContent = 'Recording';
+        statusPillEl.dataset.status = 'running';
+      } else if (!hostConnected) {
+        statusPillEl.textContent = 'Standalone';
+        statusPillEl.dataset.status = 'standalone';
+      } else {
+        statusPillEl.textContent = 'Idle';
+        statusPillEl.dataset.status = 'idle';
+      }
     }
   }
 
@@ -769,6 +1041,120 @@
     if (resp && resp.ok) {
       updateRecordingUi(Boolean(resp.active));
     }
+  }
+
+  function selectSetupTab(which) {
+    const isDesktop = which === 'desktop';
+    if (tabDesktopEl) {
+      tabDesktopEl.setAttribute('aria-selected', isDesktop ? 'true' : 'false');
+    }
+    if (tabCliEl) {
+      tabCliEl.setAttribute('aria-selected', isDesktop ? 'false' : 'true');
+    }
+    if (panelDesktopEl) {
+      panelDesktopEl.hidden = !isDesktop;
+    }
+    if (panelCliEl) {
+      panelCliEl.hidden = isDesktop;
+    }
+  }
+
+  async function copyCliCommand() {
+    if (!cliInstallCmdEl || !copyCliBtnEl) return;
+    const text = cliInstallCmdEl.textContent.trim();
+    let copied = false;
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      }
+    } catch (e) {
+      copied = false;
+    }
+    if (!copied) {
+      try {
+        const area = document.createElement('textarea');
+        area.value = text;
+        area.setAttribute('readonly', 'true');
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        copied = document.execCommand('copy');
+        document.body.removeChild(area);
+      } catch (e) {
+        copied = false;
+      }
+    }
+    const prev = copyCliBtnEl.textContent;
+    copyCliBtnEl.textContent = copied ? 'Copied \u2713' : 'Copy failed';
+    setTimeout(() => {
+      copyCliBtnEl.textContent = prev || 'Copy';
+    }, 1800);
+  }
+
+  if (tabDesktopEl && tabCliEl) {
+    tabDesktopEl.addEventListener('click', () => selectSetupTab('desktop'));
+    tabCliEl.addEventListener('click', () => selectSetupTab('cli'));
+    const onTabKeydown = (ev) => {
+      if (ev.key === 'ArrowRight' || ev.key === 'ArrowLeft') {
+        ev.preventDefault();
+        const next = ev.currentTarget === tabDesktopEl ? 'cli' : 'desktop';
+        selectSetupTab(next);
+        (next === 'desktop' ? tabDesktopEl : tabCliEl).focus();
+      }
+    };
+    tabDesktopEl.addEventListener('keydown', onTabKeydown);
+    tabCliEl.addEventListener('keydown', onTabKeydown);
+  }
+
+  if (copyCliBtnEl) {
+    copyCliBtnEl.addEventListener('click', () => {
+      void copyCliCommand();
+    });
+  }
+
+  if (checkConnectionBtnEl) {
+    checkConnectionBtnEl.addEventListener('click', async () => {
+      checkConnectionBtnEl.disabled = true;
+      checkConnectionBtnEl.textContent = 'Checking...';
+      if (connectionFeedbackEl) {
+        connectionFeedbackEl.textContent = '';
+        connectionFeedbackEl.removeAttribute('data-tone');
+      }
+      lastRenderedStateKey = '__force_rerender__';
+      const result = await syncState({ forceScroll: false });
+      checkConnectionBtnEl.disabled = false;
+      if (result && result.connected) {
+        if (connectionFeedbackEl) {
+          connectionFeedbackEl.textContent = 'Local engine connected.';
+          connectionFeedbackEl.setAttribute('data-tone', 'ok');
+        }
+      } else {
+        updateOnboardingSteps();
+        if (connectionFeedbackEl) {
+          connectionFeedbackEl.textContent =
+            'Not detected yet. Install Desktop or run the CLI command, then check again.';
+        }
+      }
+    });
+  }
+
+  if (dismissOnboardingBtnEl) {
+    dismissOnboardingBtnEl.addEventListener('click', () => {
+      saveOnboardingDismissed(true);
+      lastRenderedStateKey = '__force_rerender__';
+      renderState(currentState, {
+        authPause: currentAuthPause,
+        popupState: currentPopupState,
+      });
+    });
+  }
+
+  if (inspectPageBtnEl) {
+    inspectPageBtnEl.addEventListener('click', () => {
+      void inspectCurrentPage();
+    });
   }
 
   if (recordBtnEl) {
@@ -786,15 +1172,19 @@
   refreshBtnEl.addEventListener('click', () => {
     lastRenderedStateKey = '__force_rerender__';
     void syncRecordingState();
+    void syncActiveTab();
     void syncState({ forceScroll: true });
   });
 
-  document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('DOMContentLoaded', async () => {
+    await loadOnboardingPreference();
     void syncRecordingState();
+    void syncActiveTab();
     void syncState({ forceScroll: true });
     setInterval(() => {
       if (document.visibilityState === 'visible') {
         void syncRecordingState();
+        void syncActiveTab();
         void syncState({ forceScroll: false });
       }
     }, 1500);

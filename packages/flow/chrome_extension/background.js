@@ -491,6 +491,25 @@ const cancelTimer = typeof clearTimeout === 'function' ? clearTimeout : null;
 
 if (
   typeof chrome !== 'undefined' &&
+  chrome.runtime &&
+  chrome.runtime.onInstalled &&
+  typeof chrome.runtime.onInstalled.addListener === 'function'
+) {
+  try {
+    chrome.runtime.onInstalled.addListener((details) => {
+      if (details && details.reason === 'install') {
+        try {
+          chrome.action.setTitle({
+            title: 'OpenAdapt Co-Pilot — click to open Getting Started',
+          });
+        } catch (e) {}
+      }
+    });
+  } catch (e) {}
+}
+
+if (
+  typeof chrome !== 'undefined' &&
   chrome.sidePanel &&
   typeof chrome.sidePanel.setPanelBehavior === 'function'
 ) {
@@ -671,6 +690,118 @@ function isHighlightableTab(tab) {
     return tab.url.startsWith('http://') || tab.url.startsWith('https://');
   }
   return true;
+}
+
+function extractHostname(rawUrl) {
+  if (typeof rawUrl !== 'string' || !rawUrl) return null;
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return parsed.hostname || null;
+    }
+  } catch (e) {}
+  return null;
+}
+
+function queryActiveWebTab() {
+  return new Promise((resolve) => {
+    const pickTab = (tabs) => {
+      const list = Array.isArray(tabs) ? tabs : [];
+      const webTab = list.find((t) => t && Number.isInteger(t.id) && extractHostname(t.url));
+      if (webTab) {
+        return {
+          tabId: webTab.id,
+          hostname: extractHostname(webTab.url),
+          isWebPage: true,
+        };
+      }
+      const anyHighlightable = list.find(isHighlightableTab);
+      if (anyHighlightable && Number.isInteger(anyHighlightable.id)) {
+        const hostname = extractHostname(anyHighlightable.url);
+        return {
+          tabId: anyHighlightable.id,
+          hostname,
+          isWebPage: Boolean(hostname),
+        };
+      }
+      return null;
+    };
+    try {
+      chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+        const match = pickTab(tabs);
+        if (match && match.isWebPage) {
+          resolve(match);
+          return;
+        }
+        chrome.tabs.query({ active: true }, (fallbackTabs) => {
+          const fallback = pickTab(fallbackTabs);
+          if (fallback && fallback.isWebPage) {
+            resolve(fallback);
+            return;
+          }
+          resolve(match || fallback || { tabId: null, hostname: null, isWebPage: false });
+        });
+      });
+    } catch (e) {
+      resolve({ tabId: null, hostname: null, isWebPage: false });
+    }
+  });
+}
+
+async function inspectActiveWebTab(explicitTabId) {
+  let targetTabId = Number.isInteger(explicitTabId) ? explicitTabId : null;
+  let hostname = null;
+  if (!Number.isInteger(targetTabId)) {
+    const active = await queryActiveWebTab();
+    if (!active || !active.isWebPage || !Number.isInteger(active.tabId)) {
+      return { ok: false, error: 'no_web_page' };
+    }
+    targetTabId = active.tabId;
+    hostname = active.hostname;
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+    const guard = scheduleTimer
+      ? scheduleTimer(() => finish({ ok: false, error: 'inspect_timeout' }), 2000)
+      : null;
+    try {
+      const cb = (resp) => {
+        if (guard && cancelTimer) cancelTimer(guard);
+        const lastErr =
+          chrome.runtime && chrome.runtime.lastError
+            ? chrome.runtime.lastError.message
+            : null;
+        if (lastErr || !resp || !resp.ok || !resp.inspection) {
+          finish({ ok: false, error: 'page_not_inspectable', hostname });
+          return;
+        }
+        const inspection = Object.assign({}, resp.inspection);
+        if (!inspection.hostname && hostname) {
+          inspection.hostname = hostname;
+        }
+        finish({ ok: true, inspection });
+      };
+      // Prefer frameId 0 when the runtime supports options; fall back cleanly in tests.
+      try {
+        chrome.tabs.sendMessage(
+          targetTabId,
+          { type: 'COPILOT_INSPECT_PAGE' },
+          { frameId: 0 },
+          cb
+        );
+      } catch (e) {
+        chrome.tabs.sendMessage(targetTabId, { type: 'COPILOT_INSPECT_PAGE' }, cb);
+      }
+    } catch (e) {
+      if (guard && cancelTimer) cancelTimer(guard);
+      finish({ ok: false, error: 'page_not_inspectable', hostname });
+    }
+  });
 }
 
 function broadcastCopilotHighlights(highlights, forceScroll) {
@@ -878,12 +1009,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     'COPILOT_RETURN_TO_PARENT',
     'COPILOT_GET_AUTH_STATE',
     'COPILOT_AUTH_RESUME',
+    'COPILOT_GET_ACTIVE_TAB',
+    'COPILOT_INSPECT_PAGE',
   ]);
   if (
     sidePanelOnlyTypes.has(msg.type) &&
     sender.url !== chrome.runtime.getURL('sidepanel.html')
   ) {
     sendResponse({ ok: false, error: 'copilot_requires_sidepanel' });
+    return true;
+  }
+  if (msg.type === 'COPILOT_GET_ACTIVE_TAB') {
+    (async () => {
+      const info = await queryActiveWebTab();
+      sendResponse({ ok: true, ...info });
+    })();
+    return true;
+  }
+  if (msg.type === 'COPILOT_INSPECT_PAGE') {
+    (async () => {
+      const res = await inspectActiveWebTab(
+        Number.isInteger(msg.tabId) ? msg.tabId : undefined
+      );
+      sendResponse(res);
+    })();
     return true;
   }
   if (msg.type === 'COPILOT_GET_POPUP_STATE') {
