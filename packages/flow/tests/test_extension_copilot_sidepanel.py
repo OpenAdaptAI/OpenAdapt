@@ -34,8 +34,8 @@ from openadapt_flow.copilot_bridge import (
     CopilotSessionBridge,
     CopilotViewState,
 )
-from openadapt_flow.copilot_protocol import CopilotRunBinding
-from openadapt_flow.form_tx.types import (
+from openadapt_flow.copilot_protocol import (
+    CopilotRunBinding,
     FormHaltItem,
     FormHaltKind,
     FormTxOutcome,

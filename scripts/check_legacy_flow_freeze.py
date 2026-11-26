@@ -8,14 +8,18 @@ The overlapping legacy guard/transaction stacks in ``packages/flow`` listed in
 with ``openadapt-flow 4.0.0`` and existing callers, and may shrink or receive
 bug/security fixes, but must not grow new surfaces:
 
-1. No new Python modules under frozen directories (``tx/``, ``form_tx/``,
-   ``txplan/``, ``agent_guard/``, ``flight/``, ``wrap/``, ``hooks/``,
-   ``readiness/``) or new root ``shadow*.py`` files in ``openadapt_flow/``.
-2. No new top-level ``openadapt-flow`` CLI commands beyond the frozen set in
+1. No re-creation of deleted legacy stacks (``form_tx/``).
+2. No new Python modules under remaining frozen directories (``tx/``,
+   ``txplan/``, ``agent_guard/``, ``hooks/``) or new root ``shadow*.py`` files
+   in ``openadapt_flow/``.
+3. No new top-level ``openadapt-flow`` CLI commands beyond the frozen set in
    ``packages/flow/tests/fixtures/cli_surface.json``.
-3. No new references from ``openadapt/`` to frozen legacy flow stacks beyond
-   the existing allowlist.
-4. Zero ``openadapt_flow`` imports inside ``packages/kernel/src/openadapt_kernel``.
+4. No new references from ``openadapt/`` to frozen or deleted legacy flow
+   stacks beyond the existing allowlist.
+5. Zero ``openadapt_flow`` imports inside ``packages/kernel/src/openadapt_kernel``.
+
+Note: ``wrap/`` (``openadapt wrap``), ``flight/`` (``openadapt flight``), and
+``readiness/`` (shadow scorecard) are active subsystems and are not frozen.
 
 Deleting files or commands is always allowed.
 
@@ -50,6 +54,16 @@ def check_frozen_modules(root: Path, manifest: dict) -> list[str]:
     flow_pkg = root / FLOW_PKG_REL
     if not flow_pkg.is_dir():
         return violations
+
+    deleted_dirs: list[str] = manifest.get("deleted_directories", [])
+    for stack in sorted(deleted_dirs):
+        stack_dir = flow_pkg / stack
+        if stack_dir.exists():
+            violations.append(
+                f"Deleted legacy stack '{stack}/' was re-created at "
+                f"packages/flow/openadapt_flow/{stack}. "
+                "Add new runtime capabilities in packages/kernel/ instead."
+            )
 
     frozen_dirs: dict[str, list[str]] = manifest["frozen_directories"]
     for stack, allowed_list in sorted(frozen_dirs.items()):
@@ -112,7 +126,11 @@ def check_launcher_imports(root: Path, manifest: dict) -> list[str]:
     if not launcher_dir.is_dir():
         return violations
 
-    frozen_stacks = list(manifest["frozen_directories"].keys()) + ["shadow"]
+    frozen_stacks = (
+        list(manifest.get("deleted_directories", []))
+        + list(manifest["frozen_directories"].keys())
+        + ["shadow"]
+    )
     allowed_map: dict[str, set[str]] = {
         k: set(v) for k, v in manifest["allowed_launcher_imports"].items()
     }

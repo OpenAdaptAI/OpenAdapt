@@ -31,13 +31,11 @@ from openadapt_flow.copilot_protocol import (
     BoundDecisionStore,
     CopilotBoundDecision,
     CopilotRunBinding,
-    private_session_directory,
-)
-from openadapt_flow.form_tx.types import (
     FormHaltItem,
     FormTxOutcome,
     HumanDecisionAction,
     HumanResolutionInput,
+    private_session_directory,
 )
 from openadapt_flow.private_file import open_binary
 from openadapt_flow.report_redaction import redact_text

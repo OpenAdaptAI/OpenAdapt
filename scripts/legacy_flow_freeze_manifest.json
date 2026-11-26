@@ -1,5 +1,8 @@
 {
-  "about": "Legacy flow freeze manifest enforced by scripts/check_legacy_flow_freeze.py. New commit-boundary, staging, healing, and shadow-to-autopilot work belongs in packages/kernel (openadapt-kernel). Frozen legacy stacks in packages/flow may shrink or receive bug/security fixes, but must not add new Python modules, new top-level openadapt-flow CLI commands, or new launcher imports. See docs/architecture/KERNEL_CONSOLIDATION.md.",
+  "about": "Legacy flow freeze manifest enforced by scripts/check_legacy_flow_freeze.py. New commit-boundary, staging, healing, and shadow-to-autopilot work belongs in packages/kernel (openadapt-kernel). Frozen legacy stacks in packages/flow may shrink or receive bug/security fixes, but must not add new Python modules, new top-level openadapt-flow CLI commands, or new launcher imports. Deleted Wave 1 stacks (form_tx/) must not be re-created. wrap/, flight/, and readiness/ are active subsystems (not frozen). See docs/architecture/KERNEL_CONSOLIDATION.md.",
+  "deleted_directories": [
+    "form_tx"
+  ],
   "frozen_directories": {
     "tx": [
       "tx/__init__.py",
@@ -14,22 +17,6 @@
       "tx/sqlite_authority.py",
       "tx/types.py",
       "tx/wire_tap.py"
-    ],
-    "form_tx": [
-      "form_tx/__init__.py",
-      "form_tx/cli.py",
-      "form_tx/codecs.py",
-      "form_tx/judge.py",
-      "form_tx/learning.py",
-      "form_tx/pack_compiler.py",
-      "form_tx/playwright_surface.py",
-      "form_tx/presets/__init__.py",
-      "form_tx/profiles/__init__.py",
-      "form_tx/receipt.py",
-      "form_tx/reconciler.py",
-      "form_tx/session_lease.py",
-      "form_tx/surface.py",
-      "form_tx/types.py"
     ],
     "txplan": [
       "txplan/__init__.py",
@@ -60,38 +47,6 @@
       "agent_guard/session.py",
       "agent_guard/shadow_hold.py"
     ],
-    "flight": [
-      "flight/__init__.py",
-      "flight/cli.py",
-      "flight/computer.py",
-      "flight/egress.py",
-      "flight/gate.py",
-      "flight/proxy.py",
-      "flight/pseudonym.py",
-      "flight/scrub.py",
-      "flight/timeline.py"
-    ],
-    "wrap": [
-      "wrap/__init__.py",
-      "wrap/adaptive_conformal.py",
-      "wrap/approval_gate.py",
-      "wrap/candidate.py",
-      "wrap/checkpoint_spec.py",
-      "wrap/cli.py",
-      "wrap/commit_prosecutor.py",
-      "wrap/compiled_only.py",
-      "wrap/dirty_and_provenance.py",
-      "wrap/dispatch_cli.py",
-      "wrap/entity_ledger.py",
-      "wrap/example.py",
-      "wrap/fallback.py",
-      "wrap/fallback_marker.py",
-      "wrap/hit_test_oracle.py",
-      "wrap/mcp.py",
-      "wrap/origin_firewall.py",
-      "wrap/process.py",
-      "wrap/publish.py"
-    ],
     "hooks": [
       "hooks/__init__.py",
       "hooks/__main__.py",
@@ -101,21 +56,6 @@
       "hooks/engine.py",
       "hooks/install.py",
       "hooks/systems.py"
-    ],
-    "readiness": [
-      "readiness/__init__.py",
-      "readiness/cdp_wire.py",
-      "readiness/cli.py",
-      "readiness/compare.py",
-      "readiness/devtools_relay.py",
-      "readiness/egress.py",
-      "readiness/export.py",
-      "readiness/launcher.py",
-      "readiness/program_child.py",
-      "readiness/reference.py",
-      "readiness/runner.py",
-      "readiness/scorecard.py",
-      "readiness/targets.py"
     ]
   },
   "frozen_root_shadow_modules": [
@@ -223,8 +163,7 @@
   "allowed_launcher_imports": {
     "openadapt/cli.py": [
       "hooks",
-      "txplan",
-      "wrap"
+      "txplan"
     ],
     "openadapt/receipt_verify.py": [
       "tx"

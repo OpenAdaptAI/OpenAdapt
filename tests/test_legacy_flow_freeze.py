@@ -14,6 +14,7 @@ import check_legacy_flow_freeze as freeze  # noqa: E402
 
 def _make_synthetic_repo(tmp_path: Path) -> Path:
     manifest = {
+        "deleted_directories": ["form_tx"],
         "frozen_directories": {
             "tx": ["tx/__init__.py", "tx/receipt.py"],
             "txplan": ["txplan/__init__.py"],
@@ -130,3 +131,11 @@ def test_kernel_importing_openadapt_flow_fails(tmp_path: Path) -> None:
     violations = freeze.check_all(repo)
     assert len(violations) == 1
     assert "openadapt_flow.tx" in violations[0]
+
+
+def test_recreating_deleted_stack_fails(tmp_path: Path) -> None:
+    repo = _make_synthetic_repo(tmp_path)
+    (repo / "packages/flow/openadapt_flow/form_tx").mkdir(parents=True)
+    violations = freeze.check_all(repo)
+    assert len(violations) == 1
+    assert "form_tx/" in violations[0]
