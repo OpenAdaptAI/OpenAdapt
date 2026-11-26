@@ -18,6 +18,7 @@ from openadapt_kernel import (
     ControlSignature,
     DistilledRepairStep,
     EgressPolicy,
+    ExtractedFact,
     FieldType,
     ObligationLedger,
     PolicyDecisionTable,
@@ -27,8 +28,11 @@ from openadapt_kernel import (
     ReadBackProof,
     RubberStampViolationError,
     UnresolvedSlot,
+    calibrate_critic_decision,
+    compile_policy_rules_to_table,
     evaluate_policy_decision,
     evaluate_pre_step_policy,
+    extract_dossier_facts,
     inspect_outbound_payload,
     is_ephemeral_selector,
     lift_cold_trace_to_pack,
@@ -37,6 +41,7 @@ from openadapt_kernel import (
     resume_from_prepare_card,
     verify_completion_closure,
     verify_freetext_fact_coverage,
+    verify_readonly_answer_provenance,
 )
 
 
@@ -672,3 +677,192 @@ def test_egress_guard_allows_standard_w3c_css_keywords() -> None:
     blocked = inspect_outbound_payload(phi_payload, policy)
     assert blocked.allowed is False
     assert "JonathanDoe1984" in blocked.rejected_tokens
+
+
+def test_extract_dossier_facts_and_closure_autowiring() -> None:
+    sources = {
+        "policy_doc": (
+            "Order SKU-4821 billed $1,250.00 on 2026-05-01; appeals due within 30 days. "
+            "Do not issue partial credit without manager signoff."
+        ),
+        "case_record": "Primary Code: J45.909\nStatus: Denied\nReason: Prior authorization expired",
+    }
+    facts = extract_dossier_facts(
+        sources, extra_patterns={"batch_tag": r"\b(BATCH-\d{3})\b"}
+    )
+    cats = {f.category for f in facts}
+    vals = {f.value for f in facts}
+    assert {"code", "date", "currency", "deadline", "policy_clause", "kv_finding"}.issubset(cats)
+    assert "SKU-4821" in vals
+    assert "J45.909" in vals
+    assert "$1,250.00" in vals
+    assert "2026-05-01" in vals
+    assert any("within 30 days" in v.lower() for v in vals)
+    assert any("do not issue partial credit" in v.lower() for v in vals)
+    assert "Prior authorization expired" in vals
+
+    # Auto-wiring into verify_completion_closure catches omitted required facts
+    ledger = ObligationLedger("extract-ep-1", subject_key="CASE-77")
+    ledger.add_obligation("log_note", "Record case determination")
+    ledger.mark_committed(
+        "log_note",
+        ReadBackProof("api_read", "https://portal.example/cases/77", ["CASE-77", "Saved"]),
+    )
+    targeted_facts = (
+        ExtractedFact("code", "J45.909", "case_record", required_in_freetext=True),
+        ExtractedFact("date", "2026-05-01", "policy_doc", required_in_freetext=True),
+        ExtractedFact("currency", "$1,250.00", "policy_doc", required_in_freetext=True),
+        ExtractedFact("kv_finding", "optional background memo", "case_record", required_in_freetext=False),
+    )
+
+    blocked = verify_completion_closure(
+        ledger,
+        step_idx=3,
+        max_steps=10,
+        freetext_notes="Reviewed case on May 1, 2026 for $1,250.00.",
+        extracted_facts=targeted_facts,
+    )
+    assert blocked.passed is False
+    assert blocked.reason == "missing_freetext_facts"
+    assert any("J45.909" in k or k.startswith("code:") for k in blocked.missing_freetext_facts)
+
+    passed = verify_completion_closure(
+        ledger,
+        step_idx=4,
+        max_steps=10,
+        freetext_notes="Reviewed J45.909 on May 1, 2026; billed amount 1250.00 verified.",
+        extracted_facts=targeted_facts,
+    )
+    assert passed.passed is True
+    assert passed.outcome == "VERIFIED"
+
+
+def test_closure_anchored_critic_calibration() -> None:
+    ledger = ObligationLedger("calib-ep-1", subject_key="ORD-99")
+    ledger.add_obligation("commit_order", "Confirm order update")
+    failed_closure = verify_completion_closure(ledger, step_idx=2, max_steps=10)
+    assert failed_closure.passed is False
+
+    # Failed closure ALWAYS escalates even if critic did not veto
+    cal_fail = calibrate_critic_decision(failed_closure, critic_vetoed=False)
+    assert cal_fail.action == "ESCALATE"
+    assert cal_fail.overrode_false_escalation is False
+
+    ledger.mark_committed(
+        "commit_order",
+        ReadBackProof("fresh_reload", "https://shop.example/orders/99", ["ORD-99", "Confirmed"]),
+    )
+    verified_closure = verify_completion_closure(ledger, step_idx=3, max_steps=10)
+    assert verified_closure.passed is True
+
+    # Verified closure + conservative LLM critic veto -> override false escalation
+    cal_override = calibrate_critic_decision(
+        verified_closure, critic_vetoed=True, critic_reason="unsure about sidebar count"
+    )
+    assert cal_override.action == "ALLOW_COMPLETE"
+    assert cal_override.overrode_false_escalation is True
+
+    # Policy human gate is NEVER weakened even when closure passed
+    cal_human = calibrate_critic_decision(
+        verified_closure, critic_vetoed=False, policy_requires_human=True
+    )
+    assert cal_human.action == "PREPARE"
+    assert cal_human.overrode_false_escalation is False
+
+
+def test_readonly_answer_provenance_grounding() -> None:
+    observed_spans = [
+        "Ticket INC-501 status: Pending Approval. Total billed: $249.50 on 2026-04-15 (14 items).",
+    ]
+    observed_urls = ["https://tracker.example/issues/INC-501"]
+
+    grounded = verify_readonly_answer_provenance(
+        'Ticket INC-501 at https://tracker.example/issues/INC-501 is "Pending Approval" '
+        "for $249.50 on Apr 15, 2026 with 14 items.",
+        observed_spans,
+        observed_urls,
+    )
+    assert grounded.covered is True
+    assert not grounded.missing_facts
+
+    hallucinated = verify_readonly_answer_provenance(
+        "Ticket INC-999 at https://fake.example/admin was billed $999.00.",
+        observed_spans,
+        observed_urls,
+    )
+    assert hallucinated.covered is False
+    assert "code:INC-999" in hallucinated.missing_facts
+    assert "url:https://fake.example/admin" in hallucinated.missing_facts
+    assert "currency:$999.00" in hallucinated.missing_facts
+
+    empty_res = verify_readonly_answer_provenance("", observed_spans)
+    assert empty_res.covered is False
+    assert empty_res.missing_facts == ("empty_answer",)
+
+
+def test_compile_policy_rules_to_table_and_step0_wiring() -> None:
+    specs: List[Dict[str, Any]] = [
+        {"kind": "missing_params", "params": ["order_id", "$refund_reason"]},
+        {
+            "kind": "access_management",
+            "allow_patterns": ["https://portal.example/orders/*"],
+            "deny_patterns": ["*/admin/*", "*/delete*"],
+        },
+        {
+            "kind": "policy_contradiction",
+            "rule_id": "expired_return",
+            "when": {"return_window": "expired"},
+            "then": "deny_refund",
+        },
+        {"kind": "ask_the_user", "triggers": ["discount_override"]},
+        {
+            "kind": "irreversible_actions",
+            "actions": ["wire_transfer", "account_purge"],
+            "when": {"action_kind": "wire_transfer"},
+        },
+        {
+            "rule_id": "nl_high_risk",
+            "rule_text": "When risk_tier=high and loss_history=prior_claim then refer_senior",
+        },
+    ]
+
+    table, gate_cfg = compile_policy_rules_to_table(specs, table_id="enterprise_step0_v1")
+    assert table.table_id == "enterprise_step0_v1"
+    assert table.require_human_if_unmatched is True
+    assert gate_cfg["required_params"] == ["order_id", "$refund_reason"]
+    assert "*/admin/*" in gate_cfg["deny_patterns"]
+    assert "wire_transfer" in gate_cfg["irreversible_actions"]
+    assert "discount_override" in gate_cfg["ask_user_triggers"]
+
+    # Compiled NL rule works directly in evaluate_policy_decision
+    nl_res = evaluate_policy_decision(
+        table, {"risk_tier": "high", "loss_history": "prior_claim"}, "auto_bind"
+    )
+    assert nl_res.allowed is False
+    assert nl_res.expected_disposition == "refer_senior"
+
+    # Compiled gate_cfg + table plug directly into evaluate_pre_step_policy
+    missing = evaluate_pre_step_policy(
+        stage="step_0", required_params=gate_cfg["required_params"], dossier={"order_id": "ORD-1"}
+    )
+    assert missing.action == "PREPARE_ASK"
+    assert missing.missing_params == ("$refund_reason",)
+
+    contradiction = evaluate_pre_step_policy(
+        stage="step_0",
+        required_params=gate_cfg["required_params"],
+        dossier={"order_id": "ORD-1", "refund_reason": "late"},
+        policy_table=table,
+        observed_facts={"return_window": "expired"},
+        task_disposition="issue_refund",
+    )
+    assert contradiction.action == "REFUSE"
+    assert contradiction.reason == "policy_contradiction"
+
+    blocked_nav = evaluate_pre_step_policy(
+        stage="pre_navigation",
+        target_url="https://portal.example/admin/users",
+        allow_patterns=gate_cfg["allow_patterns"],
+        deny_patterns=gate_cfg["deny_patterns"],
+    )
+    assert blocked_nav.action == "REFUSE"

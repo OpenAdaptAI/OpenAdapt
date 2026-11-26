@@ -16,7 +16,7 @@ from __future__ import annotations
 import fnmatch
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Dict, List, Literal, Mapping, Optional, Sequence, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Mapping, Optional, Sequence, Set, Tuple
 
 from openadapt_kernel.copilot import ShadowTrace
 from openadapt_kernel.ledger import ObligationLedger
@@ -340,3 +340,90 @@ def evaluate_pre_step_policy(
             if norm_val == norm_src or re.search(rf"(?<![a-z0-9]){re.escape(norm_val)}(?![a-z0-9])", norm_src):
                 return PreStepPolicyResult(True, "ALLOW", "grounded_value_verified")
     return PreStepPolicyResult(False, "VETO", "ungrounded_fill_value", detail=f"Ungrounded value {val!r} for {field_name!r}")
+
+
+_NL_WHEN_THEN_RE = re.compile(r"(?:when|if)\s+(.+?)\s+then\s+([A-Za-z0-9_\- ]+)", re.IGNORECASE)
+_NL_KV_PAIR_RE = re.compile(r"([A-Za-z0-9_]+)\s*(?:=|is)\s*([A-Za-z0-9_*.-]+)", re.IGNORECASE)
+
+
+def compile_policy_rules_to_table(
+    policy_specs: Sequence[Mapping[str, Any]],
+    *,
+    table_id: str = "compiled_step0_policy",
+    require_human_if_unmatched: bool = True,
+) -> Tuple[PolicyDecisionTable, Dict[str, Any]]:
+    """Compile structured or natural-language policy specs into a PolicyDecisionTable and PreStepPolicyGate config."""
+    rules: List[PolicyRule] = []
+    required_params: List[str] = []
+    allow_patterns: List[str] = []
+    deny_patterns: List[str] = []
+    ask_user_triggers: List[str] = []
+    irreversible_actions: List[str] = []
+    require_human = require_human_if_unmatched
+
+    def _extend_unique(dst: List[str], items: Any) -> None:
+        if isinstance(items, str):
+            items = [items]
+        for item in items or ():
+            s = str(item).strip()
+            if s and s not in dst:
+                dst.append(s)
+
+    for idx, spec in enumerate(policy_specs):
+        kind = str(spec.get("kind") or spec.get("type") or "").strip().lower()
+        rule_id = str(spec.get("rule_id") or spec.get("id") or f"compiled_rule_{idx}")
+
+        if kind in ("missing_params", "required_params"):
+            _extend_unique(required_params, spec.get("params") or spec.get("fields") or spec.get("required_params"))
+        elif kind == "access_management":
+            _extend_unique(allow_patterns, spec.get("allow_patterns") or spec.get("allow"))
+            _extend_unique(deny_patterns, spec.get("deny_patterns") or spec.get("deny"))
+        elif kind == "ask_the_user":
+            require_human = True
+            _extend_unique(ask_user_triggers, spec.get("triggers") or spec.get("description") or spec.get("condition"))
+            conds = spec.get("conditions") or spec.get("when")
+            if isinstance(conds, Mapping) and conds:
+                rules.append(PolicyRule(rule_id, {str(k): str(v) for k, v in conds.items()}, "ask_user"))
+        elif kind == "irreversible_actions":
+            require_human = True
+            _extend_unique(irreversible_actions, spec.get("actions") or spec.get("targets") or spec.get("description"))
+            conds = spec.get("conditions") or spec.get("when")
+            if isinstance(conds, Mapping) and conds:
+                rules.append(
+                    PolicyRule(
+                        rule_id,
+                        {str(k): str(v) for k, v in conds.items()},
+                        str(spec.get("required_disposition") or spec.get("then") or "require_human_confirmation"),
+                    )
+                )
+        else:
+            conds = spec.get("conditions") or spec.get("when")
+            disp = spec.get("required_disposition") or spec.get("then")
+            if isinstance(conds, Mapping) and conds and disp:
+                rules.append(PolicyRule(rule_id, {str(k): str(v) for k, v in conds.items()}, str(disp).strip()))
+            else:
+                text = str(spec.get("rule_text") or spec.get("text") or "").strip()
+                m = _NL_WHEN_THEN_RE.search(text)
+                if m:
+                    parsed_conds = {k.strip(): v.strip() for k, v in _NL_KV_PAIR_RE.findall(m.group(1))}
+                    if parsed_conds:
+                        rules.append(PolicyRule(rule_id, parsed_conds, m.group(2).strip().rstrip(".")))
+
+        # Also support inline gate hints on any spec
+        if kind not in ("missing_params", "required_params") and spec.get("required_params"):
+            _extend_unique(required_params, spec.get("required_params"))
+        if kind != "access_management":
+            _extend_unique(allow_patterns, spec.get("allow_patterns"))
+            _extend_unique(deny_patterns, spec.get("deny_patterns"))
+
+    table = PolicyDecisionTable(table_id=table_id, rules=tuple(rules), require_human_if_unmatched=require_human)
+    gate_config: Dict[str, Any] = {
+        "policy_table_id": table_id,
+        "required_params": required_params,
+        "allow_patterns": allow_patterns,
+        "deny_patterns": deny_patterns,
+        "ask_user_triggers": ask_user_triggers,
+        "irreversible_actions": irreversible_actions,
+        "require_human_if_unmatched": require_human,
+    }
+    return table, gate_config

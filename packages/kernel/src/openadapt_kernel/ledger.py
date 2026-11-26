@@ -435,10 +435,29 @@ class ObligationLedger:
 
 
 @dataclass(frozen=True)
+class ExtractedFact:
+    category: str
+    value: str
+    source_key: str
+    required_in_freetext: bool = True
+
+
+@dataclass(frozen=True)
 class FactCoverageReport:
     covered: bool
     matched_facts: tuple[str, ...]
     missing_facts: tuple[str, ...]
+
+
+CriticCalibrationAction = Literal["ALLOW_COMPLETE", "ESCALATE", "PREPARE"]
+
+
+@dataclass(frozen=True)
+class CriticCalibrationVerdict:
+    action: CriticCalibrationAction
+    overrode_false_escalation: bool
+    reason: str
+    critic_reason: str = ""
 
 
 @dataclass
@@ -451,6 +470,10 @@ class ClosureVerdict:
     pending_obligations: List[str] = field(default_factory=list)
     missing_freetext_facts: List[str] = field(default_factory=list)
 
+    @property
+    def passed(self) -> bool:
+        return self.allowed and self.outcome == "VERIFIED"
+
 
 _DATE_SCAN_RE = re.compile(
     r"\b(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4}|[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4})\b"
@@ -459,6 +482,21 @@ _CURRENCY_SCAN_RE = re.compile(
     r"(?:\$\(\s*[\d,]+(?:\.\d{1,2})?\s*\)|\(\s*\$?\s*[\d,]+(?:\.\d{1,2})?\s*\)|[-+]?\s*(?:USD\s*)?\$\s*[\d,]+(?:\.\d{1,2})?|[-+]?\b\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?\b|[-+]?\b\d+\.\d{2}\b)"
 )
 _PHONE_SCAN_RE = re.compile(r"(?:\+?\d[\d\s().-]{7,}\d)")
+_CODE_SCAN_RE = re.compile(
+    r"\b(?:[A-Z]{1,5}[-_](?=[A-Z0-9_-]*\d)[A-Z0-9]{2,}(?:[-_.][A-Z0-9]+)*|[A-Z]\d{2}(?:\.\d{1,4})?)\b"
+)
+_DEADLINE_SCAN_RE = re.compile(
+    r"\b(?:within\s+\d{1,3}\s+(?:business\s+)?(?:days?|hours?|weeks?|months?)|net\s+\d{1,3}|\d{1,3}-day\s+(?:window|limit|period|deadline))\b",
+    re.IGNORECASE,
+)
+_POLICY_CLAUSE_RE = re.compile(
+    r"\b(?:(?:do\s+not|must\s+not|cannot\s+be|not\s+eligible|requires?\s+(?:prior\s+authorization|approval|review|escalation)|refer\s+to|escalate\s+to)[^.;\n]{2,80})",
+    re.IGNORECASE,
+)
+_KV_FINDING_RE = re.compile(r"(?:^|[;\n])\s*([A-Za-z][A-Za-z0-9 _/-]{1,28}):\s*([^\n;]{2,80})")
+_URL_SCAN_RE = re.compile(r"https?://[^\s)\]>\"']+")
+_QUOTED_SCAN_RE = re.compile(r'"([^"]{2,80})"|\'([^\']{2,80})\'')
+_NUMBER_SCAN_RE = re.compile(r"\b\d+(?:,\d{3})*(?:\.\d+)?%?\b")
 
 
 def _lookup_key(mapping: Mapping[str, Any], key: str) -> Any:
@@ -514,6 +552,142 @@ def verify_freetext_fact_coverage(
     return FactCoverageReport(not missing, tuple(matched), tuple(missing))
 
 
+def extract_dossier_facts(
+    source_texts: Mapping[str, str],
+    *,
+    extra_patterns: Optional[Mapping[str, str]] = None,
+) -> tuple[ExtractedFact, ...]:
+    """Deterministically extract structured facts (codes, dates, currency, deadlines, clauses, findings)."""
+    from openadapt_kernel import canonical as _can
+
+    facts: List[ExtractedFact] = []
+    seen: set[tuple[str, str]] = set()
+
+    def _add(category: str, value: str, source_key: str, required: bool = True) -> None:
+        cleaned = " ".join(str(value).strip().split())
+        if not cleaned:
+            return
+        dedup_key = (category, cleaned.casefold())
+        if dedup_key not in seen:
+            seen.add(dedup_key)
+            facts.append(ExtractedFact(category, cleaned, source_key, required))
+
+    for src_key, raw in source_texts.items():
+        text = str(raw or "")
+        if not text.strip():
+            continue
+        for m in _CODE_SCAN_RE.finditer(text):
+            _add("code", m.group(0), src_key, True)
+        for m in _DATE_SCAN_RE.finditer(text):
+            if _can.parse_canonical_date(m.group(0)) is not None:
+                _add("date", m.group(0), src_key, True)
+        for m in _CURRENCY_SCAN_RE.finditer(text):
+            if _can.parse_canonical_currency_cents(m.group(0)) is not None:
+                _add("currency", m.group(0), src_key, True)
+        for m in _DEADLINE_SCAN_RE.finditer(text):
+            _add("deadline", m.group(0), src_key, True)
+        for m in _POLICY_CLAUSE_RE.finditer(text):
+            _add("policy_clause", m.group(0).rstrip(".,;"), src_key, True)
+        for m in _KV_FINDING_RE.finditer(text):
+            k_part, v_part = m.group(1).strip(), m.group(2).strip().rstrip(".")
+            if k_part.lower() in ("http", "https") or v_part.startswith("//"):
+                continue
+            _add("kv_finding", v_part, f"{src_key}:{k_part}", True)
+        if extra_patterns:
+            for cat, pat in extra_patterns.items():
+                for m in re.finditer(pat, text):
+                    _add(cat, m.group(1) if m.groups() else m.group(0), src_key, True)
+    return tuple(facts)
+
+
+def verify_readonly_answer_provenance(
+    answer_text: str,
+    observed_spans: Sequence[str],
+    observed_urls: Sequence[str] = (),
+) -> FactCoverageReport:
+    """Verify concrete tokens (URLs, IDs, dates, currencies, numbers, quotes) in a read-only answer are grounded."""
+    from openadapt_kernel import canonical as _can
+
+    ans = (answer_text or "").strip()
+    if not ans:
+        return FactCoverageReport(False, (), ("empty_answer",))
+
+    combined = "\n".join([*(str(s) for s in observed_spans), *(str(u) for u in observed_urls)])
+    norm_combined = _can.normalize_casefold_ws(combined)
+    norm_urls = [str(u).strip().rstrip(".,;:") for u in observed_urls if str(u).strip()]
+
+    candidates: List[tuple[str, str, FieldType]] = []
+    consumed_spans: List[tuple[int, int]] = []
+
+    def _overlaps(start: int, end: int) -> bool:
+        return any(not (end <= s or start >= e) for s, e in consumed_spans)
+
+    for m in _URL_SCAN_RE.finditer(ans):
+        url_tok = m.group(0).rstrip(".,;:")
+        candidates.append((f"url:{url_tok}", url_tok, "exact"))
+        consumed_spans.append(m.span())
+    for m in _QUOTED_SCAN_RE.finditer(ans):
+        q_tok = (m.group(1) or m.group(2) or "").strip()
+        if q_tok and not _overlaps(*m.span()):
+            candidates.append((f"quote:{q_tok}", q_tok, "casefold_ws"))
+            consumed_spans.append(m.span())
+    for m in _CODE_SCAN_RE.finditer(ans):
+        if not _overlaps(*m.span()):
+            candidates.append((f"code:{m.group(0)}", m.group(0), "code_prefix"))
+            consumed_spans.append(m.span())
+    for m in _DATE_SCAN_RE.finditer(ans):
+        if not _overlaps(*m.span()) and _can.parse_canonical_date(m.group(0)) is not None:
+            candidates.append((f"date:{m.group(0)}", m.group(0), "date"))
+            consumed_spans.append(m.span())
+    for m in _CURRENCY_SCAN_RE.finditer(ans):
+        ctok = m.group(0).strip()
+        if not _overlaps(*m.span()) and _can.parse_canonical_currency_cents(ctok) is not None:
+            candidates.append((f"currency:{ctok}", ctok, "currency"))
+            consumed_spans.append(m.span())
+    for m in _NUMBER_SCAN_RE.finditer(ans):
+        if not _overlaps(*m.span()):
+            candidates.append((f"number:{m.group(0)}", m.group(0), "exact"))
+
+    matched: List[str] = []
+    missing: List[str] = []
+    seen_cands: set[str] = set()
+    for label, tok, ftype in candidates:
+        if label in seen_cands:
+            continue
+        seen_cands.add(label)
+        if label.startswith("url:"):
+            ok = any(tok == u or tok in u or u in tok for u in norm_urls) or tok in combined
+        elif label.startswith("number:"):
+            ok = bool(re.search(rf"(?<![0-9.]){re.escape(tok)}(?![0-9.])", combined))
+        elif ftype == "casefold_ws":
+            ok = _can.normalize_casefold_ws(tok) in norm_combined
+        else:
+            ok = _evidence_cited_in_text(tok, combined, ftype)
+        (matched if ok else missing).append(label)
+    return FactCoverageReport(not missing, tuple(matched), tuple(missing))
+
+
+def calibrate_critic_decision(
+    closure_report: ClosureVerdict,
+    *,
+    critic_vetoed: bool,
+    critic_reason: str = "",
+    policy_requires_human: bool = False,
+) -> CriticCalibrationVerdict:
+    """Calibrate an LLM critic veto against deterministic closure verification and human-policy gates."""
+    if policy_requires_human:
+        return CriticCalibrationVerdict("PREPARE", False, "policy_requires_human", critic_reason)
+    if not closure_report.passed:
+        return CriticCalibrationVerdict(
+            "ESCALATE", False, f"closure_not_verified:{closure_report.reason}", critic_reason
+        )
+    if critic_vetoed:
+        return CriticCalibrationVerdict(
+            "ALLOW_COMPLETE", True, "overrode_conservative_critic_on_verified_closure", critic_reason
+        )
+    return CriticCalibrationVerdict("ALLOW_COMPLETE", False, "closure_and_critic_agreed", critic_reason)
+
+
 def verify_completion_closure(
     ledger: ObligationLedger, *, step_idx: int, max_steps: int, required_dossier_keys: Sequence[str] = (),
     readback_values: Optional[Mapping[str, str]] = None, dossier_values: Optional[Mapping[str, str]] = None,
@@ -522,11 +696,12 @@ def verify_completion_closure(
     post_commit_obligations: Sequence[str] = (),
     freetext_notes: str = "",
     required_freetext_facts: Optional[Mapping[str, str]] = None,
+    extracted_facts: Sequence[ExtractedFact] = (),
 ) -> ClosureVerdict:
     """Enforce non-waivable step-limit default-deny, post-commit chains, dossier keys, triage & freetext facts."""
     from openadapt_kernel.canonical import canonical_equal
 
-    rb, dos, ftypes, triage_req = readback_values or {}, dossier_values or {}, field_types or {}, required_triage_evidence or {}
+    rb, dos, ftypes, triage_req = readback_values or {}, dossier_values or {}, dict(field_types or {}), required_triage_evidence or {}
     pending = ledger.pending_ids()
     unproven = [oid for oid, ob in ledger.obligations.items() if ob.readback_proof is None or not ob.readback_proof.is_valid()]
     unverified_post = [
@@ -563,8 +738,17 @@ def verify_completion_closure(
     if uncited:
         ledger.status, ledger.escalation_reason = "ESCALATED", f"uncited_triage_evidence: {uncited}"
         return ClosureVerdict("ESCALATED", False, "uncited_triage_evidence", uncited_triage_keys=uncited)
-    if required_freetext_facts:
-        cov = verify_freetext_fact_coverage(freetext_notes, required_freetext_facts, field_types=ftypes)
+
+    merged_freetext_facts: Dict[str, str] = dict(required_freetext_facts or {})
+    cat_to_type: Dict[str, FieldType] = {"date": "date", "currency": "currency", "code": "code_prefix"}
+    for idx, ef in enumerate(extracted_facts):
+        if ef.required_in_freetext:
+            fkey = f"{ef.category}:{ef.source_key}:{idx}"
+            merged_freetext_facts[fkey] = ef.value
+            if ef.category in cat_to_type:
+                ftypes.setdefault(fkey, cat_to_type[ef.category])
+    if merged_freetext_facts:
+        cov = verify_freetext_fact_coverage(freetext_notes, merged_freetext_facts, field_types=ftypes)
         if not cov.covered:
             ledger.status, ledger.escalation_reason = "ESCALATED", f"missing_freetext_facts: {list(cov.missing_facts)}"
             return ClosureVerdict("ESCALATED", False, "missing_freetext_facts", missing_freetext_facts=list(cov.missing_facts))
