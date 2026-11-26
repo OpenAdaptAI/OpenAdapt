@@ -6,6 +6,19 @@ from openadapt_kernel.aci import (
     SessionStartNormalizer,
     calibrate_conformal_abstain_threshold,
 )
+from openadapt_kernel.app_cartridge import (
+    AdversarialMutantSpec,
+    APIOracleSpec,
+    AppCartridge,
+    CartridgeQualificationReport,
+    CompiledSOPSpec,
+    SkillMacroSpec,
+    SOPBranchSpec,
+    check_sop_consistency,
+    compile_sop_handbook_to_rules,
+    qualify_app_cartridge_offline,
+    synthesize_app_cartridge_with_coding_agent,
+)
 from openadapt_kernel.canonical import (
     VALID_FIELD_TYPES,
     DossierVariableSchema,
@@ -278,4 +291,7 @@ __all__ = [
     "AppNavigationGraph", "NavEdge", "NavNode", "ReconciliationWatcher", "StuckLoopDetector", "StuckLoopStatus",
     "WatchedReconciliationItem", "sanitize_url_to_view_pattern",
     "ConformalRiskGate", "EpistemicArtifact", "EpistemicReadTracker", "calibrate_conformal_abstain_threshold",
+    "APIOracleSpec", "AdversarialMutantSpec", "AppCartridge", "CartridgeQualificationReport", "CompiledSOPSpec",
+    "SOPBranchSpec", "SkillMacroSpec", "check_sop_consistency", "compile_sop_handbook_to_rules",
+    "qualify_app_cartridge_offline", "synthesize_app_cartridge_with_coding_agent",
 ]
