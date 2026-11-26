@@ -697,6 +697,149 @@
     }
   }
 
+  // --- On-demand local page inspection (user-triggered only) ----------------
+  // Strictly structural: NEVER reads `.value` or `.defaultValue` of any input.
+  // Secret/password/MFA fields are counted for protection notice only and never
+  // included in sampleLabels.
+  const IGNORED_INPUT_TYPES = new Set([
+    'hidden',
+    'submit',
+    'button',
+    'reset',
+    'image',
+  ]);
+  const SUBMIT_TEXT_RE =
+    /\b(submit|save|send|apply|confirm|complete|finish|place order|continue)\b/i;
+
+  function labelTextForField(el, targetDoc) {
+    if (!el || typeof el.getAttribute !== 'function') return '';
+    const aria = String(el.getAttribute('aria-label') || '').trim();
+    if (aria) return aria;
+    if (el.id && targetDoc && typeof targetDoc.querySelector === 'function') {
+      try {
+        const lbl = targetDoc.querySelector(`label[for="${cssEscapeIdent(el.id)}"]`);
+        if (lbl && lbl.textContent && lbl.textContent.trim()) {
+          return lbl.textContent.trim().replace(/\s+/g, ' ');
+        }
+      } catch (e) {}
+    }
+    const placeholder = String(el.getAttribute('placeholder') || '').trim();
+    if (placeholder) return placeholder;
+    const name = String(el.getAttribute('name') || '').trim();
+    if (name) return name.replace(/[_-]+/g, ' ');
+    return '';
+  }
+
+  function inspectPageStructure(doc) {
+    const targetDoc = doc || (typeof document !== 'undefined' ? document : null);
+    let hostname = '';
+    try {
+      hostname = (typeof location !== 'undefined' && location.hostname) || '';
+    } catch (e) {
+      hostname = '';
+    }
+    if (!targetDoc || typeof targetDoc.querySelectorAll !== 'function') {
+      return {
+        hostname,
+        fieldCount: 0,
+        submitCount: 0,
+        secretCount: 0,
+        formCount: 0,
+        sampleLabels: [],
+        stageReady: false,
+      };
+    }
+
+    let forms = [];
+    try {
+      forms = targetDoc.querySelectorAll('form');
+    } catch (e) {
+      forms = [];
+    }
+
+    let controls = [];
+    try {
+      controls = targetDoc.querySelectorAll('input, select, textarea');
+    } catch (e) {
+      controls = [];
+    }
+
+    let fieldCount = 0;
+    let secretCount = 0;
+    const sampleLabels = [];
+    const seenLabels = new Set();
+
+    for (const el of controls) {
+      if (!el || typeof el.getAttribute !== 'function') continue;
+      const tag = String(el.tagName || '').toLowerCase();
+      if (tag === 'input') {
+        const inputType = String(el.getAttribute('type') || 'text').toLowerCase();
+        if (IGNORED_INPUT_TYPES.has(inputType)) continue;
+      }
+      fieldCount += 1;
+      if (isSecretField(el)) {
+        secretCount += 1;
+        continue;
+      }
+      if (sampleLabels.length < 5) {
+        const label = labelTextForField(el, targetDoc).slice(0, 40);
+        if (label && !seenLabels.has(label.toLowerCase())) {
+          seenLabels.add(label.toLowerCase());
+          sampleLabels.push(label);
+        }
+      }
+    }
+
+    let buttonCandidates = [];
+    try {
+      buttonCandidates = targetDoc.querySelectorAll(
+        'button, input[type="submit"], [role="button"]'
+      );
+    } catch (e) {
+      buttonCandidates = [];
+    }
+    let submitCount = 0;
+    for (const btn of buttonCandidates) {
+      if (!btn || typeof btn.getAttribute !== 'function') continue;
+      const tag = String(btn.tagName || '').toLowerCase();
+      const type = String(btn.getAttribute('type') || '').toLowerCase();
+      if (tag === 'input' && type === 'submit') {
+        submitCount += 1;
+        continue;
+      }
+      if (tag === 'button' && type === 'submit') {
+        submitCount += 1;
+        continue;
+      }
+      const text = String(btn.textContent || btn.getAttribute('aria-label') || '')
+        .trim()
+        .replace(/\s+/g, ' ');
+      if (
+        tag === 'button' &&
+        type !== 'button' &&
+        type !== 'reset' &&
+        typeof btn.closest === 'function' &&
+        btn.closest('form')
+      ) {
+        submitCount += 1;
+        continue;
+      }
+      if (text && text.length <= 48 && SUBMIT_TEXT_RE.test(text)) {
+        submitCount += 1;
+      }
+    }
+
+    return {
+      hostname,
+      fieldCount,
+      submitCount,
+      secretCount,
+      formCount: forms.length || 0,
+      sampleLabels,
+      stageReady: fieldCount > 0,
+    };
+  }
+
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!msg || typeof msg !== 'object') return;
     if (msg.type === 'SET_RECORDING') {
@@ -725,6 +868,14 @@
       if (typeof sendResponse === 'function') {
         sendResponse({ ok: true, auth: check });
       }
+      return;
+    }
+    if (msg.type === 'COPILOT_INSPECT_PAGE') {
+      if (isIframe()) return;
+      const inspection = inspectPageStructure();
+      if (typeof sendResponse === 'function') {
+        sendResponse({ ok: true, inspection });
+      }
     }
   });
 
@@ -746,6 +897,7 @@
       setRunActive,
       applyCopilotHighlights,
       detectAuthInterstitial,
+      inspectPageStructure,
       reportAuthInterstitialIfPresent,
       shadowPiercingPath,
       targetEvidence,
