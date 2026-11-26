@@ -4,6 +4,12 @@ This directory contains sanitized per-run JSON ledgers for OpenAdapt's clean-roo
 
 All confidence intervals below are exact **95% Clopper-Pearson** binomial intervals (`scipy.stats.beta.ppf`).
 
+To recompute every count, percentage, 95% Clopper-Pearson CI, McNemar exact p-value, and AUROC directly from the per-episode JSON records using only Python 3 stdlib, run:
+
+```bash
+bash benchmarks/public-runs/repro.sh
+```
+
 ## Files
 
 | File | Benchmark | Scope |
