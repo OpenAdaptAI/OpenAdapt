@@ -16,7 +16,19 @@ from __future__ import annotations
 import fnmatch
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Mapping, Optional, Sequence, Set, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+)
 
 from openadapt_kernel.copilot import ShadowTrace
 from openadapt_kernel.ledger import ObligationLedger
@@ -344,6 +356,20 @@ def evaluate_pre_step_policy(
 
 _NL_WHEN_THEN_RE = re.compile(r"(?:when|if)\s+(.+?)\s+then\s+([A-Za-z0-9_\- ]+)", re.IGNORECASE)
 _NL_KV_PAIR_RE = re.compile(r"([A-Za-z0-9_]+)\s*(?:=|is)\s*([A-Za-z0-9_*.-]+)", re.IGNORECASE)
+_NL_ASK_PARAM_RE = re.compile(
+    r"\bask\s+(?:the\s+)?user\s+(?:for|to\s+provide|to\s+confirm)\s+(?:the\s+)?([A-Za-z0-9_ -]{2,40}?)(?=\s+(?:before|prior|if|when|to\s+[a-z])|[.,;]|$)",
+    re.IGNORECASE,
+)
+_NL_SLASH_PATH_RE = re.compile(r"(?<![A-Za-z0-9:/])(/[A-Za-z0-9_./-]+)")
+_NL_ADMIN_AREA_RE = re.compile(r"\b(admin(?:\s+settings|\s+panel|\s+console)?|billing\s+settings|system\s+settings)\b", re.IGNORECASE)
+_NL_PROHIBITED_VERB_RE = re.compile(
+    r"\b(?:never|do\s+not|must\s+not|cannot|forbid(?:den)?\s+to)\s+(delete|remove|purge|modify|edit|change|overwrite|cancel|transfer|submit|approve|refund|close|access|navigate\s+to)\s+(?:any\s+|the\s+|a\s+)?([A-Za-z0-9_ /-]{2,40}?)(?=[.,;]|\s+(?:without|unless|before)|$)",
+    re.IGNORECASE,
+)
+
+
+def _slug_param(raw: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", raw.strip().lower()).strip("_")
 
 
 def compile_policy_rules_to_table(
@@ -351,15 +377,18 @@ def compile_policy_rules_to_table(
     *,
     table_id: str = "compiled_step0_policy",
     require_human_if_unmatched: bool = True,
+    llm_compiler_fn: Optional[Callable[[Sequence[Mapping[str, Any]]], Mapping[str, Any]]] = None,
 ) -> Tuple[PolicyDecisionTable, Dict[str, Any]]:
     """Compile structured or natural-language policy specs into a PolicyDecisionTable and PreStepPolicyGate config."""
     rules: List[PolicyRule] = []
+    seen_rule_ids: Set[str] = set()
     required_params: List[str] = []
     allow_patterns: List[str] = []
     deny_patterns: List[str] = []
     ask_user_triggers: List[str] = []
     irreversible_actions: List[str] = []
     require_human = require_human_if_unmatched
+    grounding_required = False
 
     def _extend_unique(dst: List[str], items: Any) -> None:
         if isinstance(items, str):
@@ -369,52 +398,111 @@ def compile_policy_rules_to_table(
             if s and s not in dst:
                 dst.append(s)
 
+    def _add_rule(rule: PolicyRule) -> None:
+        if rule.rule_id not in seen_rule_ids:
+            seen_rule_ids.add(rule.rule_id)
+            rules.append(rule)
+
     for idx, spec in enumerate(policy_specs):
-        kind = str(spec.get("kind") or spec.get("type") or "").strip().lower()
+        kind = str(
+            spec.get("policy_template_id") or spec.get("category") or spec.get("kind") or spec.get("type") or ""
+        ).strip().lower()
         rule_id = str(spec.get("rule_id") or spec.get("id") or f"compiled_rule_{idx}")
+        desc = str(spec.get("description") or spec.get("rule_text") or spec.get("text") or "").strip()
 
         if kind in ("missing_params", "required_params"):
             _extend_unique(required_params, spec.get("params") or spec.get("fields") or spec.get("required_params"))
+            for m in _NL_ASK_PARAM_RE.finditer(desc):
+                slug = _slug_param(m.group(1))
+                if slug:
+                    _extend_unique(required_params, slug)
+                    _extend_unique(ask_user_triggers, slug)
         elif kind == "access_management":
             _extend_unique(allow_patterns, spec.get("allow_patterns") or spec.get("allow"))
             _extend_unique(deny_patterns, spec.get("deny_patterns") or spec.get("deny"))
+            for m in _NL_SLASH_PATH_RE.finditer(desc):
+                _extend_unique(deny_patterns, f"*{m.group(1)}*")
+            for m in _NL_ADMIN_AREA_RE.finditer(desc):
+                head = m.group(1).strip().lower().split()[0]
+                _extend_unique(deny_patterns, f"*{head}*")
         elif kind == "ask_the_user":
             require_human = True
-            _extend_unique(ask_user_triggers, spec.get("triggers") or spec.get("description") or spec.get("condition"))
+            _extend_unique(ask_user_triggers, spec.get("triggers") or spec.get("condition"))
+            for m in _NL_ASK_PARAM_RE.finditer(desc):
+                slug = _slug_param(m.group(1))
+                if slug:
+                    _extend_unique(required_params, slug)
+                    _extend_unique(ask_user_triggers, slug)
+            if desc and not ask_user_triggers:
+                _extend_unique(ask_user_triggers, desc)
             conds = spec.get("conditions") or spec.get("when")
             if isinstance(conds, Mapping) and conds:
-                rules.append(PolicyRule(rule_id, {str(k): str(v) for k, v in conds.items()}, "ask_user"))
+                _add_rule(PolicyRule(rule_id, {str(k): str(v) for k, v in conds.items()}, "ask_user"))
         elif kind == "irreversible_actions":
             require_human = True
-            _extend_unique(irreversible_actions, spec.get("actions") or spec.get("targets") or spec.get("description"))
+            _extend_unique(irreversible_actions, spec.get("actions") or spec.get("targets"))
             conds = spec.get("conditions") or spec.get("when")
             if isinstance(conds, Mapping) and conds:
-                rules.append(
+                _add_rule(
                     PolicyRule(
                         rule_id,
                         {str(k): str(v) for k, v in conds.items()},
                         str(spec.get("required_disposition") or spec.get("then") or "require_human_confirmation"),
                     )
                 )
+            elif desc:
+                _extend_unique(irreversible_actions, desc)
+        elif kind == "hallucinated_information":
+            grounding_required = True
         else:
             conds = spec.get("conditions") or spec.get("when")
             disp = spec.get("required_disposition") or spec.get("then")
             if isinstance(conds, Mapping) and conds and disp:
-                rules.append(PolicyRule(rule_id, {str(k): str(v) for k, v in conds.items()}, str(disp).strip()))
-            else:
-                text = str(spec.get("rule_text") or spec.get("text") or "").strip()
-                m = _NL_WHEN_THEN_RE.search(text)
-                if m:
-                    parsed_conds = {k.strip(): v.strip() for k, v in _NL_KV_PAIR_RE.findall(m.group(1))}
+                _add_rule(PolicyRule(rule_id, {str(k): str(v) for k, v in conds.items()}, str(disp).strip()))
+            elif desc:
+                wt_m = _NL_WHEN_THEN_RE.search(desc)
+                if wt_m:
+                    parsed_conds = {k.strip(): v.strip() for k, v in _NL_KV_PAIR_RE.findall(wt_m.group(1))}
                     if parsed_conds:
-                        rules.append(PolicyRule(rule_id, parsed_conds, m.group(2).strip().rstrip(".")))
+                        _add_rule(PolicyRule(rule_id, parsed_conds, wt_m.group(2).strip().rstrip(".")))
 
-        # Also support inline gate hints on any spec
+        # Extract prohibited verbs ("never delete <target>") into REFUSE PolicyRules across any policy template
+        if desc and not (isinstance(spec.get("conditions") or spec.get("when"), Mapping)):
+            for p_idx, pm in enumerate(_NL_PROHIBITED_VERB_RE.finditer(desc)):
+                verb = _slug_param(pm.group(1))
+                target = _slug_param(pm.group(2))
+                if verb and target:
+                    _add_rule(PolicyRule(f"{rule_id}_prohibit_{p_idx}", {"action": verb, "target": target}, "REFUSE"))
+                    if kind == "irreversible_actions":
+                        _extend_unique(irreversible_actions, f"{verb}:{target}")
+
         if kind not in ("missing_params", "required_params") and spec.get("required_params"):
             _extend_unique(required_params, spec.get("required_params"))
         if kind != "access_management":
             _extend_unique(allow_patterns, spec.get("allow_patterns"))
             _extend_unique(deny_patterns, spec.get("deny_patterns"))
+
+    if llm_compiler_fn is not None:
+        compiled = llm_compiler_fn(policy_specs) or {}
+        _extend_unique(required_params, compiled.get("required_params"))
+        _extend_unique(allow_patterns, compiled.get("allow_patterns"))
+        _extend_unique(deny_patterns, compiled.get("deny_patterns"))
+        _extend_unique(ask_user_triggers, compiled.get("ask_user_triggers"))
+        _extend_unique(irreversible_actions, compiled.get("irreversible_actions"))
+        for r_idx, raw_r in enumerate(compiled.get("rules") or ()):
+            if isinstance(raw_r, PolicyRule):
+                _add_rule(raw_r)
+            elif isinstance(raw_r, Mapping):
+                c_map = raw_r.get("conditions") or raw_r.get("when")
+                disp = raw_r.get("required_disposition") or raw_r.get("then")
+                if isinstance(c_map, Mapping) and c_map and disp:
+                    _add_rule(
+                        PolicyRule(
+                            str(raw_r.get("rule_id") or f"llm_rule_{r_idx}"),
+                            {str(k): str(v) for k, v in c_map.items()},
+                            str(disp).strip(),
+                        )
+                    )
 
     table = PolicyDecisionTable(table_id=table_id, rules=tuple(rules), require_human_if_unmatched=require_human)
     gate_config: Dict[str, Any] = {
@@ -425,5 +513,6 @@ def compile_policy_rules_to_table(
         "ask_user_triggers": ask_user_triggers,
         "irreversible_actions": irreversible_actions,
         "require_human_if_unmatched": require_human,
+        "grounding_required": grounding_required,
     }
     return table, gate_config
