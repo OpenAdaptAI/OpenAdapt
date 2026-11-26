@@ -91,10 +91,10 @@ def probe_before_click(page: Any, selector: str) -> ProbeResult:
         focus_ok = False
 
     return ProbeResult(
-        safe_to_click=True,
+        safe_to_click=focus_ok,
         found=True,
         occluded=False,
         disabled=False,
         focus_responded=focus_ok,
-        reason="clear",
+        reason="clear" if focus_ok else "hover_focus_probe_failed",
     )

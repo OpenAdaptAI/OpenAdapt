@@ -10,19 +10,44 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional, Sequence
+from typing import Any, Dict, List, Literal, Optional, Sequence, Set
+from urllib.parse import urlparse
 
 MUTATING_HTTP_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 _SEARCH_FILTER_RE = re.compile(
-    r"(search|filter|query|find|lookup|keyword|pagination|page_size|sort)",
+    r"(?:^|[\s_-])(?:search|searchbox|search[\s_-]query|filter|keyword|pagination|page[\s_-]?size|sort[\s_-]?by|order[\s_-]?by)(?:$|[\s_-])",
     re.IGNORECASE,
 )
+_TELEMETRY_HOSTS = frozenset({
+    "google-analytics.com", "analytics.google.com", "posthog.com",
+    "segment.io", "segment.com", "sentry.io", "mixpanel.com", "plausible.io",
+})
 _TELEMETRY_PATH_RE = re.compile(
-    r"(/analytics|/telemetry|/metrics|/collect|/beacon|/sentry|/posthog|/_next/data)",
-    re.IGNORECASE,
+    r"/(?:analytics|telemetry|metrics|beacon|sentry|posthog|_next/data)(?:/|$)", re.IGNORECASE
 )
+
+
+def _is_telemetry_url(url: str) -> bool:
+    parsed = urlparse(url or "")
+    host = (parsed.hostname or "").lower()
+    if any(host == th or host.endswith(f".{th}") for th in _TELEMETRY_HOSTS):
+        return True
+    return bool(_TELEMETRY_PATH_RE.search(parsed.path or ""))
+
+
+def _url_matches_origin(url: str, target_origin: str) -> bool:
+    if not target_origin:
+        return True
+    up = urlparse(url or "")
+    tp = urlparse(target_origin)
+    if not up.scheme or not up.netloc or not tp.scheme or not tp.netloc:
+        return False
+    if tp.port is not None:
+        return up.scheme.lower() == tp.scheme.lower() and up.netloc.lower() == tp.netloc.lower()
+    return up.scheme.lower() == tp.scheme.lower() and (up.hostname or "").lower() == (tp.hostname or "").lower()
 
 
 @dataclass
@@ -69,6 +94,7 @@ class CommitInterceptor:
         self._pending_events: List[NetworkEvent] = []
         self._ignored_res = [re.compile(p, re.IGNORECASE) for p in ignored_url_patterns]
         self._attached_pages: List[Any] = []
+        self._inflight_mutating: Set[int] = set()
 
     @property
     def dirty_fields(self) -> Dict[str, str]:
@@ -98,6 +124,7 @@ class CommitInterceptor:
 
     def begin_step(self) -> None:
         self._pending_events.clear()
+        self._inflight_mutating.clear()
 
     def record_network_event(self, event: NetworkEvent) -> None:
         self._pending_events.append(event)
@@ -121,30 +148,89 @@ class CommitInterceptor:
                 ev = NetworkEvent(method=method, url=url, resource_type=rtype, post_data_preview=preview)
                 pending_by_req[id(req)] = ev
                 self._pending_events.append(ev)
+                if self._is_mutating_event(ev):
+                    self._inflight_mutating.add(id(req))
             except Exception:
                 return
 
         def _on_response(resp: Any) -> None:
             try:
                 req = resp.request
+                self._inflight_mutating.discard(id(req))
                 ev = pending_by_req.get(id(req))
                 if ev is not None:
                     ev.status = int(resp.status)
             except Exception:
                 return
 
+        def _on_request_failed(req: Any) -> None:
+            try:
+                self._inflight_mutating.discard(id(req))
+            except Exception:
+                return
+
         page.on("request", _on_request)
         page.on("response", _on_response)
+        page.on("requestfailed", _on_request_failed)
         self._attached_pages.append(page)
 
     def _is_mutating_event(self, ev: NetworkEvent) -> bool:
         if ev.method.upper() not in MUTATING_HTTP_METHODS:
             return False
-        if _TELEMETRY_PATH_RE.search(ev.url):
+        if _is_telemetry_url(ev.url):
             return False
         if any(rx.search(ev.url) for rx in self._ignored_res):
             return False
         return True
+
+    def has_target_origin_2xx_mutation(self, target_origin: str = "") -> bool:
+        return any(
+            self._is_mutating_event(ev)
+            and _url_matches_origin(ev.url, target_origin)
+            and ev.status is not None
+            and 200 <= ev.status < 300
+            for ev in self._pending_events
+        )
+
+    def wait_for_commit_settle(
+        self,
+        page: Any,
+        *,
+        target_origin: str = "",
+        timeout_ms: int = 5000,
+        quiet_ms: int = 120,
+    ) -> bool:
+        """Wait for pending target-origin mutating requests + short DOM quiet window."""
+        deadline = time.monotonic() + max(timeout_ms, 50) / 1000.0
+        page.wait_for_timeout(40)
+        while time.monotonic() < deadline:
+            inflight = bool(self._inflight_mutating) or any(
+                self._is_mutating_event(ev)
+                and _url_matches_origin(ev.url, target_origin)
+                and ev.status is None
+                for ev in self._pending_events
+            )
+            if inflight:
+                page.wait_for_timeout(30)
+                continue
+            rem_ms = max(int((deadline - time.monotonic()) * 1000), 20)
+            try:
+                page.evaluate(
+                    """([q, cap]) => new Promise((res) => {
+                      let done = false;
+                      const fin = (v) => { if (!done) { done = true; obs.disconnect(); res(v); } };
+                      let t = setTimeout(() => fin(true), q);
+                      const obs = new MutationObserver(() => { clearTimeout(t); t = setTimeout(() => fin(true), q); });
+                      if (document.body) obs.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true });
+                      setTimeout(() => fin(false), Math.min(cap, q * 4));
+                    })""",
+                    [quiet_ms, rem_ms],
+                )
+            except Exception:
+                page.wait_for_timeout(min(quiet_ms, rem_ms))
+            if not self._inflight_mutating:
+                return True
+        return False
 
     def classify_step(
         self,
@@ -163,34 +249,14 @@ class CommitInterceptor:
         mutating = [ev for ev in self._pending_events if self._is_mutating_event(ev)]
 
         if had_file_upload:
-            return CommitClassification(
-                is_commit=True,
-                kind="file_upload",
-                reason="file_upload_dispatched",
-                mutating_events=mutating,
-            )
-
+            return CommitClassification(True, "file_upload", "file_upload_dispatched", mutating)
         if mutating:
             return CommitClassification(
-                is_commit=True,
-                kind="http_mutation",
-                reason=f"observed_{len(mutating)}_mutating_http_requests",
-                mutating_events=mutating,
+                True, "http_mutation", f"observed_{len(mutating)}_mutating_http_requests", mutating
             )
-
-        tag_l = element_tag.strip().lower()
-        role_l = element_role.strip().lower()
+        tag_l, role_l = element_tag.strip().lower(), element_role.strip().lower()
         if form_submitted and self._dirty_fields and tag_l != "a" and role_l != "link":
             return CommitClassification(
-                is_commit=True,
-                kind="form_submit",
-                reason=f"form_submitted_with_{len(self._dirty_fields)}_dirty_fields",
-                mutating_events=[],
+                True, "form_submit", f"form_submitted_with_{len(self._dirty_fields)}_dirty_fields", []
             )
-
-        return CommitClassification(
-            is_commit=False,
-            kind="read_only_nav",
-            reason="no_wire_mutation_or_dirty_submit",
-            mutating_events=[],
-        )
+        return CommitClassification(False, "read_only_nav", "no_wire_mutation_or_dirty_submit", [])
