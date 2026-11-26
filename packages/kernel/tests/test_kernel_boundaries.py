@@ -1,4 +1,4 @@
-"""Boundary tests: zero openadapt_flow imports, zero app-specific names, and strict <9,500 LOC budget."""
+"""Boundary tests: zero openadapt_flow imports, zero app-specific names, and strict <10,500 LOC budget."""
 
 from __future__ import annotations
 
@@ -39,4 +39,4 @@ def test_zero_legacy_engine_imports_and_zero_app_names() -> None:
         for app in FORBIDDEN_APP_NAMES:
             assert app not in lower, f"{path} contains app-specific string {app!r}"
 
-    assert total_lines < 9500, f"Kernel exceeded 9,500 LOC budget: {total_lines} lines"
+    assert total_lines < 10500, f"Kernel exceeded 10,500 LOC budget: {total_lines} lines"

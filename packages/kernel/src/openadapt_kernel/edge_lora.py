@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import importlib
-from dataclasses import dataclass, field
-from typing import Any, Dict, FrozenSet, Literal, Optional, Tuple
+import json
+import tempfile
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Any, Dict, FrozenSet, List, Literal, Mapping, Optional, Sequence, Tuple, Union
 
+from openadapt_kernel.egress_guard import EgressBlockedError, EgressPolicy, LocalEgressGuard
 from openadapt_kernel.providers import (
     OpenAICompatHTTPProvider,
     OptionalDependencyError,
     is_loopback_url,
 )
+from openadapt_kernel.zero_phi_repair import sanitize_ui_label_allowlist
 
 SpecialistRole = Literal["pointer_stage", "blinded_crop_ocr", "probe_nav"]
 VALID_SPECIALIST_ROLES: FrozenSet[str] = frozenset({"pointer_stage", "blinded_crop_ocr", "probe_nav"})
@@ -111,3 +116,112 @@ class EdgeLoRARuntime:
         inputs = self._tokenizer(f"{system_prompt}\n{prompt}".strip() if system_prompt else prompt, return_tensors="pt")
         out_ids = self._peft_model.generate(**inputs, max_new_tokens=max_tokens, do_sample=temperature > 0.0)
         return str(self._tokenizer.decode(out_ids[0], skip_special_tokens=True))
+
+
+@dataclass(frozen=True)
+class LoRATrainingRecord:
+    role: SpecialistRole
+    prompt: str
+    completion: str
+    source_kind: str
+    record_id: str
+
+
+_LORA_EXPORT_EXTRA_TOKENS: FrozenSet[str] = frozenset(
+    "blinded_crop_ocr canary completion extract field_type map pointer_stage portal_pack "
+    "prepare_card probe_nav prompt record_id role shadow_trace source_kind stage verify".split()
+)
+
+
+def _lora_export_policy(policy: Optional[EgressPolicy] = None) -> EgressPolicy:
+    base = policy or EgressPolicy()
+    return EgressPolicy(
+        allowed_tokens=base.allowed_tokens,
+        include_html_aria_vocab=base.include_html_aria_vocab,
+        include_clinical_vocab=base.include_clinical_vocab,
+        extra_allowed_tokens=base.extra_allowed_tokens | _LORA_EXPORT_EXTRA_TOKENS,
+        allowed_var_keys=base.allowed_var_keys | frozenset(f"$var_{i}" for i in range(1, 33)),
+    )
+
+
+def export_lora_training_records(
+    traces_or_packs: Sequence[Any],
+    *,
+    output_jsonl_path: Optional[Union[str, Path]] = None,
+    egress_policy: Optional[EgressPolicy] = None,
+    ledger_path: Optional[Union[str, Path]] = None,
+) -> List[LoRATrainingRecord]:
+    """Convert verified ShadowTrace/PortalPack/PrepareCard objects into Zero-PHI LoRA JSONL records."""
+    pol = _lora_export_policy(egress_policy)
+    led = Path(ledger_path) if ledger_path else (Path(tempfile.mkdtemp(prefix="oa_lora_export_")) / "outbound_egress_ledger.jsonl")
+    guard = LocalEgressGuard(led, policy=pol)
+    records: List[LoRATrainingRecord] = []
+
+    def _append_audited(rec: LoRATrainingRecord) -> None:
+        verdict = guard.check_and_record(asdict(rec), destination="lora_dataset_export")
+        if not verdict.allowed:
+            raise EgressBlockedError(verdict)
+        records.append(rec)
+
+    for idx, item in enumerate(traces_or_packs):
+        cls_name = type(item).__name__
+        if cls_name == "ShadowTrace" or (isinstance(item, Mapping) and "submitted_fields" in item):
+            fields = item.submitted_fields if hasattr(item, "submitted_fields") else item.get("submitted_fields", {})
+            keys = sorted(str(k) for k in (fields or {}).keys())
+            sanitized_keys = [sanitize_ui_label_allowlist(k.replace("_", " ")) or "field" for k in keys]
+            var_pairs = ", ".join(f"{sk}=$var_{i}" for i, sk in enumerate(sanitized_keys, start=1)) or "field=$var_1"
+            _append_audited(
+                LoRATrainingRecord(
+                    "pointer_stage",
+                    f"stage form fields: {' '.join(sanitized_keys) or 'field'}",
+                    var_pairs,
+                    "shadow_trace",
+                    f"CANARY_REC_{len(records) + 1}",
+                )
+            )
+            _append_audited(
+                LoRATrainingRecord(
+                    "blinded_crop_ocr",
+                    f"extract value: {sanitized_keys[0] if sanitized_keys else 'field'}",
+                    "CANARY_STR_1",
+                    "shadow_trace",
+                    f"CANARY_REC_{len(records) + 1}",
+                )
+            )
+        elif cls_name == "PortalPack" or (isinstance(item, Mapping) and "pack_id" in item):
+            req_fields = (
+                item.variable_fields
+                if hasattr(item, "variable_fields")
+                else item.get("variable_fields", item.get("required_fields", ()))
+            )
+            sanitized = [sanitize_ui_label_allowlist(str(f).replace("_", " ")) or "field" for f in (req_fields or ())]
+            _append_audited(
+                LoRATrainingRecord(
+                    "probe_nav",
+                    f"verify form fields: {' '.join(sanitized) or 'submit'}",
+                    "click submit button",
+                    "portal_pack",
+                    f"CANARY_REC_{len(records) + 1}",
+                )
+            )
+        elif cls_name == "PrepareCard" or (isinstance(item, Mapping) and "staged_bindings" in item):
+            labels = item.control_labels if hasattr(item, "control_labels") else item.get("control_labels", {})
+            sanitized = [sanitize_ui_label_allowlist(str(v)) or "field" for v in (labels or {}).values()]
+            var_pairs = ", ".join(f"{lbl}=$var_{i}" for i, lbl in enumerate(sanitized, start=1)) or "field=$var_1"
+            _append_audited(
+                LoRATrainingRecord(
+                    "pointer_stage",
+                    f"map controls: {' '.join(sanitized) or 'field'}",
+                    var_pairs,
+                    "prepare_card",
+                    f"CANARY_REC_{len(records) + 1}",
+                )
+            )
+
+    if output_jsonl_path is not None:
+        out_path = Path(output_jsonl_path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w", encoding="utf-8") as fh:
+            for rec in records:
+                fh.write(json.dumps(asdict(rec), sort_keys=True) + "\n")
+    return records

@@ -7,10 +7,12 @@ import json
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import pytest
 
+from openadapt_kernel.copilot import PortalPack, ShadowTrace
 from openadapt_kernel.desktop_driver import (
     CitrixBoxGraphDriver,
     DesktopControlAction,
@@ -18,9 +20,21 @@ from openadapt_kernel.desktop_driver import (
     WindowsUIADriver,
     get_desktop_driver,
 )
-from openadapt_kernel.edge_lora import EdgeLoRAConfig, EdgeLoRARuntime, LoRAAdapterSpec
-from openadapt_kernel.egress_guard import EgressBlockedError
+from openadapt_kernel.dgm_pr import FailureRecord
+from openadapt_kernel.edge_lora import (
+    EdgeLoRAConfig,
+    EdgeLoRARuntime,
+    LoRAAdapterSpec,
+    export_lora_training_records,
+)
+from openadapt_kernel.egress_guard import EgressBlockedError, LocalEgressGuard
+from openadapt_kernel.lifecycle import (
+    LifecycleConfig,
+    run_self_healing_lifecycle,
+    verify_egress_ledger_file,
+)
 from openadapt_kernel.macro import ControlSignature
+from openadapt_kernel.prepare import PrepareCard
 from openadapt_kernel.providers import (
     DEFAULT_PROVIDER_REGISTRY,
     OpenAICompatHTTPProvider,
@@ -218,3 +232,171 @@ def test_citrix_box_graph_driver_and_os_dispatch(monkeypatch: pytest.MonkeyPatch
         WindowsUIADriver().capture_a11y_tree()
     with pytest.raises(OptionalDependencyError, match="ApplicationServices"):
         MacOSAXDriver().capture_a11y_tree()
+
+
+def test_export_lora_training_records_zero_phi_and_jsonl(tmp_path: Path) -> None:
+    trace = ShadowTrace(
+        trace_id="tr_1",
+        portal_origin="https://portal.example",
+        source_dossier={"patient_name": "JonathanDoe1984", "member_id": "123-45-6789"},
+        submitted_fields={"patient_name": "JonathanDoe1984", "member_id": "123-45-6789"},
+        readback_url="https://portal.example/record",
+        readback_text="Record saved",
+    )
+    pack = PortalPack(
+        pack_id="pk_1",
+        portal_origin="https://portal.example",
+        variable_fields=["patient_name", "member_id"],
+        static_defaults={},
+        provenance_map={"patient_name": "patient_name", "member_id": "member_id"},
+        readback_url_pattern="https://portal.example/record",
+        stage="VERIFIED_AUTOPILOT",
+    )
+    card = PrepareCard(
+        card_id="card_1",
+        portal_origin="https://portal.example",
+        staged_bindings={0: "$var_1"},
+        control_labels={0: "Member Name"},
+    )
+
+    out_jsonl = tmp_path / "lora_train.jsonl"
+    ledger_path = tmp_path / "lora_egress.jsonl"
+    records = export_lora_training_records(
+        [trace, pack, card], output_jsonl_path=out_jsonl, ledger_path=ledger_path
+    )
+    assert len(records) == 4
+    roles = {r.role for r in records}
+    assert roles == {"pointer_stage", "blinded_crop_ocr", "probe_nav"}
+
+    raw_jsonl = out_jsonl.read_text(encoding="utf-8")
+    assert "JonathanDoe1984" not in raw_jsonl
+    assert "123-45-6789" not in raw_jsonl
+    assert len(raw_jsonl.strip().splitlines()) == 4
+
+    audit = verify_egress_ledger_file(ledger_path)
+    assert audit["integrity_valid"] is True
+    assert audit["allowed_entries"] == 4
+    assert audit["phi_bytes_leaked"] == 0
+
+
+def test_verify_egress_ledger_file_valid_and_tamper_detection(tmp_path: Path) -> None:
+    ledger_path = tmp_path / "outbound_egress_ledger.jsonl"
+    guard = LocalEgressGuard(ledger_path)
+    v_ok = guard.check_and_record({"tag": "button", "idx": 1}, destination="twin_synth")
+    assert v_ok.allowed is True
+    v_bad = guard.check_and_record({"raw": "JonathanDoe1984"}, destination="twin_synth")
+    assert v_bad.allowed is False
+
+    report = verify_egress_ledger_file(ledger_path)
+    assert report["integrity_valid"] is True
+    assert report["total_entries"] == 2
+    assert report["allowed_entries"] == 1
+    assert report["blocked_entries"] == 1
+    assert report["phi_bytes_leaked"] == 0
+    assert len(report["chain_head_sha256"]) == 64
+
+    # Tampering with a single field breaks SHA-256 chain verification
+    tampered = ledger_path.read_text(encoding="utf-8").replace("twin_synth", "tampered_dest", 1)
+    ledger_path.write_text(tampered, encoding="utf-8")
+    tampered_report = verify_egress_ledger_file(ledger_path)
+    assert tampered_report["integrity_valid"] is False
+
+
+def test_run_self_healing_lifecycle_end_to_end(tmp_path: Path) -> None:
+    ledger_path = tmp_path / "lifecycle_egress.jsonl"
+    lora_jsonl = tmp_path / "lifecycle_lora.jsonl"
+    pack = PortalPack(
+        pack_id="pk_lifecycle",
+        portal_origin="https://portal.example",
+        variable_fields=["title"],
+        static_defaults={},
+        provenance_map={"title": "title"},
+        readback_url_pattern="https://portal.example/record",
+        stage="VERIFIED_AUTOPILOT",
+    )
+    trace = ShadowTrace(
+        trace_id="tr_life",
+        portal_origin="https://portal.example",
+        source_dossier={"title": "SecretPatientTitle99"},
+        submitted_fields={"title": "SecretPatientTitle99"},
+        readback_url="https://portal.example/record",
+        readback_text="Record saved",
+    )
+    failures = [
+        FailureRecord("pk_a", "selector_not_found", ("submit", "button"), "button missing"),
+        FailureRecord("pk_b", "selector_not_found", ("submit", "button"), "button missing"),
+    ]
+
+    def stub_twin_coder(_prompt: str) -> str:
+        return json.dumps(
+            {
+                "pages": [
+                    {
+                        "url_path": "/form",
+                        "html": '<form method="post" action="/submit"><input name="title" /><button type="submit">Submit</button></form>',
+                    },
+                    {"url_path": "/record", "html": '<div data-oa-twin-store="records"></div>'},
+                ],
+                "api_routes": [
+                    {
+                        "method": "POST",
+                        "path_pattern": "/submit",
+                        "mutates_collection": "records",
+                        "response_template": {"status": "ok"},
+                        "status_code": 303,
+                        "redirect_to": "/record",
+                    }
+                ],
+            }
+        )
+
+    cfg = LifecycleConfig(
+        pack_id="pk_lifecycle",
+        min_cluster_size=2,
+        egress_ledger_path=ledger_path,
+        lora_output_jsonl_path=lora_jsonl,
+    )
+    report = run_self_healing_lifecycle(
+        cfg,
+        pack=pack,
+        sanitized_trace_summary={"pages": [{"path": "/form", "tag": "form"}]},
+        coding_agent_fn=stub_twin_coder,
+        run_pack_fn=lambda p: {"pack_id": p.pack_id, "verified": True},
+        traces_for_lora=[trace],
+        failure_records=failures,
+    )
+    assert "synthesize_twin" in report.stages_executed
+    assert "run_portal_pack" in report.stages_executed
+    assert "export_lora_dataset" in report.stages_executed
+    assert "cluster_pack_failures" in report.stages_executed
+    assert "verify_egress_ledger" in report.stages_executed
+    assert report.twin_app is not None and "/form" in report.twin_app.pages
+    assert report.run_result == {"pack_id": "pk_lifecycle", "verified": True}
+    assert len(report.exported_lora_records) >= 3
+    assert len(report.failure_clusters) == 1
+    assert report.egress_audit["integrity_valid"] is True
+    assert report.egress_audit["phi_bytes_leaked"] == 0
+    assert "SecretPatientTitle99" not in lora_jsonl.read_text(encoding="utf-8")
+
+    # Air-gapped EdgeLoRA fallback when coding_agent_fn is None
+    server, base_url, _received = _start_mock_openai_server()
+    try:
+        edge_rt = EdgeLoRARuntime(
+            EdgeLoRAConfig(
+                backend="local_http",
+                base_url=base_url,
+                adapters=(LoRAAdapterSpec("local_ptr", "/opt/ptr", "pointer_stage"),),
+            )
+        )
+        airgapped = run_self_healing_lifecycle(
+            LifecycleConfig(pack_id="pk_airgap"),
+            coding_agent_fn=None,
+            edge_lora_runtime=edge_rt,
+            edge_lora_prompt="stage submit field",
+        )
+        assert airgapped.edge_lora_fallback_used is True
+        assert airgapped.edge_lora_output == "model=local_ptr|ok"
+        assert "edge_lora_airgapped_fallback" in airgapped.stages_executed
+    finally:
+        server.shutdown()
+        server.server_close()
