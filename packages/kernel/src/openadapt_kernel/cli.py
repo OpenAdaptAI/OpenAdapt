@@ -333,6 +333,14 @@ def _cmd_prepare_inbox(args: argparse.Namespace) -> int:
     return 0 if res.status == "RESUME" else 1
 
 
+def _cmd_verify_egress_ledger(args: argparse.Namespace) -> int:
+    from openadapt_kernel.lifecycle import verify_egress_ledger_file
+
+    report = verify_egress_ledger_file(args.ledger)
+    print(json.dumps(report, indent=2))
+    return 0 if report.get("integrity_valid") and report.get("phi_bytes_leaked", 0) == 0 else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="openadapt-kernel")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -413,6 +421,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_prep.add_argument("--response", help="Path to PrepareResumeResponse JSON (reads stdin if omitted)")
     p_prep.add_argument("--dossier", help="Optional path to existing dossier JSON")
     p_prep.set_defaults(func=_cmd_prepare_inbox)
+
+    p_aud = sub.add_parser("verify-egress-ledger", help="Verify SHA-256 hash chain and zero-PHI compliance of an egress ledger")
+    p_aud.add_argument("--ledger", required=True, help="Path to outbound_egress_ledger.jsonl")
+    p_aud.set_defaults(func=_cmd_verify_egress_ledger)
 
     return parser
 

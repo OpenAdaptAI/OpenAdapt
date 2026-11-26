@@ -31,6 +31,15 @@ from openadapt_kernel.copilot import (
     qualify_verifier_offline,
     verify_receipt,
 )
+from openadapt_kernel.desktop_driver import (
+    CitrixBoxGraphDriver,
+    DesktopActionResult,
+    DesktopControlAction,
+    DesktopDriver,
+    MacOSAXDriver,
+    WindowsUIADriver,
+    get_desktop_driver,
+)
 from openadapt_kernel.dgm_pr import (
     FailureCluster,
     FailureRecord,
@@ -46,6 +55,13 @@ from openadapt_kernel.digital_twin import (
     TwinHealResult,
     capture_zero_phi_digital_twin,
     self_heal_in_digital_twin,
+)
+from openadapt_kernel.edge_lora import (
+    EdgeLoRAConfig,
+    EdgeLoRARuntime,
+    LoRAAdapterSpec,
+    LoRATrainingRecord,
+    export_lora_training_records,
 )
 from openadapt_kernel.egress_guard import (
     EgressBlockedError,
@@ -102,6 +118,12 @@ from openadapt_kernel.ledger import (
     verify_freetext_fact_coverage,
     verify_readonly_answer_provenance,
 )
+from openadapt_kernel.lifecycle import (
+    LifecycleConfig,
+    LifecycleReport,
+    run_self_healing_lifecycle,
+    verify_egress_ledger_file,
+)
 from openadapt_kernel.macro import (
     ControlSchema,
     ControlSignature,
@@ -153,6 +175,14 @@ from openadapt_kernel.probe import (
     compute_pixel_delta_ratio,
     probe_before_click,
     probe_hover_pixel_delta,
+)
+from openadapt_kernel.providers import (
+    DEFAULT_PROVIDER_REGISTRY,
+    OpenAICompatHTTPProvider,
+    OptionalDependencyError,
+    ProviderRegistry,
+    ProviderSpec,
+    is_loopback_url,
 )
 from openadapt_kernel.registry import (
     SignedPackEnvelope,
@@ -214,4 +244,9 @@ __all__ = [
     "cluster_pack_failures", "draft_kernel_pr_proposal", "make_cli_coding_agent", "project_a11y_tree_to_zero_phi_twin",
     "run_dgm_pr_coding_agent", "self_heal_multipage_in_twin", "synthesize_twin_with_coding_agent",
     "synthesize_zero_phi_stateful_twin", "validate_kernel_pr_safety",
+    "CitrixBoxGraphDriver", "DEFAULT_PROVIDER_REGISTRY", "DesktopActionResult", "DesktopControlAction", "DesktopDriver",
+    "EdgeLoRAConfig", "EdgeLoRARuntime", "LifecycleConfig", "LifecycleReport", "LoRAAdapterSpec", "LoRATrainingRecord",
+    "MacOSAXDriver", "OpenAICompatHTTPProvider", "OptionalDependencyError", "ProviderRegistry", "ProviderSpec",
+    "WindowsUIADriver", "export_lora_training_records", "get_desktop_driver", "is_loopback_url",
+    "run_self_healing_lifecycle", "verify_egress_ledger_file",
 ]
