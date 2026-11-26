@@ -12,11 +12,18 @@ from openadapt_kernel.app_cartridge import (
     AppCartridge,
     CartridgeQualificationReport,
     CompiledSOPSpec,
+    CounterfactualEnumVerdict,
+    EnumAffordanceProbe,
     SkillMacroSpec,
     SOPBranchSpec,
     check_sop_consistency,
     compile_sop_handbook_to_rules,
+    discover_case_evidence_tabs,
+    evaluate_counterfactual_enum_gate,
+    induce_sop_from_shadow_traces,
+    probe_enum_affordances_in_twin,
     qualify_app_cartridge_offline,
+    render_sop_signoff_summary,
     synthesize_app_cartridge_with_coding_agent,
 )
 from openadapt_kernel.canonical import (
@@ -54,9 +61,18 @@ from openadapt_kernel.desktop_driver import (
     DesktopActionResult,
     DesktopControlAction,
     DesktopDriver,
+    DesktopPreflightReport,
+    InputPacingConfig,
     MacOSAXDriver,
+    NormalizedWindowRect,
+    StreamLivenessStatus,
     WindowsUIADriver,
+    check_stream_liveness,
+    compute_paced_pointer_path,
+    enable_windows_per_monitor_v2_dpi,
     get_desktop_driver,
+    resume_after_desktop_reconnect,
+    run_desktop_preflight_diagnostics,
 )
 from openadapt_kernel.dgm_pr import (
     FailureCluster,
@@ -209,9 +225,11 @@ from openadapt_kernel.prepare import (
 )
 from openadapt_kernel.probe import (
     ProbeResult,
+    VisualServoResult,
     compute_pixel_delta_ratio,
     probe_before_click,
     probe_hover_pixel_delta,
+    visual_hover_servo_click,
 )
 from openadapt_kernel.providers import (
     DEFAULT_PROVIDER_REGISTRY,
@@ -229,6 +247,26 @@ from openadapt_kernel.registry import (
     scan_pack_for_pii,
 )
 from openadapt_kernel.runner import RunResult, format_run_result_json, run_portal_pack
+from openadapt_kernel.session_resilience import (
+    AuthDetectionResult,
+    AuthGateKind,
+    AuthHandoffCard,
+    EnvVaultAdapter,
+    ReauthResumeDecision,
+    SessionCheckpoint,
+    SessionKeepAliveConfig,
+    SessionResilienceGuard,
+    SubprocessVaultAdapter,
+    VaultCredentialProvider,
+    build_auth_handoff_card,
+    build_web_bot_auth_headers,
+    detect_auth_or_challenge_gate,
+    inject_vault_secret_redacted,
+    keep_session_alive_readonly,
+    load_checkpoint,
+    save_checkpoint,
+    verify_web_bot_auth_headers,
+)
 from openadapt_kernel.stateful_twin import (
     A11yNodeSpec,
     A11yScreenSpec,
@@ -294,4 +332,17 @@ __all__ = [
     "APIOracleSpec", "AdversarialMutantSpec", "AppCartridge", "CartridgeQualificationReport", "CompiledSOPSpec",
     "SOPBranchSpec", "SkillMacroSpec", "check_sop_consistency", "compile_sop_handbook_to_rules",
     "qualify_app_cartridge_offline", "synthesize_app_cartridge_with_coding_agent",
+    "CounterfactualEnumVerdict", "EnumAffordanceProbe", "discover_case_evidence_tabs",
+    "evaluate_counterfactual_enum_gate", "induce_sop_from_shadow_traces",
+    "probe_enum_affordances_in_twin", "render_sop_signoff_summary",
+    "DesktopPreflightReport", "InputPacingConfig", "NormalizedWindowRect", "StreamLivenessStatus",
+    "VisualServoResult", "check_stream_liveness", "compute_paced_pointer_path",
+    "enable_windows_per_monitor_v2_dpi", "resume_after_desktop_reconnect",
+    "run_desktop_preflight_diagnostics", "visual_hover_servo_click",
+    "AuthDetectionResult", "AuthGateKind", "AuthHandoffCard", "EnvVaultAdapter",
+    "ReauthResumeDecision", "SessionCheckpoint", "SessionKeepAliveConfig",
+    "SessionResilienceGuard", "SubprocessVaultAdapter", "VaultCredentialProvider",
+    "build_auth_handoff_card", "build_web_bot_auth_headers", "detect_auth_or_challenge_gate",
+    "inject_vault_secret_redacted", "keep_session_alive_readonly", "load_checkpoint",
+    "save_checkpoint", "verify_web_bot_auth_headers",
 ]
