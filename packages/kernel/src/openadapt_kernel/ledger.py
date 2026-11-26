@@ -14,7 +14,18 @@ import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Literal, Mapping, Optional, Sequence
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+)
 
 if TYPE_CHECKING:
     from openadapt_kernel.canonical import FieldType
@@ -486,13 +497,29 @@ _CODE_SCAN_RE = re.compile(
     r"\b(?:[A-Z]{1,5}[-_](?=[A-Z0-9_-]*\d)[A-Z0-9]{2,}(?:[-_.][A-Z0-9]+)*|[A-Z]\d{2}(?:\.\d{1,4})?)\b"
 )
 _DEADLINE_SCAN_RE = re.compile(
-    r"\b(?:within\s+\d{1,3}\s+(?:business\s+)?(?:days?|hours?|weeks?|months?)|net\s+\d{1,3}|\d{1,3}-day\s+(?:window|limit|period|deadline))\b",
+    r"\b(?:within\s+\d{1,3}\s+(?:(?:calendar|business|working)\s+)?(?:days?|hours?|weeks?|months?)"
+    r"|\d{1,3}\s+(?:calendar|business|working)\s+(?:days?|hours?|weeks?|months?)"
+    r"|net\s+\d{1,3}|\d{1,3}-day\s+(?:window|limit|period|deadline))\b",
     re.IGNORECASE,
 )
 _POLICY_CLAUSE_RE = re.compile(
     r"\b(?:(?:do\s+not|must\s+not|cannot\s+be|not\s+eligible|requires?\s+(?:prior\s+authorization|approval|review|escalation)|refer\s+to|escalate\s+to)[^.;\n]{2,80})",
     re.IGNORECASE,
 )
+_CONTRAST_CLAUSE_RE = re.compile(
+    r"\b([A-Za-z0-9][A-Za-z0-9 _/-]{2,45}\s+rather\s+than\s+(?:a\s+|an\s+|the\s+)?[A-Za-z0-9 _/-]{2,45}"
+    r"|(?:is|was|represents?)\s+(?:a|an)\s+[A-Za-z0-9 _/-]{2,40},?\s+not\s+(?:a|an)\s+[A-Za-z0-9 _/-]{2,40})",
+    re.IGNORECASE,
+)
+_ROUTING_CLAUSE_RE = re.compile(
+    r"\b([A-Za-z0-9][A-Za-z0-9 _/-]{2,55}\s+(?:requires?\s+re-?routing|must\s+be\s+re-?routed|must\s+be\s+routed)[^.;\n]{0,60})",
+    re.IGNORECASE,
+)
+_FINDING_CLAUSE_RE = re.compile(
+    r"\b(?:shows?|demonstrates?|reveals?|revealed|finding)\s*:?\s+([A-Za-z0-9+][A-Za-z0-9+_., /-]{2,70}?)(?=[.;\n]|$|\s+(?:and\s+requires|which\s+|that\s+))",
+    re.IGNORECASE,
+)
+_LEADING_COPULA_RE = re.compile(r"^(?:this|it|that|the\s+issue|the\s+case)\s+(?:is|was)\s+(?:a|an)\s+", re.IGNORECASE)
 _KV_FINDING_RE = re.compile(r"(?:^|[;\n])\s*([A-Za-z][A-Za-z0-9 _/-]{1,28}):\s*([^\n;]{2,80})")
 _URL_SCAN_RE = re.compile(r"https?://[^\s)\]>\"']+")
 _QUOTED_SCAN_RE = re.compile(r'"([^"]{2,80})"|\'([^\']{2,80})\'')
@@ -556,8 +583,9 @@ def extract_dossier_facts(
     source_texts: Mapping[str, str],
     *,
     extra_patterns: Optional[Mapping[str, str]] = None,
+    llm_extractor_fn: Optional[Callable[[Mapping[str, str]], Sequence[Mapping[str, Any]]]] = None,
 ) -> tuple[ExtractedFact, ...]:
-    """Deterministically extract structured facts (codes, dates, currency, deadlines, clauses, findings)."""
+    """Deterministically extract structured facts and optionally merge pluggable LLM-extracted facts."""
     from openadapt_kernel import canonical as _can
 
     facts: List[ExtractedFact] = []
@@ -588,6 +616,13 @@ def extract_dossier_facts(
             _add("deadline", m.group(0), src_key, True)
         for m in _POLICY_CLAUSE_RE.finditer(text):
             _add("policy_clause", m.group(0).rstrip(".,;"), src_key, True)
+        for m in _CONTRAST_CLAUSE_RE.finditer(text):
+            clause = _LEADING_COPULA_RE.sub("", m.group(1).strip().rstrip(".,;"))
+            _add("policy_clause", clause, src_key, True)
+        for m in _ROUTING_CLAUSE_RE.finditer(text):
+            _add("routing_clause", m.group(1).strip().rstrip(".,;"), src_key, True)
+        for m in _FINDING_CLAUSE_RE.finditer(text):
+            _add("kv_finding", m.group(1).strip().rstrip(".,;"), src_key, True)
         for m in _KV_FINDING_RE.finditer(text):
             k_part, v_part = m.group(1).strip(), m.group(2).strip().rstrip(".")
             if k_part.lower() in ("http", "https") or v_part.startswith("//"):
@@ -597,6 +632,17 @@ def extract_dossier_facts(
             for cat, pat in extra_patterns.items():
                 for m in re.finditer(pat, text):
                     _add(cat, m.group(1) if m.groups() else m.group(0), src_key, True)
+
+    if llm_extractor_fn is not None:
+        for item in llm_extractor_fn(source_texts) or ():
+            if not isinstance(item, Mapping):
+                continue
+            _add(
+                str(item.get("category") or "kv_finding").strip(),
+                str(item.get("value") or "").strip(),
+                str(item.get("source_key") or "llm_extracted").strip(),
+                bool(item.get("required_in_freetext", True)),
+            )
     return tuple(facts)
 
 
@@ -673,6 +719,8 @@ def calibrate_critic_decision(
     critic_vetoed: bool,
     critic_reason: str = "",
     policy_requires_human: bool = False,
+    require_extracted_facts: bool = False,
+    extracted_facts_count: int = 0,
 ) -> CriticCalibrationVerdict:
     """Calibrate an LLM critic veto against deterministic closure verification and human-policy gates."""
     if policy_requires_human:
@@ -682,6 +730,10 @@ def calibrate_critic_decision(
             "ESCALATE", False, f"closure_not_verified:{closure_report.reason}", critic_reason
         )
     if critic_vetoed:
+        if require_extracted_facts and extracted_facts_count <= 0:
+            return CriticCalibrationVerdict(
+                "ESCALATE", False, "unextracted_facts_preserve_critic_veto", critic_reason
+            )
         return CriticCalibrationVerdict(
             "ALLOW_COMPLETE", True, "overrode_conservative_critic_on_verified_closure", critic_reason
         )

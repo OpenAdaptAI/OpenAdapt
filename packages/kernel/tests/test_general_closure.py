@@ -866,3 +866,136 @@ def test_compile_policy_rules_to_table_and_step0_wiring() -> None:
         deny_patterns=gate_cfg["deny_patterns"],
     )
     assert blocked_nav.action == "REFUSE"
+
+
+def test_hybrid_extract_dossier_facts_real_world_and_llm_merge() -> None:
+    real_sources = {
+        "clinical_review": (
+            "Diagnosis H35.32 evaluated on 2025-02-01. Slit-lamp exam shows 3+ nuclear sclerosis opacity. "
+            "Appeal window is 60 calendar days from notice date. "
+            "This is a documentation gap rather than a clinical dispute. "
+            "The delegation/capitation arrangement requires rerouting to the delegated group."
+        )
+    }
+    facts = extract_dossier_facts(real_sources)
+    vals_lower = [f.value.lower() for f in facts]
+    assert any("h35.32" in v for v in vals_lower)
+    assert any("2025-02-01" in v for v in vals_lower)
+    assert any("60 calendar days" in v for v in vals_lower)
+    assert any("3+ nuclear sclerosis opacity" in v for v in vals_lower)
+    assert any("documentation gap rather than a clinical dispute" in v for v in vals_lower)
+    assert any("delegation/capitation arrangement requires rerouting" in v for v in vals_lower)
+
+    # Pluggable local/LLM extractor merges and deduplicates cleanly
+    def mock_llm_extractor(_src: Dict[str, str] | Any) -> List[Dict[str, Any]]:
+        return [
+            {"category": "code", "value": "H35.32", "source_key": "llm", "required_in_freetext": True},
+            {
+                "category": "policy_clause",
+                "value": "attach operative note prior to resubmission",
+                "source_key": "llm_summary",
+                "required_in_freetext": True,
+            },
+        ]
+
+    merged = extract_dossier_facts(real_sources, llm_extractor_fn=mock_llm_extractor)
+    assert sum(1 for f in merged if f.category == "code" and f.value == "H35.32") == 1
+    assert any(f.value == "attach operative note prior to resubmission" for f in merged)
+
+
+def test_real_schema_and_hybrid_policy_compiler_and_critic_guard() -> None:
+    nl_policies: List[Dict[str, Any]] = [
+        {
+            "policy_template_id": "missing_params",
+            "description": "Ask the user for the customer email before creating a lead.",
+        },
+        {
+            "policy_template_id": "access_management",
+            "description": "Do not access /admin or admin settings pages.",
+        },
+        {
+            "policy_template_id": "irreversible_actions",
+            "description": "Never delete production records without explicit approval.",
+        },
+    ]
+
+    table, gate_cfg = compile_policy_rules_to_table(nl_policies, table_id="real_schema_v1")
+    assert table.rules, "Expected compiled PolicyRule entries from prohibited verbs"
+    assert "customer_email" in gate_cfg["required_params"]
+    assert "customer_email" in gate_cfg["ask_user_triggers"]
+    assert any("/admin" in p or "admin" in p for p in gate_cfg["deny_patterns"])
+
+    # Verify compiled config fires accurately in evaluate_pre_step_policy
+    missing_res = evaluate_pre_step_policy(
+        stage="step_0", required_params=gate_cfg["required_params"], dossier={"lead_name": "Ada"}
+    )
+    assert missing_res.action == "PREPARE_ASK"
+    assert "customer_email" in missing_res.missing_params
+
+    nav_res = evaluate_pre_step_policy(
+        stage="pre_navigation",
+        target_url="https://crm.example/admin/settings",
+        deny_patterns=gate_cfg["deny_patterns"],
+    )
+    assert nav_res.action == "REFUSE"
+
+    prohibit_res = evaluate_pre_step_policy(
+        stage="step_0",
+        policy_table=table,
+        observed_facts={"action": "delete", "target": "production_records"},
+        task_disposition="proceed_delete",
+    )
+    assert prohibit_res.action == "REFUSE"
+    assert prohibit_res.reason == "policy_contradiction"
+
+    # Pluggable LLM policy compiler merges structured rules cleanly
+    def mock_llm_compiler(_specs: Any) -> Dict[str, Any]:
+        return {
+            "required_params": ["billing_zip"],
+            "deny_patterns": ["*/billing/purge*"],
+            "rules": [
+                {
+                    "rule_id": "llm_export_guard",
+                    "conditions": {"export_scope": "bulk"},
+                    "required_disposition": "require_manager_approval",
+                }
+            ],
+        }
+
+    hybrid_table, hybrid_cfg = compile_policy_rules_to_table(
+        nl_policies, llm_compiler_fn=mock_llm_compiler
+    )
+    assert "billing_zip" in hybrid_cfg["required_params"]
+    assert "*/billing/purge*" in hybrid_cfg["deny_patterns"]
+    assert any(r.rule_id == "llm_export_guard" for r in hybrid_table.rules)
+
+    # Safe calibrate_critic_decision guard: un-extracted facts preserve conservative critic veto
+    ledger = ObligationLedger("guard-ep-1", subject_key="CASE-9")
+    ledger.add_obligation("submit_note", "Save free-text note")
+    ledger.mark_committed(
+        "submit_note",
+        ReadBackProof("api_read", "https://portal.example/cases/9", ["CASE-9", "Saved"]),
+    )
+    verified = verify_completion_closure(ledger, step_idx=2, max_steps=10)
+    assert verified.passed is True
+
+    preserved = calibrate_critic_decision(
+        verified,
+        critic_vetoed=True,
+        critic_reason="possible missing clinical nuance",
+        require_extracted_facts=True,
+        extracted_facts_count=0,
+    )
+    assert preserved.action == "ESCALATE"
+    assert preserved.overrode_false_escalation is False
+    assert preserved.reason == "unextracted_facts_preserve_critic_veto"
+
+    overridden = calibrate_critic_decision(
+        verified,
+        critic_vetoed=True,
+        critic_reason="vague hesitation",
+        require_extracted_facts=True,
+        extracted_facts_count=4,
+    )
+    assert overridden.action == "ALLOW_COMPLETE"
+    assert overridden.overrode_false_escalation is True
