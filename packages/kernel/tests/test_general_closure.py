@@ -16,6 +16,8 @@ import pytest
 from openadapt_kernel import (
     ControlSchema,
     ControlSignature,
+    DistilledRepairStep,
+    EgressPolicy,
     FieldType,
     ObligationLedger,
     PolicyDecisionTable,
@@ -27,8 +29,10 @@ from openadapt_kernel import (
     UnresolvedSlot,
     evaluate_policy_decision,
     evaluate_pre_step_policy,
+    inspect_outbound_payload,
     is_ephemeral_selector,
     lift_cold_trace_to_pack,
+    lift_distilled_repair_to_pack,
     parameterize_value_against_dossier,
     resume_from_prepare_card,
     verify_completion_closure,
@@ -592,3 +596,79 @@ def test_post_commit_obligation_chains_and_freetext_fact_coverage(tmp_path: Path
     assert verified_all.allowed is True
     assert verified_all.outcome == "VERIFIED"
     assert reloaded.status == "VERIFIED"
+
+
+def test_prune_exploratory_prefix_before_verified_distilled_repair() -> None:
+    exploratory_prefix: List[Dict[str, Any]] = [
+        {"step_id": f"dead_end_{i}", "action": "click", "selector": f'[data-testid="tab-{i}"]'}
+        for i in range(7)
+    ]
+    verified_repairs = [
+        DistilledRepairStep(
+            method="fill_var",
+            selector="#input-99",
+            modal_ordinal=0,
+            var_key="collection_title",
+            ctrl_sig=("input", "text", "textbox", "title"),
+        ),
+        DistilledRepairStep(
+            method="click",
+            selector='[data-testid="create-submit"]',
+            modal_ordinal=0,
+            ctrl_sig=("button", "submit", "button", "create"),
+        ),
+    ]
+    dossier = {"collection_title": "Q4 Archive"}
+
+    lifted = lift_distilled_repair_to_pack(
+        verified_repairs, dossier, exploratory_prefix=exploratory_prefix
+    )
+    assert lifted.pruned_exploratory_count == 7
+    assert len(lifted.steps) == 2
+    assert lifted.stripped_selector_count == 1
+    assert lifted.steps[0].selector is None
+    assert lifted.steps[0].stripped_ephemeral_selector == "#input-99"
+    assert lifted.steps[0].value == "$collection_title"
+    assert lifted.steps[0].control_signature is not None
+    assert lifted.steps[0].control_signature.in_modal is True
+    assert lifted.steps[0].control_signature.label_tokens == ("title",)
+    assert lifted.steps[1].selector == '[data-testid="create-submit"]'
+
+    # Inline navigation reset marker also prunes unverified exploratory prefix
+    mixed_steps: List[Dict[str, Any]] = [
+        {"step_id": "explore_1", "action": "click", "selector": 'button[name="wrong"]'},
+        {"step_id": "explore_2", "action": "click", "selector": 'button[name="retry"]'},
+        {"step_id": "nav_reset", "action": "click", "selector": '[data-testid="new-item"]', "is_navigation_reset": True},
+        {"step_id": "fill_1", "action": "fill", "selector": 'input[name="title"]', "value": "Q4 Archive"},
+    ]
+    pruned_nav = lift_cold_trace_to_pack(mixed_steps, dossier)
+    assert pruned_nav.pruned_exploratory_count == 2
+    assert [s.step_id for s in pruned_nav.steps] == ["nav_reset", "fill_1"]
+    assert pruned_nav.steps[1].value == "$collection_title"
+
+    # Opt-out preserves exploratory prefix when requested
+    unpruned = lift_cold_trace_to_pack(
+        exploratory_prefix[:2], dossier, verified_repair_steps=verified_repairs, prune_exploratory_prefix_before_repair=False
+    )
+    assert unpruned.pruned_exploratory_count == 0
+    assert len(unpruned.steps) == 4
+
+
+def test_egress_guard_allows_standard_w3c_css_keywords() -> None:
+    policy = EgressPolicy()
+    css_twin_payload = {
+        "sanitized_html": (
+            '<div style="display: flow-root; margin: 0; padding: 0;">'
+            '<span style="display: contents; color: unset; font: inherit; border: initial;"></span>'
+            '<div style="display: table-cell; -webkit-box-sizing: border-box; all: revert;"></div>'
+            "</div>"
+        )
+    }
+    verdict = inspect_outbound_payload(css_twin_payload, policy)
+    assert verdict.allowed is True, f"Unexpectedly blocked W3C CSS tokens: {verdict.rejected_tokens}"
+
+    # Verify non-CSS opaque/PHI identifiers are still blocked by default policy
+    phi_payload = {"sanitized_html": '<div style="display: flow-root;">JonathanDoe1984</div>'}
+    blocked = inspect_outbound_payload(phi_payload, policy)
+    assert blocked.allowed is False
+    assert "JonathanDoe1984" in blocked.rejected_tokens

@@ -578,6 +578,7 @@ class LiftedPackSteps:
     steps: List[LiftedPackStep] = field(default_factory=list)
     stripped_selector_count: int = 0
     parameterized_vars: List[str] = field(default_factory=list)
+    pruned_exploratory_count: int = 0
 
 
 def is_ephemeral_selector(sel: str) -> bool:
@@ -633,12 +634,62 @@ def _build_signature_from_step(raw: Mapping[str, Any]) -> Optional[ControlSignat
     )
 
 
+def _coerce_repair_step(step: Any, idx: int) -> Dict[str, Any]:
+    if isinstance(step, Mapping):
+        return dict(step)
+    var_key = str(getattr(step, "var_key", "") or "").strip()
+    arg = getattr(step, "arg", None)
+    val: Optional[str] = f"${var_key.lstrip('$')}" if var_key else (str(arg) if arg is not None else None)
+    sig = getattr(step, "ctrl_sig", ("", "", "", "")) or ("", "", "", "")
+    modal_ord = int(getattr(step, "modal_ordinal", -1))
+    return {
+        "step_id": f"repair_{idx}",
+        "action": str(getattr(step, "method", "click") or "click"),
+        "selector": str(getattr(step, "selector", "") or ""),
+        "value": val,
+        "in_modal": modal_ord >= 0,
+        "ordinal": max(0, modal_ord),
+        "tag": str(sig[0]) if len(sig) > 0 else "",
+        "input_type": str(sig[1]) if len(sig) > 1 else "",
+        "role": str(sig[2]) if len(sig) > 2 else "",
+        "label": str(sig[3]) if len(sig) > 3 else "",
+    }
+
+
 def lift_cold_trace_to_pack(
-    raw_steps: Sequence[Mapping[str, Any]], dossier: Mapping[str, str], *, field_types: Optional[Mapping[str, FieldType]] = None
+    raw_steps: Sequence[Mapping[str, Any]],
+    dossier: Mapping[str, str],
+    *,
+    field_types: Optional[Mapping[str, FieldType]] = None,
+    verified_repair_steps: Sequence[Any] = (),
+    prune_exploratory_prefix_before_repair: bool = True,
 ) -> LiftedPackSteps:
-    """Lift raw trace steps into durable pack steps by stripping ephemeral selectors and parameterizing values."""
-    lifted, seen_vars = LiftedPackSteps(), set()
-    for idx, raw in enumerate(raw_steps):
+    """Lift raw trace steps into durable pack steps, pruning unverified exploratory prefixes before verified repairs."""
+    pruned = 0
+    steps_to_lift: List[Mapping[str, Any]]
+    if verified_repair_steps and prune_exploratory_prefix_before_repair:
+        pruned = len(raw_steps)
+        steps_to_lift = [_coerce_repair_step(rs, i) for i, rs in enumerate(verified_repair_steps)]
+    else:
+        steps_to_lift = list(raw_steps)
+        if prune_exploratory_prefix_before_repair and steps_to_lift:
+            repair_idx = next(
+                (i for i, s in enumerate(steps_to_lift) if s.get("verified_repair") or s.get("source") == "distilled_repair"),
+                None,
+            )
+            if repair_idx is not None and repair_idx > 0:
+                pruned = repair_idx
+                steps_to_lift = steps_to_lift[repair_idx:]
+            else:
+                reset_indices = [i for i, s in enumerate(steps_to_lift) if s.get("is_navigation_reset")]
+                if reset_indices and reset_indices[-1] > 0:
+                    pruned = reset_indices[-1]
+                    steps_to_lift = steps_to_lift[reset_indices[-1]:]
+        if verified_repair_steps:
+            steps_to_lift.extend(_coerce_repair_step(rs, i) for i, rs in enumerate(verified_repair_steps))
+
+    lifted, seen_vars = LiftedPackSteps(pruned_exploratory_count=pruned), set()
+    for idx, raw in enumerate(steps_to_lift):
         sel = str(raw.get("selector") or "").strip() or None
         stripped = sel if (sel and is_ephemeral_selector(sel)) else None
         if stripped is not None:
@@ -654,3 +705,20 @@ def lift_cold_trace_to_pack(
             LiftedPackStep(str(raw.get("step_id") or f"step_{idx}"), str(raw.get("action") or "click"), sel, _build_signature_from_step(raw), val_out, stripped, param_var)
         )
     return lifted
+
+
+def lift_distilled_repair_to_pack(
+    repair_steps: Sequence[Any],
+    dossier: Mapping[str, str],
+    *,
+    exploratory_prefix: Sequence[Mapping[str, Any]] = (),
+    field_types: Optional[Mapping[str, FieldType]] = None,
+) -> LiftedPackSteps:
+    """Lift a verified DistilledRepairStep sequence into a pack, pruning any exploratory prefix."""
+    return lift_cold_trace_to_pack(
+        exploratory_prefix,
+        dossier,
+        field_types=field_types,
+        verified_repair_steps=repair_steps,
+        prune_exploratory_prefix_before_repair=True,
+    )

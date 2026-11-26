@@ -57,19 +57,19 @@ _EXTRA_UI_CHROME_VOCAB: FrozenSet[str] = frozenset(
 )
 
 _HTML_ARIA_STRUCTURAL_VOCAB: FrozenSet[str] = frozenset(
-    "a align alt aria article aside auto b background block body border bottom "
-    "box br button calc caption center charset checked class col colgroup color "
-    "column content controls cursor data dd default desc details dfn dialog dir "
+    "0 a align alt aria article aside auto b background block body border bottom "
+    "box br button calc caption cell center charset checked class col colgroup color "
+    "column content contents controls cursor data dd default desc details dfn dialog dir "
     "disabled display div dl doctype dt em end fieldset figcaption figure fixed "
-    "flex font footer form gap grid h1 h2 h3 h4 h5 h6 head header height hidden "
-    "hr html i id img inline input ins items justify kbd label left legend li "
+    "flex flow font footer form gap grid h1 h2 h3 h4 h5 h6 head header height hidden "
+    "hr html i id img inherit initial inline input ins items justify kbd label left legend li "
     "line link list listbox main margin mark max menu menuitem meta min nav "
     "none normal nowrap ol opacity option optgroup output overflow p padding "
-    "placeholder pointer position pre px radius readonly relative rem required "
-    "rgb rgba right role row s samp section select selected self sizing small "
+    "placeholder pointer position pre px radius readonly relative rem required revert "
+    "rgb rgba right role root row s samp section select selected self sizing small "
     "solid span start strong style sub summary sup tab tabindex table tbody td "
-    "template textarea tfoot th thead time title top tr transparent u ul utf "
-    "value var vertical vh visibility vw weight width wrap z".split()
+    "template textarea tfoot th thead time title top tr transparent u ul unset utf "
+    "value var vertical vh visibility vw webkit weight width wrap z".split()
 )
 
 _CLINICAL_STRUCTURAL_VOCAB: FrozenSet[str] = frozenset(
