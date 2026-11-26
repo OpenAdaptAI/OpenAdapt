@@ -2902,6 +2902,7 @@ dependencies = [
     { name = "click" },
     { name = "openadapt-agent", marker = "python_full_version < '3.13'" },
     { name = "openadapt-flow", extra = ["browser", "hosted"], marker = "python_full_version < '3.13'" },
+    { name = "openadapt-kernel", marker = "python_full_version < '3.13'" },
     { name = "openadapt-types", marker = "python_full_version < '3.13'" },
     { name = "rich", marker = "python_full_version < '3.13'" },
 ]
@@ -2955,6 +2956,9 @@ flow = [
 ]
 grounding = [
     { name = "openadapt-grounding" },
+]
+kernel = [
+    { name = "openadapt-kernel" },
 ]
 linux = [
     { name = "openadapt-flow", extra = ["linux"], marker = "python_full_version < '3.13' and sys_platform == 'linux'" },
@@ -3010,6 +3014,8 @@ requires-dist = [
     { name = "openadapt-flow", extras = ["vision"], marker = "python_full_version < '3.13' and extra == 'flow'", specifier = ">=4.0.1,<5.0.0" },
     { name = "openadapt-flow", extras = ["windows"], marker = "python_full_version < '3.13' and extra == 'windows'", specifier = ">=4.0.1,<5.0.0" },
     { name = "openadapt-grounding", marker = "extra == 'grounding'", specifier = ">=0.1.0" },
+    { name = "openadapt-kernel", marker = "python_full_version < '3.13'", specifier = ">=0.1.0" },
+    { name = "openadapt-kernel", marker = "extra == 'kernel'", specifier = ">=0.1.0" },
     { name = "openadapt-ml", marker = "extra == 'ml'", specifier = ">=0.2.0" },
     { name = "openadapt-retrieval", marker = "extra == 'retrieval'", specifier = ">=0.1.0" },
     { name = "openadapt-types", marker = "python_full_version < '3.13'", specifier = ">=0.24.2,<0.25.0" },
@@ -3019,7 +3025,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
     { name = "uvicorn", marker = "python_full_version < '3.13' and extra == 'a2a'", specifier = ">=0.29" },
 ]
-provides-extras = ["wrap", "browser", "capture", "windows", "macos", "linux", "rdp", "ml", "evals", "viewer", "grounding", "retrieval", "privacy", "flow", "agent", "a2a", "core", "all", "dev"]
+provides-extras = ["wrap", "browser", "capture", "windows", "macos", "linux", "rdp", "ml", "evals", "viewer", "grounding", "retrieval", "privacy", "flow", "agent", "kernel", "a2a", "core", "all", "dev"]
 
 [[package]]
 name = "openadapt-agent"
@@ -3191,6 +3197,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/09/7c/8a045db440c66ba97de0c5a101538bf53c9162cff6c6ee22abe92f45684d/openadapt_grounding-0.1.2.tar.gz", hash = "sha256:2dc15fb284a6ed01ce031006949ff7cc52d4435ea13334c5d8533e905ece03b5", size = 5318481, upload-time = "2026-01-29T23:40:27.79Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a6/8c/0f3e25b0bf66907f8b6b496c92ea4a399b40bbb21d8af784e739de73d606/openadapt_grounding-0.1.2-py3-none-any.whl", hash = "sha256:6dbecc3a71bfbdb2582373b8f43694b7ead51c4f8aee5f80a45dba0620c9ab81", size = 89412, upload-time = "2026-01-29T23:40:26.37Z" },
+]
+
+[[package]]
+name = "openadapt-kernel"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ab/03/c8ffc09f2c491c3c07607dd00d663c4af5c9d3e1f0a9d8a143152190a381/openadapt_kernel-0.1.0.tar.gz", hash = "sha256:f0b485463a71b5bd318ec72e8d88596969bdb7b33a2d53fba4172dc7d41684c2", size = 104042, upload-time = "2026-11-26T02:00:26.671Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/54/1b/46f7ace29915760d41ff59a22b93071da5b350a7ec809bf456ec101cfdce/openadapt_kernel-0.1.0-py3-none-any.whl", hash = "sha256:f5d745b27105b4ca7efd805d6e3fd1e0c8814e522e48239499ce5d26c06939f3", size = 43439, upload-time = "2026-11-26T02:00:25.346Z" },
 ]
 
 [[package]]

@@ -1203,6 +1203,9 @@
       "openadapt-grounding": [
         ">=0.1.0"
       ],
+      "openadapt-kernel": [
+        ">=0.1.0"
+      ],
       "openadapt-ml": [
         ">=0.2.0"
       ],
