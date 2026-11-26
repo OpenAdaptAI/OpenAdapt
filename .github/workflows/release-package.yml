@@ -1,5 +1,5 @@
 # Publish the packages under packages/ to PyPI: types, flow, agent, capture,
-# privacy, tray and verify. Each publishes through its own GitHub environment and PyPI
+# privacy, tray, verify and kernel. Each publishes through its own GitHub environment and PyPI
 # Trusted Publisher:
 #
 #   package  PyPI project       environment
@@ -10,6 +10,7 @@
 #   privacy  openadapt-privacy  pypi-privacy
 #   tray     openadapt-tray     pypi-tray
 #   verify   openadapt-verify   pypi-verify
+#   kernel   openadapt-kernel   pypi-kernel
 #
 # One release pattern, Desktop's (desktop-release.yml): merging a reviewed
 # version bump is the authorization. A run starts after each Packages run on
@@ -60,7 +61,7 @@ on:
         required: true
         default: all
         type: choice
-        options: [all, flow, types, agent, capture, privacy, tray, verify]
+        options: [all, flow, types, agent, capture, privacy, tray, verify, kernel]
       resume:
         description: "Publish the GitHub release of a version PyPI serves and a tag names"
         required: false
