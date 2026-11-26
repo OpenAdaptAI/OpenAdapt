@@ -582,16 +582,34 @@ def test_the_step_origin_is_cleared_once_the_page_is_read() -> None:
 
 
 def test_form_snapshot_links_become_link_controls() -> None:
-    from openadapt_flow.form_tx.types import FormSnapshot, ObservedControl
+    from types import SimpleNamespace
 
-    snap = FormSnapshot(
+    snap = SimpleNamespace(
         url_origin_and_path="/hub",
         controls=(
-            ObservedControl(
-                control_id="a1", dom_selector="#a1", tag="a", label_text="Continue"
+            SimpleNamespace(
+                control_id="a1",
+                dom_selector="#a1",
+                tag="a",
+                label_text="Continue",
+                input_type="",
+                section_text="",
+                value="",
+                disabled=False,
+                visible=True,
+                options=(),
             ),
-            ObservedControl(
-                control_id="b1", dom_selector="#b1", tag="button", label_text="Back"
+            SimpleNamespace(
+                control_id="b1",
+                dom_selector="#b1",
+                tag="button",
+                label_text="Back",
+                input_type="",
+                section_text="",
+                value="",
+                disabled=False,
+                visible=True,
+                options=(),
             ),
         ),
     )
