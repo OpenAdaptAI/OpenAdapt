@@ -2385,7 +2385,7 @@ def kernel(command_ctx: click.Context) -> None:
     if kernel_main is None:
         click.echo(
             "Error: openadapt-kernel is not installed. "
-            "Install from packages/kernel (e.g. `pip install -e packages/kernel`).",
+            "Install with: pip install openadapt-kernel",
             err=True,
         )
         sys.exit(2)

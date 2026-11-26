@@ -84,6 +84,9 @@ dependencies = [
     # `openadapt-agent` command without a second package. 2.2.4 widens its
     # openadapt-flow cap to <5 so it resolves cleanly alongside Flow 4.0.0.
     "openadapt-agent>=2.2.4,<3; python_version < '3.13'",
+    # Minimal commit-boundary and shadow-to-autopilot runtime (`openadapt kernel`).
+    # Depends only on cryptography, which openadapt-flow already pulls.
+    "openadapt-kernel>=0.1.0; python_version < '3.13'",
 ]
 
 [project.optional-dependencies]
@@ -152,6 +155,11 @@ flow = [
 # `pip install openadapt[agent]` still resolves.
 agent = [
     "openadapt-agent>=2.2.4,<3; python_version < '3.13'",
+]
+# `openadapt-kernel` ships in the base install on Python <3.13. Keep the extra
+# so `pip install openadapt[kernel]` also resolves directly (including 3.13+).
+kernel = [
+    "openadapt-kernel>=0.1.0",
 ]
 # Agent-to-agent handoffs over the A2A (Agent2Agent) protocol:
 # `openadapt agent serve --a2a`. Handoffs over MCP, HTTP and files need no extra.

@@ -117,7 +117,7 @@ def __getattr__(name: str):
         except ImportError:
             raise ImportError(
                 f"{name} requires openadapt-kernel. "
-                "Install from packages/kernel (e.g. `pip install -e packages/kernel`)."
+                "Install with: pip install openadapt-kernel"
             )
 
     # Demo library lives in openadapt-evals
