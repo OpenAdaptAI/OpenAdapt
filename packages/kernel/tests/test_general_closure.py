@@ -8,16 +8,19 @@ ERP, insurance underwriting, clinical triage, and SaaS UI frameworks.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any, Dict, List
 
 import pytest
 
 from openadapt_kernel import (
+    ConformalRiskGate,
     ControlSchema,
     ControlSignature,
     DistilledRepairStep,
     EgressPolicy,
+    EpistemicReadTracker,
     ExtractedFact,
     FieldType,
     ObligationLedger,
@@ -29,6 +32,7 @@ from openadapt_kernel import (
     RubberStampViolationError,
     UnresolvedSlot,
     bind_derived_calculation,
+    calibrate_conformal_abstain_threshold,
     calibrate_critic_decision,
     compile_freetext_template,
     compile_policy_rules_to_table,
@@ -1209,3 +1213,99 @@ def test_query_view_preconditions_and_reactive_mid_trajectory_policy() -> None:
     )
     assert allowed.allowed is True
     assert allowed.action == "ALLOW"
+
+
+def test_pillar_a_epistemic_read_closed_world_oracle_and_infra_fault() -> None:
+    ledger = ObligationLedger("simplex-ep-1", subject_key="CLAIM-404")
+    ledger.add_obligation("submit_claim", "Submit claim form")
+    ledger.mark_committed(
+        "submit_claim",
+        ReadBackProof("fresh_reload", "https://portal.example/claims/404", ["CLAIM-404", "Submitted"]),
+    )
+
+    # 1. Epistemic Read Closure: unread required artifact blocks COMPLETE
+    tracker = EpistemicReadTracker()
+    tracker.register_artifact("pa_pdf", "pdf", "Prior Auth Attachment", required_before_commit=True)
+    tracker.register_artifact("optional_memo", "note", "Background Memo", required_before_commit=False)
+    assert tracker.unread_required_artifacts() == ["pa_pdf"]
+
+    unread_verdict = verify_completion_closure(
+        ledger,
+        step_idx=3,
+        max_steps=15,
+        epistemic_artifacts=list(tracker.artifacts.values()),
+    )
+    assert unread_verdict.passed is False
+    assert unread_verdict.decision == "ESCALATE"
+    assert unread_verdict.reason == "unread_epistemic_artifacts"
+    assert unread_verdict.unread_epistemic_artifacts == ["pa_pdf"]
+
+    tracker.mark_read("pa_pdf")
+    assert tracker.unread_required_artifacts() == []
+
+    # 2. Closed-World Oracle Requirement (No-Oracle = No-Autopilot)
+    no_oracle = verify_completion_closure(
+        ledger,
+        step_idx=4,
+        max_steps=15,
+        epistemic_artifacts=list(tracker.artifacts.values()),
+        require_positive_oracle_proof=True,
+        has_independent_oracle_proof=False,
+    )
+    assert no_oracle.passed is False
+    assert no_oracle.decision == "PREPARE_REQUIRED"
+    assert no_oracle.reason == "no_independent_oracle_proof"
+
+    with_oracle = verify_completion_closure(
+        ledger,
+        step_idx=4,
+        max_steps=15,
+        epistemic_artifacts=list(tracker.artifacts.values()),
+        require_positive_oracle_proof=True,
+        has_independent_oracle_proof=True,
+    )
+    assert with_oracle.passed is True
+    assert with_oracle.decision == "COMPLETE"
+
+    # 3. Infrastructure Fault Isolation unconditionally halts even on verified ledger
+    faulted = verify_completion_closure(
+        ledger,
+        step_idx=4,
+        max_steps=15,
+        epistemic_artifacts=list(tracker.artifacts.values()),
+        require_positive_oracle_proof=True,
+        has_independent_oracle_proof=True,
+        infra_fault="llm_quota_exceeded",
+    )
+    assert faulted.passed is False
+    assert faulted.outcome == "HALTED_INFRA_FAULT"
+    assert faulted.decision == "HALTED_INFRA_FAULT"
+    assert faulted.reason == "infra_fault:llm_quota_exceeded"
+    assert ledger.status == "HALTED_INFRA_FAULT"
+
+
+def test_finite_sample_conformal_risk_control_gate() -> None:
+    # Too few samples to certify alpha=0.05 (1 / (5 + 1) = 0.167 > 0.05) -> abstain-all (-inf)
+    tau_small = calibrate_conformal_abstain_threshold([0.1, 0.2, 0.3, 0.4, 0.5], [0.0] * 5, alpha=0.05)
+    assert tau_small == -math.inf
+    gate_small = ConformalRiskGate.from_calibration([0.1, 0.2, 0.3, 0.4, 0.5], [0.0] * 5, alpha=0.05)
+    assert gate_small.should_abstain(0.0) is True
+
+    # n=25, alpha=0.10: 20 safe actions [0.05..0.50] (loss=0) + 5 risky actions [0.70..0.95] (loss=1)
+    scores = [round(0.05 + 0.02 * i, 2) for i in range(20)] + [0.70, 0.75, 0.80, 0.90, 0.95]
+    losses = [0.0] * 20 + [1.0] * 5
+    gate = ConformalRiskGate.from_calibration(scores, losses, alpha=0.10)
+    # At tau=0.70: (1 + 1) / 26 = 0.0769 <= 0.10; at tau=0.75: (2 + 1) / 26 = 0.1154 > 0.10
+    assert gate.threshold == 0.70
+    assert gate.empirical_risk_bound <= 0.10
+    assert gate.should_abstain(0.20) is False
+    assert gate.should_abstain(0.70) is False
+    assert gate.should_abstain(0.75) is True
+    assert gate.should_abstain(0.95) is True
+    assert gate.should_abstain(float("nan")) is True
+
+    # Input validation
+    with pytest.raises(ValueError, match="equal length"):
+        calibrate_conformal_abstain_threshold([0.1, 0.2], [0.0], alpha=0.1)
+    with pytest.raises(ValueError, match="bounded"):
+        calibrate_conformal_abstain_threshold([0.1], [1.5], alpha=0.5)

@@ -1,6 +1,11 @@
 """openadapt-kernel: minimal commit-boundary verification and shadow-to-autopilot runtime."""
 
-from openadapt_kernel.aci import OnlineACICalibrator, SessionStartNormalizer
+from openadapt_kernel.aci import (
+    ConformalRiskGate,
+    OnlineACICalibrator,
+    SessionStartNormalizer,
+    calibrate_conformal_abstain_threshold,
+)
 from openadapt_kernel.canonical import (
     VALID_FIELD_TYPES,
     DossierVariableSchema,
@@ -107,6 +112,8 @@ from openadapt_kernel.ledger import (
     CriticCalibrationAction,
     CriticCalibrationVerdict,
     DerivedCalculation,
+    EpistemicArtifact,
+    EpistemicReadTracker,
     ExtractedFact,
     FactCoverageReport,
     FinalizationDecision,
@@ -270,4 +277,5 @@ __all__ = [
     "evaluate_derived_calculation", "evaluate_reactive_policy_on_dossier_update", "verify_query_view_preconditions",
     "AppNavigationGraph", "NavEdge", "NavNode", "ReconciliationWatcher", "StuckLoopDetector", "StuckLoopStatus",
     "WatchedReconciliationItem", "sanitize_url_to_view_pattern",
+    "ConformalRiskGate", "EpistemicArtifact", "EpistemicReadTracker", "calibrate_conformal_abstain_threshold",
 ]

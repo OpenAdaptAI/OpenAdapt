@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from openadapt_kernel.canonical import FieldType
 
 ObligationState = Literal["PENDING", "COMMITTED", "EXEMPT", "ESCALATED"]
-EpisodeOutcome = Literal["UNVERIFIED", "VERIFIED", "ESCALATED", "AWAITING_MICRO_HANDOFF"]
+EpisodeOutcome = Literal["UNVERIFIED", "VERIFIED", "ESCALATED", "AWAITING_MICRO_HANDOFF", "HALTED_INFRA_FAULT"]
 CapabilityKind = Literal["consent", "ssa_literal", "constraint"]
 
 
@@ -476,6 +476,44 @@ class CriticCalibrationVerdict:
 
 
 @dataclass
+class EpistemicArtifact:
+    artifact_id: str
+    kind: str
+    label: str
+    required_before_commit: bool = True
+    read: bool = False
+
+
+@dataclass
+class EpistemicReadTracker:
+    """Tracks required documents/tabs/attachments that must be read before commit."""
+
+    artifacts: Dict[str, EpistemicArtifact] = field(default_factory=dict)
+
+    def register_artifact(
+        self,
+        artifact_id: str,
+        kind: str,
+        label: str,
+        *,
+        required_before_commit: bool = True,
+        read: bool = False,
+    ) -> EpistemicArtifact:
+        art = EpistemicArtifact(artifact_id, kind, label, required_before_commit=required_before_commit, read=read)
+        self.artifacts[artifact_id] = art
+        return art
+
+    def mark_read(self, artifact_id: str) -> EpistemicArtifact:
+        if artifact_id not in self.artifacts:
+            raise KeyError(f"Unknown epistemic artifact: {artifact_id!r}")
+        self.artifacts[artifact_id].read = True
+        return self.artifacts[artifact_id]
+
+    def unread_required_artifacts(self) -> List[str]:
+        return [aid for aid, art in self.artifacts.items() if art.required_before_commit and not art.read]
+
+
+@dataclass
 class ClosureVerdict:
     outcome: EpisodeOutcome
     allowed: bool
@@ -484,6 +522,17 @@ class ClosureVerdict:
     uncited_triage_keys: List[str] = field(default_factory=list)
     pending_obligations: List[str] = field(default_factory=list)
     missing_freetext_facts: List[str] = field(default_factory=list)
+    unread_epistemic_artifacts: List[str] = field(default_factory=list)
+    decision: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.decision:
+            if self.outcome == "HALTED_INFRA_FAULT":
+                self.decision = "HALTED_INFRA_FAULT"
+            elif self.allowed and self.outcome == "VERIFIED":
+                self.decision = "COMPLETE"
+            else:
+                self.decision = "ESCALATE"
 
     @property
     def passed(self) -> bool:
@@ -954,9 +1003,28 @@ def verify_completion_closure(
     extracted_facts: Sequence[ExtractedFact] = (),
     min_content_overlap: float = 0.65,
     entailment_fn: Optional[Callable[[str, str], bool]] = None,
+    epistemic_artifacts: Sequence[EpistemicArtifact] = (),
+    require_positive_oracle_proof: bool = False,
+    has_independent_oracle_proof: bool = True,
+    infra_fault: str = "",
 ) -> ClosureVerdict:
-    """Enforce non-waivable step-limit default-deny, post-commit chains, dossier keys, triage & freetext facts."""
+    """Enforce closed-world Simplex invariants: infra fault isolation, epistemic reads, oracle proof, and closure."""
     from openadapt_kernel.canonical import canonical_equal
+
+    if (fault := str(infra_fault or "").strip()):
+        ledger.status, ledger.escalation_reason = "HALTED_INFRA_FAULT", f"infra_fault:{fault}"
+        return ClosureVerdict("HALTED_INFRA_FAULT", False, f"infra_fault:{fault}", decision="HALTED_INFRA_FAULT")
+
+    unread_art = [a.artifact_id for a in epistemic_artifacts if a.required_before_commit and not a.read]
+    if unread_art:
+        ledger.status, ledger.escalation_reason = "ESCALATED", f"unread_epistemic_artifacts: {unread_art}"
+        return ClosureVerdict(
+            "ESCALATED", False, "unread_epistemic_artifacts", unread_epistemic_artifacts=unread_art, decision="ESCALATE"
+        )
+
+    if require_positive_oracle_proof and not has_independent_oracle_proof:
+        ledger.status, ledger.escalation_reason = "ESCALATED", "no_independent_oracle_proof"
+        return ClosureVerdict("ESCALATED", False, "no_independent_oracle_proof", decision="PREPARE_REQUIRED")
 
     rb, dos, ftypes, triage_req = readback_values or {}, dossier_values or {}, dict(field_types or {}), required_triage_evidence or {}
     pending = ledger.pending_ids()

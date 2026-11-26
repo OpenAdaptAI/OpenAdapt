@@ -20,6 +20,7 @@ from openadapt_kernel.egress_guard import LocalEgressGuard
 from openadapt_kernel.fsm import compile_policy_rules_to_table, evaluate_pre_step_policy
 from openadapt_kernel.interceptor import CommitInterceptor
 from openadapt_kernel.ledger import (
+    EpistemicArtifact,
     ObligationLedger,
     extract_dossier_facts,
     verify_completion_closure,
@@ -228,6 +229,8 @@ def run_portal_pack(
     observed_facts: Optional[Mapping[str, str]] = None,
     task_disposition: Optional[str] = None,
     max_steps: int = 20,
+    strict_closed_world: bool = False,
+    epistemic_artifacts: Sequence[EpistemicArtifact] = (),
 ) -> RunResult:
     """Execute a PortalPack in Draft-to-Commit, Verified Autopilot, or Self-Healing mode."""
     from playwright.sync_api import sync_playwright
@@ -591,6 +594,7 @@ def run_portal_pack(
 
             # 4. Completion Closure & Fact Coverage before minting signed receipt
             extracted_facts = extract_dossier_facts(source_texts) if source_texts else ()
+            has_oracle_proof = bool(verdict.verified and (sqlite_db_path or pdf_readback_path or expected_vars))
             closure = verify_completion_closure(
                 ledger,
                 step_idx=1,
@@ -601,12 +605,21 @@ def run_portal_pack(
                 post_commit_obligations=list(post_commit_obligations or ()),
                 freetext_notes=freetext_notes,
                 extracted_facts=extracted_facts,
+                epistemic_artifacts=epistemic_artifacts,
+                require_positive_oracle_proof=strict_closed_world,
+                has_independent_oracle_proof=has_oracle_proof,
             )
-            if not closure.allowed and (source_texts is not None or freetext_notes or post_commit_obligations):
+            if not closure.allowed and (
+                strict_closed_world
+                or epistemic_artifacts
+                or source_texts is not None
+                or freetext_notes
+                or post_commit_obligations
+            ):
                 ledger.finalize("error", dirty_fields=list(interceptor.dirty_fields.keys()), error_detail="completion_closure_failed")
                 return RunResult(
                     mode="autopilot",
-                    outcome="ESCALATED",
+                    outcome=closure.decision or "ESCALATED",
                     staged_fields=staged.staged,
                     commit_detected=classification.is_commit,
                     readback_verified=True,
