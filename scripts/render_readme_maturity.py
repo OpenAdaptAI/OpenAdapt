@@ -425,13 +425,15 @@ def _qualification_block() -> str:
     return "\n".join(
         [
             BEGIN,
-            "The signed ledger has seven active target admissions. Their evidence class",
-            "is `remote-safe-synthetic`, not MockMed `production_acceptance`. They remain",
-            "valid until revoked; there's no expiry date. `pip install openadapt` is the",
-            "admitted runtime (launcher 1.16.0, Flow 1.35.1). Desktop's admitted artifact",
-            "is the 0.16.0 wheel. Native Mac DMGs stay ad-hoc signed 0.15.0; don't treat",
-            "those as admitted. A Production run still needs a workflow admission for the",
-            "exact compiled bundle, application, and environment.",
+            "The last signed lifecycle snapshot (September 2026) has seven active target admissions.",
+            "Their evidence class is `remote-safe-synthetic`, not MockMed `production_acceptance`.",
+            "They remain valid until revoked; there's no expiry date. The admitted versions in that",
+            "snapshot are launcher 1.16.0, Flow 1.35.1, and Desktop's 0.16.0 wheel (`pip install openadapt`",
+            "installs the latest PyPI release; see [GitHub Releases](https://github.com/OpenAdaptAI/OpenAdapt/releases)",
+            "and [PyPI](https://pypi.org/project/openadapt/) for current package versions, which have not",
+            "yet been re-admitted to the signed ledger). Native Mac DMGs from that snapshot stay ad-hoc",
+            "signed 0.15.0; don't treat those as admitted. A Production run still needs a workflow admission",
+            "for the exact compiled bundle, application, and environment.",
             f"[Check the live signed Production record]({LIVE_RECORD_URL}).",
             END,
         ]

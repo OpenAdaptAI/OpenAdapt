@@ -173,7 +173,10 @@ class ReadmeMaturityContractTests(unittest.TestCase):
         block = MODULE.render_block(projection, {}, now=NOW)
 
         self.assertIn(MODULE.LIVE_RECORD_URL, block)
+        self.assertIn("last signed lifecycle snapshot", block)
         self.assertIn("seven active target admissions", block)
+        self.assertIn("GitHub Releases", block)
+        self.assertIn("https://github.com/OpenAdaptAI/OpenAdapt/releases", block)
         self.assertIn("remote-safe-synthetic", block)
         self.assertIn("production_acceptance", block)
         self.assertIn("MockMed", block)
