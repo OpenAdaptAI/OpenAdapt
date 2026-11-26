@@ -52,6 +52,7 @@ PACKAGES = {
     "privacy": "openadapt-privacy",
     "tray": "openadapt-tray",
     "verify": "openadapt-verify",
+    "kernel": "openadapt-kernel",
 }
 _HEADER = re.compile(r"^## v([^ ]+) \(\d{4}-\d{2}-\d{2}\)$", re.MULTILINE)
 _REQUIREMENT = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[[^\]]*\])?\s*(.*)$")

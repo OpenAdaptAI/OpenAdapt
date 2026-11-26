@@ -47,6 +47,7 @@ PACKAGES: dict[str, tuple[list[str], str, list[str]]] = {
         "packages.yml",
         ["verify facade (", "verify clean install"],
     ),
+    "kernel": (["packages/kernel"], "kernel.yml", ["openadapt-kernel ("]),
     "program-graph": (["packages/program-graph"], "packages.yml", ["program-graph"]),
     "desktop": (
         ["packages/desktop"],

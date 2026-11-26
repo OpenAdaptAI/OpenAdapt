@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (2026-11-25)
+## v0.1.0 (2026-11-25)
 
 - Initial release of `openadapt-kernel` with zero `openadapt-flow` dependencies and zero per-app engine code.
 - Added default-deny `ObligationLedger`, typed `<MANDATORY_CONSTRAINTS>` + `<VERIFIED_CAPABILITIES>`, SSA opaque-ID provenance, and durable Saga checkpointing.
