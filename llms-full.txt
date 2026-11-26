@@ -17,12 +17,13 @@ Source: https://github.com/OpenAdaptAI/OpenAdapt
 [![CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml)
 [![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml)
 [![PyPI](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-OpenAdapt%20Co--Pilot-4285F4?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/openadapt-co-pilot/bcpliibliddclnibacbjbmbpgffkjefd)
 [![Python 3.11-3.12](https://img.shields.io/badge/python-3.11--3.12-blue)](https://www.python.org/downloads/)
 [![Hugging Face Veto-4B-r6](https://img.shields.io/badge/Hugging%20Face-Veto--4B--r6-FFD21E?logo=huggingface&logoColor=black)](https://huggingface.co/OpenAdapt/openadapt-veto-4b-r6)
 [![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
-[Website](https://openadapt.ai) · [Docs](https://docs.openadapt.ai) · [Live Demo](https://app.openadapt.ai/demo) · [Starter Skills Registry](https://app.openadapt.ai/skills) · [Benchmarks](https://openadapt.ai/proof)
+[Website](https://openadapt.ai) · [Docs](https://docs.openadapt.ai) · [Chrome Extension](https://chromewebstore.google.com/detail/openadapt-co-pilot/bcpliibliddclnibacbjbmbpgffkjefd) · [Live Demo](https://app.openadapt.ai/demo) · [Starter Skills Registry](https://app.openadapt.ai/skills) · [Benchmarks](https://openadapt.ai/proof)
 
 </div>
 
