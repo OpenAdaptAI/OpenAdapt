@@ -31,6 +31,14 @@ from openadapt_kernel.copilot import (
     qualify_verifier_offline,
     verify_receipt,
 )
+from openadapt_kernel.dgm_pr import (
+    FailureCluster,
+    FailureRecord,
+    KernelPRProposal,
+    cluster_pack_failures,
+    draft_kernel_pr_proposal,
+    validate_kernel_pr_safety,
+)
 from openadapt_kernel.digital_twin import (
     DigitalTwinSnapshot,
     TwinHealResult,
@@ -152,6 +160,13 @@ from openadapt_kernel.registry import (
     scan_pack_for_pii,
 )
 from openadapt_kernel.runner import RunResult, format_run_result_json, run_portal_pack
+from openadapt_kernel.stateful_twin import (
+    StatefulTwinApp,
+    TwinPageSpec,
+    TwinRouteSpec,
+    self_heal_multipage_in_twin,
+    synthesize_zero_phi_stateful_twin,
+)
 from openadapt_kernel.zero_phi_repair import (
     ASTVerificationResult,
     DistilledRepairStep,
@@ -189,4 +204,6 @@ __all__ = [
     "token_boundary_check", "tokenize_role_label", "verify_completion_closure", "verify_cross_tab_dom", "verify_freetext_fact_coverage",
     "verify_fsm_safety", "verify_pdf_readback", "verify_readonly_answer_provenance", "verify_receipt", "verify_semantic_slot_bindings",
     "verify_sqlite_ro", "verify_symbolic_repair_ast", "verify_warm_pack_putget",
+    "FailureCluster", "FailureRecord", "KernelPRProposal", "StatefulTwinApp", "TwinPageSpec", "TwinRouteSpec",
+    "cluster_pack_failures", "draft_kernel_pr_proposal", "self_heal_multipage_in_twin", "synthesize_zero_phi_stateful_twin", "validate_kernel_pr_safety",
 ]
