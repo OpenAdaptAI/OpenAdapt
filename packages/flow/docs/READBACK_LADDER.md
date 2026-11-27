@@ -9,31 +9,21 @@ records the level for each save (`readback.saves`) and for the run
 | `checked_how` | Label | What happened | Tier |
 |---|---|---|---|
 | `unchecked` | Not checked | Nothing confirmed the save | none |
-| `same_screen` | The screen said it saved | The value was read on the screen the save left | 4 |
+| `same_screen` | Checked on the screen | The expected value was read in a bounded region on the current screen | 4 |
 | `reopened` | Reopened in the same session | The acting session reset its state, found the record again and read it | 3 |
-| `separate_session` | Checked in a separate session | A separately signed-in session opened the record and read it (`ui_readback`) | 2 |
+| `separate_session` | Checked in a separate session | A separately signed-in session opened the record and read it (`ui_readback` or `fresh_session`) | 2 |
 | `system_of_record` | Checked in your system's records | An API, database or FHIR read, or a read of a file the system itself wrote (`artifact_producer: system_of_record`), found the record | 1 |
 
 ## What makes a run VERIFIED
 
-`VERIFIED` means every save was read back independently of the acting
-session: `separate_session` or `system_of_record`. That is the floor for both
-production profiles, Standard and Regulated.
+Each production execution profile sets a floor for `VERIFIED`:
 
-`same_screen` and `reopened` are reported with their own labels and never
-make a run `VERIFIED` by themselves. A run whose saves were all confirmed, but
-at least one only at those levels, ends `COMPLETED_UNVERIFIED`. The report sets
-`readback.below_minimum`, and the agent says `not_sure_if_saved` with reason
-`checked_below_minimum`: a person checks the record.
+- **Standard** defaults to `same_screen` (tier 4). Any confirmed check (`same_screen`, `reopened`, `separate_session`, or `system_of_record`) makes a run `VERIFIED`, while `report.json` (`readback.checked_how`) and the run receipt (`effect_tier_reached`) record the exact level reached. This works out of the box on in-place field or grid edits without a separate post-save screen and on non-idempotent portals or wizards that cannot reload, while still refusing `unchecked`.
+- **Regulated** defaults to `separate_session` (tier 2): every save must be read back independently of the acting session (`separate_session` or `system_of_record`), and OpenAdapt Cloud countersigns tier 1 (`system_of_record`) only.
 
-A reopen counts toward `VERIFIED` only under an execution profile whose
-contract sets `reopened_counts_as_verified`. No built-in profile does.
+When a run's saves are all confirmed, but at least one was checked below the active floor (for example `same_screen` or `reopened` under `Regulated`, or below a workflow's `minimum_readback`), the run ends `COMPLETED_UNVERIFIED`. The report sets `readback.below_minimum`, and the agent says `not_sure_if_saved` with reason `checked_below_minimum`: a person checks the record.
 
-A workflow can raise the floor with `minimum_readback`: `separate_session`
-(the default) or `system_of_record`. It can't lower it. `qualify` enforces the
-same minimum before the workflow ships (`minimum_readback` in `verify.yaml`,
-or the older `minimum_effect_strength`), and a workflow that sets it also
-refuses to run with a weaker verifier.
+A workflow or `verify.yaml` can declare `minimum_readback` (`same_screen`, `reopened`, `separate_session`, or `system_of_record`) to raise a profile's floor; it never lowers `Regulated` below `separate_session`. `qualify` enforces the same minimum before the workflow ships (`minimum_readback` in `verify.yaml`, or the older `minimum_effect_strength`), and a workflow that sets a stricter minimum refuses to run with a weaker verifier.
 
 ## How Flow reopens a record without configuration
 

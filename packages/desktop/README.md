@@ -141,19 +141,24 @@ Every frame is a screenshot the replayer saved.
 ## How it confirms a save
 
 The right-record check before typing reads the screen, so it needs no other
-access. Confirming the save afterwards needs a way to read the record back.
-**Check it** asks how for each step that saves:
+access. Confirming a save afterwards checks observable evidence and records the
+exact check level (`same_screen`, `reopened`, `separate_session`, or
+`system_of_record`) on the run report and receipt:
 
-- From the system's records: an API or database read (REST, GraphQL, FHIR, or
-  SQL), a file, or a document hash. This checks the record from outside the
-  app. IT connects it once per system in the deployment settings file that
-  **Run it** takes.
-- By opening the saved record again on screen, for systems where you have no
-  API or database access. This is a weaker check than an outside read, because
-  it shows only what the app displays.
+- **On the screen out of the box** (`same_screen` or `reopened`): OpenAdapt
+  checks the expected values in bounded screen or accessibility regions right
+  on the current view (working even on in-place field or grid edits with no
+  separate post-save screen, and on non-idempotent portals or wizards that
+  cannot reload), or by reopening the record when a recording demonstrates how.
+- **Through a separate session or backend store when available**
+  (`separate_session` or `system_of_record`): a separate read-only session, or
+  a read-only API, database view (REST, GraphQL, FHIR, or SQL), or exported
+  file/PDF connected once in the deployment settings file that **Run it**
+  takes. Regulated runs require `separate_session` or `system_of_record`.
 
-Without one of these, a completed run shows **Finished, not checked** and
-doesn't count as done.
+Without a confirmed check (or when a check falls below the profile or workflow
+minimum), a completed run shows **Finished, not checked** and doesn't count as
+done.
 
 ## Answering a stop from your phone
 

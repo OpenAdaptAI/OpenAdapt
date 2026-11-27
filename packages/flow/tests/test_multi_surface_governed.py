@@ -1,11 +1,11 @@
 """Governed, durable, and qualified runs of multi-surface bundles.
 
-docs/MULTI_SURFACE.md, "Governance and verification". A multi-surface run
-reaches VERIFIED under exactly the single-surface rules (governed
-authorization, durable checkpoints, identity on writes, an effect confirmed by
-an independent read of the system of record), plus one rule of its own: every
-step result records the surface it ran on, and that record must match the
-sealed contract. Screen-only evidence never reaches VERIFIED on any surface.
+docs/MULTI_SURFACE.md, "Governance, qualification, and verification". A
+multi-surface run reaches VERIFIED under the same rules as a single-surface run
+(governed authorization, durable checkpoints, identity on writes, and an effect
+confirmed at or above the profile's and workflow's floor), plus one rule of its
+own: every step result records the surface it ran on, and that record must
+match the sealed contract.
 """
 
 from __future__ import annotations
@@ -84,10 +84,11 @@ def _multi_surface_write_workflow() -> Workflow:
     )
 
 
-def _governed_run(tmp_path, *, verifier=None, admit_with=None):
-    workflow, bundle = _sealed(
-        tmp_path, _multi_surface_write_workflow(), encrypted=False
-    )
+def _governed_run(tmp_path, *, verifier=None, admit_with=None, minimum_readback=None):
+    raw = _multi_surface_write_workflow()
+    if minimum_readback is not None:
+        raw = raw.model_copy(update={"minimum_readback": minimum_readback})
+    workflow, bundle = _sealed(tmp_path, raw, encrypted=False)
     verifier = verifier or _TieredVerifier()
     gate = _gate(
         workflow,
@@ -152,13 +153,35 @@ def test_surface_record_must_match_the_contract(tmp_path) -> None:
         )
 
 
-def test_screen_reacquisition_never_verifies_a_multi_surface_run(tmp_path) -> None:
-    # Admitted with a system-of-record verifier, but the run's verifier only
-    # re-reads the screen: VERIFIED is out of reach, on any surface.
-    report, *_ = _governed_run(
-        tmp_path, verifier=_PersistedVerifier(), admit_with=_TieredVerifier()
+def test_screen_reacquisition_respects_graded_floor_on_multi_surface_run(
+    tmp_path,
+) -> None:
+    # Under Standard with no raised floor, tier-3 reopen reaches VERIFIED and
+    # records checked_how honestly, matching single-surface Standard.
+    standard_report, standard_workflow, *_ = _governed_run(
+        tmp_path / "standard", verifier=_PersistedVerifier()
     )
-    assert report.execution_outcome != ExecutionOutcome.VERIFIED.value
+    assert standard_report.execution_outcome == ExecutionOutcome.VERIFIED.value
+    assert (
+        standard_report.readback is not None
+        and standard_report.readback.checked_how == "reopened"
+    )
+    assert (
+        classify_execution_outcome(
+            standard_report, standard_workflow, ExecutionProfile.REGULATED
+        )
+        is ExecutionOutcome.COMPLETED_UNVERIFIED
+    )
+
+    # When minimum_readback raises the floor to separate_session, tier-3
+    # reacquisition cannot verify a multi-surface run.
+    raised_report, *_ = _governed_run(
+        tmp_path / "raised",
+        verifier=_PersistedVerifier(),
+        admit_with=_TieredVerifier(),
+        minimum_readback="separate_session",
+    )
+    assert raised_report.execution_outcome != ExecutionOutcome.VERIFIED.value
 
 
 def test_single_surface_results_carry_no_surface_record(tmp_path) -> None:

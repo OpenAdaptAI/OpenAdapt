@@ -144,7 +144,7 @@ The simulated sandbox suggests the same command in its `list_workflows` result.
 | `did_not_run` (Didn't run) | This call wrote nothing. With `request_id_conflict`, an earlier request with the same `request_id` may have saved. | If `safe_to_retry` is true, fix the cause and resend the same request. Otherwise follow `next_action`. |
 | `running` (Running) | The run didn't finish within `wait_seconds` (default 60). | Call `get_run` with the `run_id` until `outcome` changes. |
 
-`checked_how` says how the save was checked, when the run recorded it: `system_of_record` (Checked in your system's records), `separate_session` (Checked in a separate session), `reopened` (Reopened in the same session), `same_screen` (The screen said it saved), or `unchecked`. Only `separate_session` or stronger makes a run `done`. A save that was confirmed only by reopening it in the same session, or on the screen it left, is `not_sure_if_saved` with reason `checked_below_minimum`. A workflow can require `system_of_record`.
+`checked_how` says how the save was checked, when the run recorded it: `system_of_record` (Checked in your system's records), `separate_session` (Checked in a separate session), `reopened` (Reopened in the same session), `same_screen` (Checked on the screen), or `unchecked`. Under the `standard` profile, any confirmed check (`same_screen` or stronger) makes a run `done`; under `regulated` (or when `minimum_readback` sets a stricter floor), a save confirmed below that floor is `not_sure_if_saved` with reason `checked_below_minimum`. A workflow can raise its floor with `minimum_readback` (`reopened`, `separate_session`, or `system_of_record`).
 
 Branch on `outcome` and `safe_to_retry`. `next_step` names the next move as a fixed code, so your code doesn't have to parse `next_action`: `none`, `call_get_run`, `wait_for_person`, `check_record`, `fix_inputs`, `fix_setup`, or `retry`.
 
@@ -406,7 +406,7 @@ When a run reads back correctly, it becomes a draft in the teach dir that `guard
 claude mcp add --scope user openadapt-teach -- uvx --python 3.12 --from 'openadapt-agent[tutorial]' openadapt-agent serve --teach verify.yaml --url https://emr-test.example.org --runs-dir ~/.openadapt/runs
 ```
 
-`verify.yaml` needs only a `verifier:` section that reads the app's records (`rest`, `sql`, `fhir`, `graphql` or `file`), the same file `openadapt-flow record --verify` uses. The first run makes a real entry in the app, so point `--url` at a test copy with test records.
+`verify.yaml` needs a `verifier:` section that reads the app's records: a backend channel (`rest`, `sql`, `fhir`, `graphql`, or `file`) when available, or a separate read-only UI session (`ui_readback`) on portals without backend access, and can set `minimum_readback` (`same_screen`, `reopened`, `separate_session`, or `system_of_record`). It is the same file `openadapt-flow record --verify` uses. The first run makes a real entry in the app, so point `--url` at a test copy with test records.
 
 Your agent then:
 
