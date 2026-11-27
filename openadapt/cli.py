@@ -2610,6 +2610,134 @@ def handoff(command_ctx: click.Context) -> None:
     sys.exit(_invoke_flow(["handoff", *args]))
 
 
+@main.group("audit")
+def audit() -> None:
+    """Sample verified runs for statistical compliance spot-checks."""
+
+
+@audit.command("sample")
+@click.option(
+    "--receipts-dir",
+    "--input",
+    "receipts_dir",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Path to receipts directory or JSONL ledger (default: ~/.openadapt/verify).",
+)
+@click.option(
+    "--rate",
+    default=0.05,
+    type=float,
+    show_default=True,
+    help="Fraction of eligible runs to sample, in (0.0, 1.0].",
+)
+@click.option(
+    "--count",
+    default=None,
+    type=int,
+    help="Explicit number of runs to sample instead of using --rate.",
+)
+@click.option(
+    "--min-samples",
+    default=None,
+    type=int,
+    help="Minimum number of runs to sample (capped at eligible count).",
+)
+@click.option(
+    "--max-samples",
+    default=None,
+    type=int,
+    help="Maximum number of runs to sample.",
+)
+@click.option(
+    "--since",
+    default=None,
+    type=str,
+    help="Include only runs at or after this ISO date/timestamp or window (e.g. 7d, 24h).",
+)
+@click.option(
+    "--seed",
+    default=None,
+    type=str,
+    help="Deterministic seed for reproducible sampling (omit for cryptographic random sampling).",
+)
+@click.option(
+    "--status",
+    default="verified".upper(),
+    type=str,
+    show_default=True,
+    help="Run status filter (case-insensitive, comma-separated, or ALL).",
+)
+@click.option(
+    "--out",
+    "out_path",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Write an audit_sample_v1 manifest to a JSON or JSONL file.",
+)
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    default=False,
+    help="Print the audit_sample_v1 manifest as JSON to stdout.",
+)
+@click.option(
+    "--exclude-already-sampled",
+    "exclude_paths",
+    multiple=True,
+    type=click.Path(path_type=Path),
+    help="Exclude run IDs and digests already in a prior manifest or ledger (repeatable).",
+)
+def audit_sample(
+    receipts_dir: Optional[Path],
+    rate: float,
+    count: Optional[int],
+    min_samples: Optional[int],
+    max_samples: Optional[int],
+    since: Optional[str],
+    seed: Optional[str],
+    status: str,
+    out_path: Optional[Path],
+    as_json: bool,
+    exclude_paths: tuple[Path, ...],
+) -> None:
+    """Draw a random statistical spot-check sample of verified runs."""
+    from openadapt.audit_sample import (
+        DEFAULT_RECEIPTS_DIR,
+        AuditSampleError,
+        format_sample_table,
+        sample_runs,
+        write_sample_manifest,
+    )
+
+    source = receipts_dir if receipts_dir is not None else DEFAULT_RECEIPTS_DIR
+    try:
+        result = sample_runs(
+            source,
+            rate=rate,
+            count=count,
+            min_samples=min_samples,
+            max_samples=max_samples,
+            since=since,
+            seed=seed,
+            status=status,
+            exclude_already_sampled=exclude_paths,
+        )
+    except AuditSampleError as exc:
+        raise click.BadParameter(str(exc)) from None
+
+    if out_path is not None:
+        write_sample_manifest(result.manifest, out_path)
+
+    if as_json:
+        click.echo(json.dumps(result.manifest, indent=2))
+    else:
+        click.echo(format_sample_table(result.manifest))
+        if out_path is not None:
+            click.echo(f"\nManifest written to {out_path}")
+
+
 @main.command(
     "receipt",
     context_settings={

@@ -70,7 +70,10 @@ def test_wrap_help_is_discovered_as_an_actual_launcher_command():
     assert "wrap" not in choices
     assert "kernel" not in choices
     assert "mcpify" not in choices
-    assert len(names) == 19
+    assert "audit" in names
+    assert cli.main.commands["audit"] is cli.audit
+    assert "audit" not in choices
+    assert len(names) == 20
 
 
 def test_review_brief_comes_from_the_unmodified_canonical_generator():
