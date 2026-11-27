@@ -16,7 +16,7 @@ from openadapt_kernel.egress_guard import (
     LocalEgressGuard,
     inspect_outbound_payload,
 )
-from openadapt_kernel.macro import observe_schema
+from openadapt_kernel.macro import ControlSignature, observe_schema
 from openadapt_kernel.zero_phi_repair import (
     DistilledRepairStep,
     _has_disabled_submit,
@@ -75,6 +75,10 @@ _EXTRACT_DOM_TREE_JS = """() => {
     for (const k of ['type','role','data-oa-idx','placeholder','aria-label','aria-required','aria-disabled','aria-checked','aria-expanded','aria-selected','tabindex']) {
       const v = node.getAttribute(k);
       if (v !== null && v !== '') attrs[k] = v;
+    }
+    if (!attrs['aria-label'] && (low === 'input' || low === 'select' || low === 'textarea') && node.id) {
+      const lbl = document.querySelector(`label[for="${CSS.escape(node.id)}"]`);
+      if (lbl) { const lt = (lbl.innerText || lbl.textContent || '').trim(); if (lt) attrs['aria-label'] = lt; }
     }
     if (node.disabled || node.hasAttribute('disabled')) attrs.disabled = 'true';
     if (node.required || node.hasAttribute('required')) attrs.required = 'true';
@@ -361,6 +365,38 @@ def _invoke_coding_agent(
     return fn(outbound_payload)
 
 
+def _detokenize_repair_step(
+    step: DistilledRepairStep, codec: BijectiveSymbolCodec
+) -> DistilledRepairStep:
+    cs = step.control_signature
+    detok_cs: Optional[ControlSignature] = None
+    if cs is not None:
+        detok_cs = ControlSignature(
+            in_modal=cs.in_modal,
+            tag=cs.tag,
+            input_type=cs.input_type,
+            role=cs.role,
+            name=codec.detokenize_text(cs.name),
+            placeholder=codec.detokenize_text(cs.placeholder),
+            label_tokens=tuple(codec.detokenize_text(t) for t in cs.label_tokens),
+            text_tokens=tuple(codec.detokenize_text(t) for t in cs.text_tokens),
+            ordinal=cs.ordinal,
+        )
+    c0, c1, c2, c3 = step.ctrl_sig
+    return DistilledRepairStep(
+        method=step.method,
+        selector=codec.detokenize_text(step.selector),
+        modal_ordinal=step.modal_ordinal,
+        var_key=codec.detokenize_text(step.var_key),
+        arg=codec.detokenize_text(step.arg) if isinstance(step.arg, str) else step.arg,
+        is_stripped_target=step.is_stripped_target,
+        ctrl_sig=(c0, c1, c2, codec.detokenize_text(c3)),
+        control_signature=detok_cs,
+        semantic_role=step.semantic_role,
+        semantic_label=codec.detokenize_text(step.semantic_label),
+    )
+
+
 def self_heal_in_digital_twin(
     twin: DigitalTwinSnapshot,
     var_map: Dict[str, str],
@@ -375,7 +411,24 @@ def self_heal_in_digital_twin(
     """Run bounded offline TDD self-healing inside twin.sanitized_html with mandatory egress gating."""
     from playwright.sync_api import sync_playwright
 
-    var_keys = sorted(var_map.keys())
+    twin_html = (
+        symbol_codec.symbolize_html(twin.sanitized_html)
+        if symbol_codec is not None
+        else twin.sanitized_html
+    )
+    sym_var_map: Dict[str, str] = (
+        {
+            symbol_codec.symbolize_token(k): symbol_codec.symbolize_text(v)
+            for k, v in var_map.items()
+        }
+        if symbol_codec is not None
+        else dict(var_map)
+    )
+    outbound_var_keys = sorted(sym_var_map.keys())
+    exec_var_map: Dict[str, str] = dict(sym_var_map)
+    if symbol_codec is not None:
+        for raw_k, raw_v in var_map.items():
+            exec_var_map.setdefault(raw_k, symbol_codec.symbolize_text(raw_v))
     safe_error = sanitize_ui_label_allowlist(structural_error) or "error"
     limit = max(1, int(max_turns))
     attempted_net_reqs = 0
@@ -398,7 +451,7 @@ def self_heal_in_digital_twin(
                 route.abort("blockedbyclient")
 
             page.route("**/*", _abort_all_network)
-            page.set_content(twin.sanitized_html, wait_until="domcontentloaded")
+            page.set_content(twin_html, wait_until="domcontentloaded")
             page.evaluate(_TWIN_FORM_HARNESS_JS)
 
             for turn_idx in range(1, limit + 1):
@@ -411,18 +464,8 @@ def self_heal_in_digital_twin(
                     "submit_still_disabled": submit_disabled,
                     "last_failure_code": last_failure_code or "none",
                 }
-                outbound_html = (
-                    symbol_codec.symbolize_html(twin.sanitized_html)
-                    if symbol_codec is not None
-                    else twin.sanitized_html
-                )
-                outbound_var_keys = (
-                    [k if k.startswith("$") else symbol_codec.symbolize_text(k) for k in var_keys]
-                    if symbol_codec is not None
-                    else var_keys
-                )
                 outbound_payload: Dict[str, Any] = {
-                    "sanitized_html": outbound_html,
+                    "sanitized_html": twin_html,
                     "controls": ctrl_twin,
                     "var_keys": outbound_var_keys,
                     "structural_error": safe_error,
@@ -446,25 +489,28 @@ def self_heal_in_digital_twin(
                         turn_history=history,
                     )
 
-                code_str = _invoke_coding_agent(
-                    coding_agent_fn, outbound_payload, outbound_html, outbound_var_keys, safe_error, feedback
+                sym_code_str = _invoke_coding_agent(
+                    coding_agent_fn, outbound_payload, twin_html, outbound_var_keys, safe_error, feedback
                 )
-                if symbol_codec is not None:
-                    code_str = symbol_codec.detokenize_text(code_str)
-                ast_check = verify_symbolic_repair_ast(code_str, frozenset(var_keys))
+                detok_code_str = (
+                    symbol_codec.detokenize_text(sym_code_str)
+                    if symbol_codec is not None
+                    else sym_code_str
+                )
+                ast_check = verify_symbolic_repair_ast(sym_code_str, frozenset(exec_var_map.keys()))
                 if not ast_check.ok:
                     last_failure_code = "ast_firewall_rejected"
                     last_ast_violations = list(ast_check.violations)
-                    history.append({"turn": turn_idx, "outcome": last_failure_code, "code": code_str})
+                    history.append({"turn": turn_idx, "outcome": last_failure_code, "code": detok_code_str})
                     continue
 
                 ns: Dict[str, Any] = {"__builtins__": {"True": True, "False": False, "None": None}}
-                exec(compile(code_str, "<twin_symbolic_repair>", "exec"), ns)  # noqa: S102
+                exec(compile(sym_code_str, "<twin_symbolic_repair>", "exec"), ns)  # noqa: S102
                 repair_fn = ns.get("repair")
                 if not callable(repair_fn):
                     return TwinHealResult(
                         verified=False,
-                        synthesized_code=code_str,
+                        synthesized_code=detok_code_str,
                         egress_ledger_entry_sha256=last_entry_sha,
                         egress_payload_sha256=last_payload_sha,
                         turns_used=turn_idx,
@@ -473,24 +519,34 @@ def self_heal_in_digital_twin(
                         turn_history=history,
                     )
 
-                proxy = _ZeroPhiUIProxy(page, var_map, controls)
-                executed_codes.append(code_str)
+                proxy = _ZeroPhiUIProxy(page, exec_var_map, controls)
+                executed_codes.append(detok_code_str)
                 try:
-                    repair_fn(proxy, {k: _SymVal(k, v) for k, v in var_map.items()})
+                    repair_fn(proxy, {k: _SymVal(k, v) for k, v in exec_var_map.items()})
                 except Exception as exc:
                     last_failure_code = "submit_disabled" if isinstance(exc, PermissionError) else "runtime_exception"
-                    accumulated_steps.extend(proxy.recorded_steps)
-                    history.append({"turn": turn_idx, "outcome": last_failure_code, "code": code_str})
+                    steps = (
+                        [_detokenize_repair_step(s, symbol_codec) for s in proxy.recorded_steps]
+                        if symbol_codec is not None
+                        else list(proxy.recorded_steps)
+                    )
+                    accumulated_steps.extend(steps)
+                    history.append({"turn": turn_idx, "outcome": last_failure_code, "code": detok_code_str})
                     continue
 
-                accumulated_steps.extend(proxy.recorded_steps)
+                steps = (
+                    [_detokenize_repair_step(s, symbol_codec) for s in proxy.recorded_steps]
+                    if symbol_codec is not None
+                    else list(proxy.recorded_steps)
+                )
+                accumulated_steps.extend(steps)
                 if postcondition_fn is not None:
                     ok = bool(postcondition_fn(page))
                 else:
                     state = page.evaluate(_TWIN_POSTCONDITION_JS)
                     ok = bool(state.get("allReqOk") and (state.get("submitted") or state.get("anyEnabled")))
                 if ok:
-                    history.append({"turn": turn_idx, "outcome": "verified", "code": code_str})
+                    history.append({"turn": turn_idx, "outcome": "verified", "code": detok_code_str})
                     return TwinHealResult(
                         verified=True,
                         synthesized_code="\n\n# --- turn ---\n".join(executed_codes),
@@ -502,7 +558,7 @@ def self_heal_in_digital_twin(
                         turn_history=history,
                     )
                 last_failure_code = "readback_refuted"
-                history.append({"turn": turn_idx, "outcome": last_failure_code, "code": code_str})
+                history.append({"turn": turn_idx, "outcome": last_failure_code, "code": detok_code_str})
         finally:
             browser.close()
 

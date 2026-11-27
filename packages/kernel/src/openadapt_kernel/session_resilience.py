@@ -479,3 +479,47 @@ class SessionResilienceGuard:
             "readback_confirmed_not_persisted_safe_to_resume",
             duplicate_prevented=False,
         )
+
+
+@dataclass(frozen=True)
+class BatchSagaCheckpoint:
+    """Multi-item batch Saga checkpoint for exact-once recovery across mid-batch session drops."""
+
+    batch_id: str
+    items: Tuple[str, ...]
+    committed_item_ids: Tuple[str, ...] = ()
+    current_item_idx: int = 0
+
+    @property
+    def remaining_items(self) -> Tuple[str, ...]:
+        done = set(self.committed_item_ids)
+        return tuple(item for item in self.items if item not in done)
+
+    @property
+    def is_complete(self) -> bool:
+        return not self.remaining_items
+
+
+def reconcile_batch_after_reauth(
+    checkpoint: BatchSagaCheckpoint,
+    ui_readback_present_fn: Callable[[str], bool],
+) -> BatchSagaCheckpoint:
+    """Probe uncommitted batch items via read-only UI read-back after reauth and return exact remaining slice."""
+    committed_set = set(checkpoint.committed_item_ids)
+    committed_list = list(checkpoint.committed_item_ids)
+    for item_id in checkpoint.items:
+        if item_id in committed_set:
+            continue
+        if bool(ui_readback_present_fn(item_id)):
+            committed_set.add(item_id)
+            committed_list.append(item_id)
+    next_idx = next(
+        (i for i, item_id in enumerate(checkpoint.items) if item_id not in committed_set),
+        len(checkpoint.items),
+    )
+    return BatchSagaCheckpoint(
+        batch_id=checkpoint.batch_id,
+        items=tuple(checkpoint.items),
+        committed_item_ids=tuple(committed_list),
+        current_item_idx=next_idx,
+    )

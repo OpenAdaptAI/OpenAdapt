@@ -252,11 +252,18 @@ def _policy_value_matches(actual: str, expected: str) -> bool:
         return True
     m = _POLICY_CMP_RE.match(expected)
     if m:
+        from openadapt_kernel.canonical import parse_canonical_currency_cents
+
         op, rhs = m.group(1), float(m.group(2))
-        num_m = re.search(r"-?\d+(?:\.\d+)?", actual.replace(",", ""))
-        if num_m:
+        cents = parse_canonical_currency_cents(actual)
+        if cents is not None:
+            lhs = cents / 100.0
+        else:
+            num_m = re.search(r"-?\d+(?:\.\d+)?", actual.replace(",", ""))
+            if not num_m:
+                return False
             lhs = float(num_m.group(0))
-            return {"<": lhs < rhs, "<=": lhs <= rhs, ">": lhs > rhs, ">=": lhs >= rhs, "!=": lhs != rhs}[op]
+        return {"<": lhs < rhs, "<=": lhs <= rhs, ">": lhs > rhs, ">=": lhs >= rhs, "!=": lhs != rhs}[op]
     return False
 
 

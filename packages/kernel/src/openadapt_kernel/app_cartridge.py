@@ -24,11 +24,13 @@ from typing import (
     Union,
 )
 
+from openadapt_kernel.canonical import parse_canonical_currency_cents
 from openadapt_kernel.egress_guard import (
     BijectiveSymbolCodec,
     EgressBlockedError,
     EgressPolicy,
     LocalEgressGuard,
+    OrderPreservingRankCodec,
     summarize_egress_ledger,
 )
 from openadapt_kernel.fsm import (
@@ -56,7 +58,7 @@ _CARTRIDGE_EXTRA_TOKENS: FrozenSet[str] = frozenset(
     "specialist split summary support suspended then timely trace traces transfer triage underpaid "
     "unverified waived when with without writeoff "
     "chosen_disposition demo_traces filters note_template_slots observed_features readback_path "
-    "readback_url selector url_pattern var_key visited_tabs".split()
+    "readback_url selector url_pattern var_key visited_tabs actions".split()
 )
 _READ_ONLY_METHODS: FrozenSet[str] = frozenset({"GET", "HEAD", "OPTIONS"})
 _CMP_RE = re.compile(r"^(<=|>=|!=|<|>)\s*(-?\d+(?:\.\d+)?)$")
@@ -139,6 +141,16 @@ class SOPBranchSpec:
     required_read_artifacts: Tuple[str, ...] = ()
     required_note_slots: Tuple[str, ...] = ()
     priority: int = 0
+    unless_defeaters: Tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class DefeasibleVerdict:
+    allowed: bool
+    defeated: bool
+    defeater_reason: str = ""
+    requires_prepare: bool = False
+    branch_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -427,6 +439,7 @@ def _parse_branch_dicts(raw_list: Sequence[Mapping[str, Any]]) -> List[SOPBranch
             required_read_artifacts=tuple(str(a) for a in (item.get("required_read_artifacts") or [])),
             required_note_slots=tuple(str(s) for s in (item.get("required_note_slots") or [])),
             priority=int(item.get("priority", 0)),
+            unless_defeaters=tuple(str(d) for d in (item.get("unless_defeaters") or [])),
         )
         for i, item in enumerate(raw_list, start=1)
     ]
@@ -1561,8 +1574,52 @@ _RAW_NUM_RE = re.compile(r"^\s*[$€£¥]?\s*(-?\d+(?:,\d{3})*(?:\.\d+)?)\s*%?\s
 
 
 def _parse_pure_number(raw: str) -> Optional[float]:
-    m = _RAW_NUM_RE.match(str(raw or ""))
+    s = str(raw or "").strip()
+    if not s:
+        return None
+    cents = parse_canonical_currency_cents(s)
+    if cents is not None:
+        return cents / 100.0
+    m = _RAW_NUM_RE.match(s)
     return float(m.group(1).replace(",", "")) if m else None
+
+
+def evaluate_defeasible_branch(
+    branch: SOPBranchSpec,
+    case_evidence: Union[Mapping[str, Any], str],
+    *,
+    defeater_detector_fn: Optional[
+        Callable[[SOPBranchSpec, Union[Mapping[str, Any], str]], Optional[str]]
+    ] = None,
+) -> DefeasibleVerdict:
+    """Block a matched SOP branch when an undercutting defeater is present in case evidence."""
+    if defeater_detector_fn is not None:
+        detected = defeater_detector_fn(branch, case_evidence)
+        if detected:
+            return DefeasibleVerdict(False, True, str(detected), True, branch.branch_id)
+    if isinstance(case_evidence, Mapping):
+        ev_cf = " ".join(f"{k} {v}" for k, v in case_evidence.items() if v is not None).casefold()
+        falsy = {"", "false", "no", "none", "0"}
+        for d in branch.unless_defeaters:
+            dc = d.strip()
+            if not dc:
+                continue
+            d_cf, d_sp = dc.casefold(), dc.replace("_", " ").casefold()
+            key_hit = any(
+                str(k).strip().casefold() in (d_cf, d_sp)
+                and bool(v)
+                and str(v).strip().casefold() not in falsy
+                for k, v in case_evidence.items()
+            )
+            if key_hit or d_cf in ev_cf or d_sp in ev_cf:
+                return DefeasibleVerdict(False, True, f"defeater_present:{dc}", True, branch.branch_id)
+    else:
+        ev_cf = str(case_evidence or "").casefold()
+        for d in branch.unless_defeaters:
+            dc = d.strip()
+            if dc and (dc.casefold() in ev_cf or dc.replace("_", " ").casefold() in ev_cf):
+                return DefeasibleVerdict(False, True, f"defeater_present:{dc}", True, branch.branch_id)
+    return DefeasibleVerdict(True, False, "", False, branch.branch_id)
 
 
 def _anchored_note_slots(demos: Sequence[RawDemoTrace], note_field: str) -> Tuple[str, ...]:
@@ -1683,17 +1740,24 @@ def induce_cartridge_from_raw_demos(
     branches: List[SOPBranchSpec] = []
     if coding_agent_fn is not None:
         codec = BijectiveSymbolCodec()
+        ord_codec = OrderPreservingRankCodec().fit(
+            v for d in raw_demos for v in (*d.dom_observations.values(), *d.committed_fields.values())
+        )
 
         def _sym(text: str) -> str:
             return codec.symbolize_text(re.sub(r"\$(?=\d)", " ", text or ""))
+
+        def _sym_val(text: str) -> str:
+            ord_tok = ord_codec.encode_value(text)
+            return ord_tok if ord_tok is not None else _sym(text)
 
         outbound = {
             "demo_traces": [
                 {
                     "summary": _sym(d.goal_text),
                     "visited_tabs": [_sym(v) for v in d.visited_views],
-                    "observations": {_sym(k): _sym(v) for k, v in d.dom_observations.items()},
-                    "fields": {_sym(k): _sym(v) for k, v in d.committed_fields.items()},
+                    "observations": {_sym(k): _sym_val(v) for k, v in d.dom_observations.items()},
+                    "fields": {_sym(k): _sym_val(v) for k, v in d.committed_fields.items()},
                     "actions": [_sym(a) for a in d.post_commit_actions],
                 }
                 for d in raw_demos
@@ -1708,11 +1772,13 @@ def induce_cartridge_from_raw_demos(
             + json.dumps(outbound, sort_keys=True)
             + "\n"
         )
-        parsed = _extract_json_dict(codec.detokenize_text(raw_reply))
+        parsed = _extract_json_dict(codec.detokenize_text(ord_codec.detokenize_text(raw_reply)))
         for b in _parse_branch_dicts(parsed.get("branches") or []):
             reads = b.required_read_artifacts or read_views_by_disp.get(b.disposition, ())
             slots = b.required_note_slots or note_slots_by_disp.get(b.disposition, ())
-            branches.append(SOPBranchSpec(b.branch_id, b.when, b.disposition, reads, slots, b.priority))
+            branches.append(
+                SOPBranchSpec(b.branch_id, b.when, b.disposition, reads, slots, b.priority, b.unless_defeaters)
+            )
 
     if not branches:
         for idx, (disp, demos) in enumerate(by_disp.items(), start=1):

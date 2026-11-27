@@ -122,11 +122,12 @@ _SAFE_CSS_VALUE_RE = re.compile(
 )
 
 _TOKEN_RE = re.compile(
-    r"SYM_[0-9A-F]{8}|CANARY_[A-Z]+_\d+|<OPAQUE(?:_\d+)?>|\$[A-Za-z_][A-Za-z0-9_]*|\w+"
+    r"SYM_[0-9A-F]{8}|ORD_NUM_\d{4}|CANARY_[A-Z]+_\d+|<OPAQUE(?:_\d+)?>|\$[^\W\d_]\w*|\w+"
 )
 _CANARY_RE = re.compile(r"^CANARY_[A-Z]+_\d+$")
 _OPAQUE_RE = re.compile(r"^<OPAQUE(?:_\d+)?>$")
 _BIJECTIVE_SYM_RE = re.compile(r"^SYM_[0-9A-F]{8}$")
+_ORD_NUM_RE = re.compile(r"^ORD_NUM_\d{4}$")
 _UNICODE_WORD_RE = re.compile(r"[^\W_]+")
 _HTML_TAG_SPLIT_RE = re.compile(r"(<[^>]+>)")
 _HTML_ATTR_VAL_RE = re.compile(
@@ -176,10 +177,12 @@ class EgressPolicy:
     def is_token_allowed(self, token: str, effective: Optional[FrozenSet[str]] = None) -> bool:
         if _CANARY_RE.match(token) or _OPAQUE_RE.match(token):
             return True
-        if self.allow_bijective_symbols and _BIJECTIVE_SYM_RE.match(token):
+        if self.allow_bijective_symbols and (_BIJECTIVE_SYM_RE.match(token) or _ORD_NUM_RE.match(token)):
             return True
         vocab = effective if effective is not None else self.effective_tokens()
         if token.startswith("$"):
+            if self.allow_bijective_symbols and _BIJECTIVE_SYM_RE.match(token[1:]):
+                return True
             if token in self.allowed_var_keys:
                 return True
             parts = [p.lower() for p in token[1:].split("_") if p]
@@ -537,12 +540,18 @@ class BijectiveSymbolCodec:
         self._raw_to_sym: Dict[str, str] = {}
 
     def symbolize_token(self, token: str) -> str:
+        if not token:
+            return token
+        if token.startswith("$"):
+            stem = token[1:]
+            if not stem or _BIJECTIVE_SYM_RE.match(stem):
+                return token
+            return f"${self.symbolize_token(stem)}"
         if (
-            not token
-            or _BIJECTIVE_SYM_RE.match(token)
+            _BIJECTIVE_SYM_RE.match(token)
+            or _ORD_NUM_RE.match(token)
             or _CANARY_RE.match(token)
             or _OPAQUE_RE.match(token)
-            or token.startswith("$")
             or token.casefold() in self._preserve
         ):
             return token
@@ -577,6 +586,61 @@ class BijectiveSymbolCodec:
         return re.sub(
             r"SYM_[0-9A-F]{8}",
             lambda m: self._sym_to_raw.get(m.group(0), m.group(0)),
+            text or "",
+        )
+
+
+def _format_plain_number(val: float) -> str:
+    return str(int(val)) if float(val).is_integer() else f"{val:.6f}".rstrip("0").rstrip(".")
+
+
+class OrderPreservingRankCodec:
+    """Batch-scoped order-preserving rank encoder mapping numeric/currency quantities to ORD_NUM_XXXX."""
+
+    def __init__(self) -> None:
+        self._val_to_tok: Dict[float, str] = {}
+        self._tok_to_val: Dict[str, float] = {}
+
+    @staticmethod
+    def parse_quantity(raw: Any) -> Optional[float]:
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+            return float(raw)
+        s = str(raw or "").strip()
+        if not s:
+            return None
+        from openadapt_kernel.canonical import parse_canonical_currency_cents
+
+        cents = parse_canonical_currency_cents(s)
+        if cents is not None:
+            return cents / 100.0
+        if s.endswith("%"):
+            try:
+                return float(s[:-1].strip())
+            except ValueError:
+                return None
+        if re.fullmatch(r"-?\d+\.\d+", s):
+            return float(s)
+        return None
+
+    def fit(self, values: Iterable[Any]) -> "OrderPreservingRankCodec":
+        parsed = sorted({v for raw in values if (v := self.parse_quantity(raw)) is not None})
+        self._val_to_tok = {v: f"ORD_NUM_{i:04d}" for i, v in enumerate(parsed, start=1)}
+        self._tok_to_val = {tok: v for v, tok in self._val_to_tok.items()}
+        return self
+
+    def encode_value(self, raw: Any) -> Optional[str]:
+        v = self.parse_quantity(raw)
+        return self._val_to_tok.get(v) if v is not None else None
+
+    def decode_token(self, token: str) -> Optional[float]:
+        return self._tok_to_val.get(token)
+
+    def detokenize_text(self, text: str) -> str:
+        return re.sub(
+            r"ORD_NUM_\d{4}",
+            lambda m: _format_plain_number(self._tok_to_val[m.group(0)])
+            if m.group(0) in self._tok_to_val
+            else m.group(0),
             text or "",
         )
 

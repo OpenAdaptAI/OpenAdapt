@@ -24,7 +24,8 @@ _FROZEN_UI_VOCAB: FrozenSet[str] = frozenset(
     "text textarea tier title to toggle type up upcoming update user username value view yes".split()
 )
 
-_WORD_RE = re.compile(r"[A-Za-z0-9_]+")
+_WORD_RE = re.compile(r"SYM_[0-9A-F]{8}|[A-Za-z0-9_]+")
+_SYM_LITERAL_RE = re.compile(r"^SYM_[0-9A-F]{8}(?:\s+SYM_[0-9A-F]{8})*$")
 _ALLOWED_KEYS: FrozenSet[str] = frozenset({"Enter", "Tab", "Escape", "Backspace", "ArrowDown", "ArrowUp", "Space"})
 _ALLOWED_UI_METHODS: FrozenSet[str] = frozenset({
     "click", "click_first_option", "fill", "fill_var", "fill_var_quoted",
@@ -42,10 +43,13 @@ _SAFE_ROLES = ("dialog", "button", "textbox", "combobox", "checkbox", "listbox",
 
 
 def sanitize_ui_label_allowlist(raw: str) -> str:
-    """Keep ONLY words in _FROZEN_UI_VOCAB; replace every other token with <OPAQUE>."""
+    """Keep ONLY words in _FROZEN_UI_VOCAB (or bijective SYM_* tokens); replace others with <OPAQUE>."""
     collapsed: List[str] = []
     for tok in _WORD_RE.findall(raw or "")[:12]:
-        item = tok.lower() if tok.lower() in _FROZEN_UI_VOCAB else "<OPAQUE>"
+        if _SYM_LITERAL_RE.fullmatch(tok):
+            item = tok
+        else:
+            item = tok.lower() if tok.lower() in _FROZEN_UI_VOCAB else "<OPAQUE>"
         if not (item == "<OPAQUE>" and collapsed and collapsed[-1] == "<OPAQUE>"):
             collapsed.append(item)
     return " ".join(collapsed)
@@ -118,7 +122,14 @@ def verify_symbolic_repair_ast(code_str: str, allowed_vars: FrozenSet[str]) -> A
                 violations.append("non_constant_var_key")
             elif node.slice.value not in allowed_vars:
                 violations.append(f"unknown_symbolic_var:{node.slice.value}")
-        elif isinstance(node, ast.Constant) and (isinstance(node.value, bytes) or (isinstance(node.value, str) and node.value not in allowed_strings)):
+        elif isinstance(node, ast.Constant) and (
+            isinstance(node.value, bytes)
+            or (
+                isinstance(node.value, str)
+                and node.value not in allowed_strings
+                and not _SYM_LITERAL_RE.fullmatch(node.value)
+            )
+        ):
             violations.append("forbidden_literal_constant")
     return ASTVerificationResult(ok=not violations, violations=violations)
 
@@ -346,7 +357,7 @@ class _ZeroPhiUIProxy:
     def select(self, idx: int, val: str) -> None:
         vk, tv = self._resolve_var(val)
         self._raw_loc(idx).select_option(tv, timeout=2000)
-        self._record("select", idx=int(idx), var_key=vk)
+        self._record("select", idx=int(idx), var_key=vk, arg=None if vk else tv)
 
     def press(self, idx: int, key: str) -> None:
         if key not in _ALLOWED_KEYS:
@@ -550,14 +561,15 @@ def _resolve_target_idx_by_control_signature(
             pass
 
     if cs is not None and cs.label_tokens:
-        want_tokens = set(cs.label_tokens)
+        want_tokens = {t.casefold() for t in cs.label_tokens}
         candidates = [c for c in controls if (not in_modal or c.in_modal) and c.role != "option"]
         exact_matches: List[ControlSchema] = []
         for c in candidates:
-            c_tokens = {t for t in sanitize_ui_label_allowlist(c.label).split() if t != "<OPAQUE>"}
+            c_tokens = {t.casefold() for t in sanitize_ui_label_allowlist(c.label).split() if t != "<OPAQUE>"}
+            c_unicode = {t.casefold() for t in re.findall(r"[^\W_]+", c.label or "")}
             tag_ok = not cs.tag or c.tag.lower() == cs.tag
             type_ok = not cs.input_type or c.input_type.lower() == cs.input_type
-            if tag_ok and type_ok and want_tokens.issubset(c_tokens):
+            if tag_ok and type_ok and want_tokens.issubset(c_tokens | c_unicode):
                 exact_matches.append(c)
         if len(exact_matches) == 1:
             return exact_matches[0].control_index
@@ -604,7 +616,7 @@ def replay_distilled_zero_phi_repair(
             "click": proxy.click, "fill": lambda i: proxy.fill_var(i, step.var_key),
             "fill_var": lambda i: proxy.fill_var(i, step.var_key), "fill_var_quoted": lambda i: proxy.fill_var_quoted(i, step.var_key),
             "press": lambda i: proxy.press(i, str(step.arg)), "check": lambda i: proxy.check(i, bool(step.arg)),
-            "clear": proxy.clear, "select": lambda i: proxy.select(i, step.var_key),
+            "clear": proxy.clear, "select": lambda i: proxy.select(i, step.var_key or str(step.arg or "")),
             "reconcile_stripped_var_in_detail": lambda i: proxy.reconcile_stripped_var_in_detail(i, int(step.arg if step.arg is not None else -1), step.var_key),
         }.get(step.method)
         if dispatch_fn is not None:

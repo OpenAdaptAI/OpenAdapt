@@ -1009,6 +1009,58 @@ def verify_readonly_answer_provenance(
     return FactCoverageReport(not missing, tuple(matched), tuple(missing))
 
 
+_CITATION_STOPWORDS = frozenset(
+    {"the", "and", "for", "was", "were", "with", "from", "this", "that", "have", "has", "not", "are", "but", "all", "tab", "view", "page", "status", "note", "notes"}
+)
+
+
+def verify_per_artifact_note_citations(
+    note_text: str,
+    visited_artifacts_text: Mapping[str, str],
+    *,
+    min_token_len: int = 3,
+) -> FactCoverageReport:
+    """Verify every non-empty visited evidence view has >= 1 SpanAnchor-verified token cited in note_text."""
+    note = str(note_text or "")
+    matched: List[str] = []
+    missing: List[str] = []
+    for view_id, raw in visited_artifacts_text.items():
+        text = str(raw or "")
+        if not text.strip():
+            continue
+        cited_quote: Optional[str] = None
+        scans: List[Tuple[re.Pattern[str], Optional[FieldType]]] = [
+            (_CODE_SCAN_RE, "code_prefix"),
+            (_DATE_SCAN_RE, "date"),
+            (_CURRENCY_SCAN_RE, "currency"),
+            (_NUMBER_SCAN_RE, None),
+            (re.compile(rf"[^\W_]{{{max(2, int(min_token_len))},}}"), "casefold_ws"),
+        ]
+        for pat, ftype in scans:
+            for m in pat.finditer(text):
+                q = m.group(0).strip()
+                if not q or (ftype == "casefold_ws" and q.casefold() in _CITATION_STOPWORDS):
+                    continue
+                if not verify_span_anchor(visited_artifacts_text, SpanAnchor(view_id, m.start(), m.end(), m.group(0))):
+                    continue
+                if ftype is None:
+                    hit = bool(re.search(rf"(?<![0-9.]){re.escape(q)}(?![0-9.])", note))
+                elif ftype == "casefold_ws":
+                    hit = bool(re.search(rf"(?<!\w){re.escape(q)}(?!\w)", note, re.IGNORECASE))
+                else:
+                    hit = _evidence_cited_in_text(q, note, ftype)
+                if hit:
+                    cited_quote = q
+                    break
+            if cited_quote is not None:
+                break
+        if cited_quote is not None:
+            matched.append(f"{view_id}:{cited_quote}")
+        else:
+            missing.append(view_id)
+    return FactCoverageReport(not missing, tuple(matched), tuple(missing))
+
+
 def calibrate_critic_decision(
     closure_report: ClosureVerdict,
     *,
