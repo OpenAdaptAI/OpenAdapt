@@ -21,7 +21,7 @@
   "est_model_cost_usd": 0.0,
   "execution_outcome": "VERIFIED",
   "execution_profile": "standard",
-  "governed_minimum_effect_tier": 3,
+  "governed_minimum_effect_tier": 4,
   "governed_policy_name": "clinical-write",
   "halt": null,
   "heal_count": 0,

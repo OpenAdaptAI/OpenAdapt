@@ -3794,12 +3794,14 @@ class Workflow(BaseModel):
     # None for every pre-qualification bundle and omitted from its serialized
     # bytes by ``_serialize_compatible`` below.
     qualification: Optional["QualificationProject"] = None
-    #: Raises the check level every save must reach for the run to be
-    #: VERIFIED (:mod:`openadapt_flow.readback_ladder`): ``separate_session``
-    #: (the default floor) or ``system_of_record``. It can't lower the floor.
-    #: None means the profile's floor; omitted from the serialized bytes when
-    #: unset.
-    minimum_readback: Optional[Literal["separate_session", "system_of_record"]] = None
+    #: Sets or raises the check level every save must reach for the run to be
+    #: VERIFIED (:mod:`openadapt_flow.readback_ladder`): ``same_screen``,
+    #: ``reopened``, ``separate_session``, or ``system_of_record``. Never lowers
+    #: the active profile's floor. None means the profile's floor; omitted from
+    #: the serialized bytes when unset.
+    minimum_readback: Optional[
+        Literal["same_screen", "reopened", "separate_session", "system_of_record"]
+    ] = None
     # Multi-surface workflows (docs/MULTI_SURFACE.md): every browser tab,
     # popup, and backend the workflow runs on, primary first. Empty (the
     # default) for a single-surface bundle, and then omitted from serialized

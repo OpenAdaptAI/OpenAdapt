@@ -4,14 +4,15 @@ Status: draft for approval. Nothing here is applied to the website.
 
 These changes bring the insurance and dental pages in line with the repository
 docs ([LIMITS.md](../packages/flow/docs/LIMITS.md#what-the-guarantee-covers-without-database-access),
+[READBACK_LADDER.md](../packages/flow/docs/READBACK_LADDER.md),
 [THREAT_MODEL.md](../packages/flow/docs/THREAT_MODEL.md#what-layer-1-covers)).
-When a portal's own screens are the only read path (no database, API, log, or
-export, which is true for most third-party portals and closed desktop apps),
-OpenAdapt verifies the write by evicting the stale screen and independently
-re-reading the persisted UI: opening a fresh read-only second browser tab or
-cache-busted reload, or closing and reopening the record from the list/index
-and confirming the persisted values visually or via the accessibility tree,
-separate from the ephemeral `"Saved!"` toast.
+After each action, OpenAdapt checks observable evidence and stamps how the
+action was checked (`same_screen`, `reopened`, `separate_session`, or
+`system_of_record`) on the receipt: right on the current screen by default
+(working even on in-place edits with no separate post-save screen and on
+non-idempotent portals that cannot reload), or via a reopened record view, a
+separate read-only session, or a direct API, database, or file check when
+available.
 
 File: `data/site/pages/industries.mjs` in `OpenAdaptAI/openadapt-web`, at
 commit `53f05758`. Line numbers refer to that commit.
@@ -28,13 +29,12 @@ Current:
 Proposed:
 
 > It's also for brokers and agencies that key claims or submissions into
-> carrier portals. Where a backend API, database view, or file export is
-> available, OpenAdapt checks the write there first. On UI-only portals without
-> backend access, OpenAdapt evicts the stale screen and independently re-reads
-> the persisted UI in a fresh read-only second tab, a cache-busted reload, or
-> by closing and reopening the claim from the list/index, comparing it field by
-> field with what was entered rather than trusting an ephemeral `"Saved!"`
-> toast. The check is set up along with the workflow.
+> carrier portals. OpenAdapt checks observable evidence after each step: on
+> the current screen by default (including in-place edits and portals that
+> cannot reload), or by reopening the claim, checking in a separate read-only
+> session, or reading an API or export when available, and stamps the exact
+> check level (`same_screen`, `reopened`, `separate_session`, or
+> `system_of_record`) on the receipt.
 
 The link that follows ("How to stop re-keying claims") stays.
 
@@ -47,10 +47,10 @@ Current:
 
 Proposed:
 
-> Staff key a submission into several carrier portals. Each save is checked
-> through a read-only API or export when available, or by evicting the stale
-> screen and re-reading the persisted claim in a fresh read-only tab,
-> cache-busted reload, or reopened record view.
+> Staff key a submission into several carrier portals. Each step is checked on
+> the current screen by default, or via a reopened view, separate read-only
+> session, or API/export when available, with the check level stamped on the
+> receipt.
 
 ## Line 176: insurance, record-check table (make conditional)
 
@@ -62,9 +62,9 @@ Current row:
 
 Proposed row:
 
-| Your setup | Independent read-back | Result OpenAdapt can give |
+| Your setup | Graded read-back | Result OpenAdapt can give |
 | --- | --- | --- |
-| Broker entering into a carrier portal | Read-only API/export when available, or evicting the stale screen and independently re-reading the persisted claim via a fresh read-only tab, cache-busted reload, or reopened record view | Verified against persisted UI state, separate from the ephemeral `"Saved!"` toast |
+| Broker entering into a carrier portal | Bounded check on the current screen by default, or reopened record, separate read-only session, or API/export when available | Receipt stamps exact check level (`same_screen`, `reopened`, `separate_session`, or `system_of_record`) |
 
 ## Line 218: dental page description (remove)
 

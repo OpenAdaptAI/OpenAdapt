@@ -84,11 +84,15 @@ class ExecutionProfileContract:
     #: REPRESENT. A future scrubbed tier would not have that property, and this
     #: field is where ``regulated`` refuses it.
     max_remote_decision_tier: DecisionDeliveryTier
-    #: Whether a reopen of the record in the acting session (check level
-    #: ``reopened``, tier 3) counts toward ``VERIFIED``. False keeps
-    #: ``VERIFIED`` at a separate session or the system of record
-    #: (:data:`~openadapt_flow.verification.VERIFIED_EFFECT_TIER`). A profile
-    #: has to opt in explicitly; no built-in profile does.
+    #: Profile-specific floor for ``VERIFIED`` (:func:`verified_tier_floor`).
+    #: When unset (``None``), falls back to
+    #: :data:`~openadapt_flow.verification.VERIFIED_EFFECT_TIER` (tier 2,
+    #: ``separate_session``), or tier 3 when :attr:`reopened_counts_as_verified`
+    #: is True. A workflow's ``minimum_readback`` can always raise the floor to
+    #: a stronger tier.
+    verified_effect_floor: VerificationTier | None = None
+    #: Legacy opt-in allowing ``reopened`` (tier 3) to count toward ``VERIFIED``
+    #: on a contract whose :attr:`verified_effect_floor` is ``None``.
     reopened_counts_as_verified: bool = False
 
 
@@ -117,7 +121,7 @@ _CONTRACTS = {
         require_identity_coverage=True,
         require_consequential_postconditions=True,
         require_effect_contracts=True,
-        minimum_effect_tier=VerificationTier.PERSISTED_STATE_REACQUISITION,
+        minimum_effect_tier=VerificationTier.IMMEDIATE_SCREEN,
         require_approval_for_unverified_effects=False,
         allow_unverified_write_approval=False,
         require_encryption=False,
@@ -126,6 +130,7 @@ _CONTRACTS = {
         require_settled=True,
         default_policy="clinical-write",
         max_remote_decision_tier=DecisionDeliveryTier.REMOTE_CLOSED_CONTEXT,
+        verified_effect_floor=VerificationTier.IMMEDIATE_SCREEN,
     ),
     ExecutionProfile.REGULATED: ExecutionProfileContract(
         profile=ExecutionProfile.REGULATED,
@@ -134,10 +139,10 @@ _CONTRACTS = {
         require_identity_coverage=True,
         require_consequential_postconditions=True,
         require_effect_contracts=True,
-        # Regulated demands INDEPENDENT evidence: a persisted-state re-read
-        # (tier 3) shares the application surface the actuation drove, so it
-        # can never prove a consequential write to a regulated reviewer.
-        # Standard keeps the tier-3 floor above.
+        # Regulated demands independent evidence: an acting-session read-back
+        # (tier 3 or 4) shares the application session the actuation drove, so
+        # Regulated requires at least a separate session (tier 2) or system of
+        # record (tier 1). Standard admits bounded on-screen checks (tier 4).
         minimum_effect_tier=VerificationTier.INDEPENDENT_SESSION,
         require_approval_for_unverified_effects=False,
         allow_unverified_write_approval=False,
@@ -204,9 +209,12 @@ def verified_tier_floor(
 ) -> VerificationTier:
     """The weakest tier that counts toward ``VERIFIED`` for this workflow.
 
-    :data:`~openadapt_flow.verification.VERIFIED_EFFECT_TIER` (a separate
-    session) unless the profile opts in to ``reopened`` (tier 3). The
-    workflow's ``minimum_readback`` can only raise it.
+    Starts from ``contract.verified_effect_floor`` when set (``Standard`` uses
+    tier 4, ``same_screen``), or :data:`~openadapt_flow.verification.VERIFIED_EFFECT_TIER`
+    (tier 2, ``separate_session``, used by ``Regulated``) unless
+    ``contract.reopened_counts_as_verified`` relaxes a ``None`` floor to tier 3.
+    The workflow's ``minimum_readback`` can always raise the floor to a stronger
+    (lower-integer) tier and never lowers it.
     """
 
     from openadapt_flow.readback_ladder import workflow_tier_floor
@@ -217,10 +225,14 @@ def verified_tier_floor(
         else execution_profile_contract(profile)
     )
     floor = (
-        VerificationTier.PERSISTED_STATE_REACQUISITION
-        if contract.reopened_counts_as_verified
+        contract.verified_effect_floor
+        if contract.verified_effect_floor is not None
         else VERIFIED_EFFECT_TIER
     )
+    if contract.reopened_counts_as_verified and int(floor) < int(
+        VerificationTier.PERSISTED_STATE_REACQUISITION
+    ):
+        floor = VerificationTier.PERSISTED_STATE_REACQUISITION
     raised = workflow_tier_floor(workflow)
     if raised is not None and int(raised) < int(floor):
         floor = raised
@@ -237,11 +249,9 @@ def required_effect_tier(
     required = contract.minimum_effect_tier
     if not contract.production:
         return required
-    # A workflow that sets ``minimum_readback`` raises the gate with it, so a
-    # verifier weaker than the workflow asks for refuses to actuate. Without
-    # one the profile's gate is unchanged: Standard still admits a reopen
-    # (tier 3) so a pixel-only run executes with halt-on-doubt, and the
-    # outcome classifier keeps VERIFIED at a separate session or stronger.
+    # A workflow that sets ``minimum_readback`` or a stricter qualification
+    # ``minimum_effect_tier`` raises the gate so a weaker verifier refuses to
+    # actuate; it never lowers the profile's own floor.
     from openadapt_flow.readback_ladder import workflow_tier_floor
 
     raised = workflow_tier_floor(workflow)
@@ -1514,18 +1524,15 @@ def classify_execution_outcome(
 ) -> ExecutionOutcome:
     """Classify a completed report without changing legacy ``success``.
 
-    Demo success is always visibly non-production.  Standard and Regulated
+    Demo success is always visibly non-production. Standard and Regulated
     success becomes ``VERIFIED`` only when every executed consequential action
     has a confirmed effect at or above both the workflow's required evidence
-    tier and :func:`verified_tier_floor`: a separate-session read-back or a
-    system-of-record read (:data:`~openadapt_flow.verification.VERIFIED_EFFECT_TIER`),
-    raised by the workflow's ``minimum_readback``. An approved-unverified,
-    same-screen (tier 4) or same-session reopen (tier 3) result is never
-    ``VERIFIED`` under either production profile; it is reported with its
-    own check level (:mod:`openadapt_flow.readback_ladder`). A pixel-only
-    Citrix run with neither a system-of-record read nor a separate-session
-    read-back cannot be ``VERIFIED``. A reopen counts only under a profile
-    whose contract sets ``reopened_counts_as_verified``; none does.
+    tier and :func:`verified_tier_floor`. Standard defaults to ``same_screen``
+    (tier 4) so bounded in-place and on-screen checks reach ``VERIFIED`` while
+    recording ``checked_how`` honestly, unless ``workflow.minimum_readback`` or
+    ``workflow.qualification.minimum_effect_tier`` raises the floor. Regulated
+    defaults to ``separate_session`` (tier 2) and classifies same-screen (tier 4)
+    and same-session reopen (tier 3) results as ``COMPLETED_UNVERIFIED``.
     """
 
     resolved = resolve_execution_profile(profile)
@@ -2203,11 +2210,8 @@ def classify_execution_outcome(
                 if requirement is not None
                 else minimum
             )
-            # The Standard gate still admits persisted-state so a pixel-only
-            # Citrix run can execute with halt-on-doubt. VERIFIED itself
-            # requires a read independent of the acting session: tier 1
-            # (system of record) or tier 2 (separate-session read-back), or
-            # stronger when the workflow's minimum_readback raises it.
+            # Enforce the stronger of the qualified/profile requirement and the
+            # profile's verified_tier_floor (raised by workflow.minimum_readback).
             required_tier = VerificationTier(
                 min(int(required_tier), int(verified_tier_floor(workflow, resolved)))
             )

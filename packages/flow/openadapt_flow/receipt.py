@@ -85,6 +85,7 @@ ReceiptEffectTier = Literal[
     "independent_system",
     "independent_session",
     "persisted_state_reacquisition",
+    "immediate_screen",
 ]
 
 #: How the weakest effect was checked (:mod:`openadapt_flow.assurance`). A
@@ -95,6 +96,7 @@ _ASSURANCE_BY_TIER: dict[str, ReceiptAssurance] = {
     "independent_system": "independent_readback",
     "independent_session": "screen_readback",
     "persisted_state_reacquisition": "screen_readback",
+    "immediate_screen": "screen_readback",
 }
 
 ReceiptSubstrate = Literal["web", "windows", "macos", "linux", "rdp", "citrix"]
@@ -110,6 +112,7 @@ _TIER_NAMES: dict[int, ReceiptEffectTier] = {
     int(VerificationTier.PERSISTED_STATE_REACQUISITION): (
         "persisted_state_reacquisition"
     ),
+    int(VerificationTier.IMMEDIATE_SCREEN): "immediate_screen",
 }
 
 ReceiptProfile = Literal["standard", "regulated"]
@@ -332,8 +335,15 @@ class RunReceipt(BaseModel):
             raise ValueError("VERIFIED receipt lacks postcondition evidence")
         if not any(item.startswith("effect_tier_") for item in self.evidence_classes):
             raise ValueError("VERIFIED receipt lacks effect evidence")
-        if "effect_tier_4" in self.evidence_classes:
-            raise ValueError("immediate-screen evidence cannot produce VERIFIED")
+        if self.profile == "regulated" and (
+            {"effect_tier_3", "effect_tier_4"}.intersection(self.evidence_classes)
+            or self.effect_tier_reached
+            in {"persisted_state_reacquisition", "immediate_screen"}
+        ):
+            raise ValueError(
+                "regulated receipt requires independent-session or "
+                "independent-system effect evidence"
+            )
         if (
             self.effect_assurance is not None
             and self.effect_assurance != _ASSURANCE_BY_TIER[self.effect_tier_reached]
@@ -421,8 +431,8 @@ def _weakest_confirmed_tier(report: Any) -> ReceiptEffectTier:
             weakest = int(tier) if weakest is None else max(weakest, int(tier))
     if weakest is None:
         raise ReceiptError(
-            "VERIFIED receipt requires every effect at independent-system, "
-            "independent-session, or persisted-state strength"
+            "VERIFIED receipt requires confirmed effect evidence at a "
+            "recognized verification tier"
         )
     return _TIER_NAMES[weakest]  # type: ignore[return-value]
 
@@ -639,7 +649,7 @@ def _build_receipt(
         and getattr(report, "governed_authorization_id", None)
         and getattr(report, "governed_runtime_inputs_digest", None)
         and getattr(report, "governed_policy_contract_sha256", None)
-        and minimum_effect_tier in {1, 2, 3}
+        and minimum_effect_tier in ({1, 2} if profile == "regulated" else {1, 2, 3, 4})
     ):
         raise ReceiptError(
             "run does not carry the complete governed VERIFIED contract "

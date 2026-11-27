@@ -616,11 +616,10 @@ class EffectChecks(_Base):
         )
 
     def _all_default_readback(self, effects: list["Effect"]) -> bool:
-        """Whether EVERY declared effect is an auto-derived DIFFERENT-PATH
-        on-screen read-back that may be verified out of the box with no
-        connector (measured false-CONFIRM ~0). A same-surface read-back or any
-        structured system-of-record effect makes this False — those still
-        require a configured verifier (fail-safe)."""
+        """Whether every declared effect carries a valid bounded on-screen
+        read-back that may be verified out of the box with no external
+        connector. Any structured system-of-record effect without ``readback``
+        makes this False so it still requires a configured verifier."""
         from openadapt_flow.runtime.effects.onscreen import is_default_readback_effect
 
         return bool(effects) and all(is_default_readback_effect(e) for e in effects)

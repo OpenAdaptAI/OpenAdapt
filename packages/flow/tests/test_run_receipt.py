@@ -444,7 +444,7 @@ def _report(**overrides: object) -> RunReport:
         "governed_approval_source": "openadapt-flow-tutorial",
         "governed_runtime_inputs_digest": "c" * 64,
         "governed_policy_contract_sha256": "d" * 64,
-        "governed_minimum_effect_tier": 3,
+        "governed_minimum_effect_tier": 4,
         "required_identity_step_ids": ["step_000"],
         "params": {"note": "SECRET-NOTE-VALUE"},
         "success": True,
@@ -1392,12 +1392,16 @@ def test_receipt_refuses_uncertainty_hidden_as_delivered() -> None:
         build_receipt(_report(results=[result]))
 
 
-def test_receipt_refuses_screen_only_effect_evidence() -> None:
+def test_receipt_grades_screen_effect_evidence_by_profile() -> None:
+    from openadapt_flow.terminal_verification_v2 import (
+        project_production_run_receipt,
+    )
+
     evidence = (
         _report()
         .results[0]
         .effect_evidence[0]
-        .model_copy(update={"verification_tier": 4})
+        .model_copy(update={"verification_tier": 4, "substrate": "onscreen"})
     )
     result = _report().results[0].model_copy(update={"effect_evidence": [evidence]})
     envelope = _report().outcome_envelope.model_copy(
@@ -1410,9 +1414,35 @@ def test_receipt_refuses_screen_only_effect_evidence() -> None:
             ]
         }
     )
-    with pytest.raises(ReceiptError, match="independent verification floor"):
+    # Standard admits tier 4 and stamps immediate_screen + screen_readback.
+    standard_receipt = build_receipt(
+        _report(results=[result], outcome_envelope=envelope),
+    )
+    assert standard_receipt.effect_tier_reached == "immediate_screen"
+    assert standard_receipt.effect_assurance == "screen_readback"
+    projected = project_production_run_receipt(standard_receipt)
+    assert projected.effect_tier_reached == "immediate_screen"
+
+    # Raising governed_minimum_effect_tier to 3 refuses tier 4 on Standard.
+    with pytest.raises(ReceiptError, match="authorization minimum"):
         build_receipt(
-            _report(results=[result], outcome_envelope=envelope),
+            _report(
+                results=[result],
+                outcome_envelope=envelope,
+                governed_minimum_effect_tier=3,
+            ),
+        )
+
+    # Regulated refuses tier 4 (and tier 3) even if an envelope were forged.
+    reg_envelope = envelope.model_copy(update={"profile": "regulated"})
+    with pytest.raises(ReceiptError):
+        build_receipt(
+            _report(
+                execution_profile="regulated",
+                governed_minimum_effect_tier=2,
+                results=[result],
+                outcome_envelope=reg_envelope,
+            ),
         )
 
 
@@ -1501,4 +1531,9 @@ def test_demo_profile_still_cannot_require_or_report_verified_effects() -> None:
     assert standard.require_effect_contracts is True
     assert standard.require_certification is True
     assert standard.require_identity_coverage is True
-    assert int(standard.minimum_effect_tier) == 3
+    assert int(standard.minimum_effect_tier) == 4
+    assert int(standard.verified_effect_floor) == 4
+
+    regulated = execution_profile_contract(ExecutionProfile.REGULATED)
+    assert int(regulated.minimum_effect_tier) == 2
+    assert regulated.verified_effect_floor is None

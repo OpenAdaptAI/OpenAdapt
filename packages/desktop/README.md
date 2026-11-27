@@ -141,23 +141,24 @@ Every frame is a screenshot the replayer saved.
 ## How it confirms a save
 
 The right-record check before typing reads the screen, so it needs no other
-access. Confirming the save afterwards uses a tiered read-back check.
-**Check it** asks how for each step that saves:
+access. Confirming a save afterwards checks observable evidence and records the
+exact check level (`same_screen`, `reopened`, `separate_session`, or
+`system_of_record`) on the run report and receipt:
 
-- **When a backend channel is available:** a read-only API or database view
-  (REST, GraphQL, FHIR, or SQL), or an exported file/PDF or document hash.
-  Use this first as the strongest check from outside the app. IT connects it
-  once per system in the deployment settings file that **Run it** takes.
-- **When no API, database view, or file access exists** (most third-party
-  portals and closed desktop apps): OpenAdapt verifies the write by evicting
-  the stale screen and independently re-reading the persisted UI, opening a
-  fresh read-only second browser tab or cache-busted reload, or closing and
-  reopening the record from the list/index and confirming the persisted values
-  visually or via the accessibility tree, separate from the ephemeral `"Saved!"`
-  toast.
+- **On the screen out of the box** (`same_screen` or `reopened`): OpenAdapt
+  checks the expected values in bounded screen or accessibility regions right
+  on the current view (working even on in-place field or grid edits with no
+  separate post-save screen, and on non-idempotent portals or wizards that
+  cannot reload), or by reopening the record when a recording demonstrates how.
+- **Through a separate session or backend store when available**
+  (`separate_session` or `system_of_record`): a separate read-only session, or
+  a read-only API, database view (REST, GraphQL, FHIR, or SQL), or exported
+  file/PDF connected once in the deployment settings file that **Run it**
+  takes. Regulated runs require `separate_session` or `system_of_record`.
 
-Without an independent read-back check, a completed run shows **Finished, not
-checked** and doesn't count as done.
+Without a confirmed check (or when a check falls below the profile or workflow
+minimum), a completed run shows **Finished, not checked** and doesn't count as
+done.
 
 ## Answering a stop from your phone
 

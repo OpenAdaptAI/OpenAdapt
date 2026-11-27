@@ -282,23 +282,60 @@ def test_renavigation_backend_error_is_indeterminate() -> None:
 
 
 def test_is_default_readback_effect_gate() -> None:
-    # Different-path + renavigation => default-eligible.
+    # Different-path + renavigation with reset => default-eligible, tier 3.
     assert is_default_readback_effect(_renav_effect())
-    # Same-surface => NEVER a default.
+    assert OnScreenReadbackVerifier.verification_tier_for(_renav_effect()) is (
+        VerificationTier.PERSISTED_STATE_REACQUISITION
+    )
+    # Same-surface => default-eligible out of the box, graded at tier 4.
     same_surface = Effect(
         kind=EffectKind.FIELD_EQUALS,
         value="x",
         readback=ReadbackSpec(region=(0, 0, 1, 1), different_path=False),
     )
-    assert not is_default_readback_effect(same_surface)
-    # Different-path with no state reset => no reopen credit, never a default:
-    # the read could come from a page the save left behind.
+    assert is_default_readback_effect(same_surface)
+    assert OnScreenReadbackVerifier.verification_tier_for(same_surface) is (
+        VerificationTier.IMMEDIATE_SCREEN
+    )
+    # Different-path with no state reset => default-eligible at tier 4 (no reopen credit).
     no_reset = _renav_effect()
     assert no_reset.readback is not None
     no_reset.readback.reset = None
-    assert not is_default_readback_effect(no_reset)
+    assert is_default_readback_effect(no_reset)
     assert OnScreenReadbackVerifier.verification_tier_for(no_reset) is (
         VerificationTier.IMMEDIATE_SCREEN
+    )
+    # Unadmitted demonstrated check => never auto-defaulted until a person admits it.
+    unadmitted = Effect(
+        kind=EffectKind.FIELD_EQUALS,
+        value="x",
+        readback=ReadbackSpec(
+            region=(0, 0, 10, 10),
+            different_path=True,
+            renavigation=list(_RENAV),
+            reset=ReadbackReset(kind="new_search", at=2),
+            demonstrated=True,
+        ),
+    )
+    assert not is_default_readback_effect(unadmitted)
+    # Empty or missing region, or unperformable renavigation => not a default.
+    assert not is_default_readback_effect(
+        Effect(
+            kind=EffectKind.FIELD_EQUALS,
+            value="x",
+            readback=ReadbackSpec(region=(0, 0, 0, 10), different_path=False),
+        )
+    )
+    assert not is_default_readback_effect(
+        Effect(
+            kind=EffectKind.FIELD_EQUALS,
+            value="x",
+            readback=ReadbackSpec(
+                region=(0, 0, 10, 10),
+                different_path=False,
+                renavigation=[ReadbackNav(action="click", point=None)],
+            ),
+        )
     )
     # A structured effect (no readback) => not a read-back default.
     assert not is_default_readback_effect(Effect(kind=EffectKind.RECORD_WRITTEN))

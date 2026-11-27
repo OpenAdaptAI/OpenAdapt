@@ -1,13 +1,11 @@
-"""Pixel-only Citrix cannot be VERIFIED without an independent read.
+"""Graded VERIFIED floors across Standard, Regulated, and workflow minimums.
 
-Browser + independent API is the easy case. A Citrix/RDP window with only
-pixels, a green banner, or an on-screen read-back is the weak case. The
-Standard gate still admits persisted-state so the run can execute with
-halt-on-doubt. The outcome classifier refuses VERIFIED for a same-screen
-check and for a same-session reopen (check level ``reopened``); it needs a
-separate session or the system of record, and a workflow that sets
-``minimum_readback: system_of_record`` needs the latter. If a write may
-already have been delivered, the transaction is RECONCILIATION_REQUIRED.
+Standard defaults to ``same_screen`` (tier 4) so bounded on-screen and
+reopened checks reach ``VERIFIED`` while stamping the exact ``checked_how``
+level on ``report.json`` and the receipt, unless ``minimum_readback`` sets a
+stricter floor. Regulated defaults to ``separate_session`` (tier 2) and
+refuses ``VERIFIED`` for ``same_screen`` (tier 4) and ``reopened`` (tier 3)
+checks, marking the transaction ``RECONCILIATION_REQUIRED``.
 
 This is not live Citrix Production evidence.
 """
@@ -22,6 +20,7 @@ from openadapt_flow.execution_profiles import (
     ExecutionProfile,
     classify_execution_outcome,
     stamp_execution_outcome,
+    verified_tier_floor,
 )
 from openadapt_flow.readback_ladder import level_for_tier
 from openadapt_flow.transaction import TransactionOutcome
@@ -49,9 +48,17 @@ def _with_tier(report, tier: VerificationTier, *, substrate: str):
     [
         (S, None, VerificationTier.INDEPENDENT_SYSTEM, "rest", V),
         (S, None, VerificationTier.INDEPENDENT_SESSION, "session", V),
-        # A same-session reopen is never VERIFIED by itself under Standard.
-        (S, None, VerificationTier.PERSISTED_STATE_REACQUISITION, "onscreen", U),
-        (S, None, VerificationTier.IMMEDIATE_SCREEN, "onscreen", U),
+        (S, None, VerificationTier.PERSISTED_STATE_REACQUISITION, "onscreen", V),
+        (S, None, VerificationTier.IMMEDIATE_SCREEN, "onscreen", V),
+        (S, "reopened", VerificationTier.PERSISTED_STATE_REACQUISITION, "onscreen", V),
+        (S, "reopened", VerificationTier.IMMEDIATE_SCREEN, "onscreen", U),
+        (
+            S,
+            "separate_session",
+            VerificationTier.PERSISTED_STATE_REACQUISITION,
+            "onscreen",
+            U,
+        ),
         (S, SOR, VerificationTier.INDEPENDENT_SYSTEM, "rest", V),
         (S, SOR, VerificationTier.INDEPENDENT_SESSION, "session", U),
         (S, SOR, VerificationTier.PERSISTED_STATE_REACQUISITION, "onscreen", U),
@@ -59,10 +66,18 @@ def _with_tier(report, tier: VerificationTier, *, substrate: str):
         (R, None, VerificationTier.INDEPENDENT_SESSION, "session", V),
         (R, None, VerificationTier.PERSISTED_STATE_REACQUISITION, "onscreen", U),
         (R, None, VerificationTier.IMMEDIATE_SCREEN, "onscreen", U),
+        # A workflow minimum never lowers Regulated below separate_session.
+        (
+            R,
+            "same_screen",
+            VerificationTier.PERSISTED_STATE_REACQUISITION,
+            "onscreen",
+            U,
+        ),
         (R, SOR, VerificationTier.INDEPENDENT_SESSION, "session", U),
     ],
 )
-def test_production_verified_needs_an_independent_read(
+def test_production_verified_follows_profile_and_workflow_floor(
     profile, minimum, tier, substrate, expected
 ) -> None:
     workflow = _workflow()
@@ -85,7 +100,10 @@ def test_production_verified_needs_an_independent_read(
         expected_transaction is TransactionOutcome.VERIFIED
     )
     assert stamped.readback is not None
-    assert stamped.readback.minimum == (minimum or "separate_session")
+    expected_minimum_label = level_for_tier(
+        int(verified_tier_floor(workflow, profile)), confirmed=True
+    ).label
+    assert stamped.readback.minimum == expected_minimum_label
     assert stamped.readback.checked_how == level_for_tier(tier, confirmed=True).label
     assert stamped.readback.below_minimum is (
         expected_execution is not ExecutionOutcome.VERIFIED

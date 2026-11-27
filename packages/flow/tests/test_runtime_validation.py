@@ -90,7 +90,7 @@ def _approved_artifacts(
         runtime_inputs_digest=runtime_inputs_digest(workflow, None, None),
         admitted_policy_name="permissive",
         execution_profile=execution_profile or "standard",
-        minimum_effect_tier=3,
+        minimum_effect_tier=(2 if execution_profile == "regulated" else 4),
     )
     report = Replayer(
         object(),
