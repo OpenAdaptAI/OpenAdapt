@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Mapping, Optional, Sequence
 
+from openadapt_kernel.app_cartridge import AppCartridge, evaluate_cartridge_ood_support
 from openadapt_kernel.canonical import (
     DossierVariableSchema,
     tokenize_role_label,
@@ -16,7 +17,7 @@ from openadapt_kernel.canonical import (
 )
 from openadapt_kernel.copilot import PortalPack, mint_receipt
 from openadapt_kernel.digital_twin import capture_zero_phi_digital_twin, self_heal_in_digital_twin
-from openadapt_kernel.egress_guard import LocalEgressGuard
+from openadapt_kernel.egress_guard import BijectiveSymbolCodec, EgressPolicy, LocalEgressGuard
 from openadapt_kernel.fsm import compile_policy_rules_to_table, evaluate_pre_step_policy
 from openadapt_kernel.interceptor import CommitInterceptor
 from openadapt_kernel.ledger import (
@@ -25,7 +26,12 @@ from openadapt_kernel.ledger import (
     extract_dossier_facts,
     verify_completion_closure,
 )
-from openadapt_kernel.macro import lift_distilled_repair_to_pack, observe_schema, stage_form
+from openadapt_kernel.macro import (
+    detect_opaque_visual_surfaces,
+    lift_distilled_repair_to_pack,
+    observe_schema,
+    stage_form,
+)
 from openadapt_kernel.oracles import verify_cross_tab_dom, verify_pdf_readback, verify_sqlite_ro
 from openadapt_kernel.prepare import (
     PrepareCard,
@@ -116,15 +122,18 @@ def _attempt_twin_self_heal_and_publish(
     registry_dir: Optional[Path],
     signing_key: Optional[bytes],
     private_key_path: Optional[Path],
+    use_bijective_twin_symbols: bool = False,
 ) -> tuple[bool, Any, str, Optional[str]]:
-    twin = capture_zero_phi_digital_twin(page)
+    symbol_codec = BijectiveSymbolCodec() if use_bijective_twin_symbols else None
+    var_map = {f"${k}": str(v) for k, v in bindings.items()}
+    egress_pol = EgressPolicy(allowed_var_keys=frozenset(var_map.keys()))
+    twin = capture_zero_phi_digital_twin(page, policy=egress_pol, symbol_codec=symbol_codec)
     ledger_file = (
         Path(egress_ledger_path)
         if egress_ledger_path is not None
         else Path(tempfile.mkdtemp(prefix="oa_runner_egress_")) / "outbound_egress_ledger.jsonl"
     )
-    guard = LocalEgressGuard(ledger_file)
-    var_map = {f"${k}": str(v) for k, v in bindings.items()}
+    guard = LocalEgressGuard(ledger_file, policy=egress_pol)
     with ThreadPoolExecutor(max_workers=1) as pool:
         heal_res = pool.submit(
             self_heal_in_digital_twin,
@@ -134,6 +143,7 @@ def _attempt_twin_self_heal_and_publish(
             egress_guard=guard,
             max_turns=3,
             structural_error=structural_error,
+            symbol_codec=symbol_codec,
         ).result()
     if not heal_res.verified:
         return False, None, heal_res.egress_ledger_entry_sha256, None
@@ -231,6 +241,9 @@ def run_portal_pack(
     max_steps: int = 20,
     strict_closed_world: bool = False,
     epistemic_artifacts: Sequence[EpistemicArtifact] = (),
+    cartridge: Optional[AppCartridge] = None,
+    use_bijective_twin_symbols: bool = False,
+    visual_servo_click_fn: Optional[Callable[[Any, Dict[str, Any]], Any]] = None,
 ) -> RunResult:
     """Execute a PortalPack in Draft-to-Commit, Verified Autopilot, or Self-Healing mode."""
     from playwright.sync_api import sync_playwright
@@ -238,6 +251,15 @@ def run_portal_pack(
     pack = _load_portal_pack(pack_path)
     working_dossier: Dict[str, str] = dict(dossier)
     required_params = [k for k in pack.variable_fields if k not in pack.static_defaults]
+
+    if cartridge is not None:
+        ood = evaluate_cartridge_ood_support(cartridge, observed_facts or working_dossier)
+        if ood.requires_prepare and mode == "autopilot" and prepare_handler is None:
+            return RunResult(
+                mode=mode,
+                outcome="PREPARE_REQUIRED",
+                reason="ood_unseen_feature_value",
+            )
 
     # 1. Step-0 Policy Gate + PREPARE_ASK resume loop (0 writes before approval)
     if policy_specs is not None or prepare_handler is not None:
@@ -338,9 +360,28 @@ def run_portal_pack(
             if url:
                 page.goto(url, wait_until="domcontentloaded")
 
+            init_controls = observe_schema(page)
+            opaque = detect_opaque_visual_surfaces(page)
+            if opaque.get("requires_visual_grounding") and len(init_controls) == 0:
+                if visual_servo_click_fn is not None:
+                    visual_servo_click_fn(page, opaque["surfaces"][0])
+                    init_controls = observe_schema(page)
+                    if len(init_controls) == 0:
+                        return RunResult(
+                            mode=mode,
+                            outcome="VISUAL_SERVO_EXECUTED",
+                            reason="opaque_visual_surface_servo_invoked",
+                        )
+                else:
+                    return RunResult(
+                        mode=mode,
+                        outcome="ESCALATED",
+                        reason="opaque_visual_surface_requires_servo",
+                    )
+
             # Optional semantic slot guard when policy/prepare pipeline is enabled
             if policy_specs is not None or prepare_handler is not None:
-                controls = observe_schema(page)
+                controls = init_controls
                 if controls and bindings:
                     schemas = {
                         k: DossierVariableSchema(var_name=k, field_type="casefold_ws", role_tokens=tokenize_role_label(k))
@@ -400,6 +441,7 @@ def run_portal_pack(
                         registry_dir=registry_dir,
                         signing_key=signing_key,
                         private_key_path=private_key_path,
+                        use_bijective_twin_symbols=use_bijective_twin_symbols,
                     )
                     if healed_ok and heal_verdict is not None:
                         healed = True
@@ -501,6 +543,7 @@ def run_portal_pack(
                         registry_dir=registry_dir,
                         signing_key=signing_key,
                         private_key_path=private_key_path,
+                        use_bijective_twin_symbols=use_bijective_twin_symbols,
                     )
                     if healed_ok and heal_verdict is not None:
                         interceptor.clear_dirty_fields()
@@ -568,6 +611,7 @@ def run_portal_pack(
                     registry_dir=registry_dir,
                     signing_key=signing_key,
                     private_key_path=private_key_path,
+                    use_bijective_twin_symbols=use_bijective_twin_symbols,
                 )
                 if healed_ok and heal_verdict is not None:
                     healed = True

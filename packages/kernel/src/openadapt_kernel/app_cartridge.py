@@ -25,13 +25,19 @@ from typing import (
 )
 
 from openadapt_kernel.egress_guard import (
+    BijectiveSymbolCodec,
     EgressBlockedError,
     EgressPolicy,
     LocalEgressGuard,
     summarize_egress_ledger,
 )
-from openadapt_kernel.fsm import PolicyDecisionTable, PolicyRule, evaluate_policy_decision
-from openadapt_kernel.ledger import EpistemicArtifact
+from openadapt_kernel.fsm import (
+    PolicyDecisionTable,
+    PolicyRule,
+    _policy_value_matches,
+    evaluate_policy_decision,
+)
+from openadapt_kernel.ledger import EpistemicArtifact, SpanAnchor, verify_span_anchor
 from openadapt_kernel.stateful_twin import StatefulTwinApp
 from openadapt_kernel.zero_phi_repair import verify_symbolic_repair_ast
 
@@ -144,6 +150,18 @@ class CompiledSOPSpec:
     consistency_conflicts: Tuple[str, ...] = ()
     observed_feature_domains: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
     branch_support_counts: Dict[str, int] = field(default_factory=dict)
+    post_commit_obligations: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class RawDemoTrace:
+    demo_id: str
+    goal_text: str
+    visited_views: Tuple[str, ...]
+    dom_observations: Dict[str, str]
+    committed_fields: Dict[str, str]
+    post_commit_actions: Tuple[str, ...] = ()
+    post_commit_url: str = ""
 
 
 @dataclass(frozen=True)
@@ -1482,7 +1500,10 @@ def evaluate_cartridge_ood_support(
     matched_branch: Optional[SOPBranchSpec] = None
     for b in cartridge.sop_spec.branches:
         if all(
-            str(observed_facts.get(k, "")).strip().casefold() == str(v).strip().casefold()
+            _policy_value_matches(
+                str(observed_facts.get(k, "")).strip().casefold(),
+                str(v).strip().casefold(),
+            )
             for k, v in b.when.items()
         ):
             matched_branch = b
@@ -1534,3 +1555,269 @@ def incorporate_prepare_resolution_into_cartridge(
     )
     qual = qualify_app_cartridge_offline(updated)
     return updated, qual
+
+
+_RAW_NUM_RE = re.compile(r"^\s*[$€£¥]?\s*(-?\d+(?:,\d{3})*(?:\.\d+)?)\s*%?\s*$")
+
+
+def _parse_pure_number(raw: str) -> Optional[float]:
+    m = _RAW_NUM_RE.match(str(raw or ""))
+    return float(m.group(1).replace(",", "")) if m else None
+
+
+def _anchored_note_slots(demos: Sequence[RawDemoTrace], note_field: str) -> Tuple[str, ...]:
+    """Discover $slot note keys anchored via SpanAnchor directly to dom_observations."""
+    per_demo_slots: List[List[str]] = []
+    for d in demos:
+        note = str(d.committed_fields.get(note_field, "") or "")
+        if not note:
+            per_demo_slots.append([])
+            continue
+        note_cf = note.casefold()
+        found: List[str] = []
+        for obs_k, obs_v in d.dom_observations.items():
+            raw_obs = str(obs_v or "")
+            if not raw_obs.strip():
+                continue
+            cand = raw_obs.strip()
+            pos = raw_obs.find(cand)
+            if len(cand) >= 2 and cand.casefold() in note_cf and pos >= 0:
+                if verify_span_anchor(d.dom_observations, SpanAnchor(obs_k, pos, pos + len(cand), cand)):
+                    found.append(obs_k)
+                    continue
+            for m in re.finditer(r"[A-Za-z0-9][A-Za-z0-9_./-]{2,}", raw_obs):
+                tok = m.group(0)
+                if tok.casefold() in note_cf and verify_span_anchor(
+                    d.dom_observations, SpanAnchor(obs_k, m.start(), m.end(), tok)
+                ):
+                    found.append(obs_k)
+                    break
+        per_demo_slots.append(found)
+    if not per_demo_slots:
+        return ()
+    common = set(per_demo_slots[0])
+    for s in per_demo_slots[1:]:
+        common &= set(s)
+    return tuple(k for k in per_demo_slots[0] if k in common)
+
+
+def _induce_contrastive_when(
+    disp: str,
+    disp_demos: Sequence[RawDemoTrace],
+    other_demos: Sequence[RawDemoTrace],
+) -> Dict[str, Any]:
+    all_keys = sorted({k for d in disp_demos for k in d.dom_observations.keys()})
+    when: Dict[str, Any] = {}
+    for k in all_keys:
+        d_vals = [str(d.dom_observations.get(k, "")).strip() for d in disp_demos]
+        if not all(d_vals):
+            continue
+        o_vals = [str(d.dom_observations.get(k, "")).strip() for d in other_demos if k in d.dom_observations]
+        d_cf = {v.casefold() for v in d_vals}
+        o_cf = {v.casefold() for v in o_vals}
+        if len(d_cf) == 1 and (not other_demos or not (d_cf & o_cf)):
+            when[k] = d_vals[0]
+            continue
+        d_nums = [_parse_pure_number(v) for v in d_vals]
+        o_nums = [_parse_pure_number(v) for v in o_vals]
+        if other_demos and all(n is not None for n in d_nums) and o_nums and all(n is not None for n in o_nums):
+            d_f = [float(n) for n in d_nums if n is not None]
+            o_f = [float(n) for n in o_nums if n is not None]
+            if min(d_f) > max(o_f):
+                when[k] = f">= {min(d_f):g}"
+            elif max(d_f) < min(o_f):
+                when[k] = f"<= {max(d_f):g}"
+            continue
+        if other_demos:
+            d_tok_sets = [set(re.findall(r"[^\W_]{3,}", v.casefold())) for v in d_vals]
+            o_toks = {t for v in o_vals for t in re.findall(r"[^\W_]{3,}", v.casefold())}
+            shared_unique = sorted((set.intersection(*d_tok_sets) if d_tok_sets else set()) - o_toks)
+            if shared_unique:
+                when[k] = shared_unique[0]
+    if not when and disp_demos:
+        for k, v in disp_demos[0].dom_observations.items():
+            if str(v).strip():
+                when[k] = str(v).strip()
+                break
+    return when
+
+
+def induce_cartridge_from_raw_demos(
+    raw_demos: Sequence[RawDemoTrace],
+    *,
+    cartridge_id: str,
+    portal_origin: str,
+    disposition_field: str = "disposition",
+    note_field: str = "notes",
+    coding_agent_fn: Optional[Callable[[str], str]] = None,
+    egress_policy: Optional[EgressPolicy] = None,
+    ledger_path: Optional[Union[str, Path]] = None,
+) -> AppCartridge:
+    """Induce an AppCartridge directly from raw unlabelled demonstrations with zero pre-structured feature dicts."""
+    if not raw_demos:
+        raise ValueError("induce_cartridge_from_raw_demos requires at least one RawDemoTrace")
+
+    guard = _make_guard(egress_policy, ledger_path, "oa_raw_demo_egress_")
+    by_disp: Dict[str, List[RawDemoTrace]] = {}
+    for d in raw_demos:
+        disp = str(d.committed_fields.get(disposition_field, "")).strip() or "default"
+        by_disp.setdefault(disp, []).append(d)
+
+    read_views_by_disp: Dict[str, Tuple[str, ...]] = {}
+    post_commit_by_disp: Dict[str, Tuple[str, ...]] = {}
+    note_slots_by_disp: Dict[str, Tuple[str, ...]] = {}
+    for disp, demos in by_disp.items():
+        common_views = set(demos[0].visited_views)
+        for d in demos[1:]:
+            common_views &= set(d.visited_views)
+        read_views_by_disp[disp] = tuple(v for v in demos[0].visited_views if v in common_views)
+
+        common_post = set(demos[0].post_commit_actions)
+        for d in demos[1:]:
+            common_post &= set(d.post_commit_actions)
+        post_tuple = tuple(a for a in demos[0].post_commit_actions if a in common_post)
+        if post_tuple:
+            post_commit_by_disp[disp] = post_tuple
+        note_slots_by_disp[disp] = _anchored_note_slots(demos, note_field)
+
+    branches: List[SOPBranchSpec] = []
+    if coding_agent_fn is not None:
+        codec = BijectiveSymbolCodec()
+
+        def _sym(text: str) -> str:
+            return codec.symbolize_text(re.sub(r"\$(?=\d)", " ", text or ""))
+
+        outbound = {
+            "demo_traces": [
+                {
+                    "summary": _sym(d.goal_text),
+                    "visited_tabs": [_sym(v) for v in d.visited_views],
+                    "observations": {_sym(k): _sym(v) for k, v in d.dom_observations.items()},
+                    "fields": {_sym(k): _sym(v) for k, v in d.committed_fields.items()},
+                    "actions": [_sym(a) for a in d.post_commit_actions],
+                }
+                for d in raw_demos
+            ]
+        }
+        verdict = guard.check_and_record(outbound, destination="raw_demo_inducer")
+        if not verdict.allowed:
+            raise EgressBlockedError(verdict)
+        raw_reply = coding_agent_fn(
+            'Induce JSON {"branches": [{"branch_id", "when", "disposition", "required_read_artifacts", '
+            '"required_note_slots", "priority"}]} from symbolized demos:\n'
+            + json.dumps(outbound, sort_keys=True)
+            + "\n"
+        )
+        parsed = _extract_json_dict(codec.detokenize_text(raw_reply))
+        for b in _parse_branch_dicts(parsed.get("branches") or []):
+            reads = b.required_read_artifacts or read_views_by_disp.get(b.disposition, ())
+            slots = b.required_note_slots or note_slots_by_disp.get(b.disposition, ())
+            branches.append(SOPBranchSpec(b.branch_id, b.when, b.disposition, reads, slots, b.priority))
+
+    if not branches:
+        for idx, (disp, demos) in enumerate(by_disp.items(), start=1):
+            others = [d for od, od_list in by_disp.items() if od != disp for d in od_list]
+            when = _induce_contrastive_when(disp, demos, others)
+            branches.append(
+                SOPBranchSpec(
+                    branch_id=f"raw_branch_{idx}",
+                    when=when,
+                    disposition=disp,
+                    required_read_artifacts=read_views_by_disp[disp],
+                    required_note_slots=note_slots_by_disp[disp],
+                    priority=idx,
+                )
+            )
+
+    base_sop = _build_compiled_sop(f"{cartridge_id}_sop", branches)
+    domains: Dict[str, set[str]] = {}
+    for d in raw_demos:
+        for k, v in d.dom_observations.items():
+            sv = str(v).strip()
+            if sv and _parse_pure_number(sv) is None:
+                domains.setdefault(k, set()).add(sv.casefold())
+    support_counts = {b.branch_id: len(by_disp.get(b.disposition, ())) for b in base_sop.branches}
+    sop_spec = CompiledSOPSpec(
+        spec_id=base_sop.spec_id,
+        decision_table=base_sop.decision_table,
+        branches=base_sop.branches,
+        consistency_ok=base_sop.consistency_ok,
+        consistency_conflicts=base_sop.consistency_conflicts,
+        observed_feature_domains={k: tuple(sorted(vs)) for k, vs in domains.items()},
+        branch_support_counts=support_counts,
+        post_commit_obligations=post_commit_by_disp,
+    )
+
+    skills: List[SkillMacroSpec] = []
+    for disp, demos in by_disp.items():
+        slug = re.sub(r"[^a-z0-9]+", "_", disp.lower()).strip("_") or "action"
+        slots = note_slots_by_disp.get(disp, ())
+        skills.append(
+            SkillMacroSpec(
+                skill_id=f"skill_{slug}",
+                name=f"execute_{slug}",
+                description=f"Induced skill for {disp}",
+                parameters=slots,
+                code="def repair(ui, vars):\n    ui.click(0)\n",
+                expected_url_pattern=demos[0].post_commit_url,
+            )
+        )
+
+    oracles: List[APIOracleSpec] = []
+    seen_urls: set[str] = set()
+    for d in raw_demos:
+        if d.post_commit_url and d.post_commit_url not in seen_urls:
+            seen_urls.add(d.post_commit_url)
+            oracles.append(
+                APIOracleSpec(
+                    oracle_id=f"oracle_{len(oracles) + 1}",
+                    method="GET",
+                    path_pattern=d.post_commit_url,
+                    expected_fields=tuple(sorted(d.committed_fields.keys())),
+                    read_only=True,
+                )
+            )
+
+    mutants: List[AdversarialMutantSpec] = []
+    for b in sop_spec.branches:
+        rep_demo = (by_disp.get(b.disposition) or list(raw_demos))[0]
+        dossier = dict(rep_demo.dom_observations)
+        mutants.append(
+            AdversarialMutantSpec(
+                mutant_id=f"mutant_{b.branch_id}_happy",
+                description=f"Verify {b.branch_id} routes to {b.disposition}",
+                dossier=dossier,
+                expected_disposition=b.disposition,
+                expected_blocked=False,
+            )
+        )
+        if b.required_read_artifacts:
+            mutants.append(
+                AdversarialMutantSpec(
+                    mutant_id=f"mutant_{b.branch_id}_unread",
+                    description=f"Block {b.branch_id} when {b.required_read_artifacts[0]} is unread",
+                    dossier=dossier,
+                    expected_disposition=b.disposition,
+                    expected_blocked=True,
+                    unread_artifacts=(b.required_read_artifacts[0],),
+                )
+            )
+    mutants.append(
+        AdversarialMutantSpec(
+            mutant_id="mutant_ood_abstain",
+            description="Unseen OOD observation must abstain",
+            dossier={"ood_unseen_feature": "out_of_distribution"},
+            expected_disposition="",
+            expected_blocked=True,
+        )
+    )
+
+    return AppCartridge(
+        cartridge_id=cartridge_id,
+        portal_origin=portal_origin,
+        sop_spec=sop_spec,
+        skills=tuple(skills),
+        api_oracles=tuple(oracles),
+        mutants=tuple(mutants),
+        egress_audit=summarize_egress_ledger(guard.read_ledger()),
+    )

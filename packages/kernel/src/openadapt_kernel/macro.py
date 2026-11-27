@@ -16,6 +16,7 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
+    Union,
 )
 
 from openadapt_kernel.interceptor import CommitInterceptor
@@ -24,7 +25,7 @@ from openadapt_kernel.ledger import ObligationLedger, ProvenanceViolation
 if TYPE_CHECKING:
     from openadapt_kernel.canonical import FieldType
 
-_OBSERVE_SCHEMA_JS = """() => {
+_OBSERVE_SCHEMA_JS = """(startIdx = 0) => {
   const selectorQuery = 'input, textarea, select, button, a[href], [contenteditable="true"], [role="button"], [role="textbox"], [role="combobox"], [role="checkbox"], [role="option"]';
   const collected = [];
   const walkRoot = (root, inShadow, hostChain) => {
@@ -207,7 +208,7 @@ _OBSERVE_SCHEMA_JS = """() => {
   };
 
   const items = [];
-  let idx = 0;
+  let idx = Number(startIdx) || 0;
   for (const { el, inShadow, root, hostChain } of collected) {
     const st = window.getComputedStyle(el);
     if (!st || st.display === 'none' || st.visibility === 'hidden') continue;
@@ -365,9 +366,10 @@ def detect_opaque_visual_surfaces(page: Any, *, min_area_px: int = 10000) -> Dic
 def observe_schema(page: Any, *, include_frames: bool = True) -> List[ControlSchema]:
     """Extract all visible interactive controls across main DOM, open Shadow DOM, and nested iframes."""
     controls: List[ControlSchema] = []
-    raw_main = page.evaluate(_OBSERVE_SCHEMA_JS) or []
+    raw_main = page.evaluate(_OBSERVE_SCHEMA_JS, 0) or []
     for item in raw_main:
         controls.append(ControlSchema(frame_index=-1, frame_chain=(), **item))
+    next_idx = max((c.control_index + 1 for c in controls if c.control_index >= 0), default=len(controls))
 
     if include_frames and hasattr(page, "frames"):
         frames = list(page.frames)
@@ -377,9 +379,12 @@ def observe_schema(page: Any, *, include_frames: bool = True) -> List[ControlSch
                 continue
             try:
                 fchain = _compute_frame_chain(frame, main_frame)
-                raw_sub = frame.evaluate(_OBSERVE_SCHEMA_JS) or []
+                raw_sub = frame.evaluate(_OBSERVE_SCHEMA_JS, next_idx) or []
                 for item in raw_sub:
-                    controls.append(ControlSchema(frame_index=idx, frame_chain=fchain, **item))
+                    ctrl = ControlSchema(frame_index=idx, frame_chain=fchain, **item)
+                    controls.append(ctrl)
+                    if ctrl.control_index >= next_idx:
+                        next_idx = ctrl.control_index + 1
             except Exception:
                 continue
     return controls
@@ -389,14 +394,15 @@ observe_dom_schema = observe_schema
 
 
 def _match_control(
-    key: str,
+    key: Union[str, int],
     controls: Sequence[ControlSchema],
     *,
     prefer_modal: bool = False,
     allowed_tags: Optional[Sequence[str]] = None,
 ) -> Optional[ControlSchema]:
-    key_l = key.strip().lower()
-    key_toks = _tokens(key)
+    key_str = str(key)
+    key_l = key_str.strip().lower()
+    key_toks = _tokens(key_str)
     best: Optional[ControlSchema] = None
     best_score = 0.0
 
@@ -406,6 +412,8 @@ def _match_control(
         score = 0.0
         if ctrl.selector and ctrl.selector.lower() == key_l:
             score = 100.0
+        elif ctrl.control_index >= 0 and str(ctrl.control_index) == key_l:
+            score = 99.0
         elif ctrl.testid and ctrl.testid.lower() == key_l:
             score = 95.0
         elif ctrl.name and ctrl.name.lower() == key_l:
@@ -443,12 +451,19 @@ def _resolve_locator(page: Any, ctrl: ControlSchema) -> Any:
         fl = page.frame_locator(ctrl.frame_chain[0])
         for sub_sel in ctrl.frame_chain[1:]:
             fl = fl.frame_locator(sub_sel)
+        if ctrl.control_index >= 0:
+            idx_loc = fl.locator(f'[data-oa-idx="{ctrl.control_index}"]').first
+            try:
+                if idx_loc.count() > 0:
+                    return idx_loc
+            except Exception:
+                pass
         if ctrl.selector:
             return fl.locator(ctrl.selector).first
         if ctrl.label and ctrl.tag in ("button", "a"):
             return fl.locator(f"{ctrl.tag}:has-text({ctrl.label!r})").first
     root = _target_root(page, ctrl)
-    if ctrl.control_index >= 0 and ctrl.frame_index == -1:
+    if ctrl.control_index >= 0:
         idx_loc = root.locator(f'[data-oa-idx="{ctrl.control_index}"]').first
         try:
             if idx_loc.count() > 0:
@@ -464,7 +479,7 @@ def _resolve_locator(page: Any, ctrl: ControlSchema) -> Any:
 
 def stage_form(
     page: Any,
-    bindings: Dict[str, str],
+    bindings: Union[Mapping[str, str], Mapping[int, str], Mapping[Union[str, int], str]],
     *,
     ledger: Optional[ObligationLedger] = None,
     opaque_fields: Iterable[str] = (),
@@ -473,9 +488,10 @@ def stage_form(
     prefer_modal: bool = False,
 ) -> StageResult:
     """Fill an entire form (main DOM, Shadow DOM, iframes, ARIA comboboxes) in one verified batch."""
+    str_bindings = {str(k): v for k, v in bindings.items()}
     if ledger is not None and opaque_fields:
         violations = ledger.verify_ssa_provenance(
-            bindings, opaque_fields=opaque_fields, target_subject_key=subject_key
+            str_bindings, opaque_fields=opaque_fields, target_subject_key=subject_key
         )
         if violations:
             return StageResult(ok=False, provenance_violations=violations)
@@ -488,7 +504,7 @@ def stage_form(
     ]
     result = StageResult(ok=True)
 
-    for key, val in bindings.items():
+    for key, val in str_bindings.items():
         ctrl = _match_control(key, input_controls, prefer_modal=prefer_modal)
         if ctrl is None:
             result.unmatched.append(key)

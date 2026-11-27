@@ -242,6 +242,24 @@ class PolicyDecisionResult:
     requires_prepare: bool = False
 
 
+_POLICY_CMP_RE = re.compile(r"^(<=|>=|!=|<|>)\s*(-?\d+(?:\.\d+)?)$")
+
+
+def _policy_value_matches(actual: str, expected: str) -> bool:
+    if expected == "*":
+        return bool(actual)
+    if actual == expected:
+        return True
+    m = _POLICY_CMP_RE.match(expected)
+    if m:
+        op, rhs = m.group(1), float(m.group(2))
+        num_m = re.search(r"-?\d+(?:\.\d+)?", actual.replace(",", ""))
+        if num_m:
+            lhs = float(num_m.group(0))
+            return {"<": lhs < rhs, "<=": lhs <= rhs, ">": lhs > rhs, ">=": lhs >= rhs, "!=": lhs != rhs}[op]
+    return False
+
+
 def evaluate_policy_decision(
     table: PolicyDecisionTable, observed_facts: Mapping[str, str], proposed_disposition: str
 ) -> PolicyDecisionResult:
@@ -251,7 +269,7 @@ def evaluate_policy_decision(
     for rule in table.rules:
         if all(
             (nk := _norm_policy_str(ck)) in norm_facts
-            and ((nv := _norm_policy_str(cv)) == "*" and bool(norm_facts[nk]) or norm_facts[nk] == nv)
+            and _policy_value_matches(norm_facts[nk], _norm_policy_str(cv))
             for ck, cv in rule.conditions.items()
         ):
             if norm_proposed != _norm_policy_str(rule.required_disposition):

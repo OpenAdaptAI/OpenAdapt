@@ -1017,6 +1017,8 @@ def calibrate_critic_decision(
     policy_requires_human: bool = False,
     require_extracted_facts: bool = False,
     extracted_facts_count: int = 0,
+    untemplated_freetext: bool = False,
+    ood_case: bool = False,
 ) -> CriticCalibrationVerdict:
     """Calibrate an LLM critic veto against deterministic closure verification and human-policy gates."""
     if policy_requires_human:
@@ -1026,6 +1028,10 @@ def calibrate_critic_decision(
             "ESCALATE", False, f"closure_not_verified:{closure_report.reason}", critic_reason
         )
     if critic_vetoed:
+        if untemplated_freetext or ood_case:
+            return CriticCalibrationVerdict(
+                "ESCALATE", False, "preserved_critic_veto_on_untemplated_or_ood_prose", critic_reason
+            )
         if require_extracted_facts and extracted_facts_count <= 0:
             return CriticCalibrationVerdict(
                 "ESCALATE", False, "unextracted_facts_preserve_critic_veto", critic_reason

@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple
 
 from openadapt_kernel.egress_guard import (
+    BijectiveSymbolCodec,
     EgressBlockedError,
     EgressPolicy,
     EgressVerdict,
@@ -43,7 +44,7 @@ _DATE_SPAN_RE = re.compile(r"\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{2,4})\b")
 _NUM_OR_ID_SPAN_RE = re.compile(
     r"(?:\$\s?\d[\d,]*(?:\.\d{2})?|\b\d{3}-\d{2}-\d{4}\b|\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b|\b[A-Za-z]{1,6}-\d{2,}[A-Za-z0-9-]*\b|\b\d[\d,./-]*\b)"
 )
-_WORD_OR_CANARY_RE = re.compile(r"CANARY_[A-Z]+_\d+|[A-Za-z0-9_]+")
+_WORD_OR_CANARY_RE = re.compile(r"SYM_[0-9A-F]{8}|CANARY_[A-Z]+_\d+|[^\W_]+")
 
 _EXTRACT_DOM_TREE_JS = """() => {
   const SKIP = new Set(['SCRIPT','STYLE','IMG','CANVAS','SVG','VIDEO','AUDIO','IFRAME','OBJECT','EMBED','PICTURE','SOURCE','NOSCRIPT','LINK','META']);
@@ -163,8 +164,14 @@ _TWIN_POSTCONDITION_JS = """() => {
 class _CanaryProjector:
     """Deterministic type-preserving allowlist projector emitting CANARY_* tokens."""
 
-    def __init__(self, vocab: FrozenSet[str]) -> None:
+    def __init__(
+        self,
+        vocab: FrozenSet[str],
+        *,
+        symbol_codec: Optional[BijectiveSymbolCodec] = None,
+    ) -> None:
         self._vocab = vocab
+        self._symbol_codec = symbol_codec
         self._seen: Dict[Tuple[str, str], str] = {}
         self.counts: Dict[str, int] = {"TEXT": 0, "DATE": 0, "NUM": 0}
 
@@ -190,12 +197,15 @@ class _CanaryProjector:
                 non_allowed_buf.clear()
 
         for tok in _WORD_OR_CANARY_RE.findall(step2):
-            if tok.startswith("CANARY_"):
+            if tok.startswith(("CANARY_", "SYM_")):
                 _flush_buf()
                 out.append(tok)
             elif tok.lower() in self._vocab:
                 _flush_buf()
                 out.append(tok)
+            elif self._symbol_codec is not None:
+                _flush_buf()
+                out.append(self._symbol_codec.symbolize_token(tok))
             else:
                 non_allowed_buf.append(tok)
         _flush_buf()
@@ -284,17 +294,20 @@ def capture_zero_phi_digital_twin(
     page: Any,
     *,
     policy: Optional[EgressPolicy] = None,
+    symbol_codec: Optional[BijectiveSymbolCodec] = None,
 ) -> DigitalTwinSnapshot:
     """Extract a runnable, zero-PHI HTML+CSS digital twin of the active page/modal."""
     pol = policy or EgressPolicy()
     controls = observe_schema(page)
     raw_tree = page.evaluate(_EXTRACT_DOM_TREE_JS)
-    projector = _CanaryProjector(pol.effective_tokens())
+    projector = _CanaryProjector(pol.effective_tokens(), symbol_codec=symbol_codec)
     body_html = _render_safe_node(raw_tree, projector) if isinstance(raw_tree, dict) else "<div></div>"
     sanitized_html = (
         '<!doctype html><html><head><meta charset="utf-8"><title>Twin</title></head>'
         f"<body>{body_html}</body></html>"
     )
+    if symbol_codec is not None:
+        sanitized_html = symbol_codec.symbolize_html(sanitized_html)
     verdict = inspect_outbound_payload(sanitized_html, policy=pol)
     if not verdict.allowed:
         raise EgressBlockedError(verdict)
@@ -357,6 +370,7 @@ def self_heal_in_digital_twin(
     max_turns: int = 3,
     structural_error: str = "submit disabled",
     postcondition_fn: Optional[Callable[[Any], bool]] = None,
+    symbol_codec: Optional[BijectiveSymbolCodec] = None,
 ) -> TwinHealResult:
     """Run bounded offline TDD self-healing inside twin.sanitized_html with mandatory egress gating."""
     from playwright.sync_api import sync_playwright
@@ -397,10 +411,20 @@ def self_heal_in_digital_twin(
                     "submit_still_disabled": submit_disabled,
                     "last_failure_code": last_failure_code or "none",
                 }
+                outbound_html = (
+                    symbol_codec.symbolize_html(twin.sanitized_html)
+                    if symbol_codec is not None
+                    else twin.sanitized_html
+                )
+                outbound_var_keys = (
+                    [k if k.startswith("$") else symbol_codec.symbolize_text(k) for k in var_keys]
+                    if symbol_codec is not None
+                    else var_keys
+                )
                 outbound_payload: Dict[str, Any] = {
-                    "sanitized_html": twin.sanitized_html,
+                    "sanitized_html": outbound_html,
                     "controls": ctrl_twin,
-                    "var_keys": var_keys,
+                    "var_keys": outbound_var_keys,
                     "structural_error": safe_error,
                     "feedback": feedback,
                 }
@@ -423,8 +447,10 @@ def self_heal_in_digital_twin(
                     )
 
                 code_str = _invoke_coding_agent(
-                    coding_agent_fn, outbound_payload, twin.sanitized_html, var_keys, safe_error, feedback
+                    coding_agent_fn, outbound_payload, outbound_html, outbound_var_keys, safe_error, feedback
                 )
+                if symbol_codec is not None:
+                    code_str = symbol_codec.detokenize_text(code_str)
                 ast_check = verify_symbolic_repair_ast(code_str, frozenset(var_keys))
                 if not ast_check.ok:
                     last_failure_code = "ast_firewall_rejected"
