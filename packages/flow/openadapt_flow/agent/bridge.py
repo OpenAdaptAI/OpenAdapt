@@ -807,9 +807,7 @@ class AgentBridge:
                 raise BridgeError(str(exc)) from exc
         if name == "continue_halted_run":
             if not self.allow_run or self.sandbox is not None:
-                raise BridgeError(
-                    "continue_halted_run is unavailable on this server"
-                )
+                raise BridgeError("continue_halted_run is unavailable on this server")
             try:
                 return self.continuation_desk.continue_halted_run(
                     resume_token=arguments.get("resume_token"),
