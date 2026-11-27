@@ -205,7 +205,7 @@ def _governed_report(
         runtime_inputs_digest=runtime_inputs_digest(workflow, None, None),
         admitted_policy_name="permissive",
         execution_profile="standard",
-        minimum_effect_tier=int(VerificationTier.PERSISTED_STATE_REACQUISITION),
+        minimum_effect_tier=int(VerificationTier.IMMEDIATE_SCREEN),
         required_identity_step_ids=required_identity_step_ids,
     )
     run_dir = root / "run"

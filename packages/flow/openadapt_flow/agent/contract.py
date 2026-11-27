@@ -894,8 +894,10 @@ RUN_RESULT_SCHEMA: dict[str, Any] = {
                 "save reached: unchecked, same_screen, reopened (found again "
                 "and re-read in the acting session), separate_session (read "
                 "in a separately signed-in session), system_of_record, or "
-                "counterparty_confirmed. Only separate_session and stronger "
-                "make a run done by default."
+                "counterparty_confirmed. Under the standard profile, any "
+                "confirmed check (same_screen or stronger) makes a run done "
+                "unless minimum_readback raises the floor; under regulated, "
+                "separate_session or stronger is required."
             ),
         },
         "checked_how_label": {"type": "string"},

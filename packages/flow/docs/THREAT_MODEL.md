@@ -28,7 +28,7 @@ checks only reduce how often that owner has to act.
 
 | Layer | Guarantees | Where it applies |
 | --- | --- | --- |
-| **1. The record check** | A write is reported as `VERIFIED` only if a read independent of the acting session showed the declared effect at the time of the read, within what that read covers (below). Anything else is a stop or a weaker outcome. | Every surface: browser, desktop, Citrix and RDP. What it covers depends on the read path |
+| **1. The record check** | A write is reported as `VERIFIED` only if the configured read-back path showed the declared effect at the time of the read and met the profile's and workflow's floor (`same_screen` or stronger under `Standard`; `separate_session` or stronger under `Regulated`), within what that read covers (below). Anything else is a stop or a weaker outcome. | Every surface: browser, desktop, Citrix and RDP. What it covers depends on the read path |
 | **2. The wire check** | Only declared writes leave: the method, the path and the body must match before the request is sent. Anything else is refused. | Wherever requests can be intercepted, the browser today |
 | **3. Undo or a person** | A wrong write the record check catches is undone and the undo verified, or it goes to a person with the exact difference. A write that cannot be undone needs a person's approval first. | Every surface |
 
@@ -51,8 +51,12 @@ screen postcondition and is not graded.
   (level 3) is the strongest read available there. Changes to other records that the log does
   not show, server-side jobs that run later, and outbound messages (HL7,
   queues, email) are outside it.
-- **Reads in the acting session** (`same_screen`, `reopened`) are reported at
-  their own levels and never make a run `VERIFIED`.
+- **Reads in the acting session** (`same_screen`, `reopened`) confirm only
+  what the acting surface showed at the time of the read. Under `Standard`
+  they reach `VERIFIED` (with `same_screen` or `reopened` recorded on the
+  report and receipt) unless `minimum_readback` sets a higher floor; under
+  `Regulated` (or when `minimum_readback` sets a higher floor) they end
+  `COMPLETED_UNVERIFIED`.
 
 `VERIFIED` means "as of the read-back time, the read showed this value". It
 does not mean the value persisted after that, and it does not mean the run
