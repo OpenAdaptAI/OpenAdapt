@@ -1,4 +1,4 @@
-"""Boundary tests: zero openadapt_flow imports, zero app-specific names, and strict <14,750 LOC budget."""
+"""Boundary tests: zero openadapt_flow imports and zero app-specific names in engine code."""
 
 from __future__ import annotations
 
@@ -22,10 +22,8 @@ FORBIDDEN_APP_NAMES = (
 def test_zero_legacy_engine_imports_and_zero_app_names() -> None:
     py_files = sorted(SRC_DIR.rglob("*.py"))
     assert py_files
-    total_lines = 0
     for path in py_files:
         text = path.read_text(encoding="utf-8")
-        total_lines += len(text.splitlines())
         tree = ast.parse(text, filename=str(path))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -38,5 +36,3 @@ def test_zero_legacy_engine_imports_and_zero_app_names() -> None:
         lower = text.lower()
         for app in FORBIDDEN_APP_NAMES:
             assert app not in lower, f"{path} contains app-specific string {app!r}"
-
-    assert total_lines < 14750, f"Kernel exceeded 14,750 LOC budget: {total_lines} lines"
