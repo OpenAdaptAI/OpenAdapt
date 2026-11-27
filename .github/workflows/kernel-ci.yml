@@ -1,0 +1,45 @@
+name: Kernel CI
+
+on:
+  pull_request:
+    paths:
+      - "packages/kernel/**"
+      - ".github/workflows/kernel-ci.yml"
+  push:
+    paths:
+      - "packages/kernel/**"
+      - ".github/workflows/kernel-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kernel-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  kernel-ci:
+    name: openadapt-kernel (uv py3.12 + ruff + mypy + pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: packages/kernel
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          python-version: "3.12"
+      - name: Install kernel dependencies and headless Chromium
+        run: |
+          uv sync --extra browser --extra dev
+          uv run playwright install chromium
+      - name: Lint with ruff
+        run: uv run ruff check src tests
+      - name: Typecheck with mypy
+        run: uv run mypy --ignore-missing-imports src
+      - name: Run full test suite
+        run: uv run pytest tests -q

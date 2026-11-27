@@ -341,6 +341,36 @@ def _cmd_verify_egress_ledger(args: argparse.Namespace) -> int:
     return 0 if report.get("integrity_valid") and report.get("phi_bytes_leaked", 0) == 0 else 1
 
 
+def _cmd_compile_demos(args: argparse.Namespace) -> int:
+    from openadapt_kernel.app_cartridge import compile_demo_traces_to_cartridge
+
+    demos = json.loads(Path(args.demos).read_text(encoding="utf-8"))
+    cartridge = compile_demo_traces_to_cartridge(
+        demos,
+        cartridge_id=args.cartridge_id,
+        portal_origin=args.origin,
+    )
+    out_path = Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(asdict(cartridge), indent=2), encoding="utf-8")
+    print(
+        json.dumps(
+            {
+                "cartridge_id": cartridge.cartridge_id,
+                "portal_origin": cartridge.portal_origin,
+                "branch_count": len(cartridge.sop_spec.branches),
+                "skill_count": len(cartridge.skills),
+                "oracle_count": len(cartridge.api_oracles),
+                "mutant_count": len(cartridge.mutants),
+                "consistency_ok": cartridge.sop_spec.consistency_ok,
+                "out": str(out_path),
+            },
+            indent=2,
+        )
+    )
+    return 0 if cartridge.sop_spec.consistency_ok else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="openadapt-kernel")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -425,6 +455,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_aud = sub.add_parser("verify-egress-ledger", help="Verify SHA-256 hash chain and zero-PHI compliance of an egress ledger")
     p_aud.add_argument("--ledger", required=True, help="Path to outbound_egress_ledger.jsonl")
     p_aud.set_defaults(func=_cmd_verify_egress_ledger)
+
+    p_cd = sub.add_parser("compile-demos", help="Compile Zero-PHI demonstration traces into a verified AppCartridge")
+    p_cd.add_argument("--demos", required=True, help="Path to JSON list of Zero-PHI demonstration trace dicts")
+    p_cd.add_argument("--cartridge-id", required=True)
+    p_cd.add_argument("--origin", required=True)
+    p_cd.add_argument("--out", required=True)
+    p_cd.set_defaults(func=_cmd_compile_demos)
 
     return parser
 

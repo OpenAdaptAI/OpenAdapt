@@ -17,6 +17,7 @@ from openadapt_kernel.app_cartridge import (
     SkillMacroSpec,
     SOPBranchSpec,
     check_sop_consistency,
+    compile_demo_traces_to_cartridge,
     compile_sop_handbook_to_rules,
     discover_case_evidence_tabs,
     evaluate_counterfactual_enum_gate,
@@ -342,7 +343,8 @@ __all__ = [
     "AuthDetectionResult", "AuthGateKind", "AuthHandoffCard", "EnvVaultAdapter",
     "ReauthResumeDecision", "SessionCheckpoint", "SessionKeepAliveConfig",
     "SessionResilienceGuard", "SubprocessVaultAdapter", "VaultCredentialProvider",
-    "build_auth_handoff_card", "build_web_bot_auth_headers", "detect_auth_or_challenge_gate",
+    "build_auth_handoff_card", "build_web_bot_auth_headers", "compile_demo_traces_to_cartridge",
+    "detect_auth_or_challenge_gate",
     "inject_vault_secret_redacted", "keep_session_alive_readonly", "load_checkpoint",
     "save_checkpoint", "verify_web_bot_auth_headers",
 ]

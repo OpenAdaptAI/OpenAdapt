@@ -12,7 +12,14 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-from openadapt_kernel import ObligationLedger, ReadBackProof, mint_receipt
+from openadapt_kernel import (
+    EgressBlockedError,
+    ObligationLedger,
+    ReadBackProof,
+    compile_demo_traces_to_cartridge,
+    mint_receipt,
+    qualify_app_cartridge_offline,
+)
 
 
 def _run_cli(args: List[str], *, cwd: Path) -> Tuple[int, Dict[str, Any]]:
@@ -271,3 +278,77 @@ def test_cli_live_e2e_smoke(tmp_path: Path) -> None:
     rc_tamp, tamp_out = _run_cli(["verify-receipt", "--receipt", str(tampered_path), "--pub", str(pub_path)], cwd=tmp_path)
     assert rc_tamp == 1
     assert tamp_out["valid"] is False
+
+
+def test_compile_demo_traces_to_cartridge_unit_and_cli(tmp_path: Path) -> None:
+    demos: List[Dict[str, Any]] = [
+        {
+            "visited_tabs": ["evidence", "coverage"],
+            "observed_features": {"status": "expired", "coverage": "active"},
+            "chosen_disposition": "appeal",
+            "note_template_slots": ["code", "date"],
+            "readback_url": "https://portal.example/claims/12345/summary",
+            "actions": [
+                {"action": "fill", "var_key": "code", "url_pattern": "/claims/*", "filters": {"status": "open"}},
+                {"action": "click"},
+            ],
+        },
+        {
+            "visited_tabs": ["evidence"],
+            "observed_features": {"status": "valid", "coverage": "active"},
+            "chosen_disposition": "approve",
+            "note_template_slots": ["code"],
+            "readback_url": "https://portal.example/claims/67890/summary",
+            "actions": [{"action": "fill", "var_key": "code"}, {"action": "click"}],
+        },
+    ]
+
+    cartridge = compile_demo_traces_to_cartridge(
+        demos, cartridge_id="demo_cart_v1", portal_origin="https://portal.example"
+    )
+    assert cartridge.sop_spec.consistency_ok is True
+    assert len(cartridge.sop_spec.branches) == 2
+    assert len(cartridge.skills) == 2
+    assert len(cartridge.api_oracles) == 1
+    assert cartridge.api_oracles[0].path_pattern == "/claims/*/summary"
+    assert cartridge.api_oracles[0].read_only is True
+    assert any(m.unread_artifacts for m in cartridge.mutants)
+    assert any(m.mutant_id == "mutant_ood_abstain" for m in cartridge.mutants)
+    assert cartridge.egress_audit["blocked_count"] == 0
+
+    qual = qualify_app_cartridge_offline(cartridge)
+    assert qual.qualified is True
+
+    # Poisoned PHI in demo trace is blocked by LocalEgressGuard
+    bad_demos = [{"chosen_disposition": "approve", "observed_features": {"name": "JonathanDoe1984"}}]
+    try:
+        compile_demo_traces_to_cartridge(bad_demos, cartridge_id="bad_cart", portal_origin="https://portal.example")
+    except EgressBlockedError:
+        pass
+    else:
+        raise AssertionError("Expected EgressBlockedError on PHI demo trace")
+
+    # CLI compile-demos smoke test
+    demos_path = tmp_path / "demos.json"
+    out_path = tmp_path / "cartridge.json"
+    demos_path.write_text(json.dumps(demos), encoding="utf-8")
+    rc, cli_out = _run_cli(
+        [
+            "compile-demos",
+            "--demos",
+            str(demos_path),
+            "--cartridge-id",
+            "demo_cart_cli",
+            "--origin",
+            "https://portal.example",
+            "--out",
+            str(out_path),
+        ],
+        cwd=tmp_path,
+    )
+    assert rc == 0
+    assert cli_out["branch_count"] == 2
+    assert cli_out["skill_count"] == 2
+    assert cli_out["oracle_count"] == 1
+    assert cli_out["consistency_ok"] is True
+    assert out_path.exists()

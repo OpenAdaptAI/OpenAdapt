@@ -48,7 +48,9 @@ _CARTRIDGE_EXTRA_TOKENS: FrozenSet[str] = frozenset(
     "remittance reprocess request response responsibility resubmit resubmission retroactive review "
     "route routing rule rules schema schemas secondary skill skills sla slot slots sop spec "
     "specialist split summary support suspended then timely trace traces transfer triage underpaid "
-    "unverified waived when with without writeoff".split()
+    "unverified waived when with without writeoff "
+    "chosen_disposition demo_traces filters note_template_slots observed_features readback_path "
+    "readback_url selector url_pattern var_key visited_tabs".split()
 )
 _READ_ONLY_METHODS: FrozenSet[str] = frozenset({"GET", "HEAD", "OPTIONS"})
 _CMP_RE = re.compile(r"^(<=|>=|!=|<|>)\s*(-?\d+(?:\.\d+)?)$")
@@ -1069,3 +1071,214 @@ def induce_sop_from_shadow_traces(
     else:
         branches = _induce_minimal_branches(normalized)
     return _build_compiled_sop(spec_id, branches)
+
+
+def _normalize_readback_path_pattern(raw_url: str) -> str:
+    raw = (raw_url or "").strip()
+    if not raw:
+        return ""
+    path = raw
+    if "://" in raw:
+        after_scheme = raw.split("://", 1)[1]
+        path = "/" + after_scheme.split("/", 1)[1] if "/" in after_scheme else "/"
+    path = path.split("?", 1)[0].split("#", 1)[0]
+    segs = []
+    for seg in path.split("/"):
+        if not seg:
+            continue
+        if re.fullmatch(r"\d+|[0-9a-f]{8,}|[A-Z]{2,5}-\d+", seg):
+            segs.append("*")
+        else:
+            segs.append(seg)
+    return "/" + "/".join(segs)
+
+
+def _synthesize_demo_skill_code(actions: Sequence[Mapping[str, Any]], params: Sequence[str]) -> str:
+    lines = ["def repair(ui, vars):"]
+    for act in actions:
+        kind = str(act.get("action") or act.get("method") or "click").strip().lower()
+        var_key = str(act.get("var_key") or act.get("field") or "").strip().lstrip("$")
+        if kind in ("fill", "fill_var") and var_key and var_key in params:
+            lines.append(f'    ui.fill_var(0, vars["{var_key}"])')
+        elif kind == "select" and var_key and var_key in params:
+            lines.append(f'    ui.select(0, vars["{var_key}"])')
+        elif kind == "check":
+            lines.append("    ui.check(0)")
+        elif kind == "wait":
+            lines.append("    ui.wait(200)")
+        else:
+            lines.append("    ui.click(0)")
+    if len(lines) == 1:
+        lines.append("    ui.click(0)")
+    return "\n".join(lines) + "\n"
+
+
+def compile_demo_traces_to_cartridge(
+    demo_traces: Sequence[Mapping[str, Any]],
+    *,
+    cartridge_id: str,
+    portal_origin: str,
+    coding_agent_fn: Optional[Callable[[str], str]] = None,
+    egress_policy: Optional[EgressPolicy] = None,
+    ledger_path: Optional[Union[str, Path]] = None,
+) -> AppCartridge:
+    """Compile Zero-PHI demonstration traces into a full AppCartridge (SOP, skills, oracles, mutants)."""
+    guard = _make_guard(egress_policy, ledger_path, "oa_demo_cartridge_egress_")
+    normalized_demos: List[Dict[str, Any]] = []
+    sop_observations: List[Dict[str, Any]] = []
+
+    for item in demo_traces:
+        visited_tabs = [
+            str(t).strip()
+            for t in (item.get("visited_tabs") or item.get("observed_read_artifacts") or item.get("read_artifacts") or ())
+            if str(t).strip()
+        ]
+        raw_feats = item.get("observed_features") or item.get("features") or item.get("context_facts") or {}
+        observed_features = {str(k): str(v) for k, v in raw_feats.items()} if isinstance(raw_feats, Mapping) else {}
+        chosen_disp = str(
+            item.get("chosen_disposition") or item.get("disposition") or item.get("decision") or ""
+        ).strip()
+        note_slots = [
+            str(s).strip()
+            for s in (item.get("note_template_slots") or item.get("observed_note_slots") or item.get("required_note_slots") or ())
+            if str(s).strip()
+        ]
+        readback_url = str(item.get("readback_url") or item.get("readback_path") or "").strip()
+        raw_actions = item.get("actions") or ()
+        actions = [
+            {str(k): v for k, v in a.items()} for a in raw_actions if isinstance(a, Mapping)
+        ]
+        norm_entry = {
+            "visited_tabs": visited_tabs,
+            "observed_features": observed_features,
+            "chosen_disposition": chosen_disp,
+            "note_template_slots": note_slots,
+            "readback_url": _normalize_readback_path_pattern(readback_url),
+            "actions": actions,
+        }
+        normalized_demos.append(norm_entry)
+        if chosen_disp:
+            sop_observations.append(
+                {
+                    "disposition": chosen_disp,
+                    "features": observed_features,
+                    "observed_read_artifacts": visited_tabs,
+                    "observed_note_slots": note_slots,
+                }
+            )
+
+    verdict = guard.check_and_record({"demo_traces": normalized_demos}, destination="demo_cartridge_compiler")
+    if not verdict.allowed:
+        raise EgressBlockedError(verdict)
+
+    # 1. Induce SOP spec (with required_read_artifacts and required_note_slots per disposition)
+    sop_spec = induce_sop_from_shadow_traces(
+        sop_observations,
+        spec_id=f"{cartridge_id}_sop",
+        coding_agent_fn=coding_agent_fn,
+        egress_policy=egress_policy,
+        ledger_path=guard.ledger_path,
+    )
+
+    # 2. Lift reusable SkillMacroSpecs (verified by verify_symbolic_repair_ast)
+    skills: List[SkillMacroSpec] = []
+    seen_skill_keys: set[str] = set()
+    for idx, demo in enumerate(normalized_demos):
+        disp_key = _slugify_tokens(demo["chosen_disposition"]) or f"demo_{idx + 1}"
+        if disp_key in seen_skill_keys:
+            continue
+        seen_skill_keys.add(disp_key)
+        params: List[str] = []
+        filters: Dict[str, str] = {}
+        url_pat = ""
+        for act in demo["actions"]:
+            vk = str(act.get("var_key") or act.get("field") or "").strip().lstrip("$")
+            if vk and vk not in params:
+                params.append(vk)
+            if act.get("url_pattern") and not url_pat:
+                url_pat = str(act["url_pattern"])
+            if isinstance(act.get("filters"), Mapping):
+                for fk, fv in act["filters"].items():
+                    filters[str(fk)] = str(fv)
+        for slot in demo["note_template_slots"]:
+            clean_slot = slot.lstrip("$")
+            if clean_slot and clean_slot not in params:
+                params.append(clean_slot)
+
+        code = _synthesize_demo_skill_code(demo["actions"], params)
+        ast_res = verify_symbolic_repair_ast(code, frozenset(params))
+        if not ast_res.ok:
+            code = "def repair(ui, vars):\n    ui.click(0)\n"
+        skills.append(
+            SkillMacroSpec(
+                skill_id=f"skill_{disp_key}",
+                name=f"execute_{disp_key}",
+                description=f"Lifted skill macro for {disp_key}",
+                parameters=tuple(params),
+                code=code,
+                expected_url_pattern=url_pat or demo["readback_url"],
+                required_filters=filters,
+            )
+        )
+
+    # 3. Induce read-only APIOracleSpecs from post-commit readback routes
+    oracles: List[APIOracleSpec] = []
+    seen_paths: set[str] = set()
+    for demo in normalized_demos:
+        path_pat = demo["readback_url"]
+        if not path_pat or path_pat in seen_paths:
+            continue
+        seen_paths.add(path_pat)
+        exp_fields = tuple(sorted({*demo["note_template_slots"], *demo["observed_features"].keys()}))
+        oracles.append(
+            APIOracleSpec(
+                oracle_id=f"oracle_{len(oracles) + 1}",
+                method="GET",
+                path_pattern=path_pat,
+                expected_fields=exp_fields,
+                read_only=True,
+            )
+        )
+
+    # 4. Auto-generate AdversarialMutantSpecs (per branch + unread-tab block + OOD abstention)
+    mutants: List[AdversarialMutantSpec] = []
+    for branch in sop_spec.branches:
+        mutants.append(
+            AdversarialMutantSpec(
+                mutant_id=f"mutant_{branch.branch_id}_happy",
+                description=f"Verify induced branch {branch.branch_id} routes to {branch.disposition}",
+                dossier=dict(branch.when),
+                expected_disposition=branch.disposition,
+                expected_blocked=False,
+            )
+        )
+        if branch.required_read_artifacts:
+            mutants.append(
+                AdversarialMutantSpec(
+                    mutant_id=f"mutant_{branch.branch_id}_unread_tab",
+                    description=f"Block {branch.branch_id} when required tab {branch.required_read_artifacts[0]} is unread",
+                    dossier=dict(branch.when),
+                    expected_disposition=branch.disposition,
+                    expected_blocked=True,
+                    unread_artifacts=(branch.required_read_artifacts[0],),
+                )
+            )
+    mutants.append(
+        AdversarialMutantSpec(
+            mutant_id="mutant_ood_abstain",
+            description="Out-of-distribution feature vector must abstain to PREPARE",
+            dossier={"ood_unseen_feature": "out_of_distribution"},
+            expected_disposition="",
+            expected_blocked=True,
+        )
+    )
+
+    return AppCartridge(
+        cartridge_id=cartridge_id,
+        portal_origin=portal_origin,
+        sop_spec=sop_spec,
+        skills=tuple(skills),
+        api_oracles=tuple(oracles),
+        mutants=tuple(mutants),
+        egress_audit=summarize_egress_ledger(guard.read_ledger()),
+    )
