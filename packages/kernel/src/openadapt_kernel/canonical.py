@@ -51,11 +51,23 @@ _AGE_BADGE_RE = re.compile(
     r"(?:y(?:rs?|ears?|o)?(?:\s*\d{1,2}\s*m(?:o|os|onths?)?)?|m(?:o|os|onths?))\)\s*$",
     re.IGNORECASE,
 )
-_ISO_DATE_RE = re.compile(r"^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$")
+_ISO_DATE_RE = re.compile(r"^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$")
 _US_DATE_RE = re.compile(r"^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$")
+_DOT_DATE_RE = re.compile(r"^(\d{1,2})\.(\d{1,2})\.(\d{4})$")
 _NAMED_MONTH_DATE_RE = re.compile(
     r"^([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})$"
 )
+_DMY_NAMED_MONTH_DATE_RE = re.compile(
+    r"^(\d{1,2})\s+([A-Za-z]{3,9})\.?,?\s+(\d{4})$"
+)
+DateOrder = Literal["MDY", "DMY", "YMD", "STRICT_UNAMBIGUOUS"]
+_CJK_RUN_RE = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]+")
+_CURRENCY_CODE_SYM_RE = re.compile(
+    r"(?:USD|EUR|GBP|CAD|CHF|JPY|AUD|NZD|SEK|NOK|DKK|PLN|MXN|BRL|INR|[$€£¥₹₽₩])",
+    re.IGNORECASE,
+)
+_EU_GROUPED_NUM_RE = re.compile(r"^(?:\d{1,3}(?:[.\s\u00a0']\d{3})+|\d+)(?:,\d{1,2})?$")
+_SPACE_US_GROUPED_NUM_RE = re.compile(r"^(?:\d{1,3}(?:[,\s\u00a0']\d{3})+|\d+)(?:\.\d{1,2})?$")
 _MONTH_MAP: Dict[str, int] = {
     "jan": 1, "january": 1,
     "feb": 2, "february": 2,
@@ -105,13 +117,35 @@ def normalize_casefold_ws(value: str) -> str:
 
 
 def tokenize_role_label(text: str) -> FrozenSet[str]:
-    """Split camelCase, snake_case, hyphens, and punctuation into lowercase alphanumeric tokens."""
+    """Split camelCase, Unicode words, and CJK runs (chars + bigrams) into casefolded tokens."""
     expanded = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", text or "")
-    return frozenset(re.findall(r"[a-z0-9]+", expanded.lower()))
+    tokens: set[str] = set()
+    for word in re.findall(r"[^\W_]+", expanded.casefold()):
+        tokens.add(word)
+        for cjk_m in _CJK_RUN_RE.finditer(word):
+            run = cjk_m.group(0)
+            tokens.add(run)
+            for ch in run:
+                tokens.add(ch)
+            for i in range(len(run) - 1):
+                tokens.add(run[i : i + 2])
+    return frozenset(tokens)
 
 
-def parse_canonical_date(value: str) -> Optional[Tuple[int, int, int]]:
-    """Parse ISO YYYY-MM-DD, US MM/DD/YYYY, or Mon DD, YYYY (ignoring trailing age badges)."""
+def is_ambiguous_numeric_date(value: str) -> bool:
+    """Return True when a numeric DD/MM/YYYY vs MM/DD/YYYY date has two distinct values <= 12."""
+    s = _AGE_BADGE_RE.sub("", _norm_dashes_ws(value)).strip()
+    m = _US_DATE_RE.match(s) or _DOT_DATE_RE.match(s)
+    if not m:
+        return False
+    a, b = int(m.group(1)), int(m.group(2))
+    return 1 <= a <= 12 and 1 <= b <= 12 and a != b
+
+
+def parse_canonical_date(
+    value: str, *, date_order: DateOrder = "MDY"
+) -> Optional[Tuple[int, int, int]]:
+    """Parse ISO, MDY/DMY/STRICT_UNAMBIGUOUS numeric, DD.MM.YYYY, Mon DD YYYY, or DD Mon YYYY dates."""
     s = _AGE_BADGE_RE.sub("", _norm_dashes_ws(value)).strip()
     if not s:
         return None
@@ -120,20 +154,32 @@ def parse_canonical_date(value: str) -> Optional[Tuple[int, int, int]]:
     m_iso = _ISO_DATE_RE.match(s)
     if m_iso:
         year, month, day = int(m_iso.group(1)), int(m_iso.group(2)), int(m_iso.group(3))
-    else:
-        m_us = _US_DATE_RE.match(s)
-        if m_us:
-            month, day, year = int(m_us.group(1)), int(m_us.group(2)), int(m_us.group(3))
+    elif (m_num := _US_DATE_RE.match(s) or _DOT_DATE_RE.match(s)) is not None:
+        a, b, year = int(m_num.group(1)), int(m_num.group(2)), int(m_num.group(3))
+        is_dot = _DOT_DATE_RE.match(s) is not None
+        if date_order == "STRICT_UNAMBIGUOUS":
+            if 1 <= a <= 12 and 1 <= b <= 12 and a != b:
+                return None
+            if a > 12:
+                day, month = a, b
+            else:
+                month, day = a, b
+        elif date_order == "DMY" or (is_dot and a > 12) or is_dot:
+            day, month = a, b
         else:
-            m_named = _NAMED_MONTH_DATE_RE.match(s)
-            if not m_named:
-                return None
-            mon_key = m_named.group(1).lower()
-            if mon_key not in _MONTH_MAP:
-                return None
-            month = _MONTH_MAP[mon_key]
-            day = int(m_named.group(2))
-            year = int(m_named.group(3))
+            month, day = a, b
+    elif (m_named := _NAMED_MONTH_DATE_RE.match(s)) is not None:
+        mon_key = m_named.group(1).lower()
+        if mon_key not in _MONTH_MAP:
+            return None
+        month, day, year = _MONTH_MAP[mon_key], int(m_named.group(2)), int(m_named.group(3))
+    elif (m_dmy_named := _DMY_NAMED_MONTH_DATE_RE.match(s)) is not None:
+        mon_key = m_dmy_named.group(2).lower()
+        if mon_key not in _MONTH_MAP:
+            return None
+        day, month, year = int(m_dmy_named.group(1)), _MONTH_MAP[mon_key], int(m_dmy_named.group(3))
+    else:
+        return None
 
     if year < 1000:
         return None
@@ -145,22 +191,17 @@ def parse_canonical_date(value: str) -> Optional[Tuple[int, int, int]]:
 
 
 def parse_canonical_currency_cents(value: str) -> Optional[int]:
-    """Parse currency string into signed integer cents, preserving credit parentheses and minus signs."""
+    """Parse US/UK, EU/LatAm (1.234,56 €), Swiss (CHF 1'234.50), and ISO currency strings into integer cents."""
     s = _norm_dashes_ws(value)
     if not s:
         return None
 
     negative = False
     has_parens = False
-    # Handle ($100.00), $(100.00), (USD 100.00), or (100.00)
     if s.startswith("$(") and s.endswith(")"):
-        negative = True
-        has_parens = True
-        s = s[2:-1].strip()
+        negative, has_parens, s = True, True, s[2:-1].strip()
     elif s.startswith("(") and s.endswith(")"):
-        negative = True
-        has_parens = True
-        s = s[1:-1].strip()
+        negative, has_parens, s = True, True, s[1:-1].strip()
 
     for prefix_sign in ("-", "+"):
         if s.startswith(prefix_sign):
@@ -171,7 +212,10 @@ def parse_canonical_currency_cents(value: str) -> Optional[int]:
             s = s[1:].strip()
             break
 
-    s = re.sub(r"^(?:USD\s*)?(?:\$\s*)?", "", s, flags=re.IGNORECASE).strip()
+    # Strip leading/trailing ISO codes or currency symbols (e.g., EUR, CHF, €, £, $)
+    s = re.sub(rf"^(?:{_CURRENCY_CODE_SYM_RE.pattern}\s*)+", "", s, flags=re.IGNORECASE).strip()
+    s = re.sub(rf"(?:\s*{_CURRENCY_CODE_SYM_RE.pattern})+$", "", s, flags=re.IGNORECASE).strip()
+
     if s.startswith("-") or s.startswith("+"):
         if has_parens or negative:
             return None
@@ -179,10 +223,24 @@ def parse_canonical_currency_cents(value: str) -> Optional[int]:
             negative = True
         s = s[1:].strip()
 
-    if not _GROUPED_NUM_RE.match(s):
-        return None
+    clean_num: Optional[str] = None
+    if "," in s and "." in s:
+        if s.rfind(",") > s.rfind(".") and _EU_GROUPED_NUM_RE.match(s):
+            clean_num = s.replace(".", "").replace(" ", "").replace("\u00a0", "").replace("'", "").replace(",", ".")
+        elif s.rfind(".") > s.rfind(",") and _SPACE_US_GROUPED_NUM_RE.match(s):
+            clean_num = s.replace(",", "").replace(" ", "").replace("\u00a0", "").replace("'", "")
+    elif "," in s:
+        if re.match(r"^\d{1,3}(?:,\d{3})+$", s):
+            clean_num = s.replace(",", "")
+        elif _EU_GROUPED_NUM_RE.match(s) and re.search(r",\d{1,2}$", s):
+            clean_num = s.replace(".", "").replace(" ", "").replace("\u00a0", "").replace("'", "").replace(",", ".")
+    elif _SPACE_US_GROUPED_NUM_RE.match(s):
+        clean_num = s.replace(",", "").replace(" ", "").replace("\u00a0", "").replace("'", "")
+    elif _EU_GROUPED_NUM_RE.match(s):
+        clean_num = s.replace(".", "").replace(" ", "").replace("\u00a0", "").replace("'", "")
 
-    clean_num = s.replace(",", "")
+    if not clean_num:
+        return None
     try:
         cents = int((Decimal(clean_num) * Decimal("100")).to_integral_exact())
     except (InvalidOperation, ValueError):

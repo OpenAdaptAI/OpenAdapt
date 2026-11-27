@@ -378,8 +378,13 @@ def compile_policy_rules_to_table(
     table_id: str = "compiled_step0_policy",
     require_human_if_unmatched: bool = True,
     llm_compiler_fn: Optional[Callable[[Sequence[Mapping[str, Any]]], Mapping[str, Any]]] = None,
+    enable_english_regex_heuristics: bool = True,
+    require_llm_span_anchors: bool = False,
+    source_texts: Optional[Mapping[str, str]] = None,
 ) -> Tuple[PolicyDecisionTable, Dict[str, Any]]:
     """Compile structured or natural-language policy specs into a PolicyDecisionTable and PreStepPolicyGate config."""
+    from openadapt_kernel.ledger import SpanAnchor, verify_span_anchor
+
     rules: List[PolicyRule] = []
     seen_rule_ids: Set[str] = set()
     required_params: List[str] = []
@@ -389,6 +394,7 @@ def compile_policy_rules_to_table(
     irreversible_actions: List[str] = []
     require_human = require_human_if_unmatched
     grounding_required = False
+    anchor_corpus: Dict[str, str] = dict(source_texts or {})
 
     def _extend_unique(dst: List[str], items: Any) -> None:
         if isinstance(items, str):
@@ -409,30 +415,36 @@ def compile_policy_rules_to_table(
         ).strip().lower()
         rule_id = str(spec.get("rule_id") or spec.get("id") or f"compiled_rule_{idx}")
         desc = str(spec.get("description") or spec.get("rule_text") or spec.get("text") or "").strip()
+        if desc:
+            anchor_corpus.setdefault(f"spec_{idx}", desc)
+            anchor_corpus.setdefault(rule_id, desc)
 
         if kind in ("missing_params", "required_params"):
             _extend_unique(required_params, spec.get("params") or spec.get("fields") or spec.get("required_params"))
-            for m in _NL_ASK_PARAM_RE.finditer(desc):
-                slug = _slug_param(m.group(1))
-                if slug:
-                    _extend_unique(required_params, slug)
-                    _extend_unique(ask_user_triggers, slug)
+            if enable_english_regex_heuristics:
+                for m in _NL_ASK_PARAM_RE.finditer(desc):
+                    slug = _slug_param(m.group(1))
+                    if slug:
+                        _extend_unique(required_params, slug)
+                        _extend_unique(ask_user_triggers, slug)
         elif kind == "access_management":
             _extend_unique(allow_patterns, spec.get("allow_patterns") or spec.get("allow"))
             _extend_unique(deny_patterns, spec.get("deny_patterns") or spec.get("deny"))
             for m in _NL_SLASH_PATH_RE.finditer(desc):
                 _extend_unique(deny_patterns, f"*{m.group(1)}*")
-            for m in _NL_ADMIN_AREA_RE.finditer(desc):
-                head = m.group(1).strip().lower().split()[0]
-                _extend_unique(deny_patterns, f"*{head}*")
+            if enable_english_regex_heuristics:
+                for m in _NL_ADMIN_AREA_RE.finditer(desc):
+                    head = m.group(1).strip().lower().split()[0]
+                    _extend_unique(deny_patterns, f"*{head}*")
         elif kind == "ask_the_user":
             require_human = True
             _extend_unique(ask_user_triggers, spec.get("triggers") or spec.get("condition"))
-            for m in _NL_ASK_PARAM_RE.finditer(desc):
-                slug = _slug_param(m.group(1))
-                if slug:
-                    _extend_unique(required_params, slug)
-                    _extend_unique(ask_user_triggers, slug)
+            if enable_english_regex_heuristics:
+                for m in _NL_ASK_PARAM_RE.finditer(desc):
+                    slug = _slug_param(m.group(1))
+                    if slug:
+                        _extend_unique(required_params, slug)
+                        _extend_unique(ask_user_triggers, slug)
             if desc and not ask_user_triggers:
                 _extend_unique(ask_user_triggers, desc)
             conds = spec.get("conditions") or spec.get("when")
@@ -459,15 +471,14 @@ def compile_policy_rules_to_table(
             disp = spec.get("required_disposition") or spec.get("then")
             if isinstance(conds, Mapping) and conds and disp:
                 _add_rule(PolicyRule(rule_id, {str(k): str(v) for k, v in conds.items()}, str(disp).strip()))
-            elif desc:
+            elif desc and enable_english_regex_heuristics:
                 wt_m = _NL_WHEN_THEN_RE.search(desc)
                 if wt_m:
                     parsed_conds = {k.strip(): v.strip() for k, v in _NL_KV_PAIR_RE.findall(wt_m.group(1))}
                     if parsed_conds:
                         _add_rule(PolicyRule(rule_id, parsed_conds, wt_m.group(2).strip().rstrip(".")))
 
-        # Extract prohibited verbs ("never delete <target>") into REFUSE PolicyRules across any policy template
-        if desc and not (isinstance(spec.get("conditions") or spec.get("when"), Mapping)):
+        if enable_english_regex_heuristics and desc and not (isinstance(spec.get("conditions") or spec.get("when"), Mapping)):
             for p_idx, pm in enumerate(_NL_PROHIBITED_VERB_RE.finditer(desc)):
                 verb = _slug_param(pm.group(1))
                 target = _slug_param(pm.group(2))
@@ -491,8 +502,19 @@ def compile_policy_rules_to_table(
         _extend_unique(irreversible_actions, compiled.get("irreversible_actions"))
         for r_idx, raw_r in enumerate(compiled.get("rules") or ()):
             if isinstance(raw_r, PolicyRule):
-                _add_rule(raw_r)
+                if not require_llm_span_anchors:
+                    _add_rule(raw_r)
             elif isinstance(raw_r, Mapping):
+                if require_llm_span_anchors:
+                    raw_a = raw_r.get("span_anchor")
+                    if isinstance(raw_a, SpanAnchor):
+                        anch = raw_a
+                    elif isinstance(raw_a, Mapping) and all(k in raw_a for k in ("source_key", "start", "end", "quote")):
+                        anch = SpanAnchor(str(raw_a["source_key"]), int(raw_a["start"]), int(raw_a["end"]), str(raw_a["quote"]))
+                    else:
+                        continue
+                    if not verify_span_anchor(anchor_corpus, anch):
+                        continue
                 c_map = raw_r.get("conditions") or raw_r.get("when")
                 disp = raw_r.get("required_disposition") or raw_r.get("then")
                 if isinstance(c_map, Mapping) and c_map and disp:

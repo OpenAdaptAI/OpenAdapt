@@ -3,15 +3,30 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import re
+import secrets
 import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Callable, Dict, FrozenSet, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    FrozenSet,
+    Iterable,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 from openadapt_kernel.zero_phi_repair import _FROZEN_UI_VOCAB
 
@@ -107,10 +122,16 @@ _SAFE_CSS_VALUE_RE = re.compile(
 )
 
 _TOKEN_RE = re.compile(
-    r"CANARY_[A-Z]+_\d+|<OPAQUE(?:_\d+)?>|\$[A-Za-z_][A-Za-z0-9_]*|[A-Za-z0-9_]+"
+    r"SYM_[0-9A-F]{8}|CANARY_[A-Z]+_\d+|<OPAQUE(?:_\d+)?>|\$[A-Za-z_][A-Za-z0-9_]*|\w+"
 )
 _CANARY_RE = re.compile(r"^CANARY_[A-Z]+_\d+$")
 _OPAQUE_RE = re.compile(r"^<OPAQUE(?:_\d+)?>$")
+_BIJECTIVE_SYM_RE = re.compile(r"^SYM_[0-9A-F]{8}$")
+_UNICODE_WORD_RE = re.compile(r"[^\W_]+")
+_HTML_TAG_SPLIT_RE = re.compile(r"(<[^>]+>)")
+_HTML_ATTR_VAL_RE = re.compile(
+    r'\b(aria-label|placeholder|title|alt|value|label)\s*=\s*"([^"]*)"', re.IGNORECASE
+)
 
 
 class EgressBlockedError(PermissionError):
@@ -140,6 +161,7 @@ class EgressPolicy:
     include_clinical_vocab: bool = True
     extra_allowed_tokens: FrozenSet[str] = field(default_factory=frozenset)
     allowed_var_keys: FrozenSet[str] = field(default_factory=frozenset)
+    allow_bijective_symbols: bool = True
 
     def effective_tokens(self) -> FrozenSet[str]:
         base = set(self.allowed_tokens)
@@ -153,6 +175,8 @@ class EgressPolicy:
 
     def is_token_allowed(self, token: str, effective: Optional[FrozenSet[str]] = None) -> bool:
         if _CANARY_RE.match(token) or _OPAQUE_RE.match(token):
+            return True
+        if self.allow_bijective_symbols and _BIJECTIVE_SYM_RE.match(token):
             return True
         vocab = effective if effective is not None else self.effective_tokens()
         if token.startswith("$"):
@@ -499,3 +523,97 @@ def summarize_egress_ledger(entries: Sequence[Dict[str, Any]]) -> Dict[str, Any]
         "blocked_count": blocked,
         "total_allowed_bytes": sum(int(e.get("byte_length", 0)) for e in entries if e.get("allowed")),
     }
+
+
+class BijectiveSymbolCodec:
+    """Language-agnostic ephemeral HMAC-SHA256 bijective symbolizer for k=0 zero-PHI egress."""
+
+    def __init__(self, *, preserve_tokens: Optional[FrozenSet[str]] = None) -> None:
+        self._secret_key: bytes = secrets.token_bytes(32)
+        self._preserve: FrozenSet[str] = (
+            preserve_tokens if preserve_tokens is not None else _HTML_ARIA_STRUCTURAL_VOCAB
+        )
+        self._sym_to_raw: Dict[str, str] = {}
+        self._raw_to_sym: Dict[str, str] = {}
+
+    def symbolize_token(self, token: str) -> str:
+        if (
+            not token
+            or _BIJECTIVE_SYM_RE.match(token)
+            or _CANARY_RE.match(token)
+            or _OPAQUE_RE.match(token)
+            or token.startswith("$")
+            or token.casefold() in self._preserve
+        ):
+            return token
+        key = token.casefold()
+        existing = self._raw_to_sym.get(key)
+        if existing is not None:
+            return existing
+        digest = hmac.new(self._secret_key, key.encode("utf-8"), hashlib.sha256).hexdigest()[:8].upper()
+        sym = f"SYM_{digest}"
+        self._raw_to_sym[key] = sym
+        self._sym_to_raw[sym] = token
+        return sym
+
+    def symbolize_text(self, text: str) -> str:
+        return _TOKEN_RE.sub(lambda m: self.symbolize_token(m.group(0)), text or "")
+
+    def symbolize_html(self, html: str) -> str:
+        parts = _HTML_TAG_SPLIT_RE.split(html or "")
+        out: List[str] = []
+        for part in parts:
+            if part.startswith("<") and part.endswith(">"):
+                out.append(
+                    _HTML_ATTR_VAL_RE.sub(
+                        lambda m: f'{m.group(1)}="{self.symbolize_text(m.group(2))}"', part
+                    )
+                )
+            else:
+                out.append(self.symbolize_text(part))
+        return "".join(out)
+
+    def detokenize_text(self, text: str) -> str:
+        return re.sub(
+            r"SYM_[0-9A-F]{8}",
+            lambda m: self._sym_to_raw.get(m.group(0), m.group(0)),
+            text or "",
+        )
+
+
+def discover_taint_free_ui_chrome(
+    session_tokens_by_subject: Mapping[str, Iterable[str]],
+    *,
+    tainted_record_values: Iterable[str] = (),
+    cohort_by_subject: Optional[Mapping[str, str]] = None,
+    min_subjects: int = 3,
+    min_cohorts: int = 2,
+) -> FrozenSet[str]:
+    """Discover cross-subject, cross-cohort UI chrome while permanently disqualifying tainted record tokens."""
+    tainted: set[str] = set()
+    for val in tainted_record_values:
+        s = str(val or "").strip().casefold()
+        if s:
+            tainted.add(s)
+            for tok in _UNICODE_WORD_RE.findall(s):
+                tainted.add(tok.casefold())
+
+    token_subjects: Dict[str, set[str]] = {}
+    token_cohorts: Dict[str, set[str]] = {}
+    for subj, raw_tokens in session_tokens_by_subject.items():
+        cohort = cohort_by_subject.get(subj, subj) if cohort_by_subject is not None else subj
+        subj_seen: set[str] = set()
+        for raw in raw_tokens:
+            for tok in _UNICODE_WORD_RE.findall(str(raw or "").casefold()):
+                if tok in tainted or tok in subj_seen:
+                    continue
+                subj_seen.add(tok)
+                token_subjects.setdefault(tok, set()).add(subj)
+                token_cohorts.setdefault(tok, set()).add(cohort)
+
+    return frozenset(
+        tok
+        for tok, subjs in token_subjects.items()
+        if len(subjs) >= min_subjects
+        and (cohort_by_subject is None or len(token_cohorts.get(tok, ())) >= min_cohorts)
+    )

@@ -142,6 +142,8 @@ class CompiledSOPSpec:
     branches: Tuple[SOPBranchSpec, ...]
     consistency_ok: bool
     consistency_conflicts: Tuple[str, ...] = ()
+    observed_feature_domains: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
+    branch_support_counts: Dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -211,6 +213,27 @@ class CounterfactualEnumVerdict:
     agreement_ratio: float
     reason: str
     affordance_matched: bool = False
+
+
+@dataclass(frozen=True)
+class ReversibilityCertificate:
+    selector: str
+    certified: bool
+    information_gain: bool
+    state_involution_ok: bool
+    mutating_requests: Tuple[str, ...] = ()
+    readonly_requests: Tuple[str, ...] = ()
+    reason: str = ""
+
+
+@dataclass(frozen=True)
+class OODSupportVerdict:
+    in_support: bool
+    unseen_features: Dict[str, str] = field(default_factory=dict)
+    requires_prepare: bool = False
+    matched_branch_id: Optional[str] = None
+    branch_support: int = 0
+    reason: str = ""
 
 
 def _cartridge_policy(policy: Optional[EgressPolicy] = None) -> EgressPolicy:
@@ -690,8 +713,12 @@ def render_sop_signoff_summary(
     }
 
 
+def _unicode_tokens(text: str) -> List[str]:
+    return re.findall(r"[^\W_]+", (text or "").casefold())
+
+
 def _slugify_tokens(text: str) -> str:
-    toks = re.findall(r"[a-z0-9]+", (text or "").lower())
+    toks = _unicode_tokens(text)
     return "_".join(toks[:6])
 
 
@@ -700,42 +727,60 @@ def discover_case_evidence_tabs(
     *,
     current_url: str = "",
     visited_labels: Sequence[str] = (),
+    enable_english_keyword_fallback: bool = True,
 ) -> Tuple[EpistemicArtifact, ...]:
-    """Discover unread/read case tabs, links, buttons, and regions for EpistemicReadTracker."""
-    visited_norm = {str(v).strip().lower() for v in visited_labels if str(v).strip()}
+    """Discover unread/read evidence tabs/disclosures structurally (language-agnostic) + optional keyword fallback."""
+    visited_norm = {str(v).strip().casefold() for v in visited_labels if str(v).strip()}
     visited_slugs = {_slugify_tokens(str(v)) for v in visited_labels if _slugify_tokens(str(v))}
-    cur_url_low = (current_url or "").strip().lower()
+    cur_url_low = (current_url or "").strip().casefold()
 
     artifacts: List[EpistemicArtifact] = []
     seen_ids: set[str] = set()
     for ctrl in dom_controls:
         role = str(ctrl.get("role") or "").strip().lower()
         tag = str(ctrl.get("tag") or "").strip().lower()
-        if role not in {"tab", "link", "button", "region"} and tag not in {"a", "button", "section"}:
+        itype = str(ctrl.get("input_type") or ctrl.get("type") or "").strip().lower()
+        aria_controls = str(ctrl.get("aria_controls") or ctrl.get("aria-controls") or "").strip()
+        rev_cert = bool(ctrl.get("reversibility_certified", False))
+
+        if itype == "submit" or role == "menuitem":
+            continue
+        structural_match = (
+            role == "tab"
+            or tag == "summary"
+            or bool(aria_controls)
+            or rev_cert
+        )
+        if not structural_match and role not in {"tab", "link", "button", "region"} and tag not in {"a", "button", "section"}:
             continue
         label = str(
             ctrl.get("label") or ctrl.get("aria_label") or ctrl.get("aria-label")
             or ctrl.get("text") or ctrl.get("name") or ""
         ).strip()
         href = str(ctrl.get("href") or "").strip()
-        tokens = set(re.findall(r"[a-z0-9]+", f"{label} {href}".lower()))
-        if not tokens or (tokens & _COMMIT_ACTION_EXCLUDES and role != "tab"):
+        tokens = set(_unicode_tokens(f"{label} {href}"))
+        if not tokens:
             continue
-        if not (tokens & _EVIDENCE_AFFORDANCE_TOKENS):
-            continue
+        if not structural_match:
+            if not enable_english_keyword_fallback:
+                continue
+            if tokens & _COMMIT_ACTION_EXCLUDES:
+                continue
+            if not (tokens & _EVIDENCE_AFFORDANCE_TOKENS):
+                continue
         slug = _slugify_tokens(label or href)
         if not slug:
             continue
-        kind = role if role in {"tab", "link", "button", "region"} else ("link" if tag == "a" else "button")
+        kind = role if role in {"tab", "link", "button", "region"} else ("summary" if tag == "summary" else ("link" if tag == "a" else "button"))
         art_id = str(ctrl.get("artifact_id") or f"{kind}:{slug}")
         if art_id in seen_ids:
             continue
         seen_ids.add(art_id)
         is_read = (
-            label.lower() in visited_norm
-            or art_id.lower() in visited_norm
+            label.casefold() in visited_norm
+            or art_id.casefold() in visited_norm
             or slug in visited_slugs
-            or bool(cur_url_low and href and href.lower() in cur_url_low)
+            or bool(cur_url_low and href and href.casefold() in cur_url_low)
         )
         artifacts.append(
             EpistemicArtifact(
@@ -747,6 +792,109 @@ def discover_case_evidence_tabs(
             )
         )
     return tuple(artifacts)
+
+
+def _is_readonly_post_graphql(post_data: str, dirty_values: Sequence[str]) -> bool:
+    body = (post_data or "").strip()
+    if not body:
+        return False
+    low = body.lower()
+    if "mutation" in low:
+        return False
+    if "query" not in low:
+        return False
+    return not any(dv and dv.lower() in low for dv in dirty_values)
+
+
+def probe_reversible_evidence_controls_in_twin(
+    twin_app: StatefulTwinApp,
+    candidate_selectors: Sequence[str],
+    *,
+    page_path: str = "/",
+) -> Tuple[ReversibilityCertificate, ...]:
+    """Certify reversible evidence controls via read-only network check (incl. GraphQL POST-for-read), info gain, and involution."""
+    from playwright.sync_api import sync_playwright
+
+    norm_path = page_path if page_path.startswith("/") else f"/{page_path}"
+    target_url = f"{twin_app.base_url}{norm_path}"
+    form_digest_js = """() => {
+      const vals = Array.from(document.querySelectorAll('input, textarea, select')).map(el =>
+        `${el.name||el.id||el.tagName}:${el.type==='checkbox'||el.type==='radio'?el.checked:el.value}`
+      );
+      return vals.join('|');
+    }"""
+    visible_text_js = "() => (document.body && document.body.innerText ? document.body.innerText.trim() : '')"
+    certs: List[ReversibilityCertificate] = []
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        try:
+            for sel in candidate_selectors:
+                page = browser.new_page()
+                twin_app.install_on_page(page)
+                page.goto(target_url, wait_until="domcontentloaded")
+                init_text = str(page.evaluate(visible_text_js) or "")
+                init_digest = str(page.evaluate(form_digest_js) or "")
+                dirty_vals = [seg.split(":", 1)[1] for seg in init_digest.split("|") if ":" in seg and seg.split(":", 1)[1]]
+
+                initial_tab_sel = ""
+                try:
+                    active_tab = page.locator('[role="tab"][aria-selected="true"]').first
+                    if active_tab.count() > 0:
+                        tid = active_tab.get_attribute("id")
+                        initial_tab_sel = f"#{tid}" if tid else '[role="tab"][aria-selected="true"]'
+                except Exception:
+                    initial_tab_sel = ""
+
+                mutating: List[str] = []
+                readonly: List[str] = []
+
+                def _on_req(req: Any, _mut: List[str] = mutating, _ro: List[str] = readonly, _dv: List[str] = dirty_vals) -> None:
+                    meth = str(req.method or "GET").upper()
+                    url = str(req.url or "")
+                    if meth in _READ_ONLY_METHODS:
+                        _ro.append(f"{meth} {url}")
+                    elif meth == "POST":
+                        pdata = str(req.post_data or "")
+                        if _is_readonly_post_graphql(pdata, _dv):
+                            _ro.append(f"POST(graphql-read) {url}")
+                        else:
+                            _mut.append(f"POST {url}")
+                    else:
+                        _mut.append(f"{meth} {url}")
+
+                page.on("request", _on_req)
+                loc = page.locator(sel).first
+                loc.click()
+                page.wait_for_timeout(150)
+                post_text = str(page.evaluate(visible_text_js) or "")
+                info_gain = post_text != init_text and len(post_text) >= len(init_text) * 0.5
+
+                # State involution: return to initial tab / close disclosure / Escape
+                try:
+                    if initial_tab_sel and initial_tab_sel != sel:
+                        page.locator(initial_tab_sel).first.click(timeout=500)
+                    else:
+                        tag = str(loc.evaluate("el => el.tagName.toLowerCase()"))
+                        if tag == "summary":
+                            loc.click(timeout=500)
+                        else:
+                            page.keyboard.press("Escape")
+                    page.wait_for_timeout(80)
+                except Exception:
+                    pass
+                involution_ok = str(page.evaluate(form_digest_js) or "") == init_digest
+                certified = (not mutating) and info_gain and involution_ok
+                reason = (
+                    "certified_reversible"
+                    if certified
+                    else ("mutating_network_request" if mutating else ("no_information_gain" if not info_gain else "state_involution_failed"))
+                )
+                certs.append(ReversibilityCertificate(sel, certified, info_gain, involution_ok, tuple(mutating), tuple(readonly), reason))
+                page.close()
+        finally:
+            browser.close()
+    return tuple(certs)
 
 
 def probe_enum_affordances_in_twin(
@@ -1171,13 +1319,38 @@ def compile_demo_traces_to_cartridge(
     if not verdict.allowed:
         raise EgressBlockedError(verdict)
 
-    # 1. Induce SOP spec (with required_read_artifacts and required_note_slots per disposition)
-    sop_spec = induce_sop_from_shadow_traces(
+    # 1. Induce SOP spec (with required_read_artifacts, required_note_slots, observed domains & branch support)
+    base_sop = induce_sop_from_shadow_traces(
         sop_observations,
         spec_id=f"{cartridge_id}_sop",
         coding_agent_fn=coding_agent_fn,
         egress_policy=egress_policy,
         ledger_path=guard.ledger_path,
+    )
+    domain_sets: Dict[str, set[str]] = {}
+    for obs in sop_observations:
+        for fk, fv in obs["features"].items():
+            domain_sets.setdefault(str(fk), set()).add(str(fv).strip().casefold())
+    observed_domains = {k: tuple(sorted(vs)) for k, vs in domain_sets.items()}
+    support_counts: Dict[str, int] = {}
+    for branch in base_sop.branches:
+        cnt = sum(
+            1
+            for obs in sop_observations
+            if all(
+                str(obs["features"].get(k, "")).strip().casefold() == str(v).strip().casefold()
+                for k, v in branch.when.items()
+            )
+        )
+        support_counts[branch.branch_id] = cnt
+    sop_spec = CompiledSOPSpec(
+        spec_id=base_sop.spec_id,
+        decision_table=base_sop.decision_table,
+        branches=base_sop.branches,
+        consistency_ok=base_sop.consistency_ok,
+        consistency_conflicts=base_sop.consistency_conflicts,
+        observed_feature_domains=observed_domains,
+        branch_support_counts=support_counts,
     )
 
     # 2. Lift reusable SkillMacroSpecs (verified by verify_symbolic_repair_ast)
@@ -1282,3 +1455,82 @@ def compile_demo_traces_to_cartridge(
         mutants=tuple(mutants),
         egress_audit=summarize_egress_ledger(guard.read_ledger()),
     )
+
+
+def evaluate_cartridge_ood_support(
+    cartridge: AppCartridge,
+    observed_facts: Mapping[str, Any],
+    *,
+    min_branch_support: int = 1,
+) -> OODSupportVerdict:
+    """Stop silent extrapolation when a feature takes an unseen categorical value or branch support is too low."""
+    domains = cartridge.sop_spec.observed_feature_domains
+    unseen: Dict[str, str] = {}
+    for k, val in observed_facts.items():
+        if k in domains and domains[k]:
+            norm_v = str(val).strip().casefold()
+            if norm_v and norm_v not in domains[k]:
+                unseen[str(k)] = str(val)
+    if unseen:
+        return OODSupportVerdict(
+            in_support=False,
+            unseen_features=unseen,
+            requires_prepare=True,
+            reason=f"unseen_categorical_feature_values:{sorted(unseen.keys())}",
+        )
+
+    matched_branch: Optional[SOPBranchSpec] = None
+    for b in cartridge.sop_spec.branches:
+        if all(
+            str(observed_facts.get(k, "")).strip().casefold() == str(v).strip().casefold()
+            for k, v in b.when.items()
+        ):
+            matched_branch = b
+            break
+    if matched_branch is None:
+        return OODSupportVerdict(
+            in_support=False,
+            unseen_features={},
+            requires_prepare=True,
+            reason="no_matching_sop_branch",
+        )
+    support = cartridge.sop_spec.branch_support_counts.get(matched_branch.branch_id, 0)
+    if support < min_branch_support:
+        return OODSupportVerdict(
+            in_support=False,
+            unseen_features={},
+            requires_prepare=True,
+            matched_branch_id=matched_branch.branch_id,
+            branch_support=support,
+            reason=f"insufficient_branch_support:{support}<{min_branch_support}",
+        )
+    return OODSupportVerdict(
+        in_support=True,
+        unseen_features={},
+        requires_prepare=False,
+        matched_branch_id=matched_branch.branch_id,
+        branch_support=support,
+        reason="in_support",
+    )
+
+
+def incorporate_prepare_resolution_into_cartridge(
+    cartridge: AppCartridge,
+    new_demo_trace: Mapping[str, Any],
+    existing_traces: Sequence[Mapping[str, Any]],
+    *,
+    coding_agent_fn: Optional[Callable[[str], str]] = None,
+    egress_policy: Optional[EgressPolicy] = None,
+    ledger_path: Optional[Union[str, Path]] = None,
+) -> Tuple[AppCartridge, CartridgeQualificationReport]:
+    """Re-induce and offline-qualify an updated AppCartridge after a single human PrepareCard resolution."""
+    updated = compile_demo_traces_to_cartridge(
+        [*existing_traces, new_demo_trace],
+        cartridge_id=cartridge.cartridge_id,
+        portal_origin=cartridge.portal_origin,
+        coding_agent_fn=coding_agent_fn,
+        egress_policy=egress_policy,
+        ledger_path=ledger_path,
+    )
+    qual = qualify_app_cartridge_offline(updated)
+    return updated, qual

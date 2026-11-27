@@ -450,11 +450,41 @@ class ObligationLedger:
 
 
 @dataclass(frozen=True)
+class SpanAnchor:
+    source_key: str
+    start: int
+    end: int
+    quote: str
+
+
+def verify_span_anchor(source_texts: Mapping[str, str], anchor: SpanAnchor) -> bool:
+    """Verify that a SpanAnchor's quote matches source_texts[source_key][start:end] verbatim."""
+    raw = source_texts.get(anchor.source_key)
+    if raw is None or not anchor.quote:
+        return False
+    if anchor.start < 0 or anchor.end <= anchor.start or anchor.end > len(raw):
+        return False
+    return raw[anchor.start : anchor.end] == anchor.quote
+
+
+def _coerce_span_anchor(raw: Any) -> Optional[SpanAnchor]:
+    if isinstance(raw, SpanAnchor):
+        return raw
+    if isinstance(raw, Mapping) and all(k in raw for k in ("source_key", "start", "end", "quote")):
+        try:
+            return SpanAnchor(str(raw["source_key"]), int(raw["start"]), int(raw["end"]), str(raw["quote"]))
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+@dataclass(frozen=True)
 class ExtractedFact:
     category: str
     value: str
     source_key: str
     required_in_freetext: bool = True
+    span_anchor: Optional[SpanAnchor] = None
 
 
 @dataclass(frozen=True)
@@ -836,45 +866,54 @@ def extract_dossier_facts(
     *,
     extra_patterns: Optional[Mapping[str, str]] = None,
     llm_extractor_fn: Optional[Callable[[Mapping[str, str]], Sequence[Mapping[str, Any]]]] = None,
+    enable_english_regex_heuristics: bool = True,
+    require_llm_span_anchors: bool = False,
 ) -> tuple[ExtractedFact, ...]:
-    """Deterministically extract structured facts and optionally merge pluggable LLM-extracted facts."""
+    """Deterministically extract structured facts and optionally merge span-anchored LLM-extracted facts."""
     from openadapt_kernel import canonical as _can
 
     facts: List[ExtractedFact] = []
     seen: set[tuple[str, str]] = set()
 
-    def _add(category: str, value: str, source_key: str, required: bool = True) -> None:
+    def _add(
+        category: str,
+        value: str,
+        source_key: str,
+        required: bool = True,
+        anchor: Optional[SpanAnchor] = None,
+    ) -> None:
         cleaned = " ".join(str(value).strip().split())
         if not cleaned:
             return
         dedup_key = (category, cleaned.casefold())
         if dedup_key not in seen:
             seen.add(dedup_key)
-            facts.append(ExtractedFact(category, cleaned, source_key, required))
+            facts.append(ExtractedFact(category, cleaned, source_key, required, span_anchor=anchor))
 
     for src_key, raw in source_texts.items():
         text = str(raw or "")
         if not text.strip():
             continue
         for m in _CODE_SCAN_RE.finditer(text):
-            _add("code", m.group(0), src_key, True)
+            _add("code", m.group(0), src_key, True, SpanAnchor(src_key, m.start(), m.end(), m.group(0)))
         for m in _DATE_SCAN_RE.finditer(text):
             if _can.parse_canonical_date(m.group(0)) is not None:
-                _add("date", m.group(0), src_key, True)
+                _add("date", m.group(0), src_key, True, SpanAnchor(src_key, m.start(), m.end(), m.group(0)))
         for m in _CURRENCY_SCAN_RE.finditer(text):
             if _can.parse_canonical_currency_cents(m.group(0)) is not None:
-                _add("currency", m.group(0), src_key, True)
-        for m in _DEADLINE_SCAN_RE.finditer(text):
-            _add("deadline", m.group(0), src_key, True)
-        for m in _POLICY_CLAUSE_RE.finditer(text):
-            _add("policy_clause", m.group(0).rstrip(".,;"), src_key, True)
-        for m in _CONTRAST_CLAUSE_RE.finditer(text):
-            clause = _LEADING_COPULA_RE.sub("", m.group(1).strip().rstrip(".,;"))
-            _add("policy_clause", clause, src_key, True)
-        for m in _ROUTING_CLAUSE_RE.finditer(text):
-            _add("routing_clause", m.group(1).strip().rstrip(".,;"), src_key, True)
-        for m in _FINDING_CLAUSE_RE.finditer(text):
-            _add("kv_finding", m.group(1).strip().rstrip(".,;"), src_key, True)
+                _add("currency", m.group(0), src_key, True, SpanAnchor(src_key, m.start(), m.end(), m.group(0)))
+        if enable_english_regex_heuristics:
+            for m in _DEADLINE_SCAN_RE.finditer(text):
+                _add("deadline", m.group(0), src_key, True, SpanAnchor(src_key, m.start(), m.end(), m.group(0)))
+            for m in _POLICY_CLAUSE_RE.finditer(text):
+                _add("policy_clause", m.group(0).rstrip(".,;"), src_key, True)
+            for m in _CONTRAST_CLAUSE_RE.finditer(text):
+                clause = _LEADING_COPULA_RE.sub("", m.group(1).strip().rstrip(".,;"))
+                _add("policy_clause", clause, src_key, True)
+            for m in _ROUTING_CLAUSE_RE.finditer(text):
+                _add("routing_clause", m.group(1).strip().rstrip(".,;"), src_key, True)
+            for m in _FINDING_CLAUSE_RE.finditer(text):
+                _add("kv_finding", m.group(1).strip().rstrip(".,;"), src_key, True)
         for m in _KV_FINDING_RE.finditer(text):
             k_part, v_part = m.group(1).strip(), m.group(2).strip().rstrip(".")
             if k_part.lower() in ("http", "https") or v_part.startswith("//"):
@@ -889,11 +928,16 @@ def extract_dossier_facts(
         for item in llm_extractor_fn(source_texts) or ():
             if not isinstance(item, Mapping):
                 continue
+            anchor = _coerce_span_anchor(item.get("span_anchor"))
+            if require_llm_span_anchors:
+                if anchor is None or not verify_span_anchor(source_texts, anchor):
+                    continue
             _add(
                 str(item.get("category") or "kv_finding").strip(),
                 str(item.get("value") or "").strip(),
-                str(item.get("source_key") or "llm_extracted").strip(),
+                str(item.get("source_key") or (anchor.source_key if anchor else "llm_extracted")).strip(),
                 bool(item.get("required_in_freetext", True)),
+                anchor=anchor,
             )
     return tuple(facts)
 

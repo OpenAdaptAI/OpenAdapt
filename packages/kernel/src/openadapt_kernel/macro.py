@@ -27,18 +27,18 @@ if TYPE_CHECKING:
 _OBSERVE_SCHEMA_JS = """() => {
   const selectorQuery = 'input, textarea, select, button, a[href], [contenteditable="true"], [role="button"], [role="textbox"], [role="combobox"], [role="checkbox"], [role="option"]';
   const collected = [];
-  const walkRoot = (root, inShadow) => {
+  const walkRoot = (root, inShadow, hostChain) => {
     const all = root.querySelectorAll('*');
     for (const el of all) {
       if (el.matches && el.matches(selectorQuery)) {
-        collected.push({ el, inShadow, root });
+        collected.push({ el, inShadow, root, hostChain });
       }
       if (el.shadowRoot) {
-        walkRoot(el.shadowRoot, true);
+        walkRoot(el.shadowRoot, true, hostChain.concat([el]));
       }
     }
   };
-  walkRoot(document, false);
+  walkRoot(document, false, []);
 
   const labelTextFor = (el, root) => {
     if (el.getAttribute('aria-label')) return el.getAttribute('aria-label').trim();
@@ -58,19 +58,92 @@ _OBSERVE_SCHEMA_JS = """() => {
     return txt.slice(0, 120);
   };
 
-  const modalRoots = Array.from(
-    document.querySelectorAll('[role="dialog"], .v-dialog, .v-overlay--active, .v-dialog--active, .menuable__content__active, .modal.show, dialog[open]')
-  ).filter(r => {
-    const st = window.getComputedStyle(r);
-    const rect = r.getBoundingClientRect();
-    return st && st.display !== 'none' && st.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
-  });
+  const vw = window.innerWidth || document.documentElement.clientWidth || 1280;
+  const vh = window.innerHeight || document.documentElement.clientHeight || 720;
+  const isVisibleBox = (n) => {
+    if (!n || !n.getBoundingClientRect) return false;
+    const st = window.getComputedStyle(n);
+    const r = n.getBoundingClientRect();
+    return st && st.display !== 'none' && st.visibility !== 'hidden' && parseFloat(st.opacity || '1') > 0 && r.width > 0 && r.height > 0;
+  };
+  const modalSet = new Set();
+  for (const r of document.querySelectorAll('[aria-modal="true"], dialog[open], [role="dialog"], .modal.show')) {
+    if (isVisibleBox(r)) modalSet.add(r);
+  }
+  const hasInert = document.querySelector('[inert]') !== null;
+  if (hasInert && document.body) {
+    for (const ch of Array.from(document.body.children)) {
+      if (!ch.hasAttribute('inert') && isVisibleBox(ch) && ch.querySelector && ch.querySelector(selectorQuery)) {
+        modalSet.add(ch);
+      }
+    }
+  }
+  // Compositor hit-test backdrop/overlay detection (framework-agnostic, excludes thin sticky headers/navbars)
+  const samplePts = [[vw * 0.5, vh * 0.5], [vw * 0.5, vh * 0.35], [vw * 0.1, vh * 0.5]];
+  for (const [sx, sy] of samplePts) {
+    const stack = document.elementsFromPoint ? document.elementsFromPoint(sx, sy) : [];
+    for (const node of stack) {
+      if (!node || node === document.body || node === document.documentElement) break;
+      const t = node.tagName ? node.tagName.toLowerCase() : '';
+      if (t === 'header' || t === 'nav') continue;
+      const st = window.getComputedStyle(node);
+      const r = node.getBoundingClientRect();
+      const isOverlayPos = st.position === 'fixed' || st.position === 'absolute' || (st.transform && st.transform !== 'none');
+      const isFullBackdrop = r.width >= vw * 0.8 && r.height >= vh * 0.8 && (st.position === 'fixed' || st.position === 'absolute');
+      if (isFullBackdrop && node.querySelector && node.querySelector(selectorQuery)) {
+        modalSet.add(node);
+        break;
+      }
+      if (isOverlayPos && r.height >= vh * 0.2 && r.height <= vh * 0.98 && r.width >= vw * 0.2 && node.querySelector && node.querySelector(selectorQuery)) {
+        modalSet.add(node);
+        break;
+      }
+    }
+  }
+  const modalRoots = Array.from(modalSet);
 
   const isInsideModal = (el) => {
-    for (const mr of modalRoots) {
-      if (mr.contains(el)) return true;
+    let cur = el;
+    while (cur) {
+      if (modalSet.has(cur)) return true;
+      if (cur.parentElement) {
+        cur = cur.parentElement;
+      } else {
+        const rn = cur.getRootNode ? cur.getRootNode() : null;
+        cur = rn && rn.host ? rn.host : null;
+      }
     }
     return false;
+  };
+
+  const isCenterOccluded = (el, root, rect, hostChain) => {
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    if (cx < 0 || cy < 0 || cx > vw || cy > vh) return false;
+    const docStack = document.elementsFromPoint ? document.elementsFromPoint(cx, cy) : [];
+    if (!docStack || docStack.length === 0) return false;
+    const top = docStack[0];
+    if (top === el || (el.contains && el.contains(top)) || (top.contains && top.contains(el))) return false;
+    if (hostChain && hostChain.some(h => h === top || (top.contains && top.contains(h)) || (h.contains && h.contains(top)))) {
+      if (root && root.elementsFromPoint) {
+        const shStack = root.elementsFromPoint(cx, cy);
+        if (shStack && shStack.length > 0) {
+          const shTop = shStack[0];
+          if (shTop === el || (el.contains && el.contains(shTop)) || (shTop.contains && shTop.contains(el))) return false;
+          return true;
+        }
+      }
+      return false;
+    }
+    return true;
+  };
+
+  const hostSelectorFor = (h) => {
+    const esc = (s) => s.replace(/\\\\/g, '\\\\\\\\').replace(/"/g, '\\\\"');
+    const tid = h.getAttribute && h.getAttribute('data-testid');
+    if (tid) return `[data-testid="${esc(tid)}"]`;
+    if (h.id && !/^(input|v-input|checkbox|select|radio|textarea|switch|field)-\\d+$/i.test(h.id)) return `#${CSS.escape(h.id)}`;
+    return h.tagName ? h.tagName.toLowerCase() : '*';
   };
 
   const isEphemeralId = (id) => /^(input|v-input|checkbox|select|radio|textarea|switch|field)-\\d+$/i.test(id || '');
@@ -87,55 +160,55 @@ _OBSERVE_SCHEMA_JS = """() => {
     }
   };
 
-  const durableSelectorFor = (el, root, tag, type, label, inModal) => {
+  const durableSelectorFor = (el, root, tag, type, label, inModal, inShadow, hostChain) => {
     const esc = (s) => s.replace(/\\\\/g, '\\\\\\\\').replace(/"/g, '\\\\"');
+    const prefix = (inShadow && hostChain && hostChain.length) ? hostChain.map(hostSelectorFor).join(' >> ') + ' >> ' : '';
     const tid = el.getAttribute('data-testid');
     if (tid) {
       const s = `[data-testid="${esc(tid)}"]`;
-      if (visibleMatches(root, s)[0] === el) return s;
+      if (visibleMatches(root, s)[0] === el) return prefix + s;
     }
     const name = el.getAttribute('name');
     if (name) {
       const s = `${tag}[name="${esc(name)}"]`;
-      if (visibleMatches(root, s)[0] === el) return s;
+      if (visibleMatches(root, s)[0] === el) return prefix + s;
     }
     const aria = el.getAttribute('aria-label');
     if (aria) {
       const s = `${tag}[aria-label="${esc(aria)}"]`;
-      if (visibleMatches(root, s)[0] === el) return s;
+      if (visibleMatches(root, s)[0] === el) return prefix + s;
     }
     if (el.id && !isEphemeralId(el.id)) {
       const s = `#${CSS.escape(el.id)}`;
-      if (visibleMatches(root, s)[0] === el) return s;
+      if (visibleMatches(root, s)[0] === el) return prefix + s;
     }
-    // Synthesize a live-verified container-scoped structural selector (avoids ephemeral #input-110 IDs!)
     const isEditable = el.getAttribute('contenteditable') === 'true';
     const rawRole = (el.getAttribute('role') || '').toLowerCase();
-    const scopes = inModal
-      ? ['[role="dialog"]', '.v-dialog--active', '.v-overlay--active .v-card', '.v-dialog .v-card', '.v-card', 'form']
-      : ['main form', 'main', 'form', 'body'];
+    const scopes = inShadow
+      ? ['form', '']
+      : (inModal ? ['[aria-modal="true"]', 'dialog[open]', '[role="dialog"]', 'form'] : ['main form', 'main', 'form', 'body']);
     const basePart = isEditable ? `${tag}[contenteditable="true"]`
       : (tag === 'input' && type) ? `input[type="${esc(type)}"]`
       : (tag === 'button' && type === 'submit') ? 'button[type="submit"]'
       : (rawRole === 'combobox' || rawRole === 'option') ? `[role="${esc(rawRole)}"]`
       : tag;
     for (const sc of scopes) {
-      const cand = `${sc} ${basePart}`;
+      const cand = sc ? `${sc} ${basePart}` : basePart;
       const hits = visibleMatches(root, cand);
       const pos = hits.indexOf(el);
-      if (pos === 0) return cand;
-      if (pos > 0) return `${cand} >> nth=${pos}`;
+      if (pos === 0) return prefix + cand;
+      if (pos > 0) return prefix + `${cand} >> nth=${pos}`;
     }
     if (tag === 'button' && label && label.length <= 40) {
-      return `${inModal ? '.v-card ' : ''}button:has-text("${esc(label)}")`;
+      return prefix + `button:has-text("${esc(label)}")`;
     }
-    if (el.id) return `#${CSS.escape(el.id)}`;
-    return '';
+    if (el.id) return prefix + `#${CSS.escape(el.id)}`;
+    return prefix + basePart;
   };
 
   const items = [];
   let idx = 0;
-  for (const { el, inShadow, root } of collected) {
+  for (const { el, inShadow, root, hostChain } of collected) {
     const st = window.getComputedStyle(el);
     if (!st || st.display === 'none' || st.visibility === 'hidden') continue;
     const type = (el.getAttribute('type') || '').toLowerCase();
@@ -145,6 +218,7 @@ _OBSERVE_SCHEMA_JS = """() => {
     const tag = el.tagName.toLowerCase();
     const role = (el.getAttribute('role') || (el.getAttribute('contenteditable') === 'true' ? 'textbox' : '')).toLowerCase();
     const inModal = isInsideModal(el);
+    const occluded = isCenterOccluded(el, root, rect, hostChain);
     const label = labelTextFor(el, root);
     const options = tag === 'select'
       ? Array.from(el.options).map(o => ({ value: o.value, text: (o.text || '').trim() }))
@@ -161,17 +235,38 @@ _OBSERVE_SCHEMA_JS = """() => {
       element_id: (el.id || '').trim(),
       testid: (el.getAttribute('data-testid') || '').trim(),
       in_modal: inModal,
-      selector: durableSelectorFor(el, root, tag, type, label, inModal),
+      selector: durableSelectorFor(el, root, tag, type, label, inModal, inShadow, hostChain),
       value: tag === 'input' && (type === 'checkbox' || type === 'radio')
         ? String(Boolean(el.checked))
         : String(el.value !== undefined ? el.value : (el.getAttribute('data-value') || el.innerText || '').trim()),
       options,
       in_shadow: inShadow,
       disabled: Boolean(el.disabled || el.getAttribute('aria-disabled') === 'true'),
+      occluded,
     });
     idx += 1;
   }
   return items;
+}"""
+
+_DETECT_OPAQUE_SURFACES_JS = """(minArea) => {
+  const surfaces = [];
+  for (const el of document.querySelectorAll('canvas, embed, object')) {
+    const st = window.getComputedStyle(el);
+    if (!st || st.display === 'none' || st.visibility === 'hidden') continue;
+    const r = el.getBoundingClientRect();
+    const area = Math.round(r.width * r.height);
+    if (area >= minArea && el.children.length === 0) {
+      surfaces.push({
+        tag: el.tagName.toLowerCase(),
+        id: el.id || '',
+        width: Math.round(r.width),
+        height: Math.round(r.height),
+        area,
+      });
+    }
+  }
+  return surfaces;
 }"""
 
 
@@ -193,6 +288,8 @@ class ControlSchema:
     frame_index: int = -1
     control_index: int = -1
     disabled: bool = False
+    occluded: bool = False
+    frame_chain: Tuple[str, ...] = ()
 
 
 @dataclass
@@ -225,15 +322,52 @@ class HealResult:
 
 
 def _tokens(text: str) -> set[str]:
-    return set(re.findall(r"[a-z0-9]+", (text or "").lower()))
+    return set(re.findall(r"[^\W_]+", (text or "").casefold()))
+
+
+def _compute_frame_chain(frame: Any, main_frame: Any) -> Tuple[str, ...]:
+    chain: List[str] = []
+    cur = frame
+    while cur is not None and cur != main_frame:
+        sel = ""
+        try:
+            fe = cur.frame_element()
+            if fe is not None:
+                sel = str(
+                    fe.evaluate(
+                        """el => {
+                          if (el.getAttribute('data-testid')) return `iframe[data-testid="${el.getAttribute('data-testid')}"]`;
+                          if (el.name) return `iframe[name="${el.name}"]`;
+                          if (el.id) return `iframe#${CSS.escape(el.id)}`;
+                          const all = Array.from((el.ownerDocument || document).querySelectorAll('iframe'));
+                          const i = all.indexOf(el);
+                          return i > 0 ? `iframe >> nth=${i}` : 'iframe';
+                        }"""
+                    )
+                    or "iframe"
+                )
+        except Exception:
+            fname = str(getattr(cur, "name", "") or "").strip()
+            sel = f'iframe[name="{fname}"]' if fname else "iframe"
+        if sel:
+            chain.append(sel)
+        cur = getattr(cur, "parent_frame", None)
+    chain.reverse()
+    return tuple(chain)
+
+
+def detect_opaque_visual_surfaces(page: Any, *, min_area_px: int = 10000) -> Dict[str, Any]:
+    """Detect large zero-child <canvas>/<embed>/<object> surfaces requiring visual grounding escalation."""
+    surfaces = list(page.evaluate(_DETECT_OPAQUE_SURFACES_JS, int(min_area_px)) or [])
+    return {"requires_visual_grounding": bool(surfaces), "surfaces": surfaces}
 
 
 def observe_schema(page: Any, *, include_frames: bool = True) -> List[ControlSchema]:
-    """Extract all visible interactive controls across main DOM, open Shadow DOM, and child iframes."""
+    """Extract all visible interactive controls across main DOM, open Shadow DOM, and nested iframes."""
     controls: List[ControlSchema] = []
     raw_main = page.evaluate(_OBSERVE_SCHEMA_JS) or []
     for item in raw_main:
-        controls.append(ControlSchema(frame_index=-1, **item))
+        controls.append(ControlSchema(frame_index=-1, frame_chain=(), **item))
 
     if include_frames and hasattr(page, "frames"):
         frames = list(page.frames)
@@ -242,12 +376,16 @@ def observe_schema(page: Any, *, include_frames: bool = True) -> List[ControlSch
             if frame == main_frame:
                 continue
             try:
+                fchain = _compute_frame_chain(frame, main_frame)
                 raw_sub = frame.evaluate(_OBSERVE_SCHEMA_JS) or []
                 for item in raw_sub:
-                    controls.append(ControlSchema(frame_index=idx, **item))
+                    controls.append(ControlSchema(frame_index=idx, frame_chain=fchain, **item))
             except Exception:
                 continue
     return controls
+
+
+observe_dom_schema = observe_schema
 
 
 def _match_control(
@@ -301,6 +439,14 @@ def _target_root(page: Any, ctrl: ControlSchema) -> Any:
 
 
 def _resolve_locator(page: Any, ctrl: ControlSchema) -> Any:
+    if ctrl.frame_chain and hasattr(page, "frame_locator"):
+        fl = page.frame_locator(ctrl.frame_chain[0])
+        for sub_sel in ctrl.frame_chain[1:]:
+            fl = fl.frame_locator(sub_sel)
+        if ctrl.selector:
+            return fl.locator(ctrl.selector).first
+        if ctrl.label and ctrl.tag in ("button", "a"):
+            return fl.locator(f"{ctrl.tag}:has-text({ctrl.label!r})").first
     root = _target_root(page, ctrl)
     if ctrl.control_index >= 0 and ctrl.frame_index == -1:
         idx_loc = root.locator(f'[data-oa-idx="{ctrl.control_index}"]').first
