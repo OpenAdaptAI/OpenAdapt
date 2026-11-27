@@ -52,6 +52,13 @@ from openadapt_flow.agent.bundles import (
     url_override_key,
 )
 from openadapt_flow.agent.cards import card_for_bundle, inputs_schema
+from openadapt_flow.agent.continuation import (
+    CONTINUATION_INPUT_SCHEMA,
+    CONTINUATION_OUTPUT_SCHEMA,
+    ContinuationDesk,
+    ContinuationError,
+    FlowResumeExecutor,
+)
 from openadapt_flow.agent.contract import (
     RUN_RESULT_SCHEMA,
     WORKFLOW_LIST_SCHEMA,
@@ -180,11 +187,15 @@ class AgentBridge:
         store: Optional[RunStore] = None,
         repair_desk: Optional[Any] = None,
         admission_desk: Optional[Any] = None,
+        continuation_desk: Optional[ContinuationDesk] = None,
+        continuation_executor: Optional[Any] = None,
     ):
         self.repair_desk = repair_desk
         #: ``openadapt_flow.agent.admission.AdmissionDesk`` when the operator
         #: started the server with ``--admissions DIR``.
         self.admission_desk = admission_desk
+        self._continuation_desk = continuation_desk
+        self._continuation_executor = continuation_executor
         self.bundles_dir = Path(bundles_dir) if bundles_dir is not None else None
         self.sandbox = sandbox
         self.allow_run = allow_run or sandbox is not None
@@ -277,6 +288,17 @@ class AgentBridge:
                 intake_grants=self.intake_grants,
             )
         return self._service
+
+    @property
+    def continuation_desk(self) -> ContinuationDesk:
+        """Mid-run continuation store and policy gate, created on first use."""
+        if self._continuation_desk is None:
+            executor = self._continuation_executor or FlowResumeExecutor(self.runner)
+            self._continuation_desk = ContinuationDesk(
+                self.runner_config.runs_dir,
+                executor=executor,
+            )
+        return self._continuation_desk
 
     # -- tool surface ------------------------------------------------------
 
@@ -381,12 +403,49 @@ class AgentBridge:
                 usage=_GET_RUN_USAGE,
             )
         )
+        specs.extend(self._continuation_specs())
         specs.extend(self._repair_specs())
         specs.extend(self._approval_specs())
         specs.extend(self._admission_specs())
         if self.handoffs is not None:
             specs.extend(self.handoffs.list_tool_specs(runs_enabled=self.allow_run))
         return specs
+
+    def _continuation_specs(self) -> list[ToolSpec]:
+        """Listed only when runs are enabled for operator bundles."""
+        if not self.allow_run or self.sandbox is not None:
+            return []
+        return [
+            ToolSpec(
+                name="continue_halted_run",
+                description=(
+                    "Continue a halted workflow run from its last verified "
+                    "checkpoint without restarting earlier steps. Allowed only "
+                    "for missing required inputs (missing_parameter / "
+                    "missing_input) or safe pre-write transient network "
+                    "timeouts (transient_network / retryable_timeout with "
+                    "retry_transient=true). Refuses with "
+                    "human_sign_off_required on identity mismatches, target "
+                    "ambiguity, duplicate collisions, policy violations, "
+                    "RECONCILIATION_REQUIRED or post-write uncertainty, "
+                    "destructive or unknown halts, and immutable identity "
+                    "parameter overwrites."
+                ),
+                input_schema=CONTINUATION_INPUT_SCHEMA,
+                annotations={
+                    "readOnlyHint": False,
+                    "destructiveHint": False,
+                    "idempotentHint": True,
+                    "openWorldHint": True,
+                },
+                output_schema=CONTINUATION_OUTPUT_SCHEMA,
+                usage=(
+                    "continue_halted_run needs resume_token (or both run_id "
+                    "and halt_id), optional parameters object, and optional "
+                    "retry_transient boolean. Nothing was resumed."
+                ),
+            )
+        ]
 
     def _admission_specs(self) -> list[ToolSpec]:
         """Listed only when the operator passed ``--admissions DIR``."""
@@ -745,6 +804,24 @@ class AgentBridge:
                     arguments.get("wait_seconds", DEFAULT_WAIT_SECONDS),
                 )
             except ServiceError as exc:
+                raise BridgeError(str(exc)) from exc
+        if name == "continue_halted_run":
+            if not self.allow_run or self.sandbox is not None:
+                raise BridgeError(
+                    "continue_halted_run is unavailable on this server"
+                )
+            try:
+                return self.continuation_desk.continue_halted_run(
+                    resume_token=arguments.get("resume_token"),
+                    run_id=arguments.get("run_id"),
+                    halt_id=arguments.get("halt_id"),
+                    parameters=arguments.get("parameters"),
+                    retry_transient=bool(arguments.get("retry_transient", False)),
+                    wait_seconds=int(
+                        arguments.get("wait_seconds", DEFAULT_WAIT_SECONDS)
+                    ),
+                )
+            except ContinuationError as exc:
                 raise BridgeError(str(exc)) from exc
         if self.handoffs is not None and self.handoffs.handles(name):
             return self._handoff_dispatch(name, arguments)
