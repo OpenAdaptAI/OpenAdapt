@@ -175,6 +175,26 @@ def test_every_lock_the_helper_names_exists() -> None:
         assert (ROOT / directory / "uv.lock").is_file(), spec
 
 
+def test_editable_root_installs_include_root_lock() -> None:
+    # Installing `--editable .` registers the root `openadapt` metadata; its
+    # own lockfile must be included so `uv pip check` sees root-only deps
+    # (such as `openadapt-kernel`) instead of failing with a missing package.
+    missing = []
+    for workflow, line in COMMANDS:
+        if "locked_install.py" not in line:
+            continue
+        editables = re.findall(r"--editable '?([^' ]+)'?", line)
+        if "." not in editables:
+            continue
+        lock_dirs = {
+            re.split(r"[\[:]", spec)[0]
+            for spec in re.findall(r"--lock '?([^' ]+)'?", line)
+        }
+        if "." not in lock_dirs:
+            missing.append((workflow, line))
+    assert missing == []
+
+
 def _helper():
     import importlib.util
 

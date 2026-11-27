@@ -755,14 +755,16 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: |
+            uv.lock
             packages/flow/uv.lock
             packages/capture/uv.lock
           cache-suffix: flow-default-at-rest
       - name: Install from the locks
-        # Flow's lock, then Capture's: the in-tree Capture can need newer
-        # dependencies than the published one Flow's lock names.
+        # Root's lock first (for `--editable .` dependencies such as
+        # openadapt-kernel), then Flow's, then Capture's: the in-tree Capture
+        # can need newer dependencies than the published one Flow's lock names.
         run: >-
-          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,capture,agent]' --lock packages/capture
+          python ../../scripts/ci/locked_install.py --lock . --lock 'packages/flow[dev,capture,agent]' --lock packages/capture
           --editable packages/types --editable packages/capture --editable packages/flow --editable packages/agent --editable .
       - name: Install tesseract for the flight scrubber's OCR tests
         # pytesseract comes from Flow's dev extra (locked); this is its binary.
@@ -928,14 +930,16 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: |
+            uv.lock
             packages/flow/uv.lock
             packages/capture/uv.lock
           cache-suffix: flow-unit
       - name: Install from the locks
-        # Flow's lock, then Capture's: the in-tree Capture can need newer
-        # dependencies than the published one Flow's lock names.
+        # Root's lock first (for `--editable .` dependencies such as
+        # openadapt-kernel), then Flow's, then Capture's: the in-tree Capture
+        # can need newer dependencies than the published one Flow's lock names.
         run: >-
-          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,capture,agent]' --lock packages/capture
+          python ../../scripts/ci/locked_install.py --lock . --lock 'packages/flow[dev,capture,agent]' --lock packages/capture
           --editable packages/types --editable packages/capture --editable packages/flow --editable packages/agent --editable .
       - name: Install tesseract for the flight scrubber's OCR tests
         # pytesseract comes from Flow's dev extra (locked); this is its binary.
