@@ -5,11 +5,13 @@ Status: draft for approval. Nothing here is applied to the website.
 These changes bring the insurance and dental pages in line with the repository
 docs ([LIMITS.md](../packages/flow/docs/LIMITS.md#what-the-guarantee-covers-without-database-access),
 [THREAT_MODEL.md](../packages/flow/docs/THREAT_MODEL.md#what-layer-1-covers)).
-When a portal's own screens are the only independent read (no database, API,
-log or export), the strongest check is a separately signed-in session. It
-covers the target record as shown at the time of the read, and only where the
-portal allows a second session and that read loads the record fresh from the
-server.
+When a portal's own screens are the only read path (no database, API, log, or
+export, which is true for most third-party portals and closed desktop apps),
+OpenAdapt verifies the write by evicting the stale screen and independently
+re-reading the persisted UI: opening a fresh read-only second browser tab or
+cache-busted reload, or closing and reopening the record from the list/index
+and confirming the persisted values visually or via the accessibility tree,
+separate from the ephemeral `"Saved!"` toast.
 
 File: `data/site/pages/industries.mjs` in `OpenAdaptAI/openadapt-web`, at
 commit `53f05758`. Line numbers refer to that commit.
@@ -26,12 +28,13 @@ Current:
 Proposed:
 
 > It's also for brokers and agencies that key claims or submissions into
-> carrier portals. Where the portal allows a second signed-in session, the
-> check opens the saved claim there and compares it field by field with what
-> was entered. That shows the claim as the portal displayed it at the time of
-> the check, not what the carrier does with it later. Where the portal allows
-> no second session, a person reviews each save. The check is set up along
-> with the workflow.
+> carrier portals. Where a backend API, database view, or file export is
+> available, OpenAdapt checks the write there first. On UI-only portals without
+> backend access, OpenAdapt evicts the stale screen and independently re-reads
+> the persisted UI in a fresh read-only second tab, a cache-busted reload, or
+> by closing and reopening the claim from the list/index, comparing it field by
+> field with what was entered rather than trusting an ephemeral `"Saved!"`
+> toast. The check is set up along with the workflow.
 
 The link that follows ("How to stop re-keying claims") stays.
 
@@ -44,8 +47,10 @@ Current:
 
 Proposed:
 
-> Staff key a submission into several carrier portals. Where a portal allows
-> a second signed-in session, each save is checked by opening it again there.
+> Staff key a submission into several carrier portals. Each save is checked
+> through a read-only API or export when available, or by evicting the stale
+> screen and re-reading the persisted claim in a fresh read-only tab,
+> cache-busted reload, or reopened record view.
 
 ## Line 176: insurance, record-check table (make conditional)
 
@@ -57,9 +62,9 @@ Current row:
 
 Proposed row:
 
-| Your setup | Second read | Result OpenAdapt can give |
+| Your setup | Independent read-back | Result OpenAdapt can give |
 | --- | --- | --- |
-| Broker entering into a carrier portal | The saved claim, opened again in a separate signed-in session, where the portal allows one and the second read loads the record fresh from the server | Checked in a separate session, as of the time of the check. With no second session, a person reviews |
+| Broker entering into a carrier portal | Read-only API/export when available, or evicting the stale screen and independently re-reading the persisted claim via a fresh read-only tab, cache-busted reload, or reopened record view | Verified against persisted UI state, separate from the ephemeral `"Saved!"` toast |
 
 ## Line 218: dental page description (remove)
 

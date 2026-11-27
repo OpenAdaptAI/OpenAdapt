@@ -406,7 +406,7 @@ When a run reads back correctly, it becomes a draft in the teach dir that `guard
 claude mcp add --scope user openadapt-teach -- uvx --python 3.12 --from 'openadapt-agent[tutorial]' openadapt-agent serve --teach verify.yaml --url https://emr-test.example.org --runs-dir ~/.openadapt/runs
 ```
 
-`verify.yaml` needs only a `verifier:` section that reads the app's records (`rest`, `sql`, `fhir`, `graphql` or `file`), the same file `openadapt-flow record --verify` uses. The first run makes a real entry in the app, so point `--url` at a test copy with test records.
+`verify.yaml` needs only a `verifier:` section that reads the app's records: a backend channel (`rest`, `sql`, `fhir`, `graphql`, or `file`) when available, or independent UI read-back (`ui_readback`, via a fresh read-only second tab, cache-busted reload, or reopened record view) on UI-only portals and closed desktop apps. It is the same file `openadapt-flow record --verify` uses. The first run makes a real entry in the app, so point `--url` at a test copy with test records.
 
 Your agent then:
 

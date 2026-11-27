@@ -141,19 +141,23 @@ Every frame is a screenshot the replayer saved.
 ## How it confirms a save
 
 The right-record check before typing reads the screen, so it needs no other
-access. Confirming the save afterwards needs a way to read the record back.
+access. Confirming the save afterwards uses a tiered read-back check.
 **Check it** asks how for each step that saves:
 
-- From the system's records: an API or database read (REST, GraphQL, FHIR, or
-  SQL), a file, or a document hash. This checks the record from outside the
-  app. IT connects it once per system in the deployment settings file that
-  **Run it** takes.
-- By opening the saved record again on screen, for systems where you have no
-  API or database access. This is a weaker check than an outside read, because
-  it shows only what the app displays.
+- **When a backend channel is available:** a read-only API or database view
+  (REST, GraphQL, FHIR, or SQL), or an exported file/PDF or document hash.
+  Use this first as the strongest check from outside the app. IT connects it
+  once per system in the deployment settings file that **Run it** takes.
+- **When no API, database view, or file access exists** (most third-party
+  portals and closed desktop apps): OpenAdapt verifies the write by evicting
+  the stale screen and independently re-reading the persisted UI, opening a
+  fresh read-only second browser tab or cache-busted reload, or closing and
+  reopening the record from the list/index and confirming the persisted values
+  visually or via the accessibility tree, separate from the ephemeral `"Saved!"`
+  toast.
 
-Without one of these, a completed run shows **Finished, not checked** and
-doesn't count as done.
+Without an independent read-back check, a completed run shows **Finished, not
+checked** and doesn't count as done.
 
 ## Answering a stop from your phone
 
