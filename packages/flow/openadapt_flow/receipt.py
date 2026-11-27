@@ -78,10 +78,30 @@ ReceiptEvidenceClass = Literal[
     "compensation",
 ]
 
+#: Evidence classes carried by signed terminal projections (compensation is
+#: non-VERIFIED and excluded from TerminalEvidenceClass).
+TerminalEvidenceClass = Literal[
+    "authorization",
+    "identity",
+    "postcondition",
+    "effect_tier_1",
+    "effect_tier_2",
+    "effect_tier_3",
+    "effect_tier_4",
+    "model",
+]
+
 #: Weakest effect evidence used to prove any required effect.  Reporting the
 #: weakest tier prevents a strong verifier on one effect from masking weaker
 #: evidence on another.
 ReceiptEffectTier = Literal[
+    "independent_system",
+    "independent_session",
+    "persisted_state_reacquisition",
+    "immediate_screen",
+]
+TerminalEffectTier = Literal[
+    "none",
     "independent_system",
     "independent_session",
     "persisted_state_reacquisition",
@@ -114,6 +134,31 @@ _TIER_NAMES: dict[int, ReceiptEffectTier] = {
     ),
     int(VerificationTier.IMMEDIATE_SCREEN): "immediate_screen",
 }
+_EFFECT_CLASS_TO_TIER: dict[str, ReceiptEffectTier] = {
+    f"effect_tier_{k}": v for k, v in _TIER_NAMES.items()
+}
+
+
+def _allowed_minimum_tiers(profile: object) -> set[int]:
+    return {1, 2} if profile == "regulated" else {1, 2, 3, 4}
+
+
+def _require_profile_effect_floor(
+    profile: str,
+    *,
+    classes: Any = (),
+    tier_name: Optional[str] = None,
+    label: str = "receipt",
+) -> None:
+    if profile == "regulated" and (
+        {"effect_tier_3", "effect_tier_4"}.intersection(classes)
+        or tier_name in {"persisted_state_reacquisition", "immediate_screen"}
+    ):
+        raise ValueError(
+            f"regulated {label} requires independent-session or "
+            "independent-system effect evidence"
+        )
+
 
 ReceiptProfile = Literal["standard", "regulated"]
 #: What the run's authority rests on, when it is not a qualification
@@ -335,15 +380,11 @@ class RunReceipt(BaseModel):
             raise ValueError("VERIFIED receipt lacks postcondition evidence")
         if not any(item.startswith("effect_tier_") for item in self.evidence_classes):
             raise ValueError("VERIFIED receipt lacks effect evidence")
-        if self.profile == "regulated" and (
-            {"effect_tier_3", "effect_tier_4"}.intersection(self.evidence_classes)
-            or self.effect_tier_reached
-            in {"persisted_state_reacquisition", "immediate_screen"}
-        ):
-            raise ValueError(
-                "regulated receipt requires independent-session or "
-                "independent-system effect evidence"
-            )
+        _require_profile_effect_floor(
+            self.profile,
+            classes=self.evidence_classes,
+            tier_name=self.effect_tier_reached,
+        )
         if (
             self.effect_assurance is not None
             and self.effect_assurance != _ASSURANCE_BY_TIER[self.effect_tier_reached]
@@ -649,7 +690,7 @@ def _build_receipt(
         and getattr(report, "governed_authorization_id", None)
         and getattr(report, "governed_runtime_inputs_digest", None)
         and getattr(report, "governed_policy_contract_sha256", None)
-        and minimum_effect_tier in ({1, 2} if profile == "regulated" else {1, 2, 3, 4})
+        and minimum_effect_tier in _allowed_minimum_tiers(profile)
     ):
         raise ReceiptError(
             "run does not carry the complete governed VERIFIED contract "

@@ -53,11 +53,17 @@ from openadapt_flow.qualification_admission_v2 import (
     canonical_json,
 )
 from openadapt_flow.receipt import (
+    _EFFECT_CLASS_TO_TIER,
+    _TIER_NAMES,
     ReceiptError,
     RunReceipt,
+    TerminalEffectTier,
+    TerminalEvidenceClass,
+    _allowed_minimum_tiers,
     _hour_utc,
     _over_halt_count,
     _receipt_builder_version,
+    _require_profile_effect_floor,
     authority_basis,
     build_receipt,
 )
@@ -207,19 +213,9 @@ class ProductionExecutionOutcome(ClosedSignedModel):
     postcondition_evidence: tuple[PostconditionContractEvidence, ...] = Field(
         max_length=10_000
     )
-    evidence_classes: tuple[
-        Literal[
-            "authorization",
-            "identity",
-            "postcondition",
-            "effect_tier_1",
-            "effect_tier_2",
-            "effect_tier_3",
-            "effect_tier_4",
-            "model",
-        ],
-        ...,
-    ] = Field(min_length=1, max_length=8)
+    evidence_classes: tuple[TerminalEvidenceClass, ...] = Field(
+        min_length=1, max_length=8
+    )
     model_calls: StrictInt = Field(ge=0, le=JS_MAX_SAFE_INTEGER)
     external_network_calls: Literal["none", "observed"]
     compensation_actions: StrictInt = Field(default=0, ge=0, le=JS_MAX_SAFE_INTEGER)
@@ -308,13 +304,9 @@ class ProductionExecutionOutcome(ClosedSignedModel):
                 )
             if len(effect_classes) != 1:
                 raise ValueError("terminal VERIFIED outcome requires one effect tier")
-            if self.profile == "regulated" and {
-                "effect_tier_3",
-                "effect_tier_4",
-            }.intersection(effect_classes):
-                raise ValueError(
-                    "regulated terminal outcome requires independent effect evidence"
-                )
+            _require_profile_effect_floor(
+                self.profile, classes=effect_classes, label="terminal outcome"
+            )
         elif self.production_eligible:
             raise ValueError("only a VERIFIED terminal outcome is production eligible")
         elif self.outcome == "HALTED" and self.execution_completed:
@@ -379,26 +371,10 @@ class ProductionRunReceipt(ClosedSignedModel):
         ],
         int,
     ]
-    evidence_classes: tuple[
-        Literal[
-            "authorization",
-            "identity",
-            "postcondition",
-            "effect_tier_1",
-            "effect_tier_2",
-            "effect_tier_3",
-            "effect_tier_4",
-            "model",
-        ],
-        ...,
-    ] = Field(min_length=1, max_length=8)
-    effect_tier_reached: Literal[
-        "none",
-        "independent_system",
-        "independent_session",
-        "persisted_state_reacquisition",
-        "immediate_screen",
-    ]
+    evidence_classes: tuple[TerminalEvidenceClass, ...] = Field(
+        min_length=1, max_length=8
+    )
+    effect_tier_reached: TerminalEffectTier
     authorization_required: StrictInt = Field(ge=1, le=JS_MAX_SAFE_INTEGER)
     authorization_confirmed: StrictInt = Field(ge=1, le=JS_MAX_SAFE_INTEGER)
     identity_required: StrictInt = Field(ge=0, le=JS_MAX_SAFE_INTEGER)
@@ -476,19 +452,13 @@ class ProductionRunReceipt(ClosedSignedModel):
         effect_classes = {
             item for item in self.evidence_classes if item.startswith("effect_tier_")
         }
-        expected_effect_tier = {
-            "effect_tier_1": "independent_system",
-            "effect_tier_2": "independent_session",
-            "effect_tier_3": "persisted_state_reacquisition",
-            "effect_tier_4": "immediate_screen",
-        }
         if self.effects_confirmed == 0:
             if effect_classes or self.effect_tier_reached != "none":
                 raise ValueError("terminal receipt effect evidence is inconsistent")
         elif (
             len(effect_classes) != 1
             or self.effect_tier_reached
-            != (expected_effect_tier[next(iter(effect_classes))])
+            != (_EFFECT_CLASS_TO_TIER[next(iter(effect_classes))])
         ):
             raise ValueError("terminal receipt effect tier is inconsistent")
         if self.transaction_outcome == "VERIFIED":
@@ -502,13 +472,11 @@ class ProductionRunReceipt(ClosedSignedModel):
                 or self.effect_tier_reached == "none"
             ):
                 raise ValueError("VERIFIED terminal receipt is incomplete")
-            if self.profile == "regulated" and self.effect_tier_reached in {
-                "persisted_state_reacquisition",
-                "immediate_screen",
-            }:
-                raise ValueError(
-                    "regulated terminal receipt requires independent effect evidence"
-                )
+            _require_profile_effect_floor(
+                self.profile,
+                tier_name=self.effect_tier_reached,
+                label="terminal receipt",
+            )
             for label, required, confirmed in (
                 (
                     "authorization",
@@ -679,14 +647,7 @@ def project_production_terminal_run_receipt(
             "terminal report lacks exact confirmed effect tiers"
         )
     effect_tier_reached = (
-        {
-            1: "independent_system",
-            2: "independent_session",
-            3: "persisted_state_reacquisition",
-            4: "immediate_screen",
-        }.get(max(confirmed_tiers))
-        if confirmed_tiers
-        else "none"
+        _TIER_NAMES.get(max(confirmed_tiers)) if confirmed_tiers else "none"
     )
     if effect_tier_reached is None:
         raise ProductionTerminalVerificationError(
@@ -2263,7 +2224,7 @@ def build_production_evidence_manifests(
         report.governed_policy_contract_sha256 is None
         or report.governed_runtime_inputs_digest is None
         or report.governed_minimum_effect_tier
-        not in ({1, 2} if report.execution_profile == "regulated" else {1, 2, 3, 4})
+        not in _allowed_minimum_tiers(report.execution_profile)
         or report.governed_authorization_id is None
     ):
         raise ProductionTerminalVerificationError(
