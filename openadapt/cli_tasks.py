@@ -29,6 +29,7 @@ LAUNCHER_TASKS = {
     "mcpify": "Serve compiled workflow packs or JIT plans as a local MCP server",
     "wrap": "Run an agent task once, then reuse its checked compiled tool",
     "test": "Test an agent on real apps with planted faults, for CI",
+    "audit": "Sample verified runs for statistical compliance spot-checks",
 }
 TASKS.update(LAUNCHER_TASKS)
 
