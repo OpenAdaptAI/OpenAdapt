@@ -15,6 +15,8 @@ from openadapt_agent.continuation import (
     CONTINUATION_OUTPUT_SCHEMA,
     HUMAN_REVIEW_SURFACES,
     ContinuationDesk,
+    ContinuationError,
+    FlowResumeExecutor,
     HaltContinuationRecord,
     redact_parameters,
 )
@@ -517,16 +519,17 @@ def test_audit_entry_redacts_secret_and_credential_parameters(tmp_path):
         },
         missing_parameters=["portal_api_key", "note"],
     )
+    secret_val = "sk_" + "live_secret_value_999"
     res = desk.continue_halted_run(
         resume_token=packet["resume_token"],
-        parameters={"portal_api_key": "sk_live_secret_value_999", "note": "ok"},
+        parameters={"portal_api_key": secret_val, "note": "ok"},
     )
     assert res["continued"] is True
     audit = desk.read_audit_entry(res["audit_id"])
     assert audit is not None
     assert audit["supplied_parameters"]["portal_api_key"] == "[REDACTED]"
     assert audit["supplied_parameters"]["note"] == "ok"
-    assert "sk_live_secret_value_999" not in desk.audit_log_path.read_text(encoding="utf-8")
+    assert secret_val not in desk.audit_log_path.read_text(encoding="utf-8")
 
 
 # -- MCP server end-to-end integration tests -----------------------------------
@@ -587,6 +590,10 @@ def test_mcp_server_exposes_and_executes_continue_halted_run(
     tools, ok_res, refused_res = anyio.run(probe)
     names = [t["name"] for t in tools]
     assert "continue_halted_run" in names
+    cont_tool = next(t for t in tools if t["name"] == "continue_halted_run")
+    assert cont_tool["annotations"]["destructiveHint"] is True
+    assert cont_tool["annotations"]["idempotentHint"] is False
+    assert cont_tool["annotations"]["readOnlyHint"] is False
 
     assert ok_res["isError"] is False
     ok_payload = json.loads(ok_res["content"][0]["text"])
@@ -607,3 +614,116 @@ def test_continue_halted_run_hidden_and_refused_when_runs_disabled(bundles_root,
     assert "continue_halted_run" not in {spec.name for spec in bridge.list_tool_specs()}
     with pytest.raises(BridgeError, match="unavailable"):
         bridge.dispatch("continue_halted_run", {"resume_token": "rtok_disabled_0001"})
+
+
+def test_executor_failure_writes_audit_entry_and_consumes_token_once(tmp_path):
+    class FailingExecutor:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def resume_halted_run(self, **_kwargs) -> dict[str, Any]:
+            self.calls += 1
+            raise RuntimeError("backend connection dropped during resume")
+
+    executor = FailingExecutor()
+    desk = ContinuationDesk(tmp_path / "runs", executor=executor)
+    packet = desk.register_halt(
+        run_id="run-fail-001",
+        halt_id="halt-fail-01",
+        workflow="submit_referral",
+        halt_class="missing_parameter",
+        step_id="step_2_note",
+        checkpoint_id="ckpt-1",
+        parameter_schema={"note": {"type": "string"}},
+        missing_parameters=["note"],
+    )
+
+    with pytest.raises(ContinuationError, match="backend connection dropped during resume"):
+        desk.continue_halted_run(
+            resume_token=packet["resume_token"],
+            parameters={"note": "Attempt 1"},
+        )
+
+    assert executor.calls == 1
+    entries = desk.list_audit_entries()
+    assert len(entries) == 1
+    assert entries[0]["decision"] == "executor_error"
+    assert entries[0]["refusal_code"] == "executor_error"
+    assert entries[0]["run_id"] == "run-fail-001"
+    assert entries[0]["halt_id"] == "halt-fail-01"
+    assert entries[0]["resumed_from_step"] == "step_2_note"
+
+    # Token is already consumed and linked to the audit entry; second call must refuse.
+    persisted = json.loads(
+        desk._record_path("run-fail-001", "halt-fail-01").read_text(encoding="utf-8")
+    )
+    assert persisted["consumed"] is True
+    assert persisted["consumed_audit_id"] == entries[0]["audit_id"]
+
+    second = desk.continue_halted_run(
+        resume_token=packet["resume_token"],
+        parameters={"note": "Attempt 2"},
+    )
+    assert second["continued"] is False
+    assert second["error"] == "human_sign_off_required"
+    assert second["reason"] == "token_reused"
+    assert executor.calls == 1
+
+
+def test_flow_resume_executor_refuses_symlink_and_out_of_tree_run_dir(tmp_path):
+    class DummyRunner:
+        def __init__(self) -> None:
+            self.resumed: list[str] = []
+
+        def resume(self, *, run_dir, **_kwargs) -> dict[str, Any]:
+            self.resumed.append(str(run_dir))
+            return {"outcome": "done"}
+
+    runs_dir = tmp_path / "runs"
+    runs_dir.mkdir()
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    inside_dir = runs_dir / "run-ok-001"
+    inside_dir.mkdir()
+    symlink_dir = runs_dir / "run-link-001"
+    symlink_dir.symlink_to(outside_dir)
+
+    runner = DummyRunner()
+    executor = FlowResumeExecutor(runner, runs_dir=runs_dir)
+
+    def _record_for(path) -> HaltContinuationRecord:
+        return HaltContinuationRecord(
+            run_id="run-path-001",
+            halt_id="halt-path-01",
+            workflow="demo",
+            halt_class="transient_network",
+            step_id="step_1",
+            run_dir=str(path),
+        )
+
+    with pytest.raises(ContinuationError, match="symlink"):
+        executor.resume_halted_run(
+            record=_record_for(symlink_dir),
+            supplied_parameters={},
+            merged_parameters={},
+            retry_transient=True,
+        )
+
+    with pytest.raises(ContinuationError, match="outside"):
+        executor.resume_halted_run(
+            record=_record_for(outside_dir),
+            supplied_parameters={},
+            merged_parameters={},
+            retry_transient=True,
+        )
+
+    assert runner.resumed == []
+
+    ok = executor.resume_halted_run(
+        record=_record_for(inside_dir),
+        supplied_parameters={},
+        merged_parameters={},
+        retry_transient=True,
+    )
+    assert ok == {"outcome": "done"}
+    assert runner.resumed == [str(inside_dir.resolve())]

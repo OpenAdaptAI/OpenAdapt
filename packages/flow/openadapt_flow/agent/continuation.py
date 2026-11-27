@@ -31,6 +31,7 @@ Security and durability invariants:
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -783,8 +784,11 @@ class ContinuationExecutor(Protocol):
 class FlowResumeExecutor:
     """Default executor that resumes a paused Flow run directory from its checkpoint."""
 
-    def __init__(self, runner: Any) -> None:
+    def __init__(self, runner: Any, *, runs_dir: Optional[Path | str] = None) -> None:
         self.runner = runner
+        self.runs_dir = (
+            Path(runs_dir).expanduser().resolve() if runs_dir is not None else None
+        )
 
     def resume_halted_run(
         self,
@@ -799,7 +803,14 @@ class FlowResumeExecutor:
             raise ContinuationError(
                 "halted run has no persisted run_dir available for checkpoint resume"
             )
-        run_dir = Path(record.run_dir)
+        raw_path = Path(record.run_dir)
+        if raw_path.is_symlink():
+            raise ContinuationError("halted run directory must not be a symlink")
+        run_dir = raw_path.resolve()
+        if self.runs_dir is not None and not run_dir.is_relative_to(self.runs_dir):
+            raise ContinuationError(
+                "halted run directory resolves outside the server runs directory"
+            )
         if not run_dir.is_dir():
             raise ContinuationError(
                 "halted run directory does not exist on this server"
@@ -950,7 +961,10 @@ class ContinuationDesk:
                 return None, None, "malformed resume_token"
             token_sha = _sha256_text(resume_token)
             index = _read_json(self._token_index_path(token_sha))
-            if index is None or index.get("token_sha256") != token_sha:
+            index_sha = index.get("token_sha256") if index is not None else None
+            if not isinstance(index_sha, str) or not hmac.compare_digest(
+                index_sha, token_sha
+            ):
                 return None, token_sha, "unknown resume_token"
             rec_data = _read_json(
                 self._record_path(str(index["run_id"]), str(index["halt_id"]))
@@ -958,7 +972,9 @@ class ContinuationDesk:
             token_record = (
                 HaltContinuationRecord.from_dict(rec_data) if rec_data else None
             )
-            if token_record is None or token_record.resume_token_sha256 != token_sha:
+            if token_record is None or not hmac.compare_digest(
+                token_record.resume_token_sha256, token_sha
+            ):
                 return None, token_sha, "unknown resume_token"
 
         if run_id is not None or halt_id is not None:
@@ -1179,13 +1195,39 @@ class ContinuationDesk:
                 consumed_record.to_dict(),
             )
 
-            resumed_result = self.executor.resume_halted_run(
-                record=record,
-                supplied_parameters=supplied,
-                merged_parameters=merged,
-                retry_transient=retry_transient,
-                wait_seconds=wait_seconds,
-            )
+            try:
+                resumed_result = self.executor.resume_halted_run(
+                    record=record,
+                    supplied_parameters=supplied,
+                    merged_parameters=merged,
+                    retry_transient=retry_transient,
+                    wait_seconds=wait_seconds,
+                )
+            except Exception as exc:
+                audit = self._record_audit(
+                    run_id=record.run_id,
+                    halt_id=record.halt_id,
+                    resume_token_sha256=token_sha or record.resume_token_sha256,
+                    halt_class=record.halt_class,
+                    retry_transient=retry_transient,
+                    supplied_parameters=supplied,
+                    decision="executor_error",
+                    refusal_code="executor_error",
+                    resumed_from_step=record.step_id,
+                    resumed_from_checkpoint=record.checkpoint_id,
+                    now=current_time,
+                )
+                failed_record = HaltContinuationRecord(
+                    **{
+                        **consumed_record.__dict__,
+                        "consumed_audit_id": audit["audit_id"],
+                    }
+                )
+                _write_json_atomic(
+                    self._record_path(record.run_id, record.halt_id),
+                    failed_record.to_dict(),
+                )
+                raise ContinuationError(str(exc)) from exc
 
             audit = self._record_audit(
                 run_id=record.run_id,

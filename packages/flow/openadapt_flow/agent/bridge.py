@@ -293,7 +293,10 @@ class AgentBridge:
     def continuation_desk(self) -> ContinuationDesk:
         """Mid-run continuation store and policy gate, created on first use."""
         if self._continuation_desk is None:
-            executor = self._continuation_executor or FlowResumeExecutor(self.runner)
+            executor = self._continuation_executor or FlowResumeExecutor(
+                self.runner,
+                runs_dir=self.runner_config.runs_dir,
+            )
             self._continuation_desk = ContinuationDesk(
                 self.runner_config.runs_dir,
                 executor=executor,
@@ -432,12 +435,7 @@ class AgentBridge:
                     "parameter overwrites."
                 ),
                 input_schema=CONTINUATION_INPUT_SCHEMA,
-                annotations={
-                    "readOnlyHint": False,
-                    "destructiveHint": False,
-                    "idempotentHint": True,
-                    "openWorldHint": True,
-                },
+                annotations=_RUN_ANNOTATIONS,
                 output_schema=CONTINUATION_OUTPUT_SCHEMA,
                 usage=(
                     "continue_halted_run needs resume_token (or both run_id "
