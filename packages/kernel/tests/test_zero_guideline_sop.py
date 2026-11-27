@@ -39,6 +39,8 @@ def test_discover_case_evidence_tabs_blocks_until_all_tabs_read() -> None:
         {"role": "region", "tag": "section", "aria-label": "Plan Coverage Details"},
         {"role": "button", "tag": "button", "label": "Submit Disposition"},
         {"role": "button", "tag": "button", "label": "Cancel"},
+        {"role": "button", "tag": "button", "label": "Cosign w/o Note"},
+        {"role": "button", "tag": "button", "label": "Toggle Sidebar"},
     ]
 
     partial_tabs = discover_case_evidence_tabs(dom_controls, visited_labels=["Case Summary"])

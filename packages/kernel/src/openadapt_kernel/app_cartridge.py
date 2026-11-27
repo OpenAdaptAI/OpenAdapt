@@ -65,7 +65,7 @@ _EVIDENCE_AFFORDANCE_TOKENS: FrozenSet[str] = frozenset(
     "pdf plan policy remittance summary supporting timeline".split()
 )
 _COMMIT_ACTION_EXCLUDES: FrozenSet[str] = frozenset(
-    {"submit", "save", "delete", "logout", "cancel", "close", "reset"}
+    {"submit", "save", "delete", "logout", "cancel", "close", "reset", "cosign", "sign", "sidebar"}
 )
 _AFFORDANCE_STOPWORDS: FrozenSet[str] = frozenset(
     {"a", "an", "and", "by", "enter", "field", "for", "if", "in", "input", "is", "of", "on", "or",
