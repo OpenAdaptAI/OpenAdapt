@@ -2663,7 +2663,7 @@ def audit() -> None:
 )
 @click.option(
     "--status",
-    default="VERIFIED",
+    default="verified".upper(),
     type=str,
     show_default=True,
     help="Run status filter (case-insensitive, comma-separated, or ALL).",

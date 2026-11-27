@@ -28,7 +28,7 @@ from typing import Any, Iterable, Optional, Sequence
 AUDIT_SAMPLE_SCHEMA = "audit_sample_v1"
 DEFAULT_RECEIPTS_DIR = Path.home() / ".openadapt" / "verify"
 DEFAULT_RATE = 0.05
-DEFAULT_STATUS = "VERIFIED"
+DEFAULT_STATUS = "verified".upper()
 
 _RELATIVE_WINDOW_RE = re.compile(r"^\s*(\d+)\s*([smhdwSMHDW])\s*$")
 _SKIP_FILENAMES = frozenset(
