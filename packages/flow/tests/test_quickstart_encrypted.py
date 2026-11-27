@@ -51,6 +51,7 @@ def fresh_machine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         at_rest.MODE_ENV,
         at_rest.ENCRYPT_ENV,
         at_rest.HOME_ENV,
+        "OPENADAPT_HOME",
         crypto.ENV_KEY,
         sealed_set.RECORDING_ENV_KEY,
         "OPENADAPT_BUNDLE_KEY",
