@@ -29,7 +29,7 @@ import json
 import os
 import tempfile
 import threading
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -530,6 +530,7 @@ class _LedgerEntry:
     checked_how: str = "unchecked"
     reason: str = ""
     updated_at: str = ""
+    previous: _LedgerEntry | None = None
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -670,9 +671,22 @@ class WrapLedger:
                     arguments_sha256=arguments_sha256,
                     state=_LedgerState.IN_FLIGHT,
                     updated_at=_utc_now_iso(),
+                    previous=existing,
                 )
                 self._persist()
             return "proceed", None
+
+    def abort_in_flight(self, key: str) -> None:
+        """Roll back an IN_FLIGHT reservation when preflight aborts before dispatch."""
+        with self._lock:
+            current = self._entries.get(key)
+            if current is None or current.state is not _LedgerState.IN_FLIGHT:
+                return
+            if current.previous is not None:
+                self._entries[key] = current.previous
+            else:
+                self._entries.pop(key, None)
+            self._persist()
 
     def record_completed(
         self,
@@ -745,7 +759,13 @@ class WrapLedger:
             )
             self._persist()
 
-    def release(self, key: str | None = None, *, action: str | None = None) -> int:
+    def release(
+        self,
+        key: str | None = None,
+        *,
+        action: str | None = None,
+        actions: Collection[str] | None = None,
+    ) -> int:
         """Clear latched uncertain or refuted entries so a reconciled retry can run."""
         with self._lock:
             if key is not None:
@@ -753,6 +773,7 @@ class WrapLedger:
                 if removed:
                     self._persist()
                 return removed
+            allowed_actions = set(actions) if actions is not None else None
             to_delete = [
                 k
                 for k, entry in self._entries.items()
@@ -763,6 +784,7 @@ class WrapLedger:
                     _LedgerState.IN_FLIGHT,
                 )
                 and (action is None or entry.action == action)
+                and (allowed_actions is None or entry.action in allowed_actions)
             ]
             for k in to_delete:
                 self._entries.pop(k, None)
@@ -942,8 +964,14 @@ def _run_sync_check(
         close = getattr(raw, "close", None)
         if callable(close):
             close()
-        raise TypeError(
+        err = TypeError(
             "async check callable requires wrapping an async coroutine function"
+        )
+        return (
+            "unknown",
+            default_checked_how,
+            f"post-action check returned awaitable: {err}",
+            err,
         )
     outcome, how, reason = _interpret_check_output(raw, default_checked_how)
     return outcome, how, reason, None
@@ -1154,11 +1182,14 @@ class _CallableGuard:
         block_mode: _BlockMode,
         unverified_mode: _BlockMode,
         signing_key: Any,
-        on_receipt: Callable[[WrapReceipt], None] | None = None,
+        on_receipt: Callable[[WrapReceipt | None], None] | None = None,
     ) -> None:
         self.fn = fn
         self.action_name = action_name
         self.check_fn = check_fn
+        self.check_is_async = bool(
+            check_fn is not None and _is_async_callable(check_fn)
+        )
         self.check_arity = (
             _callable_check_arity(check_fn) if check_fn is not None else "one"
         )
@@ -1209,6 +1240,11 @@ class _CallableGuard:
                     ):
                         self.required_missing_pins[p_name] = self.pinned[p_name]
             self.param_names = frozenset(names)
+
+    def _clear_receipt(self) -> None:
+        self.last_receipt = None
+        if self.on_receipt is not None:
+            self.on_receipt(None)
 
     def _emit_receipt(self, receipt: WrapReceipt) -> WrapReceipt:
         self.last_receipt = receipt
@@ -1274,13 +1310,20 @@ class _CallableGuard:
                 working_kwargs.pop("request_id", None)
 
         extra_pinned_supplied: dict[str, Any] = {}
+        extra_identity_supplied: dict[str, Any] = {}
         if not self.has_var_keyword and self.signature is not None:
             for p_key in list(working_kwargs):
-                if p_key in self.pinned and p_key not in self.param_names:
-                    extra_pinned_supplied[p_key] = working_kwargs.pop(p_key)
+                if p_key not in self.param_names:
+                    if p_key in self.pinned:
+                        extra_pinned_supplied[p_key] = working_kwargs.pop(p_key)
+                    elif p_key in self.identity_keys:
+                        extra_identity_supplied[p_key] = working_kwargs.pop(p_key)
 
         flat_args: dict[str, Any] = {}
-        explicit_supplied: dict[str, Any] = dict(extra_pinned_supplied)
+        explicit_supplied: dict[str, Any] = {
+            **extra_pinned_supplied,
+            **extra_identity_supplied,
+        }
         call_args = args
         call_kwargs = working_kwargs
 
@@ -1313,23 +1356,28 @@ class _CallableGuard:
             flat_args.update(call_kwargs)
             explicit_supplied.update(call_kwargs)
 
-        canonical_arg_payload = {
-            "action": self.action_name,
-            "arguments": flat_args,
-            "pinned": self.pinned,
-        }
-        arguments_sha256 = _sha256_hex(canonical_arg_payload)
-        request_key = explicit_request_id or arguments_sha256
-
         identity: dict[str, Any] = {}
         declared_by: dict[str, str] = {}
         for k, pin_val in self.pinned.items():
             identity[k] = pin_val
             declared_by[k] = "operator"
         for id_key in self.identity_keys:
-            if id_key not in identity and id_key in flat_args:
-                identity[id_key] = flat_args[id_key]
-                declared_by[id_key] = "caller"
+            if id_key not in identity:
+                if id_key in flat_args:
+                    identity[id_key] = flat_args[id_key]
+                    declared_by[id_key] = "caller"
+                elif id_key in extra_identity_supplied:
+                    identity[id_key] = extra_identity_supplied[id_key]
+                    declared_by[id_key] = "caller"
+
+        canonical_arg_payload = {
+            "action": self.action_name,
+            "arguments": flat_args,
+            "pinned": self.pinned,
+            "identity": identity,
+        }
+        arguments_sha256 = _sha256_hex(canonical_arg_payload)
+        request_key = explicit_request_id or arguments_sha256
 
         # 1. Enforce operator-pinned keys before any side effect can execute.
         for pin_key, expected_val in self.pinned.items():
@@ -1607,6 +1655,11 @@ class _CallableGuard:
         raise err
 
     def call_sync(self, *args: Any, **kwargs: Any) -> Any:
+        self._clear_receipt()
+        if self.check_is_async:
+            raise TypeError(
+                "async check callable requires wrapping an async coroutine function"
+            )
         try:
             plan = self._prepare_call(args, kwargs)
         except _PreCallRefusal as stop:
@@ -1630,7 +1683,7 @@ class _CallableGuard:
                     plan.flat_args, self.pinned, plan.explicit_request_id
                 )
             except WrapBlockedError as exc:
-                self.ledger.release(plan.request_key)
+                self.ledger.abort_in_flight(plan.request_key)
                 return self._refuse(
                     reason=exc.reason,
                     code=exc.code,
@@ -1643,16 +1696,27 @@ class _CallableGuard:
 
         try:
             value = self.fn(*plan.call_args, **plan.call_kwargs)
-            if inspect.isawaitable(value):
-                close = getattr(value, "close", None)
-                if callable(close):
-                    close()
-                raise TypeError(
-                    f"{self.action_name} returned an awaitable; define it with async def"
-                )
         except BaseException as exc:
             self._record_midflight_exception(plan, exc, pending_contract)
             raise
+
+        if inspect.iscoroutine(value):
+            value.close()
+            self.ledger.abort_in_flight(plan.request_key)
+            if self.contract_bridge is not None and pending_contract is not None:
+                self.contract_bridge.verify(pending_contract, attempted=False)
+            raise TypeError(
+                f"{self.action_name} returned an unawaited coroutine; define it with async def"
+            )
+        if inspect.isawaitable(value):
+            close = getattr(value, "close", None)
+            if callable(close):
+                close()
+            awaitable_err = TypeError(
+                f"{self.action_name} returned an awaitable; define it with async def"
+            )
+            self._record_midflight_exception(plan, awaitable_err, pending_contract)
+            raise awaitable_err
 
         outcome = WrapOutcome.UNCHECKED
         how = self.default_checked_how
@@ -1682,7 +1746,7 @@ class _CallableGuard:
                 )
             )
             outcome = c_outcome
-            if self.contract_bridge is None:
+            if self.contract_bridge is None or c_outcome is not WrapOutcome.CONFIRMED:
                 how = c_how
             if c_reason:
                 reason = c_reason
@@ -1698,6 +1762,7 @@ class _CallableGuard:
         )
 
     async def call_async(self, *args: Any, **kwargs: Any) -> Any:
+        self._clear_receipt()
         try:
             plan = self._prepare_call(args, kwargs)
         except _PreCallRefusal as stop:
@@ -1724,7 +1789,7 @@ class _CallableGuard:
                     plan.explicit_request_id,
                 )
             except WrapBlockedError as exc:
-                self.ledger.release(plan.request_key)
+                self.ledger.abort_in_flight(plan.request_key)
                 return self._refuse(
                     reason=exc.reason,
                     code=exc.code,
@@ -1774,7 +1839,7 @@ class _CallableGuard:
                 )
             )
             outcome = c_outcome
-            if self.contract_bridge is None:
+            if self.contract_bridge is None or c_outcome is not WrapOutcome.CONFIRMED:
                 how = c_how
             if c_reason:
                 reason = c_reason
@@ -1826,8 +1891,19 @@ def _build_wrapped_callable(
     block_mode: _BlockMode,
     unverified_mode: _BlockMode,
     signing_key: Any,
-    on_receipt: Callable[[WrapReceipt], None] | None = None,
+    on_receipt: Callable[[WrapReceipt | None], None] | None = None,
+    allow_sync_with_async_check: bool = False,
 ) -> Callable[..., Any]:
+    is_async_fn = _is_async_callable(fn)
+    if (
+        not is_async_fn
+        and check_fn is not None
+        and _is_async_callable(check_fn)
+        and not allow_sync_with_async_check
+    ):
+        raise TypeError(
+            "async check callable requires wrapping an async coroutine function"
+        )
     assigned = tuple(a for a in functools.WRAPPER_ASSIGNMENTS if hasattr(fn, a))
 
     def _attach_wrapper_attrs(wrapper: Any, guard: _CallableGuard) -> Any:
@@ -1847,13 +1923,13 @@ def _build_wrapped_callable(
         )
         return wrapper
 
-    if _is_async_callable(fn):
+    if is_async_fn:
 
         @functools.wraps(fn, assigned=assigned)
         async def _async_wrapped(*args: Any, **kwargs: Any) -> Any:
             return await guard.call_async(*args, **kwargs)
 
-        def _update_async_receipt(receipt: WrapReceipt) -> None:
+        def _update_async_receipt(receipt: WrapReceipt | None) -> None:
             _async_wrapped.last_receipt = receipt  # type: ignore[attr-defined]
             if on_receipt is not None:
                 on_receipt(receipt)
@@ -1881,7 +1957,7 @@ def _build_wrapped_callable(
     def _sync_wrapped(*args: Any, **kwargs: Any) -> Any:
         return guard.call_sync(*args, **kwargs)
 
-    def _update_sync_receipt(receipt: WrapReceipt) -> None:
+    def _update_sync_receipt(receipt: WrapReceipt | None) -> None:
         _sync_wrapped.last_receipt = receipt  # type: ignore[attr-defined]
         if on_receipt is not None:
             on_receipt(receipt)
@@ -1933,43 +2009,67 @@ class WrappedAgentProxy:
         object.__setattr__(self, "identity_keys", identity_keys)
         object.__setattr__(self, "last_receipt", None)
 
-        wrapped_methods: list[str] = []
-
-        def _record_agent_receipt(receipt: WrapReceipt) -> None:
-            object.__setattr__(self, "last_receipt", receipt)
-
+        candidate_methods: list[tuple[str, Callable[..., Any]]] = []
         for method_name in ("run", "arun", "step", "astep"):
             raw_method = getattr(target, method_name, None)
             if callable(raw_method):
-                wrapped_methods.append(method_name)
-                wrapped_fn = _build_wrapped_callable(
-                    raw_method,
-                    action_name=f"{base_name}.{method_name}",
-                    check_fn=check_fn,
-                    checked_how=checked_how,
-                    pinned=pinned,
-                    identity_keys=identity_keys,
-                    contract_bridge=contract_bridge,
-                    ledger=ledger,
-                    idempotent=idempotent,
-                    block_uncertain_retries=block_uncertain_retries,
-                    return_receipt=return_receipt,
-                    block_mode=block_mode,
-                    unverified_mode=unverified_mode,
-                    signing_key=signing_key,
-                    on_receipt=_record_agent_receipt,
-                )
-                object.__setattr__(self, method_name, wrapped_fn)
+                candidate_methods.append((method_name, raw_method))
 
-        if not wrapped_methods:
+        if not candidate_methods:
             raise TypeError(
                 "openadapt.wrap target must be callable or expose a callable .run or .step method"
             )
+
+        has_async_method = any(_is_async_callable(m) for _, m in candidate_methods)
+        if (
+            check_fn is not None
+            and _is_async_callable(check_fn)
+            and not has_async_method
+        ):
+            raise TypeError(
+                "async check callable requires wrapping an async coroutine function"
+            )
+
+        wrapped_methods: list[str] = []
+        action_names: list[str] = []
+
+        def _record_agent_receipt(receipt: WrapReceipt | None) -> None:
+            object.__setattr__(self, "last_receipt", receipt)
+
+        for method_name, raw_method in candidate_methods:
+            wrapped_methods.append(method_name)
+            action_name = f"{base_name}.{method_name}"
+            action_names.append(action_name)
+            wrapped_fn = _build_wrapped_callable(
+                raw_method,
+                action_name=action_name,
+                check_fn=check_fn,
+                checked_how=checked_how,
+                pinned=pinned,
+                identity_keys=identity_keys,
+                contract_bridge=contract_bridge,
+                ledger=ledger,
+                idempotent=idempotent,
+                block_uncertain_retries=block_uncertain_retries,
+                return_receipt=return_receipt,
+                block_mode=block_mode,
+                unverified_mode=unverified_mode,
+                signing_key=signing_key,
+                on_receipt=_record_agent_receipt,
+                allow_sync_with_async_check=has_async_method,
+            )
+            object.__setattr__(self, method_name, wrapped_fn)
+
         object.__setattr__(self, "_wrapped_methods", tuple(wrapped_methods))
+        object.__setattr__(self, "_action_names", frozenset(action_names))
 
     def release(self, key: str | None = None) -> int:
         """Release a latched uncertain or refuted write key on this wrapped agent."""
-        return self.ledger.release(key)
+        action_names = object.__getattribute__(self, "_action_names")
+        return self.ledger.release(
+            key,
+            actions=None if key is not None else action_names,
+        )
 
     def __getattr__(self, item: str) -> Any:
         return getattr(object.__getattribute__(self, "__wrapped__"), item)

@@ -537,3 +537,115 @@ def test_callable_agent_instance_and_expect_predicate() -> None:
     assert out == "ran:PT-104:summarize visit"
     assert wrapped_agent.last_receipt.outcome == "confirmed"
     assert wrapped_agent.last_receipt.checked_how == "same_screen"
+
+
+def test_async_check_on_sync_target_and_dynamic_awaitable_handling() -> None:
+    """Async checks reject sync targets up front and latch safely on dynamic awaitables."""
+    calls: list[str] = []
+
+    def sync_write(record_id: str) -> bool:
+        calls.append(record_id)
+        return True
+
+    async def async_check(_out: Any) -> bool:
+        await asyncio.sleep(0)
+        return True
+
+    with pytest.raises(TypeError, match="async check callable"):
+        openadapt.wrap(sync_write, check=async_check)
+    assert calls == []
+
+    # Dynamic awaitable returned from a non-async check after sync_write ran
+    # must latch UNCERTAIN and emit a fresh uncertain receipt rather than leaving
+    # IN_FLIGHT stuck or last_receipt stale.
+    def sneaky_check(_out: Any) -> Any:
+        return async_check(_out)
+
+    guarded = openadapt.wrap(sync_write, check=sneaky_check, idempotent=True)
+    with pytest.raises(WrapVerificationError) as exc_info:
+        guarded("R-100")
+    assert calls == ["R-100"]
+    assert exc_info.value.code == "verification_uncertain"
+    assert guarded.last_receipt is not None
+    assert guarded.last_receipt.outcome == "uncertain"
+    assert guarded.last_receipt.dispatched is True
+
+    # Retry is blocked by the uncertain latch rather than stuck in_flight
+    with pytest.raises(WrapBlockedError) as retry_exc:
+        guarded("R-100")
+    assert retry_exc.value.code == "uncertain_write_blocked"
+
+
+def test_unstarted_coroutine_from_sync_wrapper_does_not_latch_dispatched() -> None:
+    """A sync wrapper returning an unawaited coroutine closes it without latching uncertain."""
+
+    async def inner_coro(x: int) -> int:
+        return x + 1
+
+    # Sync lambda returning a coroutine object
+    bad_sync = openadapt.wrap(lambda x: inner_coro(x), idempotent=True)
+    with pytest.raises(TypeError, match="unawaited coroutine"):
+        bad_sync(5)
+    assert bad_sync.last_receipt is None
+
+
+def test_stale_last_receipt_cleared_on_bind_errors_and_extra_identity_kwargs() -> None:
+    """Argument binding errors clear last_receipt, and zero-arg UI helpers accept identity_keys."""
+    clicks: list[str] = []
+
+    def click_apply() -> dict[str, bool]:
+        clicks.append("clicked")
+        return {"applied": True}
+
+    safe_click = openadapt.wrap(
+        click_apply,
+        identity_keys=["patient_id"],
+        idempotent=True,
+        check=lambda r: r["applied"] is True,
+    )
+
+    assert safe_click(patient_id="PT-104") == {"applied": True}
+    assert safe_click.last_receipt is not None
+    assert safe_click.last_receipt.identity["patient_id"] == "PT-104"
+    first_key = safe_click.last_receipt.request_key
+
+    # Distinct identity_key on zero-arg helper gets a distinct request_key
+    assert safe_click(patient_id="PT-205") == {"applied": True}
+    assert safe_click.last_receipt is not None
+    assert safe_click.last_receipt.request_key != first_key
+    assert len(clicks) == 2
+
+    # Invalid call clears stale last_receipt before raising TypeError / ValueError
+    with pytest.raises(ValueError, match="request_id"):
+        safe_click(patient_id="PT-205", request_id="   ")
+    assert safe_click.last_receipt is None
+
+
+def test_agent_proxy_release_scopes_to_agent_actions_on_shared_ledger() -> None:
+    """WrappedAgentProxy.release() only clears its own actions in a shared ledger."""
+    shared = WrapLedger()
+
+    class FailingAgent:
+        def run(self, task: str) -> dict[str, bool]:
+            return {"ok": False}
+
+    @openadapt.wrap(ledger=shared, check=lambda r: r["ok"] is True)
+    def other_tool(item: str) -> dict[str, bool]:
+        return {"ok": False}
+
+    wrapped_agent = openadapt.wrap(
+        FailingAgent(),
+        ledger=shared,
+        check=lambda r: r["ok"] is True,
+    )
+
+    with pytest.raises(WrapVerificationError):
+        other_tool("item-1")
+    with pytest.raises(WrapVerificationError):
+        wrapped_agent.run("task-1")
+
+    assert wrapped_agent.release() == 1
+    # other_tool remains latched in the shared ledger
+    with pytest.raises(WrapBlockedError) as blocked_other:
+        other_tool("item-1")
+    assert blocked_other.value.code == "refuted_write_blocked"
