@@ -278,6 +278,7 @@ improvising or retrying when something is off.
 | Citrix from outside the session, pixels only (`remote_display`), the fallback when nothing can be installed inside | Exploratory | A Citrix stand-in with no DOM: 3 healthy runs, 3 stops on drift | [LIMITS.md](packages/flow/docs/LIMITS.md) |
 | Chain programs across surfaces, passing confirmed values | Released | Synthetic | `openadapt-flow compose`, `process`; [PROCESS_CONTRACT.md](packages/flow/docs/PROCESS_CONTRACT.md) |
 | One program that switches surfaces, tabs and popups mid-run | Released ([#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197)) | Real Chromium; Windows switch on a mock | [#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197) |
+| Qualify a native Windows program with the normal case and five faults through an opt-in authenticated agent; bind the observed executable and machine/OS environment and judge declared inserts or field updates from complete record snapshots | In this change | Synthetic unit and transport tests; real Windows campaign evidence required before release | `qualify/windows.py`, `qualify/record_oracle.py`, [QUALIFY_A_WORKFLOW.md](packages/flow/docs/QUALIFY_A_WORKFLOW.md) |
 | Record and replay native or listed browser choices using one generic contract; require one enabled semantic match and exact committed-field read-back, and refuse unmapped held-out labels before selection; retain browser dialog answers with producer-document and dialog-kind checks | Experimental, PR [#2295](https://github.com/OpenAdaptAI/OpenAdapt/pull/2295) | Synthetic Chromium fixtures cover native, ARIA, plain lists, searchable libraries, asynchronous options, cascades and calendars; historical measurement SHAs and configurations are listed separately. Real-app evidence is partial: OpenEMR native choices read back, and OpenMRS relationship choices recorded/compiled; neither completed a verified save because an existing identity guard stopped the run. Governed receipt-bound choices refuse before input. | [CHOICES.md](packages/flow/docs/CHOICES.md), [benchmark/choice_widgets](packages/flow/benchmark/choice_widgets/README.md) |
 | Halt when a workflow qualified with page structure runs on a pixels-only surface | Released | Synthetic | `openadapt-flow qualify` |
 | Stop before acting when another shown row has the same identity; when the rows carry an app-owned record id (a `data-*` id, the row link), act on the row with the recorded id; on a surface that cannot count the rows, stop before any step that leads into a write | Released ([#1504](https://github.com/OpenAdaptAI/OpenAdapt/pull/1504)) | Real browser (headless Chromium worklist with identical rows) | `runtime/identity_census.py`; `PlaywrightBackend.identity_candidates_at` |
@@ -602,10 +603,10 @@ A test fails when a command has no file or this list is out of date.
   [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back).
 - **openIMIS claims.** On a test copy of openIMIS, the open-source insurance
   and claims system that runs Nepal's national health insurance scheme, the
-  compiled program entered 149 synthetic claims with no model calls: 148 read
-  back correct and none were saved wrong. Each saved claim was read back by
-  SQL through a read-only database role on the test copy; the 149th stopped
-  before saving:
+  compiled program ran 200 synthetic claims: 148 completed and verified with no
+  model calls, 50 paused for human review, 2 stopped, and 0 saved wrong. Each
+  saved claim was read back by SQL through a read-only database role on the
+  test copy:
   [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#openimis).
 
 The systems each result ran on are listed in

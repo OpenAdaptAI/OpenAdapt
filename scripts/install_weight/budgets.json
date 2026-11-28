@@ -380,6 +380,7 @@
         "openadapt",
         "openadapt-agent",
         "openadapt-flow",
+        "openadapt-kernel",
         "openadapt-types",
         "opencv-python",
         "opentelemetry-api",

@@ -864,6 +864,12 @@ def _quickstart_own(root: Path, url: Optional[str], watch: bool) -> None:
         "--out) and exit. Runs nothing."
     ),
 )
+@click.option(
+    "-y",
+    "--yes",
+    is_flag=True,
+    help="Run straight through without pausing for Enter or prompts.",
+)
 # --headed is the older spelling of --watch. --headless was the opt-out when
 # the window showed by default; hidden is the default now, so it changes
 # nothing and is kept so older commands still run.
@@ -960,6 +966,7 @@ def quickstart(
     no_break: bool,
     verbose: bool,
     more: bool,
+    yes: bool,
     own: bool,
     url: Optional[str],
     task: Optional[str],
@@ -1078,7 +1085,7 @@ def quickstart(
         openemr is None and _agent_serves_tutorial(),
         keep=_keep_command(),
         shadow=_shadowing_openadapt if _under_uvx() else None,
-        offer_publish=_quickstart_publish_offer(),
+        offer_publish=None if yes else _quickstart_publish_offer(),
     )
     try:
         with _synthetic_scrub_off():
@@ -1088,6 +1095,7 @@ def quickstart(
                 break_it=not no_break,
                 verbose=verbose,
                 steps=steps,
+                interactive=False if yes else None,
                 openemr=openemr,
                 open_seal=open_seal,
             )
@@ -1475,8 +1483,9 @@ _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]
 # quickstart's referral program checks its date picker against the run's
 # clock (`Postcondition.text_clock`), which Flow 3.2 ignores. Launcher 1.24
 # requires Flow 4.0 (encryption at rest by default, receipts, handoffs/A2A,
-# `openadapt wrap`, and `openadapt flight`).
-_SUPPORTED_FLOW_RANGE = ">=4.0.0,<5.0.0"
+# `openadapt wrap`, and `openadapt flight`). Launcher 1.24.1 requires Flow
+# 4.0.1 (encrypted quickstart sealing fix #2683).
+_SUPPORTED_FLOW_RANGE = ">=4.0.1,<5.0.0"
 _RDP_INSTALL_COMMAND = _pip_install("openadapt[rdp]")
 _CHROMIUM_SYSTEM_LIBS_COMMAND = (
     f"{shlex.quote(sys.executable)} -m playwright install-deps chromium"
@@ -1486,7 +1495,7 @@ _CHROMIUM_SYSTEM_LIBS_COMMAND = (
 def _supported_flow_version(value: str) -> bool:
     """Return whether a stable Flow version is in the launcher's supported range."""
     parsed = _release_tuple(value)
-    return parsed is not None and (4, 0, 0) <= parsed < (5, 0, 0)
+    return parsed is not None and (4, 0, 1) <= parsed < (5, 0, 0)
 
 
 # The Python modules each native or remote Flow backend imports when its
@@ -2255,6 +2264,8 @@ FLIGHT_VALUE_OPTIONS = frozenset(
         "--guard-task",
         "--max-cost-usd",
         "--safe-label",
+        "--known-value",
+        "--ui-allowlist",
     }
 )
 FLIGHT_FLAGS = frozenset(
@@ -2360,6 +2371,51 @@ def _optional_engine_entrypoint(command_ctx: click.Context, modules: tuple[str, 
 
 
 @main.command(
+    "kernel",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def kernel(command_ctx: click.Context) -> None:
+    """Run the minimal commit-boundary and shadow-to-autopilot runtime."""
+    kernel_main = _optional_engine_entrypoint(command_ctx, ("openadapt_kernel.cli",))
+    if kernel_main is None:
+        click.echo(
+            "Error: openadapt-kernel is not installed. "
+            "Install with: pip install openadapt-kernel",
+            err=True,
+        )
+        sys.exit(2)
+    sys.exit(int(kernel_main(list(command_ctx.args)) or 0))
+
+
+@main.command(
+    "mcpify",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        # openadapt_verify.mcpify owns its argparse help.
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def mcpify(command_ctx: click.Context) -> None:
+    """Serve compiled workflow packs or JIT plans as a local MCP server."""
+    mcpify_main = _optional_engine_entrypoint(command_ctx, ("openadapt_verify.mcpify",))
+    if mcpify_main is None:
+        click.echo(
+            "Error: openadapt-verify is not installed. "
+            "Install from packages/verify (e.g. `pip install -e packages/verify`).",
+            err=True,
+        )
+        sys.exit(2)
+    sys.exit(int(mcpify_main(list(command_ctx.args)) or 0))
+
+
+@main.command(
     "hooks",
     context_settings={
         "ignore_unknown_options": True,
@@ -2390,7 +2446,7 @@ def hooks(command_ctx: click.Context) -> None:
 )
 @click.pass_context
 def plan(command_ctx: click.Context) -> None:
-    """Dry-run a batch of writes to external systems, then apply, undo or release it."""
+    """Legacy (superseded by `openadapt kernel`): dry-run a batch of writes to external systems."""
     _require_supported_python()
     plan_main = _optional_engine_entrypoint(command_ctx, ("openadapt_flow.txplan.cli",))
     if plan_main is None:
@@ -2411,7 +2467,7 @@ def plan(command_ctx: click.Context) -> None:
 )
 @click.pass_context
 def proxy(command_ctx: click.Context) -> None:
-    """Hold the database credentials; give the agent tools that preview, apply once and undo."""
+    """Legacy (superseded by `openadapt kernel`): hold database credentials for preview/apply/undo."""
     _require_supported_python()
     proxy_main = _optional_engine_entrypoint(
         command_ctx, ("openadapt_flow.txplan.proxy_cli",)
@@ -2552,6 +2608,134 @@ def handoff(command_ctx: click.Context) -> None:
         click.echo(command_ctx.get_help())
         sys.exit(0 if args else 2)
     sys.exit(_invoke_flow(["handoff", *args]))
+
+
+@main.group("audit")
+def audit() -> None:
+    """Sample verified runs for statistical compliance spot-checks."""
+
+
+@audit.command("sample")
+@click.option(
+    "--receipts-dir",
+    "--input",
+    "receipts_dir",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Path to receipts directory or JSONL ledger (default: ~/.openadapt/verify).",
+)
+@click.option(
+    "--rate",
+    default=0.05,
+    type=float,
+    show_default=True,
+    help="Fraction of eligible runs to sample, in (0.0, 1.0].",
+)
+@click.option(
+    "--count",
+    default=None,
+    type=int,
+    help="Explicit number of runs to sample instead of using --rate.",
+)
+@click.option(
+    "--min-samples",
+    default=None,
+    type=int,
+    help="Minimum number of runs to sample (capped at eligible count).",
+)
+@click.option(
+    "--max-samples",
+    default=None,
+    type=int,
+    help="Maximum number of runs to sample.",
+)
+@click.option(
+    "--since",
+    default=None,
+    type=str,
+    help="Include only runs at or after this ISO date/timestamp or window (e.g. 7d, 24h).",
+)
+@click.option(
+    "--seed",
+    default=None,
+    type=str,
+    help="Deterministic seed for reproducible sampling (omit for cryptographic random sampling).",
+)
+@click.option(
+    "--status",
+    default="verified".upper(),
+    type=str,
+    show_default=True,
+    help="Run status filter (case-insensitive, comma-separated, or ALL).",
+)
+@click.option(
+    "--out",
+    "out_path",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Write an audit_sample_v1 manifest to a JSON or JSONL file.",
+)
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    default=False,
+    help="Print the audit_sample_v1 manifest as JSON to stdout.",
+)
+@click.option(
+    "--exclude-already-sampled",
+    "exclude_paths",
+    multiple=True,
+    type=click.Path(path_type=Path),
+    help="Exclude run IDs and digests already in a prior manifest or ledger (repeatable).",
+)
+def audit_sample(
+    receipts_dir: Optional[Path],
+    rate: float,
+    count: Optional[int],
+    min_samples: Optional[int],
+    max_samples: Optional[int],
+    since: Optional[str],
+    seed: Optional[str],
+    status: str,
+    out_path: Optional[Path],
+    as_json: bool,
+    exclude_paths: tuple[Path, ...],
+) -> None:
+    """Draw a random statistical spot-check sample of verified runs."""
+    from openadapt.audit_sample import (
+        DEFAULT_RECEIPTS_DIR,
+        AuditSampleError,
+        format_sample_table,
+        sample_runs,
+        write_sample_manifest,
+    )
+
+    source = receipts_dir if receipts_dir is not None else DEFAULT_RECEIPTS_DIR
+    try:
+        result = sample_runs(
+            source,
+            rate=rate,
+            count=count,
+            min_samples=min_samples,
+            max_samples=max_samples,
+            since=since,
+            seed=seed,
+            status=status,
+            exclude_already_sampled=exclude_paths,
+        )
+    except AuditSampleError as exc:
+        raise click.BadParameter(str(exc)) from None
+
+    if out_path is not None:
+        write_sample_manifest(result.manifest, out_path)
+
+    if as_json:
+        click.echo(json.dumps(result.manifest, indent=2))
+    else:
+        click.echo(format_sample_table(result.manifest))
+        if out_path is not None:
+            click.echo(f"\nManifest written to {out_path}")
 
 
 @main.command(

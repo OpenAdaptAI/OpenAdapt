@@ -73,7 +73,14 @@ def probe_before_click(page: Any, selector: str) -> ProbeResult:
     except Exception:
         focus_ok = False
 
-    return ProbeResult(True, True, False, False, focus_ok, "clear")
+    return ProbeResult(
+        safe_to_click=focus_ok,
+        found=True,
+        occluded=False,
+        disabled=False,
+        focus_responded=focus_ok,
+        reason="clear" if focus_ok else "hover_focus_probe_failed",
+    )
 
 
 def compute_pixel_delta_ratio(pre_bytes: bytes, post_bytes: bytes, threshold: int = 8) -> float:

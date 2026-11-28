@@ -274,19 +274,26 @@ declared. Each workflow needs two things:
    ([docs/EFFECT_KIT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/EFFECT_KIT.md#a-record-check-built-from-the-apps-own-reads-scaffold-verifier)).
    When it finds no such read, the draft it writes checks nothing until a
    person edits it.
-2. A second way to read the record. A database connection isn't required.
-   A read-only REST, FHIR, or GraphQL API works, and so does a read-only SQL
-   query, a file, report, or email the app exports, or, when you have none
-   of those, the app's own record page opened in a separate signed-in
-   browser session
-   ([`ui_readback`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/EFFECT_KIT.md#separate-session-ui-read-back-ui_readback),
-   a weaker check). You configure it once in `deploy.yaml`, and nothing
-   changes in the app. See [docs/EFFECT_KIT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/EFFECT_KIT.md).
+2. A graded read-back check, stamped on `report.json` and the receipt as
+   `same_screen`, `reopened`, `separate_session`, or `system_of_record`
+   ([`READBACK_LADDER.md`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/READBACK_LADDER.md)).
+   A database connection or API isn't required:
+   - **On the screen by default (`same_screen` or `reopened`):** checks
+     expected field values in bounded regions on the current view (including
+     in-place field or grid edits with no separate post-save screen, and
+     non-idempotent UIs where reloading is unsafe), or after reopening the
+     record in the same session when demonstrated. Accepted by `--profile
+     standard` unless `minimum_readback` sets a higher floor.
+   - **Independent session or system of record (`separate_session` or
+     `system_of_record`):** opens the record in a separate read-only session
+     ([`ui_readback`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/EFFECT_KIT.md#separate-session-ui-read-back-ui_readback)
+     or `fresh_session`), or reads a REST, FHIR, GraphQL, SQL, or file store
+     configured once in `deploy.yaml`. Required by `--profile regulated`.
+   See [docs/EFFECT_KIT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/EFFECT_KIT.md).
 
-Reading the screen the run just used doesn't count, because an app can show
-"Saved" and drop the write, as the demo shows. Without a second read, Flow can
-still rehearse the workflow, but a production run can't report a checked save:
-it stops, or it hands the result to a person.
+An unchecked step never counts as verified. When a save's check is missing,
+refuted, unreadable, or below the active profile or workflow floor, Flow stops
+or marks the run `COMPLETED_UNVERIFIED` so a person reviews the record.
 
 ```bash
 python -m openadapt_flow.cli_config init bundle --out deploy.yaml
@@ -456,9 +463,12 @@ browser workflows. Desktop and Citrix runs are self-hosted
 
 - The same entry repeats in an app with no API for the task. If the app has
   an API, call the API.
-- The system of record can be read through a second path: an API, the
-  database, FHIR, a report export or a separate signed-in session. The record
-  check reads whatever that path covers. In a fault test with injected bad
+- Observable evidence can be checked after each write: on the current screen
+  by default (including in-place edits and UIs that cannot reload), or via a
+  reopened view, a separate read-only session, or a read-only API, database
+  view, FHIR endpoint, or exported file when available, with the exact check
+  level stamped on the receipt. The record check covers whatever fields that
+  path reads. In a fault test with injected bad
   writes, a screen-only check passed 54 of the 72 runs that left the record
   wrong, one API read passed 9, and a read of every table passed none. The
   test database is SQLite with two record tables. Separately, 9 of the 18

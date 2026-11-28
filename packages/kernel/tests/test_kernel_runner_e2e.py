@@ -142,7 +142,7 @@ def test_cli_run_draft_autopilot_and_dropped_write_refusal(tmp_path: Path) -> No
         srv_ok.shutdown()
 
     # 2. Dropped-write server (shows 'Saved successfully!' banner while dropping DB write):
-    # Fresh reload refutes persistence -> MUST return exit 1 (ESCALATED) and mint NO receipt.
+    # Fresh reload refutes persistence -> MUST return exit 1 (ESCALATED) and sign non-VERIFIED receipt.
     srv_bad, url_bad, records_bad = _start_portal_server(drop_writes=True)
     try:
         bad_receipt = tmp_path / "bad_receipt.json"
@@ -169,6 +169,9 @@ def test_cli_run_draft_autopilot_and_dropped_write_refusal(tmp_path: Path) -> No
         )
         assert rc_bad == 1
         assert len(records_bad) == 0
-        assert not bad_receipt.exists()
+        assert bad_receipt.exists()
+        assert main(["verify-receipt", "--receipt", str(bad_receipt), "--pub", str(pub_path)]) == 0
+        bad_data = json.loads(bad_receipt.read_text(encoding="utf-8"))
+        assert bad_data["payload"]["outcome"] == "ESCALATED"
     finally:
         srv_bad.shutdown()

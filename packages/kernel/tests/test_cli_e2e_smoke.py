@@ -71,6 +71,7 @@ def test_cli_live_e2e_smoke(tmp_path: Path) -> None:
     ev1.write_text(
         "\n".join(
             [
+                json.dumps({"kind": "pre_write", "url": "https://portal.example/form", "text": "Draft form before submission"}),
                 json.dumps({"kind": "input", "frame_origin": "https://portal.example", "field": "claim_ref", "value": "CLM-101"}),
                 json.dumps({"kind": "input", "frame_origin": "https://portal.example", "field": "queue", "value": "STANDARD"}),
                 json.dumps({"kind": "network_save", "method": "POST", "url": "https://portal.example/submit", "status": 201}),
@@ -83,6 +84,7 @@ def test_cli_live_e2e_smoke(tmp_path: Path) -> None:
     ev2.write_text(
         "\n".join(
             [
+                json.dumps({"kind": "pre_write", "url": "https://portal.example/form", "text": "Draft form before submission"}),
                 json.dumps({"kind": "input", "frame_origin": "https://portal.example", "field": "claim_ref", "value": "CLM-202"}),
                 json.dumps({"kind": "input", "frame_origin": "https://portal.example", "field": "queue", "value": "STANDARD"}),
                 json.dumps({"kind": "network_save", "method": "POST", "url": "https://portal.example/submit", "status": 201}),

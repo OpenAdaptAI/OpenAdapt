@@ -2924,6 +2924,21 @@
         ],
         "default": null,
         "title": "Recheck After S"
+       },
+       "entity_tables": {
+        "anyOf": [
+         {
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Entity Tables"
        }
       },
       "required": [
@@ -9146,6 +9161,21 @@
         ],
         "default": null,
         "title": "Recheck After S"
+       },
+       "entity_tables": {
+        "anyOf": [
+         {
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Entity Tables"
        }
       },
       "required": [

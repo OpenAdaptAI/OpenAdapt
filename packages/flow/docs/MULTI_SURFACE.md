@@ -483,10 +483,11 @@ single-surface run does, and no gate is weakened:
   `classify_execution_outcome` returns `COMPLETED_UNVERIFIED` unless every
   result's `surface` equals its step's declared surface. A single-surface
   report never carries the field, and one that does is not `VERIFIED`.
-- **Effects stay keyed by step.** An effect contract names its own system of
-  record, so the same `independent_readback` rule applies: only a non-UI read
-  of the system of record (tier 2 or stronger) reaches `VERIFIED`; a persisted
-  re-read or any screen read never does, on any surface. On-screen readback
+- **Effects stay keyed by step.** An effect contract names its own read-back
+  check, so the same graded floor applies: `Standard` accepts `same_screen` or
+  stronger (recording `checked_how` on the report and receipt) unless
+  `minimum_readback` raises the floor, while `Regulated` requires
+  `separate_session` (tier 2) or stronger on every surface. On-screen readback
   state is reset at every switch so nothing read on one surface counts for
   another.
 - **Qualification gets one environment boundary per surface.** A

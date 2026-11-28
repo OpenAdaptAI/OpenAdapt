@@ -128,9 +128,12 @@ def test_launcher_route_table_matches_the_engine_source():
     assert FLOW_NAMES == assignments["FLOW_NAMES"]
     # Native-only tasks must bind actual launcher commands and must never
     # masquerade as parser tasks supported by an older Flow.
-    assert set(LAUNCHER_TASKS) == {"wrap", "test"}
+    assert set(LAUNCHER_TASKS) == {"kernel", "mcpify", "wrap", "test", "audit"}
     assert set(LAUNCHER_TASKS) <= set(cli.main.commands)
+    assert cli.main.commands["kernel"] is cli.kernel
+    assert cli.main.commands["mcpify"] is cli.mcpify
     assert cli.main.commands["wrap"] is cli.wrap
+    assert cli.main.commands["audit"] is cli.audit
     assert not set(LAUNCHER_TASKS) & set(assignments["TASKS"])
     assert not set(LAUNCHER_TASKS) & set(FLOW_NAMES)
     assignments["TASKS"].update(LAUNCHER_TASKS)

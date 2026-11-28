@@ -1,6 +1,6 @@
 # openadapt-kernel
 
-Minimal, self-contained runtime kernel (`< 2,800` LOC, zero `openadapt-flow` dependencies, zero per-app code) implementing commit-boundary verification, cross-rail read-back, reversible occlusion probing, online ACI calibration, macro staging, stepwise live-DOM healing, and shadow-to-autopilot execution:
+Minimal, self-contained runtime kernel (`< 3,200` LOC, zero `openadapt-flow` dependencies, zero per-app code) implementing commit-boundary verification, cross-rail read-back, reversible occlusion probing, online ACI calibration, macro staging, stepwise live-DOM healing, and shadow-to-autopilot execution:
 
 1. **Default-Deny Obligation, Capability, and Saga Ledger (`ledger.py`):** Episodes start `UNVERIFIED` and emit `VERIFIED` only when every obligation has an independent post-commit read-back proof and zero dirty form buffers remain. Step-limit timeouts, crashes, and unverified exits deterministically return `ESCALATED`. Carries both cross-screen `<MANDATORY_CONSTRAINTS>` and `<VERIFIED_CAPABILITIES>` (user consent and SSA opaque-ID provenance), with durable Saga checkpointing across multi-system workflows.
 2. **Wire and DOM-Effect Commit Interceptor (`interceptor.py`):** Detects commits from actual network mutations (`POST`, `PUT`, `PATCH`, `DELETE`) or non-empty dirty form submissions instead of button-label regexes. Excludes search/filter inputs from dirty buffers and escapes escalation payloads safely.

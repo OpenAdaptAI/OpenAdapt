@@ -1,0 +1,2152 @@
+{
+  "schema": "openadapt.icml2027.clean_hab_results.v1",
+  "run_date_utc": "2026-11-25T03:40:31Z",
+  "benchmark": "HealthAdminBench (Stanford, som-shahlab/health-admin-bench)",
+  "portal_url": "https://emrportal.vercel.app",
+  "zero_leak_audit": "0 benchmark URLs, 0 credential hints, 0 task hints, genuine Playwright page.reload() DOM read-back",
+  "tasks": [
+    "prior_auth/emr-easy-1.json",
+    "prior_auth/emr-easy-2.json",
+    "prior_auth/emr-medium-1.json",
+    "prior_auth/emr-medium-2.json",
+    "prior_auth/emr-medium-3.json",
+    "prior_auth/emr-hard-1.json",
+    "appeals_denials/denial-easy-1.json",
+    "appeals_denials/denial-easy-2.json",
+    "appeals_denials/denial-medium-1.json",
+    "dme/fax-easy-1.json",
+    "dme/fax-easy-2.json",
+    "dme/fax-medium-1.json"
+  ],
+  "arms": {
+    "baseline_gpt54": {
+      "aggregate": {
+        "n": 12,
+        "full_completion_count": 3,
+        "full_completion_rate": 0.25,
+        "full_completion_wilson_95": [
+          0.0889,
+          0.5323
+        ],
+        "mean_subtask_percentage": 68.77,
+        "avc_count": 3,
+        "avc_rate": 0.25,
+        "avc_wilson_95": [
+          0.0889,
+          0.5323
+        ],
+        "ser_count": 9,
+        "ser_rate": 0.75,
+        "ser_wilson_95": [
+          0.4677,
+          0.9111
+        ],
+        "escalation_count": 0,
+        "escalation_rate": 0.0,
+        "true_escalation_count": 0,
+        "hep": null,
+        "hep_wilson_95": null,
+        "total_reloads": 0,
+        "total_critic_calls": 0,
+        "total_nudges": 0
+      },
+      "episodes": [
+        {
+          "task_id": "emr-easy-1",
+          "task_file": "prior_auth/emr-easy-1.json",
+          "arm": "baseline_gpt54",
+          "full_success": true,
+          "percentage": 100.0,
+          "points_earned": 4.0,
+          "max_points": 0.0,
+          "steps": 7,
+          "elapsed_s": 42.69,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [],
+          "error": null
+        },
+        {
+          "task_id": "emr-easy-2",
+          "task_file": "prior_auth/emr-easy-2.json",
+          "arm": "baseline_gpt54",
+          "full_success": true,
+          "percentage": 100.0,
+          "points_earned": 4.0,
+          "max_points": 0.0,
+          "steps": 13,
+          "elapsed_s": 59.54,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [],
+          "error": null
+        },
+        {
+          "task_id": "emr-medium-1",
+          "task_file": "prior_auth/emr-medium-1.json",
+          "arm": "baseline_gpt54",
+          "full_success": false,
+          "percentage": 30.0,
+          "points_earned": 6.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 106.11,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "7. Agent selected Outpatient Procedure as request type",
+              "message": "Mismatch: expected=outpatient, actual=None"
+            },
+            {
+              "description": "8. Agent entered correct member ID in Payer A form",
+              "message": "Mismatch: expected=AET123456789, actual=None"
+            },
+            {
+              "description": "9. Agent entered correct patient DOB in Payer A form",
+              "message": "Mismatch: expected=1965-03-15, actual=None"
+            },
+            {
+              "description": "10. Agent entered diagnosis code H35.32 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "11. Agent entered diagnosis code H35.31 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "12. Agent entered diagnosis code E11.9 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "13. Agent entered CPT code 67028 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "14. Agent entered CPT code J2778 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "15. Clinical indication mentions the diagnosis (AMD)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "16. Agent uploaded letter of medical necessity to Payer A form",
+              "message": "Mismatch:  does not contain Medical_Necessity_Letter"
+            },
+            {
+              "description": "17. Agent submitted prior auth form in Payer A portal",
+              "message": "Mismatch: expected=1, actual=0"
+            },
+            {
+              "description": "18. Agent added authorization note in EMR Communications",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "19. EMR note contains the Payer A authorization reference number",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "20. Agent cleared referral REF-2025-001 from worklist",
+              "message": "Mismatch: expected=True, actual=False"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "emr-medium-2",
+          "task_file": "prior_auth/emr-medium-2.json",
+          "arm": "baseline_gpt54",
+          "full_success": false,
+          "percentage": 36.84210526315789,
+          "points_earned": 7.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 113.75,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "3. Agent clicked Coverages tab to get portal credentials",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "8. Agent selected Outpatient Procedure as request type",
+              "message": "Mismatch: expected=outpatient, actual=None"
+            },
+            {
+              "description": "9. Agent entered correct member ID in Payer A form",
+              "message": "Mismatch: expected=AET987654321, actual=None"
+            },
+            {
+              "description": "10. Agent entered correct patient DOB in Payer A form",
+              "message": "Mismatch: expected=1962-09-15, actual=None"
+            },
+            {
+              "description": "11. Agent entered diagnosis code H25.11 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "12. Agent entered CPT code 66984 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "13a. Clinical indication mentions pathology finding (nuclear sclerosis/3+ opacity)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "13b. Clinical indication mentions functional impact (visual acuity impairment)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "14. Agent uploaded letter of medical necessity to Payer A form",
+              "message": "Mismatch:  does not contain Medical_Necessity_Letter"
+            },
+            {
+              "description": "15. Agent submitted prior auth form in Payer A portal",
+              "message": "Mismatch: expected=1, actual=0"
+            },
+            {
+              "description": "17. EMR note contains the Payer A authorization reference number",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "18. Agent cleared referral REF-2025-003 from worklist",
+              "message": "Mismatch: expected=True, actual=False"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "emr-medium-3",
+          "task_file": "prior_auth/emr-medium-3.json",
+          "arm": "baseline_gpt54",
+          "full_success": false,
+          "percentage": 36.36363636363637,
+          "points_earned": 8.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 108.76,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "9. Agent selected Outpatient Procedure as request type",
+              "message": "Mismatch: expected=outpatient, actual=None"
+            },
+            {
+              "description": "10. Agent entered correct member ID in Payer A form",
+              "message": "Mismatch: expected=AET987654322, actual=None"
+            },
+            {
+              "description": "11. Agent entered correct patient DOB in Payer A form",
+              "message": "Mismatch: expected=1960-03-22, actual=None"
+            },
+            {
+              "description": "12. Agent entered diagnosis code H35.32 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "13. Agent entered diagnosis code H35.31 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "14. Agent entered CPT code 67028 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "15. Agent entered CPT code J2778 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "16. Clinical indication mentions the diagnosis (AMD)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "17. Agent uploaded letter of medical necessity to Payer A form",
+              "message": "Mismatch:  does not contain Medical_Necessity_Letter"
+            },
+            {
+              "description": "18. Agent uploaded multiple documents (letter of medical necessity + clinical notes)",
+              "message": "Mismatch: expected=2, actual=0"
+            },
+            {
+              "description": "19. Agent submitted prior auth form in Payer A portal",
+              "message": "Mismatch: expected=1, actual=0"
+            },
+            {
+              "description": "20. Agent added authorization note in EMR Communications",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "21. EMR note contains the Payer A authorization reference number",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "22. Agent cleared referral REF-2025-004 from worklist",
+              "message": "Mismatch: expected=True, actual=False"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "emr-hard-1",
+          "task_file": "prior_auth/emr-hard-1.json",
+          "arm": "baseline_gpt54",
+          "full_success": false,
+          "percentage": 33.33333333333333,
+          "points_earned": 7.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 120.68,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "8. Agent selected Outpatient as request type",
+              "message": "Mismatch: expected=outpatient, actual=None"
+            },
+            {
+              "description": "9. Agent entered correct member ID in Payer A form",
+              "message": "Mismatch: expected=AET123456789, actual=None"
+            },
+            {
+              "description": "12. Agent entered correct patient DOB in Payer A form",
+              "message": "Mismatch: expected=1965-03-15, actual=None"
+            },
+            {
+              "description": "13. Agent entered diagnosis code H35.32 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "14. Agent entered diagnosis code H35.31 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "15. Agent entered CPT code 67028 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "16. Agent entered CPT code J2778 (ranibizumab injection) in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "17. Authorization request includes calculated annual dosage (~12mg)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "18. Clinical indication mentions the diagnosis (AMD)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "19. Agent uploaded letter of medical necessity to Payer A form",
+              "message": "Mismatch:  does not contain Medical_Necessity_Letter"
+            },
+            {
+              "description": "20. Agent submitted prior auth form in Payer A portal",
+              "message": "Mismatch: expected=1, actual=0"
+            },
+            {
+              "description": "21. Agent added authorization note in EMR Communications",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "22. EMR note contains the Payer A authorization reference number",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "23. Agent cleared referral REF-2025-001 from worklist",
+              "message": "Mismatch: expected=True, actual=False"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "denial-easy-1",
+          "task_file": "appeals_denials/denial-easy-1.json",
+          "arm": "baseline_gpt54",
+          "full_success": false,
+          "percentage": 77.77777777777779,
+          "points_earned": 7.0,
+          "max_points": 0.0,
+          "steps": 11,
+          "elapsed_s": 83.88,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "Triage note references diagnosis H35.32",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "Triage note explains this is a documentation gap, not a clinical dispute",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "denial-easy-2",
+          "task_file": "appeals_denials/denial-easy-2.json",
+          "arm": "baseline_gpt54",
+          "full_success": false,
+          "percentage": 85.71428571428571,
+          "points_earned": 6.0,
+          "max_points": 0.0,
+          "steps": 8,
+          "elapsed_s": 61.58,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "Triage note explains the delegation/capitation arrangement requires rerouting",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "denial-medium-1",
+          "task_file": "appeals_denials/denial-medium-1.json",
+          "arm": "baseline_gpt54",
+          "full_success": false,
+          "percentage": 88.88888888888889,
+          "points_earned": 16.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 147.9,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "Triage note documents denied amount",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "Triage note documents appeal deadline",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "fax-easy-1",
+          "task_file": "dme/fax-easy-1.json",
+          "arm": "baseline_gpt54",
+          "full_success": false,
+          "percentage": 45.45454545454545,
+          "points_earned": 5.0,
+          "max_points": 0.0,
+          "steps": 18,
+          "elapsed_s": 127.1,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "Verify that a fax was sent via the DME fax portal",
+              "message": "Mismatch: expected=1, actual=None"
+            },
+            {
+              "description": "Verify Face to Face Evaluation document was attached",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "Verify Prescription Power Wheelchair document was attached",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "Verify History and Physical document was attached",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "Verify correct supplier name was entered in fax dialog",
+              "message": "Mismatch: expected=National Seating & Mobility, actual=None"
+            },
+            {
+              "description": "Verify correct fax number was entered in fax dialog (format-flexible)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "fax-easy-2",
+          "task_file": "dme/fax-easy-2.json",
+          "arm": "baseline_gpt54",
+          "full_success": true,
+          "percentage": 100.0,
+          "points_earned": 11.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 110.54,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [],
+          "error": null
+        },
+        {
+          "task_id": "fax-medium-1",
+          "task_file": "dme/fax-medium-1.json",
+          "arm": "baseline_gpt54",
+          "full_success": false,
+          "percentage": 90.9090909090909,
+          "points_earned": 10.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 104.43,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "Note mentions using the current/February F2F version",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            }
+          ],
+          "error": null
+        }
+      ]
+    },
+    "clean_commit_jit_gpt54": {
+      "aggregate": {
+        "n": 12,
+        "full_completion_count": 5,
+        "full_completion_rate": 0.4167,
+        "full_completion_wilson_95": [
+          0.1933,
+          0.6805
+        ],
+        "mean_subtask_percentage": 69.99,
+        "avc_count": 2,
+        "avc_rate": 0.1667,
+        "avc_wilson_95": [
+          0.047,
+          0.448
+        ],
+        "ser_count": 5,
+        "ser_rate": 0.4167,
+        "ser_wilson_95": [
+          0.1933,
+          0.6805
+        ],
+        "escalation_count": 5,
+        "escalation_rate": 0.4167,
+        "true_escalation_count": 2,
+        "hep": 0.4,
+        "hep_wilson_95": [
+          0.1176,
+          0.7693
+        ],
+        "total_reloads": 74,
+        "total_critic_calls": 34,
+        "total_nudges": 12
+      },
+      "episodes": [
+        {
+          "task_id": "emr-easy-1",
+          "task_file": "prior_auth/emr-easy-1.json",
+          "arm": "clean_commit_jit_gpt54",
+          "full_success": true,
+          "percentage": 100.0,
+          "points_earned": 4.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 165.3,
+          "escalated": true,
+          "escalation_reason": "Cannot verify the actual prior authorization determination/result from the provided evidence; the saved note content is truncated and does not show whether prior authorization is required or not.",
+          "reloads": 21,
+          "critic_calls": 19,
+          "nudges_used": 2,
+          "failed_subtasks": [],
+          "error": null
+        },
+        {
+          "task_id": "emr-easy-2",
+          "task_file": "prior_auth/emr-easy-2.json",
+          "arm": "clean_commit_jit_gpt54",
+          "full_success": true,
+          "percentage": 100.0,
+          "points_earned": 4.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 143.65,
+          "escalated": true,
+          "escalation_reason": "Cannot verify from the provided evidence that eligibility was active and documentation was complete; the saved note content is truncated and no explicit active eligibility/documentation-complete text is visible.",
+          "reloads": 13,
+          "critic_calls": 10,
+          "nudges_used": 2,
+          "failed_subtasks": [],
+          "error": null
+        },
+        {
+          "task_id": "emr-medium-1",
+          "task_file": "prior_auth/emr-medium-1.json",
+          "arm": "clean_commit_jit_gpt54",
+          "full_success": false,
+          "percentage": 30.0,
+          "points_earned": 6.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 113.7,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 1,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "7. Agent selected Outpatient Procedure as request type",
+              "message": "Mismatch: expected=outpatient, actual=None"
+            },
+            {
+              "description": "8. Agent entered correct member ID in Payer A form",
+              "message": "Mismatch: expected=AET123456789, actual=None"
+            },
+            {
+              "description": "9. Agent entered correct patient DOB in Payer A form",
+              "message": "Mismatch: expected=1965-03-15, actual=None"
+            },
+            {
+              "description": "10. Agent entered diagnosis code H35.32 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "11. Agent entered diagnosis code H35.31 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "12. Agent entered diagnosis code E11.9 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "13. Agent entered CPT code 67028 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "14. Agent entered CPT code J2778 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "15. Clinical indication mentions the diagnosis (AMD)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "16. Agent uploaded letter of medical necessity to Payer A form",
+              "message": "Mismatch:  does not contain Medical_Necessity_Letter"
+            },
+            {
+              "description": "17. Agent submitted prior auth form in Payer A portal",
+              "message": "Mismatch: expected=1, actual=0"
+            },
+            {
+              "description": "18. Agent added authorization note in EMR Communications",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "19. EMR note contains the Payer A authorization reference number",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "20. Agent cleared referral REF-2025-001 from worklist",
+              "message": "Mismatch: expected=True, actual=False"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "emr-medium-2",
+          "task_file": "prior_auth/emr-medium-2.json",
+          "arm": "clean_commit_jit_gpt54",
+          "full_success": false,
+          "percentage": 31.57894736842105,
+          "points_earned": 6.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 110.97,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 2,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "3. Agent clicked Coverages tab to get portal credentials",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "8. Agent selected Outpatient Procedure as request type",
+              "message": "Mismatch: expected=outpatient, actual=None"
+            },
+            {
+              "description": "9. Agent entered correct member ID in Payer A form",
+              "message": "Mismatch: expected=AET987654321, actual=None"
+            },
+            {
+              "description": "10. Agent entered correct patient DOB in Payer A form",
+              "message": "Mismatch: expected=1962-09-15, actual=None"
+            },
+            {
+              "description": "11. Agent entered diagnosis code H25.11 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "12. Agent entered CPT code 66984 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "13a. Clinical indication mentions pathology finding (nuclear sclerosis/3+ opacity)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "13b. Clinical indication mentions functional impact (visual acuity impairment)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "14. Agent uploaded letter of medical necessity to Payer A form",
+              "message": "Mismatch:  does not contain Medical_Necessity_Letter"
+            },
+            {
+              "description": "15. Agent submitted prior auth form in Payer A portal",
+              "message": "Mismatch: expected=1, actual=0"
+            },
+            {
+              "description": "16. Agent added authorization note in EMR Communications",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "17. EMR note contains the Payer A authorization reference number",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "18. Agent cleared referral REF-2025-003 from worklist",
+              "message": "Mismatch: expected=True, actual=False"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "emr-medium-3",
+          "task_file": "prior_auth/emr-medium-3.json",
+          "arm": "clean_commit_jit_gpt54",
+          "full_success": false,
+          "percentage": 36.36363636363637,
+          "points_earned": 8.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 165.49,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 3,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "9. Agent selected Outpatient Procedure as request type",
+              "message": "Mismatch: expected=outpatient, actual=None"
+            },
+            {
+              "description": "10. Agent entered correct member ID in Payer A form",
+              "message": "Mismatch: expected=AET987654322, actual=None"
+            },
+            {
+              "description": "11. Agent entered correct patient DOB in Payer A form",
+              "message": "Mismatch: expected=1960-03-22, actual=None"
+            },
+            {
+              "description": "12. Agent entered diagnosis code H35.32 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "13. Agent entered diagnosis code H35.31 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "14. Agent entered CPT code 67028 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "15. Agent entered CPT code J2778 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "16. Clinical indication mentions the diagnosis (AMD)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "17. Agent uploaded letter of medical necessity to Payer A form",
+              "message": "Mismatch:  does not contain Medical_Necessity_Letter"
+            },
+            {
+              "description": "18. Agent uploaded multiple documents (letter of medical necessity + clinical notes)",
+              "message": "Mismatch: expected=2, actual=0"
+            },
+            {
+              "description": "19. Agent submitted prior auth form in Payer A portal",
+              "message": "Mismatch: expected=1, actual=0"
+            },
+            {
+              "description": "20. Agent added authorization note in EMR Communications",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "21. EMR note contains the Payer A authorization reference number",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "22. Agent cleared referral REF-2025-004 from worklist",
+              "message": "Mismatch: expected=True, actual=False"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "emr-hard-1",
+          "task_file": "prior_auth/emr-hard-1.json",
+          "arm": "clean_commit_jit_gpt54",
+          "full_success": false,
+          "percentage": 33.33333333333333,
+          "points_earned": 7.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 203.36,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 4,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "8. Agent selected Outpatient as request type",
+              "message": "Mismatch: expected=outpatient, actual=None"
+            },
+            {
+              "description": "9. Agent entered correct member ID in Payer A form",
+              "message": "Mismatch: expected=AET123456789, actual=None"
+            },
+            {
+              "description": "12. Agent entered correct patient DOB in Payer A form",
+              "message": "Mismatch: expected=1965-03-15, actual=None"
+            },
+            {
+              "description": "13. Agent entered diagnosis code H35.32 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "14. Agent entered diagnosis code H35.31 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "15. Agent entered CPT code 67028 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "16. Agent entered CPT code J2778 (ranibizumab injection) in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "17. Authorization request includes calculated annual dosage (~12mg)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "18. Clinical indication mentions the diagnosis (AMD)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "19. Agent uploaded letter of medical necessity to Payer A form",
+              "message": "Mismatch:  does not contain Medical_Necessity_Letter"
+            },
+            {
+              "description": "20. Agent submitted prior auth form in Payer A portal",
+              "message": "Mismatch: expected=1, actual=0"
+            },
+            {
+              "description": "21. Agent added authorization note in EMR Communications",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "22. EMR note contains the Payer A authorization reference number",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "23. Agent cleared referral REF-2025-001 from worklist",
+              "message": "Mismatch: expected=True, actual=False"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "denial-easy-1",
+          "task_file": "appeals_denials/denial-easy-1.json",
+          "arm": "clean_commit_jit_gpt54",
+          "full_success": false,
+          "percentage": 88.88888888888889,
+          "points_earned": 8.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 137.12,
+          "escalated": true,
+          "escalation_reason": "No verified read-back shows any selected triage disposition or documented triage note text after submission.",
+          "reloads": 6,
+          "critic_calls": 1,
+          "nudges_used": 2,
+          "failed_subtasks": [
+            {
+              "description": "Triage note references diagnosis H35.32",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "denial-easy-2",
+          "task_file": "appeals_denials/denial-easy-2.json",
+          "arm": "clean_commit_jit_gpt54",
+          "full_success": true,
+          "percentage": 100.0,
+          "points_earned": 7.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 138.28,
+          "escalated": true,
+          "escalation_reason": "No verified read-back shows any triage disposition selected or any triage note documented/submitted.",
+          "reloads": 8,
+          "critic_calls": 2,
+          "nudges_used": 2,
+          "failed_subtasks": [],
+          "error": null
+        },
+        {
+          "task_id": "denial-medium-1",
+          "task_file": "appeals_denials/denial-medium-1.json",
+          "arm": "clean_commit_jit_gpt54",
+          "full_success": false,
+          "percentage": 83.33333333333334,
+          "points_earned": 15.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 161.84,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 1,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "Triage note explains the medical necessity basis for the anti-VEGF appeal",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "Triage note documents denied amount",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "Triage note documents appeal deadline",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "fax-easy-1",
+          "task_file": "dme/fax-easy-1.json",
+          "arm": "clean_commit_jit_gpt54",
+          "full_success": true,
+          "percentage": 100.0,
+          "points_earned": 11.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 119.77,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 4,
+          "critic_calls": 0,
+          "nudges_used": 1,
+          "failed_subtasks": [],
+          "error": null
+        },
+        {
+          "task_id": "fax-easy-2",
+          "task_file": "dme/fax-easy-2.json",
+          "arm": "clean_commit_jit_gpt54",
+          "full_success": false,
+          "percentage": 36.36363636363637,
+          "points_earned": 4.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 185.21,
+          "escalated": true,
+          "escalation_reason": "Target patient 'Harrison, Walter (73M with Medicare Part B)' is not visible, and there is no evidence of processing the oxygen concentrator DME order, downloading/faxing documents, adding a progress note, or clearing the",
+          "reloads": 7,
+          "critic_calls": 2,
+          "nudges_used": 2,
+          "failed_subtasks": [
+            {
+              "description": "Verify that a fax was sent via the DME fax portal",
+              "message": "Mismatch: expected=1, actual=None"
+            },
+            {
+              "description": "Verify Face to Face Evaluation document was attached",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "Verify Prescription Oxygen Concentrator document was attached",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "Verify History and Physical document was attached",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "Verify correct supplier name was entered in fax dialog",
+              "message": "Mismatch: expected=Lincare Holdings Inc., actual=None"
+            },
+            {
+              "description": "Verify correct fax number was entered in fax dialog (format-flexible)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "Note mentions documents that were faxed",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "fax-medium-1",
+          "task_file": "dme/fax-medium-1.json",
+          "arm": "clean_commit_jit_gpt54",
+          "full_success": true,
+          "percentage": 100.0,
+          "points_earned": 11.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 120.74,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 4,
+          "critic_calls": 0,
+          "nudges_used": 1,
+          "failed_subtasks": [],
+          "error": null
+        }
+      ]
+    },
+    "baseline_claude55": {
+      "aggregate": {
+        "n": 12,
+        "full_completion_count": 4,
+        "full_completion_rate": 0.3333,
+        "full_completion_wilson_95": [
+          0.1381,
+          0.6094
+        ],
+        "mean_subtask_percentage": 67.83,
+        "avc_count": 4,
+        "avc_rate": 0.3333,
+        "avc_wilson_95": [
+          0.1381,
+          0.6094
+        ],
+        "ser_count": 8,
+        "ser_rate": 0.6667,
+        "ser_wilson_95": [
+          0.3906,
+          0.8619
+        ],
+        "escalation_count": 0,
+        "escalation_rate": 0.0,
+        "true_escalation_count": 0,
+        "hep": null,
+        "hep_wilson_95": null,
+        "total_reloads": 0,
+        "total_critic_calls": 0,
+        "total_nudges": 0
+      },
+      "episodes": [
+        {
+          "task_id": "emr-easy-1",
+          "task_file": "prior_auth/emr-easy-1.json",
+          "arm": "baseline_claude55",
+          "full_success": false,
+          "percentage": 75.0,
+          "points_earned": 3.0,
+          "max_points": 0.0,
+          "steps": 16,
+          "elapsed_s": 94.05,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "Agent mentioned Medicare as reason for no auth",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "emr-easy-2",
+          "task_file": "prior_auth/emr-easy-2.json",
+          "arm": "baseline_claude55",
+          "full_success": true,
+          "percentage": 100.0,
+          "points_earned": 4.0,
+          "max_points": 0.0,
+          "steps": 22,
+          "elapsed_s": 119.72,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [],
+          "error": null
+        },
+        {
+          "task_id": "emr-medium-1",
+          "task_file": "prior_auth/emr-medium-1.json",
+          "arm": "baseline_claude55",
+          "full_success": false,
+          "percentage": 30.0,
+          "points_earned": 6.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 129.77,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "7. Agent selected Outpatient Procedure as request type",
+              "message": "Mismatch: expected=outpatient, actual=None"
+            },
+            {
+              "description": "8. Agent entered correct member ID in Payer A form",
+              "message": "Mismatch: expected=AET123456789, actual=None"
+            },
+            {
+              "description": "9. Agent entered correct patient DOB in Payer A form",
+              "message": "Mismatch: expected=1965-03-15, actual=None"
+            },
+            {
+              "description": "10. Agent entered diagnosis code H35.32 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "11. Agent entered diagnosis code H35.31 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "12. Agent entered diagnosis code E11.9 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "13. Agent entered CPT code 67028 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "14. Agent entered CPT code J2778 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "15. Clinical indication mentions the diagnosis (AMD)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "16. Agent uploaded letter of medical necessity to Payer A form",
+              "message": "Mismatch:  does not contain Medical_Necessity_Letter"
+            },
+            {
+              "description": "17. Agent submitted prior auth form in Payer A portal",
+              "message": "Mismatch: expected=1, actual=0"
+            },
+            {
+              "description": "18. Agent added authorization note in EMR Communications",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "19. EMR note contains the Payer A authorization reference number",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "20. Agent cleared referral REF-2025-001 from worklist",
+              "message": "Mismatch: expected=True, actual=False"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "emr-medium-2",
+          "task_file": "prior_auth/emr-medium-2.json",
+          "arm": "baseline_claude55",
+          "full_success": false,
+          "percentage": 36.84210526315789,
+          "points_earned": 7.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 168.07,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "8. Agent selected Outpatient Procedure as request type",
+              "message": "Mismatch: expected=outpatient, actual=None"
+            },
+            {
+              "description": "9. Agent entered correct member ID in Payer A form",
+              "message": "Mismatch: expected=AET987654321, actual=None"
+            },
+            {
+              "description": "10. Agent entered correct patient DOB in Payer A form",
+              "message": "Mismatch: expected=1962-09-15, actual=None"
+            },
+            {
+              "description": "11. Agent entered diagnosis code H25.11 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "12. Agent entered CPT code 66984 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "13a. Clinical indication mentions pathology finding (nuclear sclerosis/3+ opacity)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "13b. Clinical indication mentions functional impact (visual acuity impairment)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "14. Agent uploaded letter of medical necessity to Payer A form",
+              "message": "Mismatch:  does not contain Medical_Necessity_Letter"
+            },
+            {
+              "description": "15. Agent submitted prior auth form in Payer A portal",
+              "message": "Mismatch: expected=1, actual=0"
+            },
+            {
+              "description": "16. Agent added authorization note in EMR Communications",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "17. EMR note contains the Payer A authorization reference number",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "18. Agent cleared referral REF-2025-003 from worklist",
+              "message": "Mismatch: expected=True, actual=False"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "emr-medium-3",
+          "task_file": "prior_auth/emr-medium-3.json",
+          "arm": "baseline_claude55",
+          "full_success": false,
+          "percentage": 36.36363636363637,
+          "points_earned": 8.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 132.36,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "9. Agent selected Outpatient Procedure as request type",
+              "message": "Mismatch: expected=outpatient, actual=None"
+            },
+            {
+              "description": "10. Agent entered correct member ID in Payer A form",
+              "message": "Mismatch: expected=AET987654322, actual=None"
+            },
+            {
+              "description": "11. Agent entered correct patient DOB in Payer A form",
+              "message": "Mismatch: expected=1960-03-22, actual=None"
+            },
+            {
+              "description": "12. Agent entered diagnosis code H35.32 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "13. Agent entered diagnosis code H35.31 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "14. Agent entered CPT code 67028 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "15. Agent entered CPT code J2778 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "16. Clinical indication mentions the diagnosis (AMD)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "17. Agent uploaded letter of medical necessity to Payer A form",
+              "message": "Mismatch:  does not contain Medical_Necessity_Letter"
+            },
+            {
+              "description": "18. Agent uploaded multiple documents (letter of medical necessity + clinical notes)",
+              "message": "Mismatch: expected=2, actual=0"
+            },
+            {
+              "description": "19. Agent submitted prior auth form in Payer A portal",
+              "message": "Mismatch: expected=1, actual=0"
+            },
+            {
+              "description": "20. Agent added authorization note in EMR Communications",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "21. EMR note contains the Payer A authorization reference number",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "22. Agent cleared referral REF-2025-004 from worklist",
+              "message": "Mismatch: expected=True, actual=False"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "emr-hard-1",
+          "task_file": "prior_auth/emr-hard-1.json",
+          "arm": "baseline_claude55",
+          "full_success": false,
+          "percentage": 33.33333333333333,
+          "points_earned": 7.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 160.34,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "8. Agent selected Outpatient as request type",
+              "message": "Mismatch: expected=outpatient, actual=None"
+            },
+            {
+              "description": "9. Agent entered correct member ID in Payer A form",
+              "message": "Mismatch: expected=AET123456789, actual=None"
+            },
+            {
+              "description": "12. Agent entered correct patient DOB in Payer A form",
+              "message": "Mismatch: expected=1965-03-15, actual=None"
+            },
+            {
+              "description": "13. Agent entered diagnosis code H35.32 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "14. Agent entered diagnosis code H35.31 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "15. Agent entered CPT code 67028 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "16. Agent entered CPT code J2778 (ranibizumab injection) in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "17. Authorization request includes calculated annual dosage (~12mg)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "18. Clinical indication mentions the diagnosis (AMD)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "19. Agent uploaded letter of medical necessity to Payer A form",
+              "message": "Mismatch:  does not contain Medical_Necessity_Letter"
+            },
+            {
+              "description": "20. Agent submitted prior auth form in Payer A portal",
+              "message": "Mismatch: expected=1, actual=0"
+            },
+            {
+              "description": "21. Agent added authorization note in EMR Communications",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "22. EMR note contains the Payer A authorization reference number",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "23. Agent cleared referral REF-2025-001 from worklist",
+              "message": "Mismatch: expected=True, actual=False"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "denial-easy-1",
+          "task_file": "appeals_denials/denial-easy-1.json",
+          "arm": "baseline_claude55",
+          "full_success": false,
+          "percentage": 22.22222222222222,
+          "points_earned": 2.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 164.48,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "Agent selected the correct disposition: Route to Clinical Appeals",
+              "message": "Mismatch: expected=Route to Clinical Appeals, actual=None"
+            },
+            {
+              "description": "Agent added a triage note documenting their reasoning",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "Triage note mentions denial code CO-50",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "Triage note mentions remark code N386 or LCD",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "Triage note references diagnosis H35.32",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "Triage note references CPT 67028",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "Triage note explains this is a documentation gap, not a clinical dispute",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "denial-easy-2",
+          "task_file": "appeals_denials/denial-easy-2.json",
+          "arm": "baseline_claude55",
+          "full_success": false,
+          "percentage": 85.71428571428571,
+          "points_earned": 6.0,
+          "max_points": 0.0,
+          "steps": 11,
+          "elapsed_s": 86.42,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "Triage note explains the delegation/capitation arrangement requires rerouting",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "denial-medium-1",
+          "task_file": "appeals_denials/denial-medium-1.json",
+          "arm": "baseline_claude55",
+          "full_success": false,
+          "percentage": 94.44444444444444,
+          "points_earned": 17.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 170.75,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "Triage note documents appeal deadline",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "fax-easy-1",
+          "task_file": "dme/fax-easy-1.json",
+          "arm": "baseline_claude55",
+          "full_success": true,
+          "percentage": 100.0,
+          "points_earned": 11.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 138.9,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [],
+          "error": null
+        },
+        {
+          "task_id": "fax-easy-2",
+          "task_file": "dme/fax-easy-2.json",
+          "arm": "baseline_claude55",
+          "full_success": true,
+          "percentage": 100.0,
+          "points_earned": 11.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 132.72,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [],
+          "error": null
+        },
+        {
+          "task_id": "fax-medium-1",
+          "task_file": "dme/fax-medium-1.json",
+          "arm": "baseline_claude55",
+          "full_success": true,
+          "percentage": 100.0,
+          "points_earned": 11.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 133.78,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 0,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [],
+          "error": null
+        }
+      ]
+    },
+    "clean_commit_jit_claude55": {
+      "aggregate": {
+        "n": 12,
+        "full_completion_count": 5,
+        "full_completion_rate": 0.4167,
+        "full_completion_wilson_95": [
+          0.1933,
+          0.6805
+        ],
+        "mean_subtask_percentage": 74.57,
+        "avc_count": 3,
+        "avc_rate": 0.25,
+        "avc_wilson_95": [
+          0.0889,
+          0.5323
+        ],
+        "ser_count": 6,
+        "ser_rate": 0.5,
+        "ser_wilson_95": [
+          0.2538,
+          0.7462
+        ],
+        "escalation_count": 3,
+        "escalation_rate": 0.25,
+        "true_escalation_count": 1,
+        "hep": 0.3333,
+        "hep_wilson_95": [
+          0.0615,
+          0.7923
+        ],
+        "total_reloads": 58,
+        "total_critic_calls": 17,
+        "total_nudges": 10
+      },
+      "episodes": [
+        {
+          "task_id": "emr-easy-1",
+          "task_file": "prior_auth/emr-easy-1.json",
+          "arm": "clean_commit_jit_claude55",
+          "full_success": false,
+          "percentage": 75.0,
+          "points_earned": 3.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 222.0,
+          "escalated": true,
+          "escalation_reason": "unparseable_critic_output",
+          "reloads": 12,
+          "critic_calls": 10,
+          "nudges_used": 2,
+          "failed_subtasks": [
+            {
+              "description": "Agent mentioned Medicare as reason for no auth",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "emr-easy-2",
+          "task_file": "prior_auth/emr-easy-2.json",
+          "arm": "clean_commit_jit_claude55",
+          "full_success": true,
+          "percentage": 100.0,
+          "points_earned": 4.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 185.76,
+          "escalated": true,
+          "escalation_reason": "unparseable_critic_output",
+          "reloads": 7,
+          "critic_calls": 5,
+          "nudges_used": 2,
+          "failed_subtasks": [],
+          "error": null
+        },
+        {
+          "task_id": "emr-medium-1",
+          "task_file": "prior_auth/emr-medium-1.json",
+          "arm": "clean_commit_jit_claude55",
+          "full_success": false,
+          "percentage": 30.0,
+          "points_earned": 6.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 246.73,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 3,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "7. Agent selected Outpatient Procedure as request type",
+              "message": "Mismatch: expected=outpatient, actual=None"
+            },
+            {
+              "description": "8. Agent entered correct member ID in Payer A form",
+              "message": "Mismatch: expected=AET123456789, actual=None"
+            },
+            {
+              "description": "9. Agent entered correct patient DOB in Payer A form",
+              "message": "Mismatch: expected=1965-03-15, actual=None"
+            },
+            {
+              "description": "10. Agent entered diagnosis code H35.32 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "11. Agent entered diagnosis code H35.31 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "12. Agent entered diagnosis code E11.9 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "13. Agent entered CPT code 67028 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "14. Agent entered CPT code J2778 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "15. Clinical indication mentions the diagnosis (AMD)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "16. Agent uploaded letter of medical necessity to Payer A form",
+              "message": "Mismatch:  does not contain Medical_Necessity_Letter"
+            },
+            {
+              "description": "17. Agent submitted prior auth form in Payer A portal",
+              "message": "Mismatch: expected=1, actual=0"
+            },
+            {
+              "description": "18. Agent added authorization note in EMR Communications",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "19. EMR note contains the Payer A authorization reference number",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "20. Agent cleared referral REF-2025-001 from worklist",
+              "message": "Mismatch: expected=True, actual=False"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "emr-medium-2",
+          "task_file": "prior_auth/emr-medium-2.json",
+          "arm": "clean_commit_jit_claude55",
+          "full_success": false,
+          "percentage": 36.84210526315789,
+          "points_earned": 7.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 330.31,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 4,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "8. Agent selected Outpatient Procedure as request type",
+              "message": "Mismatch: expected=outpatient, actual=None"
+            },
+            {
+              "description": "9. Agent entered correct member ID in Payer A form",
+              "message": "Mismatch: expected=AET987654321, actual=None"
+            },
+            {
+              "description": "10. Agent entered correct patient DOB in Payer A form",
+              "message": "Mismatch: expected=1962-09-15, actual=None"
+            },
+            {
+              "description": "11. Agent entered diagnosis code H25.11 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "12. Agent entered CPT code 66984 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "13a. Clinical indication mentions pathology finding (nuclear sclerosis/3+ opacity)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "13b. Clinical indication mentions functional impact (visual acuity impairment)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "14. Agent uploaded letter of medical necessity to Payer A form",
+              "message": "Mismatch:  does not contain Medical_Necessity_Letter"
+            },
+            {
+              "description": "15. Agent submitted prior auth form in Payer A portal",
+              "message": "Mismatch: expected=1, actual=0"
+            },
+            {
+              "description": "16. Agent added authorization note in EMR Communications",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "17. EMR note contains the Payer A authorization reference number",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "18. Agent cleared referral REF-2025-003 from worklist",
+              "message": "Mismatch: expected=True, actual=False"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "emr-medium-3",
+          "task_file": "prior_auth/emr-medium-3.json",
+          "arm": "clean_commit_jit_claude55",
+          "full_success": false,
+          "percentage": 36.36363636363637,
+          "points_earned": 8.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 278.19,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 4,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "9. Agent selected Outpatient Procedure as request type",
+              "message": "Mismatch: expected=outpatient, actual=None"
+            },
+            {
+              "description": "10. Agent entered correct member ID in Payer A form",
+              "message": "Mismatch: expected=AET987654322, actual=None"
+            },
+            {
+              "description": "11. Agent entered correct patient DOB in Payer A form",
+              "message": "Mismatch: expected=1960-03-22, actual=None"
+            },
+            {
+              "description": "12. Agent entered diagnosis code H35.32 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "13. Agent entered diagnosis code H35.31 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "14. Agent entered CPT code 67028 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "15. Agent entered CPT code J2778 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "16. Clinical indication mentions the diagnosis (AMD)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "17. Agent uploaded letter of medical necessity to Payer A form",
+              "message": "Mismatch:  does not contain Medical_Necessity_Letter"
+            },
+            {
+              "description": "18. Agent uploaded multiple documents (letter of medical necessity + clinical notes)",
+              "message": "Mismatch: expected=2, actual=0"
+            },
+            {
+              "description": "19. Agent submitted prior auth form in Payer A portal",
+              "message": "Mismatch: expected=1, actual=0"
+            },
+            {
+              "description": "20. Agent added authorization note in EMR Communications",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "21. EMR note contains the Payer A authorization reference number",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "22. Agent cleared referral REF-2025-004 from worklist",
+              "message": "Mismatch: expected=True, actual=False"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "emr-hard-1",
+          "task_file": "prior_auth/emr-hard-1.json",
+          "arm": "clean_commit_jit_claude55",
+          "full_success": false,
+          "percentage": 33.33333333333333,
+          "points_earned": 7.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 265.69,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 3,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "8. Agent selected Outpatient as request type",
+              "message": "Mismatch: expected=outpatient, actual=None"
+            },
+            {
+              "description": "9. Agent entered correct member ID in Payer A form",
+              "message": "Mismatch: expected=AET123456789, actual=None"
+            },
+            {
+              "description": "12. Agent entered correct patient DOB in Payer A form",
+              "message": "Mismatch: expected=1965-03-15, actual=None"
+            },
+            {
+              "description": "13. Agent entered diagnosis code H35.32 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "14. Agent entered diagnosis code H35.31 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "15. Agent entered CPT code 67028 in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "16. Agent entered CPT code J2778 (ranibizumab injection) in Payer A form",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "17. Authorization request includes calculated annual dosage (~12mg)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "18. Clinical indication mentions the diagnosis (AMD)",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "19. Agent uploaded letter of medical necessity to Payer A form",
+              "message": "Mismatch:  does not contain Medical_Necessity_Letter"
+            },
+            {
+              "description": "20. Agent submitted prior auth form in Payer A portal",
+              "message": "Mismatch: expected=1, actual=0"
+            },
+            {
+              "description": "21. Agent added authorization note in EMR Communications",
+              "message": "Mismatch: expected=True, actual=False"
+            },
+            {
+              "description": "22. EMR note contains the Payer A authorization reference number",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            },
+            {
+              "description": "23. Agent cleared referral REF-2025-001 from worklist",
+              "message": "Mismatch: expected=True, actual=False"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "denial-easy-1",
+          "task_file": "appeals_denials/denial-easy-1.json",
+          "arm": "clean_commit_jit_claude55",
+          "full_success": false,
+          "percentage": 88.88888888888889,
+          "points_earned": 8.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 179.43,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 2,
+          "critic_calls": 0,
+          "nudges_used": 0,
+          "failed_subtasks": [
+            {
+              "description": "Triage note explains this is a documentation gap, not a clinical dispute",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "denial-easy-2",
+          "task_file": "appeals_denials/denial-easy-2.json",
+          "arm": "clean_commit_jit_claude55",
+          "full_success": true,
+          "percentage": 100.0,
+          "points_earned": 7.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 199.0,
+          "escalated": true,
+          "escalation_reason": "The denial page for DEN-002 (Johnson, Patricia) is open and reviewed, but no triage disposition has been selected (it still shows '-- Select Disposition --'), no triage note has been written, and nothing has been submitt",
+          "reloads": 8,
+          "critic_calls": 2,
+          "nudges_used": 2,
+          "failed_subtasks": [],
+          "error": null
+        },
+        {
+          "task_id": "denial-medium-1",
+          "task_file": "appeals_denials/denial-medium-1.json",
+          "arm": "clean_commit_jit_claude55",
+          "full_success": false,
+          "percentage": 94.44444444444444,
+          "points_earned": 17.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 215.2,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 3,
+          "critic_calls": 0,
+          "nudges_used": 1,
+          "failed_subtasks": [
+            {
+              "description": "Triage note documents appeal deadline",
+              "message": "score=0.000; runs=3; run_scores=[0.0, 0.0, 0.0]; pass_votes=0/3; description+student_answer+rubric applied"
+            }
+          ],
+          "error": null
+        },
+        {
+          "task_id": "fax-easy-1",
+          "task_file": "dme/fax-easy-1.json",
+          "arm": "clean_commit_jit_claude55",
+          "full_success": true,
+          "percentage": 100.0,
+          "points_earned": 11.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 160.03,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 4,
+          "critic_calls": 0,
+          "nudges_used": 1,
+          "failed_subtasks": [],
+          "error": null
+        },
+        {
+          "task_id": "fax-easy-2",
+          "task_file": "dme/fax-easy-2.json",
+          "arm": "clean_commit_jit_claude55",
+          "full_success": true,
+          "percentage": 100.0,
+          "points_earned": 11.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 143.49,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 4,
+          "critic_calls": 0,
+          "nudges_used": 1,
+          "failed_subtasks": [],
+          "error": null
+        },
+        {
+          "task_id": "fax-medium-1",
+          "task_file": "dme/fax-medium-1.json",
+          "arm": "clean_commit_jit_claude55",
+          "full_success": true,
+          "percentage": 100.0,
+          "points_earned": 11.0,
+          "max_points": 0.0,
+          "steps": 25,
+          "elapsed_s": 141.86,
+          "escalated": false,
+          "escalation_reason": "",
+          "reloads": 4,
+          "critic_calls": 0,
+          "nudges_used": 1,
+          "failed_subtasks": [],
+          "error": null
+        }
+      ]
+    }
+  },
+  "pooled_n24": {
+    "baseline": {
+      "n": 24,
+      "full_completion_count": 7,
+      "full_completion_rate": 0.2917,
+      "full_completion_wilson_95": [
+        0.1491,
+        0.4917
+      ],
+      "mean_subtask_percentage": 68.3,
+      "avc_count": 7,
+      "avc_rate": 0.2917,
+      "avc_wilson_95": [
+        0.1491,
+        0.4917
+      ],
+      "ser_count": 17,
+      "ser_rate": 0.7083,
+      "ser_wilson_95": [
+        0.5083,
+        0.8509
+      ],
+      "escalation_count": 0,
+      "escalation_rate": 0.0,
+      "true_escalation_count": 0,
+      "hep": null,
+      "hep_wilson_95": null,
+      "total_reloads": 0,
+      "total_critic_calls": 0,
+      "total_nudges": 0
+    },
+    "clean_commit_jit": {
+      "n": 24,
+      "full_completion_count": 10,
+      "full_completion_rate": 0.4167,
+      "full_completion_wilson_95": [
+        0.2447,
+        0.6117
+      ],
+      "mean_subtask_percentage": 72.28,
+      "avc_count": 5,
+      "avc_rate": 0.2083,
+      "avc_wilson_95": [
+        0.0924,
+        0.4047
+      ],
+      "ser_count": 11,
+      "ser_rate": 0.4583,
+      "ser_wilson_95": [
+        0.2789,
+        0.6493
+      ],
+      "escalation_count": 8,
+      "escalation_rate": 0.3333,
+      "true_escalation_count": 3,
+      "hep": 0.375,
+      "hep_wilson_95": [
+        0.1368,
+        0.6943
+      ],
+      "total_reloads": 132,
+      "total_critic_calls": 51,
+      "total_nudges": 22
+    },
+    "mcnemar_ser": {
+      "b": 6,
+      "c": 0,
+      "p_value": 0.03125
+    },
+    "mcnemar_avc": {
+      "b": 4,
+      "c": 2,
+      "p_value": 0.6875
+    },
+    "mcnemar_full_completion": {
+      "b": 1,
+      "c": 4,
+      "p_value": 0.375
+    }
+  }
+}

@@ -559,6 +559,7 @@ def collect_run_receipt(path: Path) -> Contribution:
             "independent_system": "independent_readback",
             "independent_session": "screen_readback",
             "persisted_state_reacquisition": "screen_readback",
+            "immediate_screen": "screen_readback",
         }.get(str(doc.get("effect_tier_reached")))
     if assurance in _TIER_RANK:
         out.readback_tiers.append(str(assurance))

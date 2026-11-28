@@ -112,8 +112,11 @@ def make_handler(upstream_host: str, upstream_port: int, control: Control):
         ) -> None:
             self.send_response(status, reason)
             for k, v in headers:
-                if k.lower() != "content-length":
-                    self.send_header(k, v)
+                if "\r" in k or "\n" in k or k.lower() == "content-length":
+                    continue
+                safe_k = k.replace("\r", "").replace("\n", "")
+                safe_v = v.replace("\r", "").replace("\n", "")
+                self.send_header(safe_k, safe_v)
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Connection", "close")
             self.end_headers()

@@ -161,10 +161,11 @@ def test_an_authorization_built_from_the_shape_matches_it(
     program: dict[str, Any],
 ) -> None:
     shape = program["shape"]
+    assert shape["minimum_effect_tier"] == 4
     assert _matches(shape, _authorization(shape))
     other = _authorization(shape, approval_source=ha.approval_source("e" * 64))
     assert not _matches(shape, other)
-    assert not _matches(shape, _authorization(shape, minimum_effect_tier=4))
+    assert not _matches(shape, _authorization(shape, minimum_effect_tier=3))
 
 
 def test_a_signed_admission_authorizes_a_standard_managed_run(
@@ -516,7 +517,7 @@ def test_cli_refuses_a_managed_admitted_program_that_does_not_bind(
     elif case == "other_admission":
         overrides["approval_source"] = ha.approval_source("e" * 64)
     else:
-        overrides["minimum_effect_tier"] = 4
+        overrides["minimum_effect_tier"] = 3
     rc = _run(tmp_path, program, _dispatch(tmp_path, program, **overrides), profile)
     out = capsys.readouterr().out
     assert rc == 2, out

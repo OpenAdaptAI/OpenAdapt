@@ -37,7 +37,6 @@
     "openadapt_flow.deployment -> openadapt_flow.runtime.local_grounder",
     "openadapt_flow.deployment -> openadapt_flow.runtime.remote_vlm",
     "openadapt_flow.deployment -> openadapt_flow.runtime.speed",
-    "openadapt_flow.form_tx.receipt -> openadapt_flow.form_tx.types",
     "openadapt_flow.ir -> openadapt_flow.approval_mode.model",
     "openadapt_flow.ir -> openadapt_flow.qualification",
     "openadapt_flow.ir -> openadapt_flow.qualification_faults",

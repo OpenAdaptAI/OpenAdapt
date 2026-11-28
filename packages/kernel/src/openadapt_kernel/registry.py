@@ -116,12 +116,15 @@ def render_audit_card_html(receipt: Dict[str, Any], public_key_pem: bytes) -> st
     rows = []
     for oid, ob in obligations.items():
         proof = ob.get("readback_proof") or ob.get("proof") or {}
-        substrings = ", ".join(str(s) for s in (proof.get("cited_substrings") or []))
+        evidence = ", ".join(
+            str(s) for s in (proof.get("cited_substrings") or proof.get("cited_value_sha256") or [])
+        )
+        locator = str(proof.get("origin_host") or proof.get("url_or_locator") or "")
         rows.append(
             f"<tr><td>{html.escape(str(oid))}</td>"
             f"<td>{html.escape(str(ob.get('state', ob.get('status', ''))))}</td>"
             f"<td>{html.escape(str(proof.get('channel', '')))}</td>"
-            f"<td><code>{html.escape(substrings or str(proof.get('url_or_locator', '')))}</code></td></tr>"
+            f"<td><code>{html.escape(evidence or locator)}</code></td></tr>"
         )
     status_badge = "SIGNATURE VERIFIED" if sig_ok else "SIGNATURE INVALID"
     color = "#0f766e" if sig_ok else "#b91c1c"

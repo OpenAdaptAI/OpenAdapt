@@ -93,7 +93,11 @@ def run_quickstart(
 
     stream = stream or sys.stdout
     if interactive is None:
-        interactive = bool(sys.stdin.isatty() and getattr(stream, "isatty", bool)())
+        from openadapt.seal_publish import in_ci
+
+        interactive = bool(
+            not in_ci() and sys.stdin.isatty() and getattr(stream, "isatty", bool)()
+        )
     engine: Any
     if openemr is not None:
         from openadapt.quickstart.openemr import OpenEMREngine

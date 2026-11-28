@@ -1,15 +1,13 @@
 """Replayer wiring for the auto-derived on-screen read-back oracle.
 
-These pin the no-connector DEFAULT path: a GUI-only bundle whose consequential
-step declares an auto-derived DIFFERENT-PATH on-screen read-back effect is
-verified out of the box with NO ``effect_verifier`` configured — the replayer
-wires a backend-bound read-back verifier, re-navigates to re-open the record,
-and rules on the re-read value. The safety property under test is asymmetric: a
-genuine save CONFIRMS and proceeds; a PHANTOM save (the record never persisted)
-is HALTED (never a false CONFIRM), even though the write's own screen said
-"Saved".
+These pin the no-connector default path: a GUI-only bundle whose consequential
+step declares a valid bounded on-screen read-back effect (either reset-backed
+different-path reacquisition at tier 3, or bounded same-screen read-back at
+tier 4) is verified out of the box with no external ``effect_verifier``
+configured. Unbounded, unstructured, or unadmitted demonstrated effects still
+refuse to auto-default and stop with ``no EffectVerifier``.
 
-No model calls, no network — the record truth is modelled by the backend.
+No model calls, no network: the record truth is modelled by the backend.
 """
 
 from __future__ import annotations
@@ -161,10 +159,12 @@ def test_auto_default_readback_halts_phantom_save(tmp_path, monkeypatch):
     assert report.model_calls == 0
 
 
-def test_same_surface_only_effect_is_not_auto_default(tmp_path):
-    # A SAME-SURFACE (weak) read-back must NOT be auto-verified with no verifier
-    # configured — it falls through to the fail-safe HALT (non-default).
-    backend = ReadbackBackend(phantom=True)
+def test_same_surface_bounded_effect_auto_verifies_at_tier_four(tmp_path, monkeypatch):
+    import openadapt_flow.vision as vision_mod
+
+    backend = ReadbackBackend(phantom=False)
+    backend.view = NOTE
+    monkeypatch.setattr(vision_mod, "ocr", _ocr_from(backend))
     effect = Effect(
         kind=EffectKind.FIELD_EQUALS,
         value=NOTE,
@@ -172,11 +172,11 @@ def test_same_surface_only_effect_is_not_auto_default(tmp_path):
         readback=ReadbackSpec(region=REGION, different_path=False),
     )
     wf = Workflow(
-        name="save",
+        name="save-in-place",
         steps=[
             Step(
                 id="save",
-                intent="save",
+                intent="save in place",
                 action=ActionKind.KEY,
                 key="Enter",
                 risk="irreversible",
@@ -184,13 +184,77 @@ def test_same_surface_only_effect_is_not_auto_default(tmp_path):
             )
         ],
     )
-    bundle, run_dir = _dirs(tmp_path)
-    replayer = Replayer(backend, vision=FakeVision(), poll_interval_s=0.01)
-    report = replayer.run(wf, bundle_dir=bundle, run_dir=run_dir)
-
-    assert report.success is False
-    r = report.results[0]
-    assert r.effect_verified is False
-    assert "no EffectVerifier" in " ".join(r.effect_results) or "no EffectVerifier" in (
-        r.error or ""
+    bundle, run_dir = _dirs(tmp_path / "confirm")
+    report = Replayer(backend, vision=FakeVision(), poll_interval_s=0.01).run(
+        wf, bundle_dir=bundle, run_dir=run_dir
     )
+    assert report.success is True
+    r = report.results[0]
+    assert r.effect_verified is True
+    assert r.effect_evidence[0].verification_tier == 4
+    assert any("SAME-SURFACE" in line for line in r.effect_results)
+
+    # Wrong on-screen text halts (REFUTED), never a silent pass.
+    backend.view = "stale previous value"
+    bad_bundle, bad_run = _dirs(tmp_path / "refute")
+    bad_report = Replayer(backend, vision=FakeVision(), poll_interval_s=0.01).run(
+        wf, bundle_dir=bad_bundle, run_dir=bad_run
+    )
+    assert bad_report.success is False
+    assert bad_report.results[0].effect_verified is False
+
+
+def test_unbounded_or_unadmitted_effect_is_not_auto_default(tmp_path):
+    # Structured effects without readback, unbounded readbacks (region=None),
+    # and unadmitted demonstrated checks must NOT auto-default; they stop with
+    # no EffectVerifier configured.
+    cases = [
+        Effect(
+            kind=EffectKind.RECORD_WRITTEN,
+            match={"id": "1"},
+            risk="irreversible",
+        ),
+        Effect(
+            kind=EffectKind.FIELD_EQUALS,
+            value=NOTE,
+            risk="irreversible",
+            readback=ReadbackSpec(region=None, different_path=False),
+        ),
+        Effect(
+            kind=EffectKind.FIELD_EQUALS,
+            value=NOTE,
+            risk="irreversible",
+            readback=ReadbackSpec(
+                region=REGION,
+                different_path=True,
+                renavigation=RENAV,
+                reset=ReadbackReset(kind="reopen_window", at=0),
+                demonstrated=True,
+            ),
+        ),
+    ]
+    for index, effect in enumerate(cases):
+        backend = ReadbackBackend(phantom=True)
+        wf = Workflow(
+            name="save",
+            steps=[
+                Step(
+                    id="save",
+                    intent="save",
+                    action=ActionKind.KEY,
+                    key="Enter",
+                    risk="irreversible",
+                    effects=[effect],
+                )
+            ],
+        )
+        bundle, run_dir = _dirs(tmp_path / f"case-{index}")
+        replayer = Replayer(backend, vision=FakeVision(), poll_interval_s=0.01)
+        report = replayer.run(wf, bundle_dir=bundle, run_dir=run_dir)
+
+        assert report.success is False
+        r = report.results[0]
+        assert r.effect_verified is False
+        assert "no EffectVerifier" in " ".join(
+            r.effect_results
+        ) or "no EffectVerifier" in (r.error or "")

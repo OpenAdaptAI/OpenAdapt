@@ -51,6 +51,7 @@ def fresh_machine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         at_rest.MODE_ENV,
         at_rest.ENCRYPT_ENV,
         at_rest.HOME_ENV,
+        "OPENADAPT_HOME",
         crypto.ENV_KEY,
         sealed_set.RECORDING_ENV_KEY,
         "OPENADAPT_BUNDLE_KEY",
@@ -119,4 +120,5 @@ def test_quickstart_on_a_fresh_machine_seals_every_run(
         assert b'"execution_outcome":"VERIFIED"' in report.replace(b" ", b"")
         # The run sealed: this is the step that failed on Flow 4.0.0.
         assert (run_dir / "seal.json").is_file()
+        assert (run_dir / "receipt.json").is_file()
         assert sealed_set.open_set(run_dir).is_file("run-summary.json")

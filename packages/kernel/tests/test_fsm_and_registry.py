@@ -137,7 +137,9 @@ def test_zero_pii_signed_pack_registry_and_offline_audit_card(tmp_path: Path) ->
     receipt = mint_receipt(ledger, "clean-v2", priv)
     html_ok = render_audit_card_html(receipt, pub)
     assert "SIGNATURE VERIFIED" in html_ok
-    assert "POL-42" in html_ok
+    assert "POL-42" not in html_ok  # zero-PHI redacted by default
+    import hashlib
+    assert hashlib.sha256(b"POL-42").hexdigest() in html_ok
 
     receipt["payload"]["pack_id"] = "tampered-pack"
     html_bad = render_audit_card_html(receipt, pub)

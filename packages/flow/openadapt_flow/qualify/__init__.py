@@ -22,6 +22,10 @@ from openadapt_flow.qualify.config import (
 )
 from openadapt_flow.qualify.environment import WebEnvironmentObserver
 from openadapt_flow.qualify.faults import WebFaultDriver
+from openadapt_flow.qualify.windows import (
+    WindowsEnvironmentObserver,
+    WindowsFaultDriver,
+)
 
 __all__ = [
     "CASES",
@@ -33,6 +37,8 @@ __all__ = [
     "VerifyConfig",
     "WebEnvironmentObserver",
     "WebFaultDriver",
+    "WindowsEnvironmentObserver",
+    "WindowsFaultDriver",
     "load_verify_config",
     "parse_verify_config",
     "qualify",

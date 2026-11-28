@@ -510,11 +510,11 @@
          }
         ],
         "default": null,
-        "description": "salted hash of the structured identity string",
+        "description": "salted hash of structured identity",
         "title": "Structured"
        },
        "structured_params": {
-        "description": "Workflow parameters embedded in the structured identity. Their demonstrated values are replaced by fixed sentinels before hashing; replay substitutes the run's value before exact compare.",
+        "description": "Workflow params replaced by fixed sentinels in structured identity.",
         "items": {
          "type": "string"
         },
@@ -525,12 +525,12 @@
         "additionalProperties": {
          "type": "string"
         },
-        "description": "Salted hashes of strict exact/explicitly-normalized identity evidence, including operator-selected extracted fields. Keys are produced by identity_signals.",
+        "description": "Salted hashes of strict identity_signals evidence.",
         "title": "Signal Hashes",
         "type": "object"
        },
        "context_params": {
-        "description": "Workflow parameters replaced by fixed sentinels before the captured-context signal hashes were computed.",
+        "description": "Workflow params replaced by sentinels in captured-context signal hashes.",
         "items": {
          "type": "string"
         },
@@ -546,6 +546,13 @@
         },
         "title": "Param Token Indices",
         "type": "object"
+       },
+       "sibling_generic_hashes": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Sibling Generic Hashes",
+        "type": "array"
        },
        "rests_on_confusable_identifier": {
         "default": false,
@@ -5535,11 +5542,11 @@
          }
         ],
         "default": null,
-        "description": "salted hash of the structured identity string",
+        "description": "salted hash of structured identity",
         "title": "Structured"
        },
        "structured_params": {
-        "description": "Workflow parameters embedded in the structured identity. Their demonstrated values are replaced by fixed sentinels before hashing; replay substitutes the run's value before exact compare.",
+        "description": "Workflow params replaced by fixed sentinels in structured identity.",
         "items": {
          "type": "string"
         },
@@ -5550,12 +5557,12 @@
         "additionalProperties": {
          "type": "string"
         },
-        "description": "Salted hashes of strict exact/explicitly-normalized identity evidence, including operator-selected extracted fields. Keys are produced by identity_signals.",
+        "description": "Salted hashes of strict identity_signals evidence.",
         "title": "Signal Hashes",
         "type": "object"
        },
        "context_params": {
-        "description": "Workflow parameters replaced by fixed sentinels before the captured-context signal hashes were computed.",
+        "description": "Workflow params replaced by sentinels in captured-context signal hashes.",
         "items": {
          "type": "string"
         },
@@ -5571,6 +5578,13 @@
         },
         "title": "Param Token Indices",
         "type": "object"
+       },
+       "sibling_generic_hashes": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Sibling Generic Hashes",
+        "type": "array"
        },
        "rests_on_confusable_identifier": {
         "default": false,
@@ -8750,11 +8764,11 @@
          }
         ],
         "default": null,
-        "description": "salted hash of the structured identity string",
+        "description": "salted hash of structured identity",
         "title": "Structured"
        },
        "structured_params": {
-        "description": "Workflow parameters embedded in the structured identity. Their demonstrated values are replaced by fixed sentinels before hashing; replay substitutes the run's value before exact compare.",
+        "description": "Workflow params replaced by fixed sentinels in structured identity.",
         "items": {
          "type": "string"
         },
@@ -8765,12 +8779,12 @@
         "additionalProperties": {
          "type": "string"
         },
-        "description": "Salted hashes of strict exact/explicitly-normalized identity evidence, including operator-selected extracted fields. Keys are produced by identity_signals.",
+        "description": "Salted hashes of strict identity_signals evidence.",
         "title": "Signal Hashes",
         "type": "object"
        },
        "context_params": {
-        "description": "Workflow parameters replaced by fixed sentinels before the captured-context signal hashes were computed.",
+        "description": "Workflow params replaced by sentinels in captured-context signal hashes.",
         "items": {
          "type": "string"
         },
@@ -8786,6 +8800,13 @@
         },
         "title": "Param Token Indices",
         "type": "object"
+       },
+       "sibling_generic_hashes": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Sibling Generic Hashes",
+        "type": "array"
        },
        "rests_on_confusable_identifier": {
         "default": false,
@@ -10561,11 +10582,11 @@
          }
         ],
         "default": null,
-        "description": "salted hash of the structured identity string",
+        "description": "salted hash of structured identity",
         "title": "Structured"
        },
        "structured_params": {
-        "description": "Workflow parameters embedded in the structured identity. Their demonstrated values are replaced by fixed sentinels before hashing; replay substitutes the run's value before exact compare.",
+        "description": "Workflow params replaced by fixed sentinels in structured identity.",
         "items": {
          "type": "string"
         },
@@ -10576,12 +10597,12 @@
         "additionalProperties": {
          "type": "string"
         },
-        "description": "Salted hashes of strict exact/explicitly-normalized identity evidence, including operator-selected extracted fields. Keys are produced by identity_signals.",
+        "description": "Salted hashes of strict identity_signals evidence.",
         "title": "Signal Hashes",
         "type": "object"
        },
        "context_params": {
-        "description": "Workflow parameters replaced by fixed sentinels before the captured-context signal hashes were computed.",
+        "description": "Workflow params replaced by sentinels in captured-context signal hashes.",
         "items": {
          "type": "string"
         },
@@ -10597,6 +10618,13 @@
         },
         "title": "Param Token Indices",
         "type": "object"
+       },
+       "sibling_generic_hashes": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Sibling Generic Hashes",
+        "type": "array"
        },
        "rests_on_confusable_identifier": {
         "default": false,
@@ -13875,11 +13903,11 @@
          }
         ],
         "default": null,
-        "description": "salted hash of the structured identity string",
+        "description": "salted hash of structured identity",
         "title": "Structured"
        },
        "structured_params": {
-        "description": "Workflow parameters embedded in the structured identity. Their demonstrated values are replaced by fixed sentinels before hashing; replay substitutes the run's value before exact compare.",
+        "description": "Workflow params replaced by fixed sentinels in structured identity.",
         "items": {
          "type": "string"
         },
@@ -13890,12 +13918,12 @@
         "additionalProperties": {
          "type": "string"
         },
-        "description": "Salted hashes of strict exact/explicitly-normalized identity evidence, including operator-selected extracted fields. Keys are produced by identity_signals.",
+        "description": "Salted hashes of strict identity_signals evidence.",
         "title": "Signal Hashes",
         "type": "object"
        },
        "context_params": {
-        "description": "Workflow parameters replaced by fixed sentinels before the captured-context signal hashes were computed.",
+        "description": "Workflow params replaced by sentinels in captured-context signal hashes.",
         "items": {
          "type": "string"
         },
@@ -13911,6 +13939,13 @@
         },
         "title": "Param Token Indices",
         "type": "object"
+       },
+       "sibling_generic_hashes": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Sibling Generic Hashes",
+        "type": "array"
        },
        "rests_on_confusable_identifier": {
         "default": false,
@@ -15445,11 +15480,11 @@
          }
         ],
         "default": null,
-        "description": "salted hash of the structured identity string",
+        "description": "salted hash of structured identity",
         "title": "Structured"
        },
        "structured_params": {
-        "description": "Workflow parameters embedded in the structured identity. Their demonstrated values are replaced by fixed sentinels before hashing; replay substitutes the run's value before exact compare.",
+        "description": "Workflow params replaced by fixed sentinels in structured identity.",
         "items": {
          "type": "string"
         },
@@ -15460,12 +15495,12 @@
         "additionalProperties": {
          "type": "string"
         },
-        "description": "Salted hashes of strict exact/explicitly-normalized identity evidence, including operator-selected extracted fields. Keys are produced by identity_signals.",
+        "description": "Salted hashes of strict identity_signals evidence.",
         "title": "Signal Hashes",
         "type": "object"
        },
        "context_params": {
-        "description": "Workflow parameters replaced by fixed sentinels before the captured-context signal hashes were computed.",
+        "description": "Workflow params replaced by sentinels in captured-context signal hashes.",
         "items": {
          "type": "string"
         },
@@ -15481,6 +15516,13 @@
         },
         "title": "Param Token Indices",
         "type": "object"
+       },
+       "sibling_generic_hashes": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Sibling Generic Hashes",
+        "type": "array"
        },
        "rests_on_confusable_identifier": {
         "default": false,
@@ -16079,11 +16121,11 @@
          }
         ],
         "default": null,
-        "description": "salted hash of the structured identity string",
+        "description": "salted hash of structured identity",
         "title": "Structured"
        },
        "structured_params": {
-        "description": "Workflow parameters embedded in the structured identity. Their demonstrated values are replaced by fixed sentinels before hashing; replay substitutes the run's value before exact compare.",
+        "description": "Workflow params replaced by fixed sentinels in structured identity.",
         "items": {
          "type": "string"
         },
@@ -16094,12 +16136,12 @@
         "additionalProperties": {
          "type": "string"
         },
-        "description": "Salted hashes of strict exact/explicitly-normalized identity evidence, including operator-selected extracted fields. Keys are produced by identity_signals.",
+        "description": "Salted hashes of strict identity_signals evidence.",
         "title": "Signal Hashes",
         "type": "object"
        },
        "context_params": {
-        "description": "Workflow parameters replaced by fixed sentinels before the captured-context signal hashes were computed.",
+        "description": "Workflow params replaced by sentinels in captured-context signal hashes.",
         "items": {
          "type": "string"
         },
@@ -16115,6 +16157,13 @@
         },
         "title": "Param Token Indices",
         "type": "object"
+       },
+       "sibling_generic_hashes": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Sibling Generic Hashes",
+        "type": "array"
        },
        "rests_on_confusable_identifier": {
         "default": false,
@@ -17084,11 +17133,11 @@
          }
         ],
         "default": null,
-        "description": "salted hash of the structured identity string",
+        "description": "salted hash of structured identity",
         "title": "Structured"
        },
        "structured_params": {
-        "description": "Workflow parameters embedded in the structured identity. Their demonstrated values are replaced by fixed sentinels before hashing; replay substitutes the run's value before exact compare.",
+        "description": "Workflow params replaced by fixed sentinels in structured identity.",
         "items": {
          "type": "string"
         },
@@ -17099,12 +17148,12 @@
         "additionalProperties": {
          "type": "string"
         },
-        "description": "Salted hashes of strict exact/explicitly-normalized identity evidence, including operator-selected extracted fields. Keys are produced by identity_signals.",
+        "description": "Salted hashes of strict identity_signals evidence.",
         "title": "Signal Hashes",
         "type": "object"
        },
        "context_params": {
-        "description": "Workflow parameters replaced by fixed sentinels before the captured-context signal hashes were computed.",
+        "description": "Workflow params replaced by sentinels in captured-context signal hashes.",
         "items": {
          "type": "string"
         },
@@ -17120,6 +17169,13 @@
         },
         "title": "Param Token Indices",
         "type": "object"
+       },
+       "sibling_generic_hashes": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Sibling Generic Hashes",
+        "type": "array"
        },
        "rests_on_confusable_identifier": {
         "default": false,
@@ -20595,11 +20651,11 @@
          }
         ],
         "default": null,
-        "description": "salted hash of the structured identity string",
+        "description": "salted hash of structured identity",
         "title": "Structured"
        },
        "structured_params": {
-        "description": "Workflow parameters embedded in the structured identity. Their demonstrated values are replaced by fixed sentinels before hashing; replay substitutes the run's value before exact compare.",
+        "description": "Workflow params replaced by fixed sentinels in structured identity.",
         "items": {
          "type": "string"
         },
@@ -20610,12 +20666,12 @@
         "additionalProperties": {
          "type": "string"
         },
-        "description": "Salted hashes of strict exact/explicitly-normalized identity evidence, including operator-selected extracted fields. Keys are produced by identity_signals.",
+        "description": "Salted hashes of strict identity_signals evidence.",
         "title": "Signal Hashes",
         "type": "object"
        },
        "context_params": {
-        "description": "Workflow parameters replaced by fixed sentinels before the captured-context signal hashes were computed.",
+        "description": "Workflow params replaced by sentinels in captured-context signal hashes.",
         "items": {
          "type": "string"
         },
@@ -20631,6 +20687,13 @@
         },
         "title": "Param Token Indices",
         "type": "object"
+       },
+       "sibling_generic_hashes": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Sibling Generic Hashes",
+        "type": "array"
        },
        "rests_on_confusable_identifier": {
         "default": false,
@@ -22755,11 +22818,11 @@
          }
         ],
         "default": null,
-        "description": "salted hash of the structured identity string",
+        "description": "salted hash of structured identity",
         "title": "Structured"
        },
        "structured_params": {
-        "description": "Workflow parameters embedded in the structured identity. Their demonstrated values are replaced by fixed sentinels before hashing; replay substitutes the run's value before exact compare.",
+        "description": "Workflow params replaced by fixed sentinels in structured identity.",
         "items": {
          "type": "string"
         },
@@ -22770,12 +22833,12 @@
         "additionalProperties": {
          "type": "string"
         },
-        "description": "Salted hashes of strict exact/explicitly-normalized identity evidence, including operator-selected extracted fields. Keys are produced by identity_signals.",
+        "description": "Salted hashes of strict identity_signals evidence.",
         "title": "Signal Hashes",
         "type": "object"
        },
        "context_params": {
-        "description": "Workflow parameters replaced by fixed sentinels before the captured-context signal hashes were computed.",
+        "description": "Workflow params replaced by sentinels in captured-context signal hashes.",
         "items": {
          "type": "string"
         },
@@ -22791,6 +22854,13 @@
         },
         "title": "Param Token Indices",
         "type": "object"
+       },
+       "sibling_generic_hashes": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Sibling Generic Hashes",
+        "type": "array"
        },
        "rests_on_confusable_identifier": {
         "default": false,
@@ -27134,7 +27204,7 @@
       "type": "string"
      },
      "reason": {
-      "description": "What was removed, e.g. url_param:token_main or header:cookie.",
+      "description": "What was removed, e.g. url_param:session_token or header:cookie.",
       "title": "Reason",
       "type": "string"
      },
@@ -27169,7 +27239,7 @@
       "type": "string"
      },
      "reason": {
-      "description": "What was removed, e.g. url_param:token_main or header:cookie.",
+      "description": "What was removed, e.g. url_param:session_token or header:cookie.",
       "title": "Reason",
       "type": "string"
      },
@@ -30989,11 +31059,11 @@
          }
         ],
         "default": null,
-        "description": "salted hash of the structured identity string",
+        "description": "salted hash of structured identity",
         "title": "Structured"
        },
        "structured_params": {
-        "description": "Workflow parameters embedded in the structured identity. Their demonstrated values are replaced by fixed sentinels before hashing; replay substitutes the run's value before exact compare.",
+        "description": "Workflow params replaced by fixed sentinels in structured identity.",
         "items": {
          "type": "string"
         },
@@ -31004,12 +31074,12 @@
         "additionalProperties": {
          "type": "string"
         },
-        "description": "Salted hashes of strict exact/explicitly-normalized identity evidence, including operator-selected extracted fields. Keys are produced by identity_signals.",
+        "description": "Salted hashes of strict identity_signals evidence.",
         "title": "Signal Hashes",
         "type": "object"
        },
        "context_params": {
-        "description": "Workflow parameters replaced by fixed sentinels before the captured-context signal hashes were computed.",
+        "description": "Workflow params replaced by sentinels in captured-context signal hashes.",
         "items": {
          "type": "string"
         },
@@ -31025,6 +31095,13 @@
         },
         "title": "Param Token Indices",
         "type": "object"
+       },
+       "sibling_generic_hashes": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Sibling Generic Hashes",
+        "type": "array"
        },
        "rests_on_confusable_identifier": {
         "default": false,
@@ -32629,7 +32706,7 @@
         "type": "string"
        },
        "reason": {
-        "description": "What was removed, e.g. url_param:token_main or header:cookie.",
+        "description": "What was removed, e.g. url_param:session_token or header:cookie.",
         "title": "Reason",
         "type": "string"
        },
@@ -38013,11 +38090,11 @@
          }
         ],
         "default": null,
-        "description": "salted hash of the structured identity string",
+        "description": "salted hash of structured identity",
         "title": "Structured"
        },
        "structured_params": {
-        "description": "Workflow parameters embedded in the structured identity. Their demonstrated values are replaced by fixed sentinels before hashing; replay substitutes the run's value before exact compare.",
+        "description": "Workflow params replaced by fixed sentinels in structured identity.",
         "items": {
          "type": "string"
         },
@@ -38028,12 +38105,12 @@
         "additionalProperties": {
          "type": "string"
         },
-        "description": "Salted hashes of strict exact/explicitly-normalized identity evidence, including operator-selected extracted fields. Keys are produced by identity_signals.",
+        "description": "Salted hashes of strict identity_signals evidence.",
         "title": "Signal Hashes",
         "type": "object"
        },
        "context_params": {
-        "description": "Workflow parameters replaced by fixed sentinels before the captured-context signal hashes were computed.",
+        "description": "Workflow params replaced by sentinels in captured-context signal hashes.",
         "items": {
          "type": "string"
         },
@@ -38049,6 +38126,13 @@
         },
         "title": "Param Token Indices",
         "type": "object"
+       },
+       "sibling_generic_hashes": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Sibling Generic Hashes",
+        "type": "array"
        },
        "rests_on_confusable_identifier": {
         "default": false,
@@ -41918,11 +42002,11 @@
          }
         ],
         "default": null,
-        "description": "salted hash of the structured identity string",
+        "description": "salted hash of structured identity",
         "title": "Structured"
        },
        "structured_params": {
-        "description": "Workflow parameters embedded in the structured identity. Their demonstrated values are replaced by fixed sentinels before hashing; replay substitutes the run's value before exact compare.",
+        "description": "Workflow params replaced by fixed sentinels in structured identity.",
         "items": {
          "type": "string"
         },
@@ -41933,12 +42017,12 @@
         "additionalProperties": {
          "type": "string"
         },
-        "description": "Salted hashes of strict exact/explicitly-normalized identity evidence, including operator-selected extracted fields. Keys are produced by identity_signals.",
+        "description": "Salted hashes of strict identity_signals evidence.",
         "title": "Signal Hashes",
         "type": "object"
        },
        "context_params": {
-        "description": "Workflow parameters replaced by fixed sentinels before the captured-context signal hashes were computed.",
+        "description": "Workflow params replaced by sentinels in captured-context signal hashes.",
         "items": {
          "type": "string"
         },
@@ -41954,6 +42038,13 @@
         },
         "title": "Param Token Indices",
         "type": "object"
+       },
+       "sibling_generic_hashes": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Sibling Generic Hashes",
+        "type": "array"
        },
        "rests_on_confusable_identifier": {
         "default": false,
@@ -46190,11 +46281,11 @@
          }
         ],
         "default": null,
-        "description": "salted hash of the structured identity string",
+        "description": "salted hash of structured identity",
         "title": "Structured"
        },
        "structured_params": {
-        "description": "Workflow parameters embedded in the structured identity. Their demonstrated values are replaced by fixed sentinels before hashing; replay substitutes the run's value before exact compare.",
+        "description": "Workflow params replaced by fixed sentinels in structured identity.",
         "items": {
          "type": "string"
         },
@@ -46205,12 +46296,12 @@
         "additionalProperties": {
          "type": "string"
         },
-        "description": "Salted hashes of strict exact/explicitly-normalized identity evidence, including operator-selected extracted fields. Keys are produced by identity_signals.",
+        "description": "Salted hashes of strict identity_signals evidence.",
         "title": "Signal Hashes",
         "type": "object"
        },
        "context_params": {
-        "description": "Workflow parameters replaced by fixed sentinels before the captured-context signal hashes were computed.",
+        "description": "Workflow params replaced by sentinels in captured-context signal hashes.",
         "items": {
          "type": "string"
         },
@@ -46226,6 +46317,13 @@
         },
         "title": "Param Token Indices",
         "type": "object"
+       },
+       "sibling_generic_hashes": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Sibling Generic Hashes",
+        "type": "array"
        },
        "rests_on_confusable_identifier": {
         "default": false,
@@ -49544,11 +49642,11 @@
          }
         ],
         "default": null,
-        "description": "salted hash of the structured identity string",
+        "description": "salted hash of structured identity",
         "title": "Structured"
        },
        "structured_params": {
-        "description": "Workflow parameters embedded in the structured identity. Their demonstrated values are replaced by fixed sentinels before hashing; replay substitutes the run's value before exact compare.",
+        "description": "Workflow params replaced by fixed sentinels in structured identity.",
         "items": {
          "type": "string"
         },
@@ -49559,12 +49657,12 @@
         "additionalProperties": {
          "type": "string"
         },
-        "description": "Salted hashes of strict exact/explicitly-normalized identity evidence, including operator-selected extracted fields. Keys are produced by identity_signals.",
+        "description": "Salted hashes of strict identity_signals evidence.",
         "title": "Signal Hashes",
         "type": "object"
        },
        "context_params": {
-        "description": "Workflow parameters replaced by fixed sentinels before the captured-context signal hashes were computed.",
+        "description": "Workflow params replaced by sentinels in captured-context signal hashes.",
         "items": {
          "type": "string"
         },
@@ -49580,6 +49678,13 @@
         },
         "title": "Param Token Indices",
         "type": "object"
+       },
+       "sibling_generic_hashes": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Sibling Generic Hashes",
+        "type": "array"
        },
        "rests_on_confusable_identifier": {
         "default": false,
@@ -51452,11 +51557,11 @@
          }
         ],
         "default": null,
-        "description": "salted hash of the structured identity string",
+        "description": "salted hash of structured identity",
         "title": "Structured"
        },
        "structured_params": {
-        "description": "Workflow parameters embedded in the structured identity. Their demonstrated values are replaced by fixed sentinels before hashing; replay substitutes the run's value before exact compare.",
+        "description": "Workflow params replaced by fixed sentinels in structured identity.",
         "items": {
          "type": "string"
         },
@@ -51467,12 +51572,12 @@
         "additionalProperties": {
          "type": "string"
         },
-        "description": "Salted hashes of strict exact/explicitly-normalized identity evidence, including operator-selected extracted fields. Keys are produced by identity_signals.",
+        "description": "Salted hashes of strict identity_signals evidence.",
         "title": "Signal Hashes",
         "type": "object"
        },
        "context_params": {
-        "description": "Workflow parameters replaced by fixed sentinels before the captured-context signal hashes were computed.",
+        "description": "Workflow params replaced by sentinels in captured-context signal hashes.",
         "items": {
          "type": "string"
         },
@@ -51488,6 +51593,13 @@
         },
         "title": "Param Token Indices",
         "type": "object"
+       },
+       "sibling_generic_hashes": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Sibling Generic Hashes",
+        "type": "array"
        },
        "rests_on_confusable_identifier": {
         "default": false,
@@ -57653,11 +57765,11 @@
          }
         ],
         "default": null,
-        "description": "salted hash of the structured identity string",
+        "description": "salted hash of structured identity",
         "title": "Structured"
        },
        "structured_params": {
-        "description": "Workflow parameters embedded in the structured identity. Their demonstrated values are replaced by fixed sentinels before hashing; replay substitutes the run's value before exact compare.",
+        "description": "Workflow params replaced by fixed sentinels in structured identity.",
         "items": {
          "type": "string"
         },
@@ -57668,12 +57780,12 @@
         "additionalProperties": {
          "type": "string"
         },
-        "description": "Salted hashes of strict exact/explicitly-normalized identity evidence, including operator-selected extracted fields. Keys are produced by identity_signals.",
+        "description": "Salted hashes of strict identity_signals evidence.",
         "title": "Signal Hashes",
         "type": "object"
        },
        "context_params": {
-        "description": "Workflow parameters replaced by fixed sentinels before the captured-context signal hashes were computed.",
+        "description": "Workflow params replaced by sentinels in captured-context signal hashes.",
         "items": {
          "type": "string"
         },
@@ -57689,6 +57801,13 @@
         },
         "title": "Param Token Indices",
         "type": "object"
+       },
+       "sibling_generic_hashes": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Sibling Generic Hashes",
+        "type": "array"
        },
        "rests_on_confusable_identifier": {
         "default": false,
@@ -62809,6 +62928,8 @@
       "anyOf": [
        {
         "enum": [
+         "same_screen",
+         "reopened",
          "separate_session",
          "system_of_record"
         ],

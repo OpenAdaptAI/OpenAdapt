@@ -496,9 +496,25 @@ def test_production_gate_rejects_immediate_screen_but_accepts_a_reset_reopen(
 ):
     immediate, immediate_bundle = _sealed(tmp_path, _workflow(), encrypted=False)
     onscreen = OnScreenReadbackVerifier(vision=object())
-    refused = _gate(
+    # Default Standard admits tier 4 (same_screen) out of the box.
+    standard_default = _gate(
         immediate,
         immediate_bundle,
+        ExecutionProfile.STANDARD,
+        verifier=onscreen,
+        durable=True,
+    )
+    assert standard_default.passed, standard_default.render()
+
+    # Raising minimum_readback to "reopened" requires a reset-backed tier-3 reopen.
+    reopen_required_wf = _workflow()
+    reopen_required_wf.minimum_readback = "reopened"
+    immediate_strict, immediate_strict_bundle = _sealed(
+        tmp_path / "immediate-strict", reopen_required_wf, encrypted=False
+    )
+    refused = _gate(
+        immediate_strict,
+        immediate_strict_bundle,
         ExecutionProfile.STANDARD,
         verifier=onscreen,
         durable=True,
@@ -515,6 +531,7 @@ def test_production_gate_rejects_immediate_screen_but_accepts_a_reset_reopen(
         }
     )
     persisted_workflow = _workflow()
+    persisted_workflow.minimum_readback = "reopened"
     persisted_workflow.steps[0].effects = [persisted_effect]
     persisted, persisted_bundle = _sealed(
         tmp_path / "persisted",
@@ -744,10 +761,6 @@ def test_production_profiles_never_verify_screen_only_consequential_result():
             is ExecutionOutcome.VERIFIED
         )
         assert (
-            classify_execution_outcome(immediate, workflow, profile)
-            is ExecutionOutcome.COMPLETED_UNVERIFIED
-        )
-        assert (
             classify_execution_outcome(arbitrary, workflow, profile)
             is ExecutionOutcome.COMPLETED_UNVERIFIED
         )
@@ -755,12 +768,19 @@ def test_production_profiles_never_verify_screen_only_consequential_result():
             classify_execution_outcome(missing_identity, workflow, profile)
             is ExecutionOutcome.COMPLETED_UNVERIFIED
         )
-    # The Standard *gate* still admits persisted-state reacquisition so a
-    # pixel-only Citrix run can execute with halt-on-doubt. VERIFIED itself
-    # requires an independent system-of-record read (tier 1 or 2) on both
-    # production profiles: an on-screen re-read cannot prove the write.
+    # Standard defaults to tier 4 (same_screen), so bounded same-screen and
+    # reopen checks classify as VERIFIED unless a stricter floor is declared.
+    assert (
+        classify_execution_outcome(immediate, workflow, ExecutionProfile.STANDARD)
+        is ExecutionOutcome.VERIFIED
+    )
     assert (
         classify_execution_outcome(persisted, workflow, ExecutionProfile.STANDARD)
+        is ExecutionOutcome.VERIFIED
+    )
+    # Regulated requires independent evidence (tier 1 or 2) and refuses tier 3 and 4.
+    assert (
+        classify_execution_outcome(immediate, workflow, ExecutionProfile.REGULATED)
         is ExecutionOutcome.COMPLETED_UNVERIFIED
     )
     assert (
@@ -1826,7 +1846,7 @@ def test_program_edge_kind_disambiguates_normal_and_exception_paths(tmp_path):
             runtime_inputs_digest=runtime_inputs_digest(item, None, None),
             admitted_policy_name="permissive",
             execution_profile="standard",
-            minimum_effect_tier=int(VerificationTier.PERSISTED_STATE_REACQUISITION),
+            minimum_effect_tier=int(VerificationTier.IMMEDIATE_SCREEN),
             required_identity_step_ids=(),
         )
         report = Replayer(
@@ -2718,8 +2738,44 @@ def test_standard_rechecks_settled_requirement_at_actuation_boundary(tmp_path):
 
 
 def test_standard_rechecks_effect_tier_before_actuation(tmp_path):
+    class _UntypedVerifier(_TieredVerifier):
+        verification_tier = None  # type: ignore[assignment]
+
+    # Default Standard (tier 4 floor) refuses an untyped verifier before actuation.
+    default_wf = _key_workflow("tier-boundary-default", with_effect=True)
+    default_wf, default_bundle = _sealed(
+        tmp_path / "default", default_wf, encrypted=False
+    )
+    default_gate = _gate(
+        default_wf,
+        default_bundle,
+        ExecutionProfile.STANDARD,
+        verifier=_TieredVerifier(),
+        durable=True,
+    )
+    default_auth = build_runtime_authorization(default_wf, default_gate)
+    default_backend = FakeBackend()
+    default_report = Replayer(
+        default_backend,
+        vision=_ReadyVision(),
+        effect_verifier=_UntypedVerifier(),
+        governed_authorization=default_auth,
+        durable=True,
+        require_settled=True,
+    ).run(
+        default_wf,
+        bundle_dir=default_bundle,
+        run_dir=tmp_path / "tier-boundary-default-run",
+    )
+    assert default_report.execution_outcome == ExecutionOutcome.HALTED.value
+    assert default_report.results[0].failure_category == "governed_refusal"
+    assert default_backend.actions == []
+
+    # Standard with minimum_readback="reopened" (tier 3 floor) refuses tier-4
+    # OnScreenReadbackVerifier before actuation.
     workflow = _key_workflow("tier-boundary", with_effect=True)
-    workflow, bundle = _sealed(tmp_path, workflow, encrypted=False)
+    workflow.minimum_readback = "reopened"
+    workflow, bundle = _sealed(tmp_path / "reopen", workflow, encrypted=False)
     gate = _gate(
         workflow,
         bundle,
@@ -3054,7 +3110,7 @@ def test_standard_program_resume_preserves_exact_loop_contracts_without_reactuat
         runtime_inputs_digest=runtime_inputs_digest(workflow, None, None),
         admitted_policy_name="permissive",
         execution_profile="standard",
-        minimum_effect_tier=int(VerificationTier.PERSISTED_STATE_REACQUISITION),
+        minimum_effect_tier=int(VerificationTier.IMMEDIATE_SCREEN),
         required_identity_step_ids=("write",),
     )
     verifier = FakeSoRVerifier()

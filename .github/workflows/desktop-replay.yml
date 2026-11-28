@@ -54,6 +54,7 @@ on:
       - packages/flow/tests/e2e/test_windows_hosted_replay.py
       - packages/flow/tests/e2e/test_native_keyboard_lease.py
       - packages/flow/tests/e2e/test_windows_hosted_governed.py
+      - packages/flow/tests/e2e/test_windows_qualification_campaign.py
       - packages/flow/tests/e2e/test_windows_approval_completeness.py
       - packages/flow/tests/_approver_keys.py
       - packages/flow/tests/conftest.py
@@ -96,7 +97,7 @@ jobs:
     name: windows replay (Patient Notes, WindowsBackend)
     if: github.event.pull_request.draft != true
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 50
     env:
       EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     defaults:
@@ -285,6 +286,22 @@ jobs:
           echo "governed step outcome: $GOVERNED_OUTCOME"
           python ../../scripts/ci/check_windows_governed_safety.py \
             "$RUNNER_TEMP/windows-governed-evidence.json"
+      - name: Qualify native Windows with real faults and complete record read-back
+        env:
+          OAFLOW_WINDOWS_HOSTED_E2E: "1"
+          OAFLOW_WINDOWS_QUALIFICATION_EVIDENCE: ${{ runner.temp }}/windows-qualification-evidence.json
+        run: |
+          pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/wq" \
+            tests/e2e/test_windows_qualification_campaign.py --junitxml=runs/windows-qualification-junit.xml
+          python - <<'PYCODE'
+          import json, os
+          import xml.etree.ElementTree as ET
+          cases = list(ET.parse("runs/windows-qualification-junit.xml").getroot().iter("testcase"))
+          assert len(cases) == 1 and not any(c.find(tag) is not None for c in cases for tag in ("skipped", "failure", "error"))
+          evidence = json.load(open(os.environ["OAFLOW_WINDOWS_QUALIFICATION_EVIDENCE"]))
+          assert evidence["completed"] and len(evidence["result"]["cases"]) == 18 and evidence["admission_verified"]
+          assert all(case["passed"] for case in evidence["result"]["cases"])
+          PYCODE
       - name: Keep the evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -295,6 +312,11 @@ jobs:
             ${{ runner.temp }}/native-approval-evidence.frames/*.png
             ${{ runner.temp }}/windows-replay-evidence.json
             ${{ runner.temp }}/windows-governed-evidence.json
+            ${{ runner.temp }}/windows-qualification-evidence.json
+            ${{ runner.temp }}/wq/**/report.json
+            ${{ runner.temp }}/wq/**/result.json
+            ${{ runner.temp }}/wq/**/agent.log
+            ${{ runner.temp }}/wq/**/*.png
             ${{ runner.temp }}/nkl-editable/*.json
             ${{ runner.temp }}/nkl-editable/*.xml
             ${{ runner.temp }}/nkl-editable/*.log

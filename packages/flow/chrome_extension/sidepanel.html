@@ -3,33 +3,57 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>OpenAdapt Co-Pilot</title>
   <link rel="stylesheet" href="sidepanel.css">
 </head>
 <body>
   <div class="copilot-shell">
     <header class="copilot-header">
-      <div class="brand-row">
-        <div class="brand-mark" aria-hidden="true">OA</div>
-        <div class="brand-copy">
-          <h1 class="brand-title">OpenAdapt Co-Pilot</h1>
-          <span class="trust-subtitle">Local Native Channel &middot; Zero Cloud</span>
+      <div class="header-top">
+        <div class="brand-row">
+          <div class="brand-mark" aria-hidden="true">OA</div>
+          <div class="brand-copy">
+            <h1 class="brand-title">OpenAdapt Co-Pilot</h1>
+            <span class="trust-subtitle">Staged before Submit &middot; No data leaves this browser</span>
+          </div>
+        </div>
+        <div class="header-right">
+          <a
+            class="docs-link"
+            href="https://docs.openadapt.ai/guides/chrome-copilot/"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="OpenAdapt Co-Pilot documentation"
+          >Docs &#8599;</a>
+          <span id="status-pill" class="status-pill" data-status="idle">Idle</span>
         </div>
       </div>
+
       <div class="header-controls">
-        <span id="status-pill" class="status-pill" data-status="idle">Idle</span>
-        <button id="record-btn" class="refresh-btn" type="button" aria-pressed="false" title="Start or stop local workflow recording">
+        <button
+          id="record-btn"
+          class="toolbar-btn"
+          type="button"
+          aria-pressed="false"
+          title="Start or stop local workflow recording"
+        >
           Start Recording
         </button>
-        <button id="refresh-btn" class="refresh-btn" type="button" title="Sync co-pilot state">
+        <button
+          id="refresh-btn"
+          class="toolbar-btn"
+          type="button"
+          title="Sync co-pilot state"
+        >
           Refresh
         </button>
       </div>
     </header>
 
-    <section id="progress-panel" class="progress-panel" aria-label="Dossier progress">
+    <section id="progress-panel" class="progress-panel" aria-label="Form progress">
       <div class="progress-top">
-        <span class="progress-label">Auto-filled fields</span>
+        <span class="progress-label">Fields staged</span>
         <span id="progress-counter" class="progress-counter">0 / 0</span>
       </div>
       <div
@@ -43,7 +67,7 @@
         <div id="progress-bar-fill" class="progress-bar-fill"></div>
       </div>
       <p id="status-line" class="status-line">
-        Waiting for an active local form session.
+        Ready for a local form session. Everything stays staged before Submit.
       </p>
       <div id="run-meta" class="run-meta" hidden></div>
     </section>
@@ -54,15 +78,187 @@
       <section id="auth-pause-container" class="auth-pause-container" aria-label="Sign-in pause" hidden></section>
       <section id="popup-banner-container" class="popup-banner-container" aria-label="Child popup status" hidden></section>
       <section id="receipt-container" class="receipt-container" hidden></section>
-      <section id="halts-container" class="halts-container" aria-label="Active halts"></section>
-      <section id="empty-state" class="empty-state">
-        <p class="empty-title">No operator action required</p>
+      <section id="halts-container" class="halts-container" aria-label="Items needing review"></section>
+
+      <section id="onboarding-card" class="onboarding-card" aria-label="Getting started checklist" hidden>
+        <div class="onboarding-head">
+          <div>
+            <h2 class="onboarding-title">Get started in 3 steps</h2>
+            <p class="onboarding-sub">Runs locally on your computer. Zero cloud egress.</p>
+          </div>
+          <button
+            id="dismiss-onboarding-btn"
+            class="ghost-btn"
+            type="button"
+            hidden
+          >
+            Dismiss
+          </button>
+        </div>
+
+        <ol class="checklist">
+          <li id="step-install" class="checklist-step" data-done="true">
+            <span class="step-badge" aria-hidden="true">&#10003;</span>
+            <div class="step-content">
+              <div class="step-row">
+                <span class="step-title">Extension installed in Chrome</span>
+                <span class="step-pill step-pill-done">Done</span>
+              </div>
+            </div>
+          </li>
+
+          <li id="step-connect" class="checklist-step" data-done="false">
+            <span id="step-connect-badge" class="step-badge" aria-hidden="true">2</span>
+            <div class="step-content">
+              <div class="step-row">
+                <span class="step-title">Connect the local OpenAdapt engine</span>
+                <span id="connection-status-badge" class="step-pill" data-connected="false">Not connected</span>
+              </div>
+
+              <div class="setup-tabs" role="tablist" aria-label="Local engine setup options">
+                <button
+                  id="tab-desktop"
+                  class="setup-tab"
+                  type="button"
+                  role="tab"
+                  aria-selected="true"
+                  aria-controls="panel-desktop"
+                >
+                  Desktop App (easiest)
+                </button>
+                <button
+                  id="tab-cli"
+                  class="setup-tab"
+                  type="button"
+                  role="tab"
+                  aria-selected="false"
+                  aria-controls="panel-cli"
+                >
+                  CLI (developers)
+                </button>
+              </div>
+
+              <div id="panel-desktop" class="setup-panel" role="tabpanel" aria-labelledby="tab-desktop">
+                <p class="step-copy">
+                  Installs the local engine and connects Chrome automatically. No terminal needed.
+                </p>
+                <a
+                  class="option-cta-link"
+                  href="https://openadapt.ai/download"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Download OpenAdapt Desktop &#8599;
+                </a>
+              </div>
+
+              <div id="panel-cli" class="setup-panel" role="tabpanel" aria-labelledby="tab-cli" hidden>
+                <p class="step-copy">
+                  Install the Python package and register the local browser bridge:
+                </p>
+                <div class="cli-box">
+                  <code id="cli-install-cmd" class="cli-code">pip install openadapt &amp;&amp; python -m openadapt_flow.chrome_extension.native_host.install_host --browser chrome</code>
+                  <button
+                    id="copy-cli-btn"
+                    class="copy-btn"
+                    type="button"
+                    aria-label="Copy install command"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+
+              <div class="connect-check-row">
+                <button
+                  id="check-connection-btn"
+                  class="check-conn-btn"
+                  type="button"
+                  data-state="idle"
+                >
+                  Check connection
+                </button>
+                <span id="connection-feedback" class="connection-feedback" aria-live="polite"></span>
+              </div>
+            </div>
+          </li>
+
+          <li id="step-inspect" class="checklist-step" data-done="false">
+            <span id="step-inspect-badge" class="step-badge" aria-hidden="true">3</span>
+            <div class="step-content">
+              <div class="step-row">
+                <span class="step-title">Inspect a web form</span>
+                <span id="step-inspect-pill" class="step-pill">Works now</span>
+              </div>
+              <p class="step-copy">
+                Open any web form or
+                <a
+                  class="inline-link"
+                  href="https://app.openadapt.ai/demo"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >try the sample portal &rarr;</a>,
+                then click <strong>Inspect this page</strong> below to see detected fields and Submit buttons locally.
+              </p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <section id="inspect-card" class="inspect-card" aria-label="Active page inspector">
+        <div class="inspect-header">
+          <div class="inspect-title-group">
+            <span class="section-eyebrow">Active tab</span>
+            <span id="active-tab-host" class="active-tab-host">Checking current tab&hellip;</span>
+          </div>
+          <button
+            id="inspect-page-btn"
+            class="primary-btn"
+            type="button"
+          >
+            Inspect this page
+          </button>
+        </div>
+        <p class="inspect-caption">
+          Scans form fields and Submit buttons locally. Field values and passwords are never read.
+        </p>
+        <div id="inspect-result" class="inspect-result" aria-live="polite" hidden></div>
+        <div class="ecosystem-links">
+          <a
+            class="eco-link"
+            href="https://app.openadapt.ai/demo"
+            target="_blank"
+            rel="noopener noreferrer"
+          >Try the sample portal &rarr;</a>
+          <a
+            class="eco-link"
+            href="https://app.openadapt.ai/prepare?demo=1"
+            target="_blank"
+            rel="noopener noreferrer"
+          >Sign-Off Queue &#8599;</a>
+        </div>
+      </section>
+
+      <section id="empty-state" class="empty-state" hidden>
+        <p class="empty-title">Ready &mdash; nothing needs your pick</p>
         <p class="empty-copy">
-          Grounded dossier fields run locally. Any prefill mismatch or ungrounded
-          required field will pause here for 1-click resolution.
+          Forms stay staged before Submit. If a required field is missing or differs from the page, it will pause here for 1-click review.
         </p>
       </section>
     </main>
+
+    <footer class="copilot-footer">
+      <nav class="footer-links" aria-label="OpenAdapt links">
+        <a href="https://openadapt.ai" target="_blank" rel="noopener noreferrer">openadapt.ai</a>
+        <span class="footer-dot" aria-hidden="true">&middot;</span>
+        <a href="https://docs.openadapt.ai/guides/chrome-copilot/" target="_blank" rel="noopener noreferrer">Docs &#8599;</a>
+        <span class="footer-dot" aria-hidden="true">&middot;</span>
+        <a href="https://app.openadapt.ai/prepare?demo=1" target="_blank" rel="noopener noreferrer">Sign-Off Queue &#8599;</a>
+        <span class="footer-dot" aria-hidden="true">&middot;</span>
+        <a href="https://openadapt.ai/privacy-policy" target="_blank" rel="noopener noreferrer">Privacy &#8599;</a>
+      </nav>
+      <span class="footer-version">v0.3.0 &middot; Zero cloud egress</span>
+    </footer>
   </div>
 
   <script src="sidepanel.js"></script>

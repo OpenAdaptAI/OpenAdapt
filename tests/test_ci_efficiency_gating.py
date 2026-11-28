@@ -72,6 +72,7 @@ def test_codeql_runs_post_merge_and_scheduled_not_on_pull_request() -> None:
     wf = _load("codeql.yml")
     triggers = set(_triggers(wf))
     assert "pull_request" not in triggers
+    assert "merge_group" not in triggers
     assert {"push", "schedule", "workflow_dispatch"}.issubset(triggers)
     assert wf["concurrency"]["cancel-in-progress"] is False
 

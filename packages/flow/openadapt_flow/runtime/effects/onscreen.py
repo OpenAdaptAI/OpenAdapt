@@ -1,47 +1,46 @@
-"""On-screen OCR read-back verifier — the no-API, out-of-the-box effect oracle.
+"""On-screen read-back verifier: the out-of-the-box effect oracle for any UI.
 
-Every other :class:`~openadapt_flow.runtime.effects.effect.EffectVerifier` in
+Other :class:`~openadapt_flow.runtime.effects.effect.EffectVerifier` adapters in
 this package (``RestRecordVerifier``, ``FhirEffectVerifier``,
-``DocumentHashVerifier``) certifies a write by reading an **independent system of
-record** (a JSON API, a FHIR endpoint, a filesystem document). A **Citrix-only /
-Accuro-over-Citrix** substrate exposes none of those to the local box: there is no
-DB, no reachable FHIR, no local file the write lands in — only the **pixels of the
-remote-display client window**. This verifier is the honest fallback for that
-case: after a write, it re-OCRs the saved value and compares it to the expected
-one. It is the DEFAULT oracle for a GUI-only recording — auto-derived from the
-demonstration (``compiler.effect_mining``), so effect verification works with NO
-connector.
+``DocumentHashVerifier``) verify a write by reading an external store (a JSON
+API, a FHIR endpoint, a database view, or a filesystem document). Most
+third-party web portals, closed desktop apps, and remote-display windows
+(Citrix, RDP) expose no API, database view, or file export to the runner. Many
+UIs also update fields or grid cells in place without a separate post-save
+screen, or use non-idempotent requests and wizards where reloading or opening a
+second tab is unsafe.
 
-Two strengths, one gate — read ``ReadbackSpec.different_path``:
+This verifier is the general default oracle for GUI recordings, auto-derived
+from the demonstration (``compiler.effect_mining``) so effect verification
+works with no external connector.
 
-- **DIFFERENT-PATH (strong, default-eligible).** Before reading, the verifier
-  RE-NAVIGATES to the record by a path distinct from the write flow (the
-  re-navigation the demonstrator performed to re-view the saved record: clear
-  the form, search, re-open). Re-opening forces the app to actually FETCH the
-  record, so it defeats the "the form still shows what I typed but nothing
-  persisted" phantom/optimistic-save class. The measured false-CONFIRM rate is
-  ~0 (``benchmark/effect_readback/``), so this is safe to be the default.
+Two graded check levels, distinguished by :meth:`OnScreenReadbackVerifier.verification_tier_for`:
 
-- **SAME-SURFACE (weak, NON-default).** It re-reads the SAME region on the SAME
-  screen the action drove. A rendered "Saved" that the record never received
-  still reads as "Saved", so it CANNOT see a phantom/optimistic/partial save
-  (the measured false-CONFIRM rate is > 0). It is wired but never a default
-  pass — a best-effort presence/consistency signal an operator opts into.
+- **Persisted reacquisition (`reopened`, tier 3).** Before reading, the
+  verifier replays a bounded re-navigation that includes a state reset (a
+  submitted search, reload, or reopened window) to fetch the record again
+  (:data:`DIFFERENT_PATH_IS_DEFAULT_ORACLE`). Reopening catches forms that show
+  typed text locally when nothing persisted.
 
-HONESTY — even different-path is SAME-APPLICATION, not an independent system of
-record. It cannot catch a partial save the app re-renders optimistically, a
-duplicate/double-submit, a lost update by a concurrent writer, or a read served
-from a stale cache/BFF. So the pixel-only safety guarantee does **not** rest on
-this read-back — it rests on the **identity gate** (right record) and
-**halt-on-ambiguity** (never guess a target). This read-back is *additive*
-assurance, and the structured SoR oracle remains the transactional guarantee
-where a read API exists (``docs/LIMITS.md``). The verifier is fail-safe either
-way: it HALTs (INDETERMINATE) when the region is unreadable or re-navigation
-cannot be performed, and HALTs (REFUTED) when the region shows a readable value
-that is NOT expected — it never guesses CONFIRMED.
+- **Same-screen (`same_screen`, tier 4).** Reads the bounded target region on
+  the current screen (via DOM/accessibility structure when available, or OCR on
+  pixel-only surfaces), gated by :data:`SAME_SCREEN_IS_DEFAULT_ORACLE`. This
+  works on any UI, including in-place edits, inline toggles, spreadsheets,
+  modal dialogs that stay on the same view, and non-idempotent portals where
+  reloading cannot be used. Because it reads the acting screen without a state
+  reset, it is recorded at tier 4 (`same_screen`) rather than tier 3
+  (`reopened`): ``Standard`` accepts it toward ``VERIFIED`` unless a workflow
+  raises ``minimum_readback``, while ``Regulated`` requires an independent read
+  (`separate_session` or `system_of_record`).
 
-It implements the :class:`EffectVerifier` protocol so it composes with the same
-runtime plumbing, with ``substrate="onscreen"``.
+Both modes share the same application session, not an external system of record
+(``docs/LIMITS.md``). Both stop on uncertainty: the verifier returns
+``INDETERMINATE`` (halt) when the region is unreadable, ambiguous, unadmitted
+after demonstration authoring, or when re-navigation fails, and returns
+``REFUTED`` (halt) when the region shows a readable value that disagrees with
+the expected value.
+
+It implements the :class:`EffectVerifier` protocol with ``substrate="onscreen"``.
 """
 
 from __future__ import annotations
@@ -75,14 +74,12 @@ READBACK_MIN_RATIO = 0.9
 # fabricated REFUTED/CONFIRMED.
 READABLE_CONF = 0.3
 
-# GATE (measured, ``benchmark/effect_readback/``): whether an auto-derived
-# DIFFERENT-PATH read-back is trusted as the out-of-the-box DEFAULT oracle
-# (auto-wired with no deployment config). Enabled because the measured
-# false-CONFIRM rate for different-path read-back is ~0 on the fixture. A
-# SAME-SURFACE read-back is NEVER a default (measured false-CONFIRM > 0); it
-# is verifiable only when an operator explicitly wires ``effects.kind:
-# onscreen``, which acknowledges the weaker signal.
+# Out-of-the-box default gates for auto-derived on-screen read-back effects
+# when no external verifier is configured. Persisted reacquisition earns tier 3
+# (reopened); same-screen or non-reset navigation stays at tier 4 (same_screen)
+# and is graded accordingly by the active execution profile and minimum_readback.
 DIFFERENT_PATH_IS_DEFAULT_ORACLE = True
+SAME_SCREEN_IS_DEFAULT_ORACLE = True
 
 
 def _valid_renavigation_step(nav: ReadbackNav) -> bool:
@@ -247,11 +244,36 @@ def _searches_by_run_input(spec: Any) -> bool:
 
 
 def is_default_readback_effect(effect: Any) -> bool:
-    """Whether ``effect`` is an on-screen read-back that may be auto-verified as
-    the out-of-the-box default (a DIFFERENT-PATH read-back, gated by
-    :data:`DIFFERENT_PATH_IS_DEFAULT_ORACLE`)."""
+    """Whether ``effect`` carries a valid bounded on-screen read-back that may
+    be verified out of the box when no external connector is configured.
+
+    Demonstrated checks require a person's admission before they can serve as
+    the default verifier. Persisted reacquisition is gated by
+    :data:`DIFFERENT_PATH_IS_DEFAULT_ORACLE`; same-screen and non-reset
+    read-backs are gated by :data:`SAME_SCREEN_IS_DEFAULT_ORACLE` and graded at
+    :attr:`VerificationTier.IMMEDIATE_SCREEN` (:meth:`OnScreenReadbackVerifier.verification_tier_for`).
+    """
     spec = getattr(effect, "readback", None)
-    return bool(DIFFERENT_PATH_IS_DEFAULT_ORACLE and _is_persisted_reacquisition(spec))
+    if spec is None or spec.region is None:
+        return False
+    _, _, width, height = spec.region
+    if width <= 0 or height <= 0:
+        return False
+    if getattr(spec, "demonstrated", False):
+        admitted_fn = getattr(spec, "admitted", None)
+        if callable(admitted_fn):
+            if not admitted_fn():
+                return False
+        elif getattr(spec, "admission", None) is None:
+            return False
+    if spec.renavigation:
+        for nav in spec.renavigation:
+            if not _valid_renavigation_step(nav):
+                return False
+        if _is_persisted_reacquisition(spec):
+            return bool(DIFFERENT_PATH_IS_DEFAULT_ORACLE)
+        return bool(SAME_SCREEN_IS_DEFAULT_ORACLE)
+    return bool(SAME_SCREEN_IS_DEFAULT_ORACLE)
 
 
 def _normalize(text: str) -> str:

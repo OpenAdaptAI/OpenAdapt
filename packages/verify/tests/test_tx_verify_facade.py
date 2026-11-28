@@ -76,7 +76,7 @@ def _replace_task_server() -> Iterator[tuple[str, sqlite3.Connection]]:
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(raw)))
             if etag:
-                self.send_header("ETag", etag)
+                self.send_header("ETag", etag.replace("\r", "").replace("\n", ""))
             self.end_headers()
             self.wfile.write(raw)
 

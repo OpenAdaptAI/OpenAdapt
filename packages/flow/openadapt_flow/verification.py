@@ -93,9 +93,11 @@ class VerificationTier(IntEnum):
 
         Tier 1 reads the system of record. Tier 2 reads the application's
         record page in a separate signed-in session. Tiers 3 and 4 re-read
-        through the acting session (different-path or same-surface). A
-        pixel-only Citrix run with neither tier 1 nor tier 2 evidence cannot
-        be ``VERIFIED``.
+        through the acting session (different-path or same-surface). The
+        ``Regulated`` profile requires this boundary (tier 1 or tier 2) for
+        ``VERIFIED``; the ``Standard`` profile sets its default ``VERIFIED``
+        floor at ``IMMEDIATE_SCREEN`` (tier 4, ``same_screen``) unless
+        ``minimum_readback`` raises the floor.
         """
 
         return int(self) <= int(VerificationTier.INDEPENDENT_SESSION)
@@ -106,8 +108,9 @@ class VerificationTier(IntEnum):
         Until the separate-session read-back existed this returned True for
         tier 2 as well, which labeled a second application session as a
         system-of-record read. It now returns True for tier 1 only. Nothing in
-        Flow's runtime calls it; outcome gating uses
-        :data:`VERIFIED_EFFECT_TIER`, which is unchanged.
+        Flow's runtime calls it; outcome gating uses the profile's
+        ``verified_effect_floor`` (defaulting to :data:`VERIFIED_EFFECT_TIER`
+        when ``None``).
         """
 
         return self.reads_system_of_record()
@@ -127,13 +130,14 @@ def oracle_tier_from_verification_tier(
     return to_oracle_tier(VerificationTier(tier).check_level)
 
 
-#: Production ``VERIFIED`` requires this floor or stronger (lower int).
-#: The Standard *gate* still admits persisted-state read-back so a
-#: pixel-only run can execute with halt-on-doubt; the outcome classifier
-#: refuses ``VERIFIED`` unless a read independent of the acting session
-#: (tier 1 system of record, or tier 2 separate-session read-back) confirmed
-#: every consequential effect. Policies that need a system-of-record read
-#: (the ``regulated`` policy pack) set their own tier-1 floor.
+#: Default ``VERIFIED`` floor (lower int is stronger) for ``Regulated`` and
+#: whenever ``ExecutionProfileContract.verified_effect_floor`` is ``None``:
+#: a read independent of the acting session (tier 1 system of record, or
+#: tier 2 separate-session read-back). ``Standard`` sets
+#: ``verified_effect_floor = VerificationTier.IMMEDIATE_SCREEN`` (tier 4,
+#: ``same_screen``) unless raised by ``minimum_readback`` or
+#: ``workflow.qualification.minimum_effect_tier``; policies that need a
+#: system-of-record read set a tier-1 floor.
 VERIFIED_EFFECT_TIER = VerificationTier.INDEPENDENT_SESSION
 
 

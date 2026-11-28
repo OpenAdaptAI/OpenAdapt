@@ -251,3 +251,12 @@ def test_unknown_reason_falls_back_to_uncertain():
     )
     assert result["reason"] == "result_unreadable"
     assert result["outcome"] == "not_sure_if_saved"
+
+
+def test_checked_how_schema_describes_standard_and_regulated_floors():
+    description = RUN_RESULT_SCHEMA["properties"]["checked_how"]["description"]
+    assert "standard" in description
+    assert "same_screen" in description
+    assert "regulated" in description
+    assert "separate_session" in description
+    assert "Only separate_session and stronger" not in description

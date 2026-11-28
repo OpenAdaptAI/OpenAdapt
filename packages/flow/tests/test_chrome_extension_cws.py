@@ -1483,3 +1483,259 @@ def test_resume_after_auth_guards_stale_entry_after_await() -> None:
     fn_body = bg_src[idx_fn:idx_del]
     # Both before sendCopilotNative and right before delete, stale entries are guarded.
     assert fn_body.count("authPauseByTab.get(entry.tabId) !== entry") >= 2
+
+
+def test_v030_onboarding_standalone_ux_and_zero_egress_invariants() -> None:
+    """v0.3.0 ships 3-step onboarding, dark/light mode, ecosystem links, and zero remote calls."""
+    manifest = json.loads((EXT_DIR / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["version"] == "0.3.0"
+
+    html = (EXT_DIR / "sidepanel.html").read_text(encoding="utf-8")
+    css = (EXT_DIR / "sidepanel.css").read_text(encoding="utf-8")
+    js = (EXT_DIR / "sidepanel.js").read_text(encoding="utf-8")
+
+    # Dark/light mode metadata and tokens
+    assert '<meta name="color-scheme" content="light dark">' in html
+    assert "color-scheme: light dark;" in css
+    assert "prefers-color-scheme: dark" in css
+
+    # 3-step Getting Started checklist + Desktop/CLI tabs + Inspect this page
+    assert 'id="onboarding-card"' in html
+    assert 'id="step-install"' in html
+    assert 'id="step-connect"' in html
+    assert 'id="step-inspect"' in html
+    assert 'id="tab-desktop"' in html
+    assert 'id="tab-cli"' in html
+    assert 'id="copy-cli-btn"' in html
+    assert 'id="check-connection-btn"' in html
+    assert 'id="inspect-page-btn"' in html
+    assert "Inspect this page" in html
+    assert (
+        "pip install openadapt && python -m openadapt_flow.chrome_extension.native_host.install_host"
+        in html.replace("&amp;", "&")
+    )
+
+    # Full ecosystem links
+    for url in (
+        "https://openadapt.ai/download",
+        "https://app.openadapt.ai/demo",
+        "https://app.openadapt.ai/prepare?demo=1",
+        "https://docs.openadapt.ai/guides/chrome-copilot/",
+        "https://openadapt.ai/privacy-policy",
+    ):
+        assert url in html, f"Missing ecosystem link {url}"
+
+    # No raw native-host jargon or scary error prefix
+    assert "Native channel notice:" not in js
+    assert "Local Native Channel" not in html
+    assert "Grounded dossier fields" not in html
+
+    # Strict zero-egress static check across all packaged JS files
+    packager = _load_packager()
+    for rel in packager.collect_package_files(EXT_DIR):
+        if rel.suffix.lower() != ".js":
+            continue
+        src = (EXT_DIR / rel).read_text(encoding="utf-8")
+        for forbidden in (
+            "fetch(",
+            "XMLHttpRequest",
+            "new WebSocket",
+            "chrome.storage.sync",
+        ):
+            assert forbidden not in src, (
+                f"Forbidden network/sync primitive {forbidden!r} in {rel}"
+            )
+
+
+def test_content_inspect_page_structure_never_reads_values_and_hides_secrets() -> None:
+    """inspectPageStructure counts fields & submits locally without reading .value or leaking secret labels."""
+    content_path = str(EXT_DIR / "content.js")
+    script = f"""
+const fs = require('fs');
+const vm = require('vm');
+
+let valueReads = 0;
+function makeEl(tag, attrs, textContent, inForm) {{
+  const el = {{
+    nodeType: 1,
+    tagName: tag.toUpperCase(),
+    id: attrs.id || '',
+    textContent: textContent || '',
+    getAttribute: (k) => (k in attrs ? attrs[k] : null),
+    closest: (sel) => (sel === 'form' && inForm ? {{ tagName: 'FORM' }} : null),
+  }};
+  Object.defineProperty(el, 'value', {{
+    get() {{
+      valueReads += 1;
+      throw new Error('SECURITY VIOLATION: .value read during inspectPageStructure');
+    }},
+  }});
+  Object.defineProperty(el, 'defaultValue', {{
+    get() {{
+      valueReads += 1;
+      throw new Error('SECURITY VIOLATION: .defaultValue read during inspectPageStructure');
+    }},
+  }});
+  return el;
+}}
+
+const controls = [
+  makeEl('input', {{ type: 'text', id: 'full-name', name: 'full_name', 'aria-label': 'Full Name' }}, '', true),
+  makeEl('input', {{ type: 'email', id: 'email', name: 'email', placeholder: 'Work Email' }}, '', true),
+  makeEl('select', {{ id: 'plan', name: 'plan', 'aria-label': 'Coverage Plan' }}, '', true),
+  makeEl('input', {{ type: 'password', id: 'pwd', name: 'password', 'aria-label': 'Account Password' }}, '', true),
+  makeEl('input', {{ type: 'text', id: 'otp', name: 'verification_code', autocomplete: 'one-time-code' }}, '', true),
+  makeEl('input', {{ type: 'hidden', name: 'csrf_token' }}, '', true),
+];
+const buttons = [
+  makeEl('button', {{ type: 'submit' }}, 'Submit Application', true),
+  makeEl('button', {{ type: 'button' }}, 'Cancel', true),
+];
+
+const fakeDoc = {{
+  addEventListener: () => {{}},
+  removeEventListener: () => {{}},
+  readyState: 'complete',
+  querySelector: () => null,
+  querySelectorAll: (sel) => {{
+    if (sel === 'form') return [{{ tagName: 'FORM' }}];
+    if (sel === 'input, select, textarea') return controls;
+    if (sel === 'button, input[type="submit"], [role="button"]') return buttons;
+    return [];
+  }},
+}};
+
+const ctx = vm.createContext({{
+  chrome: {{
+    runtime: {{
+      onMessage: {{ addListener: () => {{}} }},
+      sendMessage: () => {{}},
+    }},
+  }},
+  window: {{ addEventListener: () => {{}}, removeEventListener: () => {{}}, top: null }},
+  document: fakeDoc,
+  location: {{ href: 'https://portal.sunlife.ca/claims?token=abc', origin: 'https://portal.sunlife.ca', hostname: 'portal.sunlife.ca' }},
+  URL, Date, Map, Set,
+}});
+ctx.window.top = ctx.window;
+ctx.globalThis = ctx;
+vm.runInContext(fs.readFileSync({json.dumps(content_path)}, 'utf8'), ctx);
+
+const result = ctx.__openadaptExtensionContent.inspectPageStructure(fakeDoc);
+console.log(JSON.stringify({{ valueReads, result }}));
+"""
+    out = _run_node(script)
+    assert out["valueReads"] == 0
+    res = out["result"]
+    assert res["hostname"] == "portal.sunlife.ca"
+    # 5 visible inputs/selects (hidden csrf_token excluded)
+    assert res["fieldCount"] == 5
+    assert res["submitCount"] == 1
+    assert res["secretCount"] == 2
+    assert res["stageReady"] is True
+    assert res["sampleLabels"] == ["Full Name", "Work Email", "Coverage Plan"]
+
+
+def test_background_active_tab_and_inspect_page_sidepanel_only() -> None:
+    """COPILOT_GET_ACTIVE_TAB and COPILOT_INSPECT_PAGE reject non-sidepanel senders and strip URLs to hostname."""
+    bg_path = str(EXT_DIR / "background.js")
+    script = f"""
+const fs = require('fs');
+const vm = require('vm');
+
+const bgListeners = [];
+const chromeMock = {{
+  runtime: {{
+    lastError: null,
+    getURL: (p) => 'chrome-extension://testext/' + p,
+    onMessage: {{ addListener: (fn) => bgListeners.push(fn) }},
+    onInstalled: {{ addListener: () => {{}} }},
+    connectNative: () => {{ throw new Error('Specified native messaging host not found.'); }},
+  }},
+  action: {{
+    onClicked: {{ addListener: () => {{}} }},
+    setBadgeText: () => {{}},
+    setBadgeBackgroundColor: () => {{}},
+    setTitle: () => {{}},
+  }},
+  sidePanel: {{ setPanelBehavior: () => Promise.resolve() }},
+  storage: {{
+    session: {{
+      get: (_k, cb) => cb && cb({{}}),
+      set: (_o, cb) => cb && cb(),
+      remove: (_k, cb) => cb && cb(),
+    }},
+  }},
+  tabs: {{
+    onCreated: {{ addListener: () => {{}} }},
+    onUpdated: {{ addListener: () => {{}} }},
+    onRemoved: {{ addListener: () => {{}} }},
+    query: (_q, cb) => cb([{{ id: 12, active: true, url: 'https://app.openadapt.ai/demo?secret=123#frag' }}]),
+    sendMessage: (tabId, msg, optsOrCb, maybeCb) => {{
+      const cb = typeof optsOrCb === 'function' ? optsOrCb : maybeCb;
+      if (msg && msg.type === 'COPILOT_INSPECT_PAGE' && cb) {{
+        cb({{
+          ok: true,
+          inspection: {{
+            hostname: 'app.openadapt.ai',
+            fieldCount: 6,
+            submitCount: 1,
+            secretCount: 0,
+            formCount: 1,
+            sampleLabels: ['Patient Name', 'Policy ID'],
+            stageReady: true,
+          }},
+        }});
+      }} else if (cb) {{
+        cb();
+      }}
+    }},
+  }},
+  windows: {{
+    onRemoved: {{ addListener: () => {{}} }},
+    onFocusChanged: {{ addListener: () => {{}} }},
+  }},
+  webRequest: {{
+    onBeforeRequest: {{ addListener: () => {{}} }},
+    onBeforeSendHeaders: {{ addListener: () => {{}} }},
+    onCompleted: {{ addListener: () => {{}} }},
+    onErrorOccurred: {{ addListener: () => {{}} }},
+  }},
+}};
+
+const ctx = vm.createContext({{
+  chrome: chromeMock,
+  globalThis: {{}},
+  importScripts: () => {{}},
+  URL, Date, Map, Set, Promise, setTimeout, clearTimeout,
+}});
+ctx.globalThis = ctx;
+vm.runInContext(fs.readFileSync({json.dumps(bg_path)}, 'utf8'), ctx);
+
+function send(msg, sender) {{
+  return new Promise((resolve) => bgListeners[0](msg, sender, resolve));
+}}
+
+(async () => {{
+  const sp = {{ url: 'chrome-extension://testext/sidepanel.html' }};
+  const evil = {{ url: 'https://evil.example.com/' }};
+  const rejectedTab = await send({{ type: 'COPILOT_GET_ACTIVE_TAB' }}, evil);
+  const rejectedInspect = await send({{ type: 'COPILOT_INSPECT_PAGE' }}, evil);
+  const activeTab = await send({{ type: 'COPILOT_GET_ACTIVE_TAB' }}, sp);
+  const inspectResp = await send({{ type: 'COPILOT_INSPECT_PAGE' }}, sp);
+  console.log(JSON.stringify({{ rejectedTab, rejectedInspect, activeTab, inspectResp }}));
+}})();
+"""
+    out = _run_node(script)
+    assert out["rejectedTab"]["ok"] is False
+    assert out["rejectedTab"]["error"] == "copilot_requires_sidepanel"
+    assert out["rejectedInspect"]["ok"] is False
+    assert out["rejectedInspect"]["error"] == "copilot_requires_sidepanel"
+    assert out["activeTab"]["ok"] is True
+    assert out["activeTab"]["hostname"] == "app.openadapt.ai"
+    assert out["activeTab"]["isWebPage"] is True
+    assert "secret=123" not in json.dumps(out["activeTab"])
+    assert out["inspectResp"]["ok"] is True
+    assert out["inspectResp"]["inspection"]["fieldCount"] == 6
+    assert out["inspectResp"]["inspection"]["submitCount"] == 1
+    assert out["inspectResp"]["inspection"]["stageReady"] is True

@@ -572,7 +572,7 @@ def get_action_dict_from_completion(completion: str) -> dict[ActionEvent]:
         dict: The action dictionary.
     """
     try:
-        action = eval(completion)
+        action = ast.literal_eval(completion)
     except Exception as exc:
         logger.warning(f"{exc=}")
     else:

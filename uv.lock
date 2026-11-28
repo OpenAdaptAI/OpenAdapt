@@ -2896,12 +2896,13 @@ wheels = [
 
 [[package]]
 name = "openadapt"
-version = "1.24.0"
+version = "1.24.1"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
     { name = "openadapt-agent", marker = "python_full_version < '3.13'" },
     { name = "openadapt-flow", extra = ["browser", "hosted"], marker = "python_full_version < '3.13'" },
+    { name = "openadapt-kernel", marker = "python_full_version < '3.13'" },
     { name = "openadapt-types", marker = "python_full_version < '3.13'" },
     { name = "rich", marker = "python_full_version < '3.13'" },
 ]
@@ -2956,6 +2957,9 @@ flow = [
 grounding = [
     { name = "openadapt-grounding" },
 ]
+kernel = [
+    { name = "openadapt-kernel" },
+]
 linux = [
     { name = "openadapt-flow", extra = ["linux"], marker = "python_full_version < '3.13' and sys_platform == 'linux'" },
 ]
@@ -3000,16 +3004,18 @@ requires-dist = [
     { name = "openadapt-agent", marker = "python_full_version < '3.13' and extra == 'agent'", specifier = ">=2.2.4,<3" },
     { name = "openadapt-capture", marker = "extra == 'capture'", specifier = ">=1.2.0,<2.0.0" },
     { name = "openadapt-evals", marker = "extra == 'evals'", specifier = ">=0.1.0" },
-    { name = "openadapt-flow", extras = ["browser"], marker = "python_full_version < '3.13' and extra == 'browser'", specifier = ">=4.0.0,<5.0.0" },
-    { name = "openadapt-flow", extras = ["browser", "hosted"], marker = "python_full_version < '3.13'", specifier = ">=4.0.0,<5.0.0" },
-    { name = "openadapt-flow", extras = ["capture"], marker = "python_full_version < '3.13' and extra == 'capture'", specifier = ">=4.0.0,<5.0.0" },
-    { name = "openadapt-flow", extras = ["linux"], marker = "python_full_version < '3.13' and sys_platform == 'linux' and extra == 'linux'", specifier = ">=4.0.0,<5.0.0" },
-    { name = "openadapt-flow", extras = ["macos"], marker = "python_full_version < '3.13' and sys_platform == 'darwin' and extra == 'macos'", specifier = ">=4.0.0,<5.0.0" },
-    { name = "openadapt-flow", extras = ["privacy"], marker = "python_full_version < '3.13' and extra == 'privacy'", specifier = ">=4.0.0,<5.0.0" },
-    { name = "openadapt-flow", extras = ["rdp"], marker = "python_full_version < '3.13' and extra == 'rdp'", specifier = ">=4.0.0,<5.0.0" },
-    { name = "openadapt-flow", extras = ["vision"], marker = "python_full_version < '3.13' and extra == 'flow'", specifier = ">=4.0.0,<5.0.0" },
-    { name = "openadapt-flow", extras = ["windows"], marker = "python_full_version < '3.13' and extra == 'windows'", specifier = ">=4.0.0,<5.0.0" },
+    { name = "openadapt-flow", extras = ["browser"], marker = "python_full_version < '3.13' and extra == 'browser'", specifier = ">=4.0.1,<5.0.0" },
+    { name = "openadapt-flow", extras = ["browser", "hosted"], marker = "python_full_version < '3.13'", specifier = ">=4.0.1,<5.0.0" },
+    { name = "openadapt-flow", extras = ["capture"], marker = "python_full_version < '3.13' and extra == 'capture'", specifier = ">=4.0.1,<5.0.0" },
+    { name = "openadapt-flow", extras = ["linux"], marker = "python_full_version < '3.13' and sys_platform == 'linux' and extra == 'linux'", specifier = ">=4.0.1,<5.0.0" },
+    { name = "openadapt-flow", extras = ["macos"], marker = "python_full_version < '3.13' and sys_platform == 'darwin' and extra == 'macos'", specifier = ">=4.0.1,<5.0.0" },
+    { name = "openadapt-flow", extras = ["privacy"], marker = "python_full_version < '3.13' and extra == 'privacy'", specifier = ">=4.0.1,<5.0.0" },
+    { name = "openadapt-flow", extras = ["rdp"], marker = "python_full_version < '3.13' and extra == 'rdp'", specifier = ">=4.0.1,<5.0.0" },
+    { name = "openadapt-flow", extras = ["vision"], marker = "python_full_version < '3.13' and extra == 'flow'", specifier = ">=4.0.1,<5.0.0" },
+    { name = "openadapt-flow", extras = ["windows"], marker = "python_full_version < '3.13' and extra == 'windows'", specifier = ">=4.0.1,<5.0.0" },
     { name = "openadapt-grounding", marker = "extra == 'grounding'", specifier = ">=0.1.0" },
+    { name = "openadapt-kernel", marker = "python_full_version < '3.13'", specifier = ">=0.1.0" },
+    { name = "openadapt-kernel", marker = "extra == 'kernel'", specifier = ">=0.1.0" },
     { name = "openadapt-ml", marker = "extra == 'ml'", specifier = ">=0.2.0" },
     { name = "openadapt-retrieval", marker = "extra == 'retrieval'", specifier = ">=0.1.0" },
     { name = "openadapt-types", marker = "python_full_version < '3.13'", specifier = ">=0.24.2,<0.25.0" },
@@ -3019,7 +3025,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
     { name = "uvicorn", marker = "python_full_version < '3.13' and extra == 'a2a'", specifier = ">=0.29" },
 ]
-provides-extras = ["wrap", "browser", "capture", "windows", "macos", "linux", "rdp", "ml", "evals", "viewer", "grounding", "retrieval", "privacy", "flow", "agent", "a2a", "core", "all", "dev"]
+provides-extras = ["wrap", "browser", "capture", "windows", "macos", "linux", "rdp", "ml", "evals", "viewer", "grounding", "retrieval", "privacy", "flow", "agent", "kernel", "a2a", "core", "all", "dev"]
 
 [[package]]
 name = "openadapt-agent"
@@ -3104,7 +3110,7 @@ wheels = [
 
 [[package]]
 name = "openadapt-flow"
-version = "4.0.0"
+version = "4.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
@@ -3114,9 +3120,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/80/06/9a3d0c59b7292a81b30b880ad3fc45acbaa6fe771b006b484c436ab77f5d/openadapt_flow-4.0.0.tar.gz", hash = "sha256:56ad29293a2541f08418157b498df69fc8161384db68689732afd38764fea6e2", size = 65673409, upload-time = "2026-11-25T00:32:08.404Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e7/5a/743d5f3a9df1938896580dfee07779a1bdb94ab8ee058c8cd1fd827c8766/openadapt_flow-4.0.1.tar.gz", hash = "sha256:bee1fdd3447016d1c63e23873b71366b988010e4f1f47480ff17088d201d3535", size = 65826602, upload-time = "2026-11-26T02:37:09.532Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/be/74/4f709793b3685197ef5b513a50d6ce9ffd884f3c5eebca9987fe4fcab939/openadapt_flow-4.0.0-py3-none-any.whl", hash = "sha256:0328cf84babb8fa6397b36763c71ac55087e4227cdf113ff714c3f45191bb1bf", size = 6451554, upload-time = "2026-11-25T00:32:04.943Z" },
+    { url = "https://files.pythonhosted.org/packages/72/a2/3f0c6fde0854249c2a1f22c76d850a0f08880c8901ad21581a3cb27d565b/openadapt_flow-4.0.1-py3-none-any.whl", hash = "sha256:0069dec7db761d53064ffab39cd2086e9eee2af1c807b0bbc94c41f1a40ff9ed", size = 6525803, upload-time = "2026-11-26T02:37:05.605Z" },
 ]
 
 [package.optional-dependencies]
@@ -3191,6 +3197,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/09/7c/8a045db440c66ba97de0c5a101538bf53c9162cff6c6ee22abe92f45684d/openadapt_grounding-0.1.2.tar.gz", hash = "sha256:2dc15fb284a6ed01ce031006949ff7cc52d4435ea13334c5d8533e905ece03b5", size = 5318481, upload-time = "2026-01-29T23:40:27.79Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a6/8c/0f3e25b0bf66907f8b6b496c92ea4a399b40bbb21d8af784e739de73d606/openadapt_grounding-0.1.2-py3-none-any.whl", hash = "sha256:6dbecc3a71bfbdb2582373b8f43694b7ead51c4f8aee5f80a45dba0620c9ab81", size = 89412, upload-time = "2026-01-29T23:40:26.37Z" },
+]
+
+[[package]]
+name = "openadapt-kernel"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ab/03/c8ffc09f2c491c3c07607dd00d663c4af5c9d3e1f0a9d8a143152190a381/openadapt_kernel-0.1.0.tar.gz", hash = "sha256:f0b485463a71b5bd318ec72e8d88596969bdb7b33a2d53fba4172dc7d41684c2", size = 104042, upload-time = "2026-11-26T02:00:26.671Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/54/1b/46f7ace29915760d41ff59a22b93071da5b350a7ec809bf456ec101cfdce/openadapt_kernel-0.1.0-py3-none-any.whl", hash = "sha256:f5d745b27105b4ca7efd805d6e3fd1e0c8814e522e48239499ce5d26c06939f3", size = 43439, upload-time = "2026-11-26T02:00:25.346Z" },
 ]
 
 [[package]]

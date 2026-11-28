@@ -48,10 +48,10 @@ on:
       - '.github/workflows/release-health.yml'
 
 concurrency:
-  # A pull request's newer push cancels its older run. Every other event (the
-  # merge queue, main, schedules, dispatches) gets a group of its own, so it
-  # is never cancelled or replaced.
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  # A pull request's newer push cancels its older run. Non-PR runs serialize on
+  # a single group (cancel-in-progress: false) so concurrent workflow_run
+  # completions do not race on `gh issue edit` against the single alert issue.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || 'main' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -114,12 +114,28 @@ jobs:
             --search "in:title \"Release health\"" --json number,title \
             --jq '[.[] | select(.title == env.TITLE)][0].number // empty')
           if [ -n "${EXISTING}" ]; then
-            gh issue edit "${EXISTING}" --repo "${GITHUB_REPOSITORY}" \
-              --body-file release-health.md
-            echo "Updated issue #${EXISTING}."
+            for attempt in 1 2 3; do
+              if gh issue edit "${EXISTING}" --repo "${GITHUB_REPOSITORY}" \
+                --body-file release-health.md; then
+                echo "Updated issue #${EXISTING}."
+                exit 0
+              fi
+              if [ "${attempt}" -lt 3 ]; then
+                sleep $((attempt * 5))
+              fi
+            done
+            exit 1
           else
-            gh issue create --repo "${GITHUB_REPOSITORY}" \
-              --title "${TITLE}" --body-file release-health.md
+            for attempt in 1 2 3; do
+              if gh issue create --repo "${GITHUB_REPOSITORY}" \
+                --title "${TITLE}" --body-file release-health.md; then
+                exit 0
+              fi
+              if [ "${attempt}" -lt 3 ]; then
+                sleep $((attempt * 5))
+              fi
+            done
+            exit 1
           fi
 
       - name: Close the issue once every gap is closed

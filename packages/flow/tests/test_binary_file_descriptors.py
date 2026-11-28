@@ -113,7 +113,10 @@ def test_copilot_offline_decision_records_preserve_physical_bytes(tmp_path, crt_
     import json
 
     from openadapt_flow.copilot_bridge import CopilotSessionBridge
-    from openadapt_flow.form_tx.types import HumanDecisionAction, HumanResolutionInput
+    from openadapt_flow.copilot_protocol import (
+        HumanDecisionAction,
+        HumanResolutionInput,
+    )
 
     bridge = CopilotSessionBridge(tmp_path / "mailbox")
     decision = HumanResolutionInput(

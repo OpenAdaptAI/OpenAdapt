@@ -261,8 +261,9 @@ def _stun_probe(block_webrtc: bool) -> bool:
 
     app, _ = _server(b"<h1>app</h1>")
     app_origin = f"http://127.0.0.1:{app.server_address[1]}"
+    lan_ip = _lan_ip()
     udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    udp.bind(("0.0.0.0", 0))
+    udp.bind((lan_ip, 0))
     udp.settimeout(6)
     try:
         with sync_playwright() as pw:
@@ -279,7 +280,7 @@ def _stun_probe(block_webrtc: bool) -> bool:
                     """(u) => { const pc = new RTCPeerConnection({iceServers: [{urls: u}]});
                     pc.createDataChannel('x');
                     pc.createOffer().then(o => pc.setLocalDescription(o)); window._pc = pc; }""",
-                    f"stun:{_lan_ip()}:{udp.getsockname()[1]}",
+                    f"stun:{lan_ip}:{udp.getsockname()[1]}",
                 )
                 try:
                     udp.recvfrom(2048)

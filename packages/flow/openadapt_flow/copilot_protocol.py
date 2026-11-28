@@ -6,12 +6,101 @@ import os
 import sqlite3
 import stat
 from contextlib import contextmanager
+from enum import Enum
 from pathlib import Path
-from typing import Callable, Iterator, Optional
+from typing import Any, Callable, Iterator, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from openadapt_flow.form_tx.types import HumanResolutionInput
+
+class FormHaltKind(str, Enum):
+    """Closed taxonomy of halts for the Chrome side-panel co-pilot."""
+
+    UNGROUNDED_REQUIRED_FIELD = "ungrounded_required_field"
+    PREFILL_VALUE_CONFLICT = "prefill_value_conflict"
+    PREFILL_ENTITY_CONFLICT = "prefill_entity_conflict"
+    AMBIGUOUS_OPTION_OR_TARGET = "ambiguous_option_or_target"
+    PORTAL_VALIDATION_BLOCKED = "portal_validation_blocked"
+    POPUP_CONTRACT_FAILED = "popup_contract_failed"
+    MODAL_CONFIRMATION_REQUIRED = "modal_confirmation_required"
+    AUTH_WALL_DETECTED = "auth_wall_detected"
+    MUTATION_BUDGET_EXCEEDED = "mutation_budget_exceeded"
+
+
+class FormTxOutcome(str, Enum):
+    """Terminal or paused outcome of a co-pilot form execution."""
+
+    VERIFIED_DONE = "verified_done"
+    HALTED_NEEDS_HUMAN = "halted_needs_human"
+    ESCALATED_TO_OWNER = "escalated_to_owner"
+    AUTH_REQUIRED = "auth_required"
+    VALIDATION_BLOCKED = "validation_blocked"
+    READBACK_REFUTED = "readback_refuted"
+    READBACK_INCOMPLETE = "readback_incomplete"
+    DELIVERY_UNCERTAIN = "delivery_uncertain"
+    ABORTED_BY_HUMAN = "aborted_by_human"
+
+
+class HumanDecisionAction(str, Enum):
+    """Governed human resolution actions at a live halt."""
+
+    PROVIDE_VALUE = "provide_value"
+    ACCEPT_PORTAL_PREFILL = "accept_portal_prefill"
+    DISMISS_PORTAL_ENTITY = "dismiss_portal_entity"
+    CONFIRM_MODAL_ACTION = "confirm_modal_action"
+    FIXED_ON_SCREEN = "fixed_on_screen"
+    ESCALATE_TO_OWNER = "escalate_to_owner"
+    ABORT_RUN = "abort_run"
+
+
+class ObservedOption(BaseModel):
+    """An option available inside a select, radio group, or portal combobox."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    value: str
+    label: str
+
+
+class FormHaltItem(BaseModel):
+    """Structured halt emitted when autonomous action is unsafe."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    halt_id: str = Field(min_length=1)
+    kind: FormHaltKind
+    screen_id: Optional[str] = None
+    control_id: Optional[str] = None
+    dom_selector: Optional[str] = None
+    field_label: str = ""
+    section_text: str = ""
+    dossier_key: Optional[str] = None
+    portal_value: Optional[Any] = None
+    dossier_value: Optional[Any] = None
+    message: str = Field(min_length=1)
+    allowed_actions: tuple[HumanDecisionAction, ...] = (
+        HumanDecisionAction.PROVIDE_VALUE,
+        HumanDecisionAction.FIXED_ON_SCREEN,
+        HumanDecisionAction.ESCALATE_TO_OWNER,
+        HumanDecisionAction.ABORT_RUN,
+    )
+    available_options: tuple[ObservedOption, ...] = ()
+
+
+class HumanResolutionInput(BaseModel):
+    """Operator/co-pilot submission resolving an active ``FormHaltItem``."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    halt_id: str = Field(min_length=1)
+    action: HumanDecisionAction
+    actor_id: str = Field(min_length=1)
+    actor_role: str = "operator"
+    provided_value: Optional[Any] = None
+    mapped_dossier_key: Optional[str] = None
+    remember_as_candidate_rule: bool = False
+    note: str = ""
+    idempotency_key: str = Field(min_length=1)
 
 
 class CopilotRunBinding(BaseModel):

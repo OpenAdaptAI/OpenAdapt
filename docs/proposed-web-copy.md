@@ -4,12 +4,15 @@ Status: draft for approval. Nothing here is applied to the website.
 
 These changes bring the insurance and dental pages in line with the repository
 docs ([LIMITS.md](../packages/flow/docs/LIMITS.md#what-the-guarantee-covers-without-database-access),
+[READBACK_LADDER.md](../packages/flow/docs/READBACK_LADDER.md),
 [THREAT_MODEL.md](../packages/flow/docs/THREAT_MODEL.md#what-layer-1-covers)).
-When a portal's own screens are the only independent read (no database, API,
-log or export), the strongest check is a separately signed-in session. It
-covers the target record as shown at the time of the read, and only where the
-portal allows a second session and that read loads the record fresh from the
-server.
+After each action, OpenAdapt checks observable evidence and stamps how the
+action was checked (`same_screen`, `reopened`, `separate_session`, or
+`system_of_record`) on the receipt: right on the current screen by default
+(working even on in-place edits with no separate post-save screen and on
+non-idempotent portals that cannot reload), or via a reopened record view, a
+separate read-only session, or a direct API, database, or file check when
+available.
 
 File: `data/site/pages/industries.mjs` in `OpenAdaptAI/openadapt-web`, at
 commit `53f05758`. Line numbers refer to that commit.
@@ -26,12 +29,12 @@ Current:
 Proposed:
 
 > It's also for brokers and agencies that key claims or submissions into
-> carrier portals. Where the portal allows a second signed-in session, the
-> check opens the saved claim there and compares it field by field with what
-> was entered. That shows the claim as the portal displayed it at the time of
-> the check, not what the carrier does with it later. Where the portal allows
-> no second session, a person reviews each save. The check is set up along
-> with the workflow.
+> carrier portals. OpenAdapt checks observable evidence after each step: on
+> the current screen by default (including in-place edits and portals that
+> cannot reload), or by reopening the claim, checking in a separate read-only
+> session, or reading an API or export when available, and stamps the exact
+> check level (`same_screen`, `reopened`, `separate_session`, or
+> `system_of_record`) on the receipt.
 
 The link that follows ("How to stop re-keying claims") stays.
 
@@ -44,8 +47,10 @@ Current:
 
 Proposed:
 
-> Staff key a submission into several carrier portals. Where a portal allows
-> a second signed-in session, each save is checked by opening it again there.
+> Staff key a submission into several carrier portals. Each step is checked on
+> the current screen by default, or via a reopened view, separate read-only
+> session, or API/export when available, with the check level stamped on the
+> receipt.
 
 ## Line 176: insurance, record-check table (make conditional)
 
@@ -57,9 +62,9 @@ Current row:
 
 Proposed row:
 
-| Your setup | Second read | Result OpenAdapt can give |
+| Your setup | Graded read-back | Result OpenAdapt can give |
 | --- | --- | --- |
-| Broker entering into a carrier portal | The saved claim, opened again in a separate signed-in session, where the portal allows one and the second read loads the record fresh from the server | Checked in a separate session, as of the time of the check. With no second session, a person reviews |
+| Broker entering into a carrier portal | Bounded check on the current screen by default, or reopened record, separate read-only session, or API/export when available | Receipt stamps exact check level (`same_screen`, `reopened`, `separate_session`, or `system_of_record`) |
 
 ## Line 218: dental page description (remove)
 

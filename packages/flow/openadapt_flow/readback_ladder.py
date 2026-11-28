@@ -4,24 +4,31 @@ Every save a run makes is checked at one :class:`~openadapt_flow.check_level.Che
 (a projection of :class:`~openadapt_flow.verification.VerificationTier`):
 
 - ``unchecked``: nothing confirmed the save.
-- ``same_screen`` (tier 4): the screen the save left was re-read.
+- ``same_screen`` (tier 4): the expected value was checked on the current screen.
 - ``reopened`` (tier 3): the acting session reset its state, found the record
   again and re-read it. Same application, same session.
 - ``separate_session`` (tier 2): a separately signed-in session opened the
-  record and read it (``ui_readback``).
+  record and read it (``ui_readback`` or ``fresh_session``).
 - ``system_of_record`` (tier 1): an API, database, FHIR or file read outside
   the application's screens.
 
-``VERIFIED`` keeps one meaning: every save was read back independently of the
-acting session, from a separate session or from the system of record. That
-is the default floor for every production profile. ``same_screen`` and
-``reopened`` are reported with their own labels, and a run whose saves were
-confirmed only that way is ``COMPLETED_UNVERIFIED`` with ``below_minimum``
-set. A reopen counts toward ``VERIFIED`` only under a profile whose contract
-sets ``reopened_counts_as_verified``; no built-in profile does.
+Each execution profile sets a floor for ``VERIFIED``:
 
-A workflow can only raise the floor: ``minimum_readback`` is
-``separate_session`` (the default) or ``system_of_record``.
+- ``Standard`` defaults to ``same_screen`` (tier 4), so general UI workflows
+  (including in-place edits and non-idempotent portals where reloading is
+  unsafe) reach ``VERIFIED`` when a bounded check confirms the value, while
+  still recording the exact ``checked_how`` level on ``report.json`` and the
+  receipt and refusing ``unchecked``.
+- ``Regulated`` defaults to ``separate_session`` (tier 2), requiring every save
+  to be read back independently of the acting session (from a separate session
+  or from the system of record). Under ``Regulated`` (or when a workflow sets a
+  stricter ``minimum_readback``), a run whose saves were confirmed below the
+  floor is ``COMPLETED_UNVERIFIED`` with ``below_minimum`` set.
+
+A workflow or ``verify.yaml`` can declare ``minimum_readback`` at any confirmed
+level (``same_screen``, ``reopened``, ``separate_session``, or
+``system_of_record``); it raises a profile's floor when stricter and never
+lowers ``Regulated`` below ``separate_session``.
 
 The persisted tier integers, the receipt ``verification_tier`` labels
 (:mod:`openadapt_flow.assurance`) and the Seal ``oracle_tier`` are unchanged.
@@ -49,19 +56,26 @@ __all__ = [
     "workflow_tier_floor",
 ]
 
-MinimumReadback = Literal["separate_session", "system_of_record"]
+MinimumReadback = Literal[
+    "same_screen",
+    "reopened",
+    "separate_session",
+    "system_of_record",
+]
 
 MINIMUM_READBACK_VALUES: Final[tuple[MinimumReadback, ...]] = (
+    "same_screen",
+    "reopened",
     "separate_session",
     "system_of_record",
 )
-DEFAULT_MINIMUM_READBACK: Final[MinimumReadback] = "separate_session"
+DEFAULT_MINIMUM_READBACK: Final[MinimumReadback] = "same_screen"
 
 #: Plain customer words for each check level (the agent result's
 #: ``checked_how`` code is the level's name).
 CHECKED_HOW_LABELS: Final[dict[str, str]] = {
     CheckLevel.UNCHECKED.label: "Not checked",
-    CheckLevel.SAME_SCREEN.label: "The screen said it saved",
+    CheckLevel.SAME_SCREEN.label: "Checked on the screen",
     CheckLevel.REOPENED.label: "Reopened in the same session",
     CheckLevel.SEPARATE_SESSION.label: "Checked in a separate session",
     CheckLevel.SYSTEM_OF_RECORD.label: "Checked in your system's records",
@@ -70,26 +84,23 @@ CHECKED_HOW_LABELS: Final[dict[str, str]] = {
 
 #: The weakest Flow tier that reaches each ``minimum_readback``.
 _FLOOR: Final[dict[MinimumReadback, VerificationTier]] = {
+    "same_screen": VerificationTier.IMMEDIATE_SCREEN,
+    "reopened": VerificationTier.PERSISTED_STATE_REACQUISITION,
     "separate_session": VerificationTier.INDEPENDENT_SESSION,
     "system_of_record": VerificationTier.INDEPENDENT_SYSTEM,
 }
 
 
 def parse_minimum_readback(value: object) -> MinimumReadback:
-    """Accept ``separate_session`` or ``system_of_record``; refuse the rest.
-
-    ``reopened`` and ``same_screen`` are refused on purpose: a workflow can
-    raise the ``VERIFIED`` floor, never lower it.
-    """
+    """Accept one of the four confirmed check levels; refuse ``unchecked`` and unknowns."""
 
     if isinstance(value, str):
         key = value.strip().lower().replace("-", "_").replace(" ", "_")
         if key in MINIMUM_READBACK_VALUES:
             return key  # type: ignore[return-value]
     raise ValueError(
-        "minimum_readback must be separate_session (the default) or "
-        f"system_of_record, not {value!r}; a same-session reopen or a "
-        "same-screen check never makes a run VERIFIED by itself"
+        "minimum_readback must be same_screen, reopened, separate_session, or "
+        f"system_of_record, not {value!r}; unchecked is never a confirmed check"
     )
 
 

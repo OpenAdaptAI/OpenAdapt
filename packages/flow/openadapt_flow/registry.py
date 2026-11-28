@@ -838,14 +838,14 @@ def cmd_pull(args: Any) -> int:
             from openadapt_flow import registry_attest
 
             try:
-                path = registry_attest.refresh_trusted_root()
+                registry_attest.refresh_trusted_root()
             except Exception as exc:  # noqa: BLE001 - report any TUF failure
                 print(
                     f"pull: refreshing the Sigstore trusted root failed: {exc}",
                     file=sys.stderr,
                 )
                 return 1
-            print(f"Sigstore trusted root refreshed: {path}")
+            print("Sigstore trusted root refreshed.")
             return 0
         from openadapt_flow.registry_snapshot import load_snapshot
 

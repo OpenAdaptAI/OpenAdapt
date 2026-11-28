@@ -1,12 +1,12 @@
 name: CodeQL
 
 # SOC 2: SAST (OA-C-24). Static analysis on push to main, a weekly schedule and
-# manual dispatch. Not on pull requests: findings surface after merge. The merge
-# queue is disabled, so merge_group does not run today.
+# manual dispatch. Not on pull requests or merge_group: merge queue entries
+# merge faster than CodeQL finishes, deleting the temporary queue ref before
+# SARIF upload. Findings surface on push to main.
 on:
   push:
     branches: [main]
-  merge_group:
   schedule:
     - cron: "23 5 * * 1"
   workflow_dispatch:

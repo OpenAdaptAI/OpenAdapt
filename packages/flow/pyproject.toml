@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-flow"
-version = "4.0.0"
+version = "4.0.1"
 description = "Verified local execution layer for computer-use agents: compile web/desktop tasks into deterministic programs with read-back checks, signed DSSE receipts, and MCP/A2A support"
 readme = "README.md"
 keywords = [

@@ -14,6 +14,17 @@ For the current evidence behind each capability claim, see
 [`VERIFICATION.md`](VERIFICATION.md). For the package-wide evidence map, see
 [`PRODUCT_STATUS.md`](PRODUCT_STATUS.md).
 
+## Native Windows qualification campaigns
+
+`qualify` can run the normal case and five faults through a native Windows
+session hook with an authenticated, explicitly enabled fault agent. The native
+screen mutations currently support buttons with an AutomationId or exact
+role/name; other controls refuse. RDP and Citrix campaign fault staging is
+separate and remains unavailable. The executable, machine and exact OS build
+are part of the qualification boundary, so this does not qualify arbitrary
+fresh workers. A script-hosted application's own code is covered by its
+declared version, not the host executable's hash.
+
 ## Validated on
 
 Every published result used synthetic patients, claims and records.
@@ -672,7 +683,7 @@ the client never learns it, so the write step halts before any read-back
 runs. That is a safe false stop, but it is a false stop, and it counts end-to-end
 run outcomes rather than any one check.
 
-The openIMIS claims result (148 of 149 read back correct) was checked by SQL,
+The openIMIS claims result (200 synthetic claims: 148 completed and verified with no model calls, 50 paused for human review, 2 stopped, and 0 saved wrong) was checked by SQL,
 through a read-only database role on a test copy. It shows the program and
 the check on a real application with database access; it is not evidence for
 a deployment without it.

@@ -19,11 +19,46 @@ import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
+from urllib.parse import urlparse
 
 from openadapt_kernel.ledger import ReadBackProof
 
 _STREAM_RE = re.compile(rb"stream\r?\n(.*?)\r?\nendstream", re.DOTALL)
-_TOKEN_RE = re.compile(r"\((?:\\.|[^\\()])*\)|\[(?:\\.|[^\[\]])*\]\s*TJ|\b\d+\s+Tr\b")
+_TOKEN_RE = re.compile(
+    r"\((?:\\.|[^\\()])*\)|\[(?:\\.|[^\\\[\]])*\]\s*TJ|\b\d+\s+Tr\b"
+)
+_DOM_EXTRACT_JS = """() => {
+  const bindings = [];
+  const labelFor = (el) => {
+    const aria = el.getAttribute && el.getAttribute('aria-label');
+    if (aria) return aria.trim();
+    if (el.id) {
+      const l = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+      if (l) return (l.innerText || l.textContent || '').trim();
+    }
+    const p = el.closest && el.closest('label');
+    return p ? (p.innerText || p.textContent || '').trim() : '';
+  };
+  for (const el of document.querySelectorAll('input,textarea,select')) {
+    const val = el.tagName === 'SELECT' && el.selectedOptions && el.selectedOptions[0]
+      ? `${el.value} ${el.selectedOptions[0].text || ''}`.trim() : String(el.value || '');
+    bindings.push({key: [el.name, el.id, el.getAttribute('data-testid'), labelFor(el)].filter(Boolean).join(' '), val});
+  }
+  for (const dt of document.querySelectorAll('dt')) {
+    const dd = dt.nextElementSibling;
+    if (dd && dd.tagName === 'DD') bindings.push({key: (dt.innerText || '').trim(), val: (dd.innerText || '').trim()});
+  }
+  for (const tr of document.querySelectorAll('tr')) {
+    const cells = tr.querySelectorAll('th,td');
+    if (cells.length >= 2) bindings.push({key: (cells[0].innerText || '').trim(), val: (cells[1].innerText || '').trim()});
+  }
+  for (const el of document.querySelectorAll('[data-field],[data-testid]')) {
+    const k = el.getAttribute('data-field') || el.getAttribute('data-testid') || '';
+    const v = (el.innerText || el.textContent || '').trim();
+    if (k && v) bindings.push({key: k, val: v});
+  }
+  return { text: (document.body && document.body.innerText) || '', bindings };
+}"""
 
 
 @dataclass
@@ -46,8 +81,41 @@ class OracleVerdict:
         )
 
 
-def token_boundary_check(expected_fields: Dict[str, str], text: str) -> tuple[List[str], List[str]]:
-    """Return (cited_values, missing_keys) using strict word/token boundaries."""
+def _key_aliases(key: str) -> List[str]:
+    base = key.strip()
+    parts = [p for p in re.split(r"[\s_-]+", base) if len(p) >= 3]
+    out = [base, base.replace("_", " "), base.replace("-", " ")]
+    for p in parts:
+        if p.lower() not in {x.lower() for x in out}:
+            out.append(p)
+    return [a for a in out if a]
+
+
+def _field_bound_match(key: str, val: str, compact: str, field_bindings: Sequence[Dict[str, str]]) -> bool:
+    v_re = rf"(?<!\w){re.escape(val)}(?!\w)"
+    aliases = _key_aliases(key)
+    key_toks = {t.lower() for t in re.findall(r"[a-z0-9]+", key) if len(t) >= 2}
+    for b in field_bindings:
+        bk = str(b.get("key") or "")
+        bv = " ".join(str(b.get("val") or "").split())
+        if not bk or not bv:
+            continue
+        btoks = {t.lower() for t in re.findall(r"[a-z0-9]+", bk)}
+        if (key.lower() in bk.lower() or (key_toks and len(key_toks & btoks) / len(key_toks) >= 0.5)) and re.search(v_re, bv):
+            return True
+    for alias in aliases:
+        if re.search(rf"(?<!\w){re.escape(alias)}[\s\"']{{0,3}}[:=][\s\"']{{0,3}}{re.escape(val)}(?!\w)", compact, re.IGNORECASE):
+            return True
+    return False
+
+
+def token_boundary_check(
+    expected_fields: Dict[str, str],
+    text: str,
+    *,
+    field_bindings: Sequence[Dict[str, str]] = (),
+) -> tuple[List[str], List[str]]:
+    """Return (cited_values, missing_keys) with field-bound matching; bare 1-2 char values require binding."""
     compact = " ".join((text or "").split())
     cited: List[str] = []
     missing: List[str] = []
@@ -55,7 +123,9 @@ def token_boundary_check(expected_fields: Dict[str, str], text: str) -> tuple[Li
         v = str(val).strip()
         if not v:
             continue
-        if re.search(rf"(?<!\w){re.escape(v)}(?!\w)", compact):
+        if _field_bound_match(key, v, compact, field_bindings):
+            cited.append(v)
+        elif len(v) >= 3 and re.search(rf"(?<!\w){re.escape(v)}(?!\w)", compact):
             cited.append(v)
         else:
             missing.append(key)
@@ -169,39 +239,79 @@ def verify_pdf_readback(
     )
 
 
+def _origin_of(url: str) -> str:
+    p = urlparse(url or "")
+    return f"{p.scheme.lower()}://{p.netloc.lower()}" if p.scheme and p.netloc else ""
+
+
+def _origin_matches(tab_url: str, target_origin: str) -> bool:
+    tp, op = urlparse(tab_url or ""), urlparse(target_origin or "")
+    if not tp.scheme or not tp.netloc or not op.scheme or not op.netloc:
+        return False
+    if op.port is not None:
+        return tp.scheme.lower() == op.scheme.lower() and tp.netloc.lower() == op.netloc.lower()
+    return tp.scheme.lower() == op.scheme.lower() and (tp.hostname or "").lower() == (op.hostname or "").lower()
+
+
 def verify_cross_tab_dom(
     page: Any,
     expected_fields: Dict[str, str],
     *,
     reload_active: bool = True,
+    target_origin: Optional[str] = None,
+    structured_bindings: Optional[Dict[str, str]] = None,
 ) -> OracleVerdict:
-    """Verify expected fields across the active tab (after fresh reload) and all other open tabs."""
+    """Verify expected fields strictly on the mutated target tab/origin using field-bound matching."""
     if reload_active:
         page.reload(wait_until="domcontentloaded")
-        page.wait_for_timeout(200)
+        page.wait_for_timeout(120)
+
+    active_url = str(getattr(page, "url", "") or "")
+    active_origin = _origin_of(active_url)
+    if target_origin and active_origin and not _origin_matches(active_url, target_origin):
+        return OracleVerdict(
+            verified=False,
+            channel="fresh_reload",
+            locator=active_url,
+            missing_fields=list(expected_fields.keys()),
+        )
+
+    ctx = getattr(page, "context", None)
+    if ctx is not None and active_origin:
+        pages = [
+            p for p in ctx.pages
+            if not p.is_closed()
+            and _origin_of(str(getattr(p, "url", "") or "")) == active_origin
+            and (not target_origin or _origin_matches(str(getattr(p, "url", "") or ""), target_origin))
+        ]
+    else:
+        pages = [page]
 
     texts: List[str] = []
     urls: List[str] = []
-    ctx = getattr(page, "context", None)
-    pages = list(ctx.pages) if ctx is not None else [page]
+    bindings: List[Dict[str, str]] = [
+        {"key": k, "val": str(v)} for k, v in (structured_bindings or {}).items()
+    ]
     for p in pages:
         try:
             if p.is_closed():
                 continue
-            txt = str(p.evaluate("() => (document.body && document.body.innerText) || ''") or "")
+            snap = p.evaluate(_DOM_EXTRACT_JS) or {}
+            txt = str(snap.get("text") or "")
             if txt.strip():
                 texts.append(txt)
                 urls.append(str(p.url))
+            bindings.extend(snap.get("bindings") or [])
         except Exception:
             continue
 
     combined = "\n".join(texts)
-    cited, missing = token_boundary_check(expected_fields, combined)
+    cited, missing = token_boundary_check(expected_fields, combined, field_bindings=bindings)
     channel = "cross_tab" if len(urls) > 1 else "fresh_reload"
     return OracleVerdict(
         verified=(len(missing) == 0 and len(cited) > 0),
         channel=channel,
-        locator=urls[0] if urls else str(getattr(page, "url", "")),
+        locator=urls[0] if urls else active_url,
         cited_substrings=cited,
         missing_fields=missing,
     )

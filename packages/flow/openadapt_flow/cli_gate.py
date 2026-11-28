@@ -74,8 +74,8 @@ def cmd_gate(args: argparse.Namespace) -> int:
     print(f"clean checks in a row: {st.clean_in_a_row} of {st.needed}")
     print(f"checks recorded: {st.checks}; stops labelled false: {st.false_stops}")
     if st.offered:
-        print(
-            "gating is offered: run `openadapt-flow gate enable "
-            f"{args.contract} --by <name>` to let this contract block"
-        )
+        from openadapt_flow.cli_hints import command
+
+        hint = command(f"gate enable {args.contract} --by <name>")
+        print(f"gating is offered: run `{hint}` to let this contract block")
     return 0
