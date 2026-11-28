@@ -1428,3 +1428,216 @@ def test_v3_stall_detector_escalates_then_micro_handoff_and_macros(
     assert hit is not None and hit[1][0]["value"] == "Beta"
     assert verified.record_macro_outcome(macro.macro_id, False) is False
     assert verified.try_instantiate_macro("default-run", "t-v3", {"name": "C"}) is None
+
+
+# -- v4: DOM-aware fingerprints, macro receipts, CoW rollback, egress, obligations --
+
+
+@dataclass
+class _WebObservation:
+    url: str = ""
+    raw_observation: dict[str, Any] | None = None
+    screenshot: bytes | None = None
+
+
+def _click(x: int, y: int) -> _NativeAction:
+    return _NativeAction(type="click", raw_action={"x": x, "y": y, "is_commit": True})
+
+
+def test_v4_commit_fingerprint_is_screen_aware_but_jitter_tolerant() -> None:
+    from openadapt.simplex_transducer import _commit_fingerprint
+
+    form_a = _WebObservation(
+        url="https://ehr.test/prior_auth/step1?x=1",
+        raw_observation={"dom_state_hash": "a"},
+    )
+    form_b = _WebObservation(
+        url="https://ehr.test/prior_auth/step2",
+        raw_observation={"dom_state_hash": "b"},
+    )
+    same_screen_again = _WebObservation(
+        url="https://ehr.test/prior_auth/step1?x=2",
+        raw_observation={"dom_state_hash": "a"},
+    )
+    base = _commit_fingerprint(_click(400, 400), observation=form_a)
+    assert base == _commit_fingerprint(_click(403, 401), observation=same_screen_again)
+    assert base != _commit_fingerprint(_click(400, 400), observation=form_b)
+    assert _commit_fingerprint(_click(400, 400)) == _commit_fingerprint(
+        _click(401, 402), observation=None
+    )
+
+
+def test_v4_same_click_on_different_screens_is_not_a_wal_duplicate(
+    tmp_path: Path,
+) -> None:
+    wal = WriteAheadSagaLog(tmp_path / "wal.jsonl")
+    agent = _ScriptedBenchmarkAgent([_click(300, 300), _click(300, 300)])
+    wrapped = openadapt.wrap(agent, wal=wal)
+    task = _NativeTask(task_id="ehr", instruction="Submit the two forms.")
+    for step, dom in enumerate(("s1", "s2")):
+        obs = _WebObservation(
+            url=f"https://ehr/f{step}", raw_observation={"dom_state_hash": dom}
+        )
+        out = wrapped.act(obs, task)
+        assert not (isinstance(out, TransducerAction) and out.is_abstained)
+
+
+def test_v4_macro_verified_receipt_is_signed_verified_tier1() -> None:
+    wrapped = openadapt.wrap(_ScriptedBenchmarkAgent([]))
+    receipt = wrapped.record_macro_verified_receipt(
+        "run-m", "task-m", "macro-1", reason="replayed"
+    )
+    assert receipt.outcome == "VERIFIED"
+    assert receipt.oracle_tier == 1
+    assert receipt.observed_effect_strength == "persisted_state_reacquisition"
+    assert wrapped.last_receipt is receipt
+
+
+def _workspace(tmp_path: Path) -> Path:
+    root = tmp_path / "ws"
+    (root / "tests").mkdir(parents=True)
+    (root / "src").mkdir()
+    (root / "tests" / "test_app.py").write_text("assert True\n")
+    (root / "src" / "app.py").write_text("x = 1\n")
+    return root
+
+
+def _write(path: str, content: str) -> _NativeAction:
+    return _NativeAction(
+        type="write_file", raw_action={"path": path, "content": content}
+    )
+
+
+def test_v4_write_file_to_oracle_is_blocked_before_execution(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    agent = _ScriptedBenchmarkAgent(
+        [_write(str(root / "tests" / "test_app.py"), "pass\n")] * 3
+    )
+    wrapped = openadapt.wrap(agent, workspace_root=str(root))
+    task = _NativeTask(task_id="os1", instruction="Make the app print hello.")
+    out = wrapped.act(_NativeObservation(), task)
+    assert isinstance(out, TransducerAction) and out.is_abstained
+    assert out.raw_action["trap_code"] == "ORACLE_TAMPER"
+
+
+def test_v4_oracle_tamper_after_step_is_rolled_back_immediately(
+    tmp_path: Path,
+) -> None:
+    root = _workspace(tmp_path)
+    agent = _ScriptedBenchmarkAgent(
+        [_write(str(root / "src" / "app.py"), "x = 2\n"), _NativeAction(type="wait")]
+    )
+    wrapped = openadapt.wrap(agent, workspace_root=str(root))
+    task = _NativeTask(task_id="os2", instruction="Change x to 2.")
+    wrapped.act(_NativeObservation(), task)
+    (root / "src" / "app.py").write_text("x = 2\n")
+    (root / "tests" / "test_app.py").write_text(
+        "assert False\n"
+    )  # tampered by a script
+    wrapped.act(_NativeObservation(), task)
+    assert (root / "tests" / "test_app.py").read_text() == "assert True\n"
+    assert any("ORACLE_TAMPER_ROLLED_BACK" in i["hint"] for i in agent.interventions)
+
+
+def test_v4_read_only_done_earns_verified_and_finalize_rolls_back(
+    tmp_path: Path,
+) -> None:
+    root = _workspace(tmp_path)
+    agent = _ScriptedBenchmarkAgent([_NativeAction(type="done")])
+    wrapped = openadapt.wrap(agent, workspace_root=str(root))
+    task = _NativeTask(task_id="os3", instruction="Explain what src/app.py does.")
+    wrapped.act(_NativeObservation(), task)
+    assert wrapped.last_receipt is not None
+    assert wrapped.last_receipt.outcome == "VERIFIED"
+    assert "Read-only" in wrapped.last_receipt.reason
+    assert wrapped.finalize_episode("x", "y")["restored"] is False
+
+    root2 = _workspace(tmp_path / "second")
+    agent2 = _ScriptedBenchmarkAgent([_write(str(root2 / "src" / "app.py"), "x = 9\n")])
+    wrapped2 = openadapt.wrap(agent2, workspace_root=str(root2))
+    task2 = _NativeTask(task_id="os4", instruction="Change x.")
+    obs = _NativeObservation()
+    wrapped2.act(obs, task2)
+    (root2 / "src" / "app.py").write_text("x = 9\n")
+    (root2 / "src" / "junk.py").write_text("boom\n")
+    run_id, task_id = wrapped2._resolve_ids(obs, task2)
+    result = wrapped2.finalize_episode(run_id, task_id, tests_passed=False)
+    assert result["restored"] is True
+    assert (root2 / "src" / "app.py").read_text() == "x = 1\n"
+    assert not (root2 / "src" / "junk.py").exists()
+
+
+def test_v4_item_auditor_is_the_single_egress_gate() -> None:
+    calls: list[str] = []
+
+    def auditor(_prompt: str, item: str) -> bool:
+        calls.append(item)
+        return "secret" not in item
+
+    action = _NativeAction(
+        type="click",
+        target_name="Send",
+        raw_action={
+            "is_commit": True,
+            "parsed_json": {"shared_content": ["agenda at 3 PM", "secret salary data"]},
+        },
+    )
+    agent = _ScriptedBenchmarkAgent([action, action, action])
+    wrapped = openadapt.wrap(agent, item_auditor=auditor)
+    out = wrapped.act(
+        _NativeObservation(),
+        _NativeTask(task_id="egress", instruction="Send the agenda."),
+    )
+    assert out.raw_action["parsed_json"]["shared_content"] == ["agenda at 3 PM"]
+    assert agent.interventions == []
+    assert agent.calls == 1
+    assert sorted(calls) == ["agenda at 3 PM", "secret salary data"]
+
+
+def test_v4_mid_episode_document_obligations_hold_done() -> None:
+    agent = _ScriptedBenchmarkAgent(
+        [
+            _NativeAction(type="wait"),
+            _NativeAction(type="done"),
+            _NativeAction(type="done"),
+        ]
+    )
+    wrapped = openadapt.wrap(agent)
+    task = _NativeTask(task_id="auth", instruction="Complete the prior authorization.")
+    wrapped.act(_NativeObservation(raw_observation={}), task)
+    wrapped.act(
+        _NativeObservation(
+            raw_observation={"document_text": "Fax cover: authorization AUTH-48213."}
+        ),
+        task,
+    )
+    out = wrapped.act(
+        _NativeObservation(raw_observation={"readback_text": "Saved. Patient: Jane."}),
+        task,
+    )
+    assert any(
+        "FIELD_OBLIGATIONS_MISSING" in i["delta_note"] for i in agent.interventions
+    )
+    assert wrapped.last_receipt is not None
+    assert wrapped.last_receipt.outcome == "COMPLETED_UNVERIFIED"
+    assert out is not None
+
+
+def test_v4_completeness_auditor_blocks_verified_when_items_missing() -> None:
+    def auditor(_intake: str, _readback: str) -> dict[str, Any]:
+        return {"complete": False, "missing": ["secondary diagnosis code"]}
+
+    agent = _ScriptedBenchmarkAgent([_NativeAction(type="done")] * 3)
+    wrapped = openadapt.wrap(agent, completeness_auditor=auditor)
+    task = _NativeTask(task_id="comp", instruction="Fill the referral form.")
+    wrapped.act(
+        _NativeObservation(
+            raw_observation={"readback_text": "Referral saved for Jane."}
+        ),
+        task,
+    )
+    assert any(
+        "FIELD_OBLIGATIONS_MISSING" in i["delta_note"] for i in agent.interventions
+    )
+    assert wrapped.last_receipt is not None
+    assert wrapped.last_receipt.outcome != "VERIFIED"

@@ -32,7 +32,10 @@ from openadapt.transducer_obligations import (
     MicroHandoffResolution,
     MicroHandoffTicket,
 )
-from openadapt.transducer_v3_runtime import TransducerV3Hooks
+from openadapt.transducer_v3_runtime import (
+    TransducerV3Hooks,
+    observation_state_prefix,
+)
 
 try:
     import fcntl
@@ -359,7 +362,7 @@ def _quantize_coord(val: Any) -> Any:
     return int(f // 40)
 
 
-def _commit_fingerprint(action: Any) -> str:
+def _commit_fingerprint(action: Any, observation: Any = None) -> str:
     """Compute a deterministic content fingerprint for a commit action."""
     raw = _action_raw_dict(action)
     explicit = _extract_attr_or_key(action, "idempotency_key", None) or raw.get(
@@ -384,6 +387,9 @@ def _commit_fingerprint(action: Any) -> str:
     entities = _extract_attr_or_key(action, "entities", None)
 
     canonical: dict[str, Any] = {"type": _action_type_str(action)}
+    state_prefix = observation_state_prefix(observation)
+    if state_prefix:
+        canonical["state"] = state_prefix
     if target_node_id is not None:
         canonical["target_node_id"] = target_node_id
     if target_name is not None:
@@ -1734,6 +1740,7 @@ class SimplexTransducer:
             [MicroHandoffTicket], MicroHandoffResolution | None
         ]
         | None = None,
+        completeness_auditor: Callable[[str, str], Mapping[str, Any]] | None = None,
     ) -> None:
         if not callable(getattr(agent, "act", None)):
             raise TypeError(
@@ -1770,11 +1777,14 @@ class SimplexTransducer:
             item_auditor=item_auditor,
             on_stall_escalate=on_stall_escalate,
             micro_handoff_resolver=micro_handoff_resolver,
+            completeness_auditor=completeness_auditor,
         )
         self.macro_store = macro_store
         self.record_verified_macro = self._v3.record_verified_macro
         self.try_instantiate_macro = self._v3.try_instantiate_macro
         self.record_macro_outcome = self._v3.record_macro_outcome
+        self.record_macro_verified_receipt = self._v3.record_macro_verified_receipt
+        self.finalize_episode = self._v3.finalize_episode
 
     @property
     def last_receipt(self) -> TransducerReceipt | None:
@@ -2488,7 +2498,11 @@ class SimplexTransducer:
                 return modal_trap
 
         # 6. General contextual integrity & scope provenance guard
-        scope_trap = self._check_contextual_integrity(state, action)
+        scope_trap = (
+            None
+            if self._v3.legacy_egress_skipped(state)
+            else self._check_contextual_integrity(state, action)
+        )
         if scope_trap is not None:
             return scope_trap
 
@@ -3642,7 +3656,7 @@ class SimplexTransducer:
             skip_attempts = 0
             while self._is_commit_boundary(action):
                 commit_index = state.next_commit_index
-                fp = _commit_fingerprint(action)
+                fp = _commit_fingerprint(action, observation=observation)
                 verified_by_idx = self.wal.is_commit_verified(
                     run_id, task_id, commit_index
                 )
@@ -3704,7 +3718,7 @@ class SimplexTransducer:
             action = self._v3.egress_gate(state, action, observation, task, history)
 
             if self._is_commit_boundary(action):
-                fp = _commit_fingerprint(action)
+                fp = _commit_fingerprint(action, observation=observation)
                 safe_summary = {
                     "type": _action_type_str(action),
                     "raw_action": self.vault.redact(_action_raw_dict(action)),

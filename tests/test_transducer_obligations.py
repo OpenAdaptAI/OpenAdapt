@@ -9,7 +9,9 @@ from openadapt.transducer_obligations import (
     build_micro_handoff,
     compile_obligations_from_spec,
     diff_readback_against_obligations,
+    evaluate_readback_with_completeness,
     mark_drafted_from_action,
+    merge_obligations_from_document,
 )
 
 PROMPT = (
@@ -120,3 +122,78 @@ def test_handoff_round_trip():
     ]
     with pytest.raises(ValueError):
         apply_human_resolution(t, MicroHandoffResolution("other", True))
+
+
+DOC = (
+    "Fax FAX-1001 re denial DEN-022 for referral REF-2025-004, "
+    "HCPCS E0601, AUTH-77, NPI: 1234567890."
+)
+
+
+def test_merge_extracts_new_ids():
+    obs = merge_obligations_from_document([], DOC, source_label="fax")
+    vals = {o.expected_value for o in obs}
+    assert {
+        "REF-2025-004",
+        "DEN-022",
+        "E0601",
+        "FAX-1001",
+        "AUTH-77",
+        "1234567890",
+    } <= vals
+
+
+def test_merge_dedups_and_preserves_status():
+    existing = compile_obligations_from_spec("REF-2025-004")
+    existing[0].status = ObligationStatus.DRAFTED
+    merged = merge_obligations_from_document(existing, DOC)
+    refs = [o for o in merged if o.expected_value.lower() == "ref-2025-004"]
+    assert len(refs) == 1 and refs[0].status is ObligationStatus.DRAFTED
+    again = merge_obligations_from_document(merged, DOC)
+    assert len(again) == len(merged)
+
+
+def test_completeness_combines_deterministic_and_narrative():
+    obs = compile_obligations_from_spec("REF-1-1 and DEN-9")
+    res = evaluate_readback_with_completeness(
+        obs,
+        "saved REF-1-1",
+        intake_context="intake",
+        completeness_auditor=lambda c, r: {
+            "complete": False,
+            "missing": ["failed conservative therapy"],
+            "reason": "x",
+        },
+    )
+    assert not res.all_verified
+    kinds = {o.kind for o in res.missing_obligations}
+    assert kinds == {"identifier", "narrative_criterion"}
+    assert "failed conservative therapy" in res.reason and "DEN-9" in res.reason
+
+
+def test_completeness_pass_and_exception_and_toast():
+    obs = compile_obligations_from_spec("REF-1-1")
+    ok = evaluate_readback_with_completeness(
+        obs,
+        "REF-1-1",
+        intake_context="i",
+        completeness_auditor=lambda c, r: {"complete": True, "missing": []},
+    )
+    assert ok.all_verified
+
+    def boom(c, r):
+        raise RuntimeError("down")
+
+    bad = evaluate_readback_with_completeness(
+        obs, "REF-1-1", intake_context="i", completeness_auditor=boom
+    )
+    assert not bad.all_verified
+    called = []
+    toast = evaluate_readback_with_completeness(
+        obs,
+        "REF-1-1",
+        intake_context="i",
+        is_toast=True,
+        completeness_auditor=lambda c, r: called.append(1) or {"complete": True},
+    )
+    assert not toast.all_verified and not called
