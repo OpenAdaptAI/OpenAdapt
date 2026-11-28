@@ -61,7 +61,7 @@ Agents can call a compiled workflow as one tool over MCP; see
 [Proof](https://openadapt.ai/proof) ·
 [Pilot](https://openadapt.ai/pilot) ·
 [Docs](https://docs.openadapt.ai) ·
-[Try it in your browser](https://app.openadapt.ai/demo) ·
+[Watch real runs](https://app.openadapt.ai/demo) ·
 [Website](https://openadapt.ai) ·
 [Discussions](https://github.com/OpenAdaptAI/OpenAdapt/discussions)
 
@@ -138,9 +138,9 @@ wrote on 2026-10-09 against the bundled fake clinic app; regenerate it with
 The two final screens are identical, pixel for pixel. Only the record check
 tells the runs apart. To watch each stage in the terminal instead, run
 `openadapt-flow tutorial`, then `openadapt-flow tutorial --break-it`;
-[docs/TUTORIAL.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/TUTORIAL.md) shows the output. The
-[live demo](https://app.openadapt.ai/demo) shows recorded runs on synthetic
-data.
+[docs/TUTORIAL.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/TUTORIAL.md) shows the output.
+[Watch real runs](https://app.openadapt.ai/demo) to inspect recorded OpenEMR,
+Frappe, and openIMIS footage with signed receipts.
 
 ## How it compares
 
