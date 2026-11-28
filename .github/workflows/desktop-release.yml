@@ -675,7 +675,7 @@ jobs:
 
       - name: Sign the installers with SignPath
         if: steps.signing.outputs.method == 'signpath'
-        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        uses: signpath/github-action-submit-signing-request@a2c5b60d9c75f073142b653c354b632eedce097b # v3.2
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
@@ -907,7 +907,7 @@ jobs:
         run: python scripts/native_release.py validate-set --directory release-assets
 
       - name: Generate a machine-readable SBOM from the exact installer set
-        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        uses: anchore/sbom-action@dfcb83b97731532d72be422cbc51ee64adb6fd56 # v0.24.4
         with:
           path: packages/desktop/release-assets
           format: cyclonedx-json
@@ -1096,7 +1096,7 @@ jobs:
     steps:
       - name: Create a repository-scoped release App token
         id: release-app
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
           app-id: ${{ vars.OPENADAPT_RELEASE_APP_ID }}
           private-key: ${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}
@@ -1299,7 +1299,7 @@ jobs:
     steps:
       - name: Create a repository-scoped release App token
         id: release-app
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
           app-id: ${{ vars.OPENADAPT_RELEASE_APP_ID }}
           private-key: ${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}
