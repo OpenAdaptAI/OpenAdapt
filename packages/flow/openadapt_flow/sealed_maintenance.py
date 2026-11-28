@@ -76,11 +76,9 @@ def mutation_lock(root: Path, *, wait_s: float = 10.0) -> Iterator[None]:
         "openadapt-sealed-mutation-"
         + hashlib.sha256(os.fsencode(Path.home())).hexdigest()[:16]
     )
-    from openadapt_flow.path_safety import canonicalize_platform_root_symlinks
-
-    lock_root = canonicalize_platform_root_symlinks(
+    lock_root = Path(
         os.environ.get("OPENADAPT_SEALED_LOCK_DIR", str(default))
-    )
+    ).absolute()
     if any(parent.is_symlink() for parent in (lock_root, *lock_root.parents)):
         raise MaintenanceError("unsafe_mutation_lock_directory")
     lock_root.mkdir(mode=0o700, parents=True, exist_ok=True)

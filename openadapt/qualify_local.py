@@ -329,6 +329,7 @@ def build_local_qualify_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="openadapt qualify --local",
         description="Locally qualify a workflow bundle or persisted-state profile.",
+        allow_abbrev=False,
     )
     parser.add_argument(
         "target",

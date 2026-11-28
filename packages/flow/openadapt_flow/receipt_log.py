@@ -22,10 +22,6 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
-from openadapt_flow.path_safety import (
-    canonicalize_platform_root_symlinks,
-    validate_no_store_symlinks,
-)
 from openadapt_flow.seal_anchor import _node, leaf_hash, root_from_inclusion
 
 #: COSE header labels (IANA COSE Header Parameters; SCITT and COSE receipts).
@@ -169,6 +165,8 @@ def validate_receipt_store_root(root: Path | str) -> Path:
     (such as ``/tmp -> /private/tmp`` and ``/var -> /private/var``) while
     refusing any symlink at or inside the store.
     """
+    from openadapt_flow.path_safety import validate_no_store_symlinks
+
     try:
         return validate_no_store_symlinks(root, label="receipt store")
     except ValueError as exc:
@@ -179,6 +177,8 @@ class LocalLog:
     """The append-only leaf file and the log key under ``home/log``."""
 
     def __init__(self, home: Optional[Path] = None) -> None:
+        from openadapt_flow.path_safety import canonicalize_platform_root_symlinks
+
         base = validate_receipt_store_root(home or receipt_home())
         self.dir = canonicalize_platform_root_symlinks(base / "log")
         if self.dir.is_symlink():

@@ -50,6 +50,8 @@ def test_action_kind_map_covers_losslessly_shared_values() -> None:
         ir.ActionKind.READ,
         ir.ActionKind.SWITCH_SURFACE,
         ir.ActionKind.SECOND_FACTOR,
+        ir.ActionKind.EXTRACT,
+        ir.ActionKind.PAGINATE_UNTIL_EOF,
     }
     assert interop.ACTION_KIND_TO_ACTION_TYPE == expected
 
