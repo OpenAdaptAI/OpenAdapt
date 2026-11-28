@@ -246,3 +246,5 @@ e09ebaec9b380b8217471cccb4031511ac7c966e:packages/flow/tests/test_readiness_devt
 36be56dcd6fdc9adc97567bce272ab81d2a528ff:packages/flow/benchmark/form_tx_heldout/MANIFEST.json:generic-api-key:8
 3146a82dd83641e83021d7034aaf03411c635555:packages/flow/benchmark/form_tx_heldout/MANIFEST.json:generic-api-key:3
 3146a82dd83641e83021d7034aaf03411c635555:packages/flow/benchmark/form_tx_heldout/MANIFEST.json:generic-api-key:6
+# PR #2723: synthetic test branch_key ("roof_1998_shake") in MicroHandoffSession e2e test, not a credential.
+3576c5010fa4bb2786e496614e9b706e85390d1a:packages/kernel/tests/test_copilot_e2e.py:generic-api-key:140
