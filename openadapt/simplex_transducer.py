@@ -21,11 +21,18 @@ import tempfile
 import threading
 import uuid
 import zlib
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, TypeVar
+
+from openadapt.transducer_macros import MacroStore, StallRecoveryPlan
+from openadapt.transducer_obligations import (
+    MicroHandoffResolution,
+    MicroHandoffTicket,
+)
+from openadapt.transducer_v3_runtime import TransducerV3Hooks
 
 try:
     import fcntl
@@ -867,6 +874,7 @@ class SupervisorConfig:
     workflow_version: str = "v1.0.0-wrap"
     qualification_id: str = "qual-default-01"
     minimum_effect_strength: str = "independent_session"
+    enable_obligation_compiler: bool = False
 
     def __post_init__(self) -> None:
         if self.isolation_mode not in ("iid_ephemeral", "continual_persistent"):
@@ -1653,6 +1661,7 @@ class EpisodeState:
     source_item_ids: set[str] = field(default_factory=set)
     task_scope_entities: set[str] = field(default_factory=set)
     required_task_anchors: list[str] = field(default_factory=list)
+    v3_ep: Any = field(default=None, repr=False)
     _lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
 
     def record_entity(self, anchor: SpanAnchor) -> None:
@@ -1715,6 +1724,16 @@ class SimplexTransducer:
         ]
         | None = None,
         pinned: Mapping[str, Any] | None = None,
+        macro_store: MacroStore | None = None,
+        regression_test_runner: Callable[[], tuple[bool, str]] | None = None,
+        protected_oracle_paths: Collection[str] = (),
+        workspace_root: str = "",
+        item_auditor: Callable[[str, str], bool] | None = None,
+        on_stall_escalate: Callable[[StallRecoveryPlan], None] | None = None,
+        micro_handoff_resolver: Callable[
+            [MicroHandoffTicket], MicroHandoffResolution | None
+        ]
+        | None = None,
     ) -> None:
         if not callable(getattr(agent, "act", None)):
             raise TypeError(
@@ -1742,6 +1761,20 @@ class SimplexTransducer:
         self._states: dict[tuple[str, str], EpisodeState] = {}
         self._last_receipt_lock = threading.RLock()
         self._last_receipt: TransducerReceipt | None = None
+        self._v3 = TransducerV3Hooks(
+            self,
+            macro_store=macro_store,
+            regression_test_runner=regression_test_runner,
+            protected_oracle_paths=protected_oracle_paths,
+            workspace_root=workspace_root,
+            item_auditor=item_auditor,
+            on_stall_escalate=on_stall_escalate,
+            micro_handoff_resolver=micro_handoff_resolver,
+        )
+        self.macro_store = macro_store
+        self.record_verified_macro = self._v3.record_verified_macro
+        self.try_instantiate_macro = self._v3.try_instantiate_macro
+        self.record_macro_outcome = self._v3.record_macro_outcome
 
     @property
     def last_receipt(self) -> TransducerReceipt | None:
@@ -1795,6 +1828,8 @@ class SimplexTransducer:
             else:
                 self._states.clear()
         self.cartridge_store.reset(self.config.isolation_mode)
+        if self.macro_store is not None:
+            self.macro_store.reset()
         inner_reset = getattr(self.__wrapped__, "reset", None)
         if callable(inner_reset):
             sig = inspect.signature(inner_reset)
@@ -3033,6 +3068,11 @@ class SimplexTransducer:
         has_unverified_work = bool(state.unverified_obligations()) or (
             state.pending_verification
         )
+        gated = self._v3.pre_done(
+            state, action, observation, task, history, int(remaining_steps), commit_idx
+        )
+        if gated is not None:
+            return gated
 
         # 1. Check Rung 3 / Rung 2 attached verifiers first
         if self.rung3_verifier is not None:
@@ -3161,6 +3201,7 @@ class SimplexTransducer:
             has_unverified_work
             and not state.verification_subgoal_issued
             and int(remaining_steps) >= self.config.min_budget_for_ui_reopen
+            and not self._v3.skip_ui_reopen(observation, action)
         ):
             state.verification_subgoal_issued = True
             self._deliver_intervention(
@@ -3523,11 +3564,26 @@ class SimplexTransducer:
         history: Sequence[Any] | None = None,
     ) -> Any:
         """Supervise one agent turn for ``(observation, task, history)``."""
+        action = self._act_supervised(observation, task, history)
+        if not (isinstance(action, TransducerAction) and action.is_abstained):
+            run_id, task_id = self._resolve_ids(observation, task)
+            self._v3.after_step(
+                self.get_state(run_id, task_id), observation, task, action
+            )
+        return action
+
+    def _act_supervised(
+        self,
+        observation: Any,
+        task: Any,
+        history: Sequence[Any] | None = None,
+    ) -> Any:
         run_id, task_id = self._resolve_ids(observation, task)
         state = self.get_state(run_id, task_id)
         with state._lock:
             state.step_count += 1
         self._ingest_context(state, observation, task)
+        self._v3.on_context(state, observation, task)
 
         # Native BenchmarkObservation surface guard: stream/VDI disconnect.
         # Hold commits and return a wait action directly without burning an LLM call.
@@ -3569,6 +3625,10 @@ class SimplexTransducer:
         if not isinstance(action, (TransducerAction, dict)):
             with state._lock:
                 state.action_cls = type(action)
+
+        action = self._v3.shell_gate(state, action, observation, task, history)
+        if isinstance(action, TransducerAction) and action.is_abstained:
+            return action
 
         # Terminal action path: DONE / answer / infeasible
         if self._is_terminal_action(action):
@@ -3641,6 +3701,7 @@ class SimplexTransducer:
             )
             if isinstance(action, TransducerAction) and action.is_abstained:
                 return action
+            action = self._v3.egress_gate(state, action, observation, task, history)
 
             if self._is_commit_boundary(action):
                 fp = _commit_fingerprint(action)

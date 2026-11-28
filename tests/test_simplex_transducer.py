@@ -1239,3 +1239,192 @@ def test_contextual_scope_bleed_nested_containers_outlier_path_and_task_prompt()
     assert "backend/api/middleware/security.py" in items
     assert "personal_drafts/letter_to_landlord.txt" not in items
     assert any("CONTEXTUAL_SCOPE_BLEED" in n["hint"] for n in agent.interventions)
+
+
+# ---------------------------------------------------------------------------
+# v3 hooks wired through openadapt.wrap(agent)
+# ---------------------------------------------------------------------------
+
+
+def _v3_task(instruction: str = "Do the task.", **raw: Any) -> _NativeTask:
+    return _NativeTask(task_id="t-v3", instruction=instruction, raw_config=raw)
+
+
+def test_v3_shell_gate_blocks_destructive_and_marks_mutation_as_commit() -> None:
+    agent = _ScriptedBenchmarkAgent(
+        [
+            _NativeAction(type="bash", text="rm -rf /"),
+            _NativeAction(type="bash", text="rm -rf /"),
+            _NativeAction(type="bash", text="rm -rf /"),
+        ]
+    )
+    wrapped = openadapt.wrap(agent)
+    out = wrapped.act(_NativeObservation(), _v3_task())
+    assert out.is_abstained
+    assert out.raw_action["trap_code"] == "DESTRUCTIVE_PRIVILEGED_COMMAND"
+    assert wrapped.last_receipt.outcome == "HALTED"
+
+    agent2 = _ScriptedBenchmarkAgent(
+        [_NativeAction(type="bash", text="echo hi > out.txt")]
+    )
+    wrapped2 = openadapt.wrap(agent2)
+    task = _v3_task()
+    out2 = wrapped2.act(_NativeObservation(), task)
+    assert out2.raw_action["is_commit"] is True
+    assert wrapped2.get_state("default-run", "t-v3").pending_verification
+    assert wrapped2.wal.commits_for("default-run", "t-v3")
+
+
+def test_v3_oracle_tamper_and_regression_gate_before_done(tmp_path: Path) -> None:
+    (tmp_path / "test_x.py").write_text("assert True\n")
+    results = iter([(False, "FAILED test_x: boom"), (True, "")])
+    agent = _ScriptedBenchmarkAgent(
+        [
+            _NativeAction(type="bash", text="echo fix > src.txt"),
+            _NativeAction(type="done"),
+            _NativeAction(type="done"),
+        ]
+    )
+    wrapped = openadapt.wrap(
+        agent,
+        workspace_root=str(tmp_path),
+        regression_test_runner=lambda: next(results),
+    )
+    task = _v3_task()
+    wrapped.act(_NativeObservation(), task)
+    out = wrapped.act(_NativeObservation(), task)
+    assert out.type == "done"
+    assert any("REGRESSION_TEST_FAILED" in i["hint"] for i in agent.interventions)
+    assert wrapped.last_receipt.outcome == "VERIFIED"
+    assert wrapped.last_receipt.oracle_tier == 2
+
+    agent2 = _ScriptedBenchmarkAgent([_NativeAction(type="done")])
+    wrapped2 = openadapt.wrap(agent2, workspace_root=str(tmp_path))
+    task2 = _v3_task()
+    obs = _NativeObservation()
+    wrapped2.get_state("default-run", "t-v3")
+    wrapped2._v3.on_context(wrapped2.get_state("default-run", "t-v3"), obs, task2)
+    (tmp_path / "test_x.py").write_text("assert False\n")
+    out2 = wrapped2.act(obs, task2)
+    assert out2.is_abstained and out2.raw_action["trap_code"] == "ORACLE_TAMPER"
+
+
+def test_v3_egress_strip_monotonic_and_single_turn_skips_reopen() -> None:
+    task = _v3_task("Email the Orion team the Orion notes.")
+    obs = _NativeObservation(
+        raw_observation={
+            "containers": {
+                "Orion": ["Orion kickoff is Monday"],
+                "Payroll": ["Salaries are confidential"],
+            }
+        }
+    )
+    agent = _ScriptedBenchmarkAgent(
+        [
+            _NativeAction(
+                type="answer",
+                answer="x",
+                raw_action={
+                    "shared_content": [
+                        "Orion kickoff is Monday",
+                        "Salaries are confidential",
+                    ]
+                },
+            ),
+            _NativeAction(type="done"),
+        ]
+    )
+    wrapped = openadapt.wrap(agent, item_auditor=lambda prompt, item: True)
+    out = wrapped.act(obs, task)
+    assert agent.calls == 1
+    assert out.raw_action["shared_content"] == ["Orion kickoff is Monday"]
+    assert not agent.interventions
+    done = wrapped.act(obs, task)
+    assert done.type == "done"
+    assert not any(
+        i["delta_note"] == "verification_subgoal_requested" for i in agent.interventions
+    )
+
+
+def test_v3_compiled_obligations_hold_done_until_full_readback() -> None:
+    task = _v3_task(
+        "File claim CLM-1234 with amount $1,250.00.",
+        structured_fields={"claim": "CLM-1234"},
+    )
+    partial = _NativeObservation(raw_observation={"readback_text": "CLM-1234 saved"})
+    full = _NativeObservation(
+        raw_observation={"readback_text": "CLM-1234 saved, total $1,250.00"}
+    )
+    agent = _ScriptedBenchmarkAgent(
+        [
+            _NativeAction(type="done"),
+            _NativeAction(type="done"),
+        ]
+    )
+    wrapped = openadapt.wrap(agent)
+    out = wrapped.act(partial, task)
+    assert out.type == "done"
+    assert any("HOLD_DONE" in i["hint"] for i in agent.interventions)
+    assert wrapped.last_receipt is None or wrapped.last_receipt.outcome != "VERIFIED"
+    agent._script = [_NativeAction(type="done")]
+    wrapped.act(full, task)
+    assert wrapped.last_receipt.outcome == "VERIFIED"
+
+
+def test_v3_stall_detector_escalates_then_micro_handoff_and_macros(
+    tmp_path: Path,
+) -> None:
+    from openadapt.transducer_macros import MacroStore
+    from openadapt.transducer_obligations import MicroHandoffResolution
+
+    escalations: list[Any] = []
+    tickets: list[Any] = []
+
+    def resolver(ticket: Any) -> MicroHandoffResolution:
+        tickets.append(ticket)
+        return MicroHandoffResolution(
+            ticket_id=ticket.ticket_id, resolved=True, learned_selector="#next"
+        )
+
+    store = MacroStore(tmp_path / "macros.json")
+    click = _NativeAction(type="click", raw_action={"selector": "#stuck"})
+    agent = _ScriptedBenchmarkAgent([click] * 12)
+    wrapped = openadapt.wrap(
+        agent,
+        macro_store=store,
+        on_stall_escalate=escalations.append,
+        micro_handoff_resolver=resolver,
+    )
+    obs = _NativeObservation(raw_observation={"dom_elements": []})
+    task = _v3_task()
+    for _ in range(8):
+        wrapped.act(obs, task)
+    assert any(i["delta_note"].startswith("stall_count") for i in agent.interventions)
+    assert escalations
+    assert tickets
+    assert any("#next" in i["hint"] for i in agent.interventions)
+
+    trace = [
+        {"action": "fill", "selector": "#a", "value": "Acme"},
+        {"action": "click", "selector": "#save", "is_commit": True},
+    ]
+    assert (
+        wrapped.record_verified_macro("default-run", "t-v3", trace, {"name": "Acme"})
+        is None
+    )
+    verified = openadapt.wrap(_ScriptedBenchmarkAgent([]), macro_store=store)
+    state = verified.get_state("default-run", "t-v3")
+    verified._emit_receipt(
+        state=state, outcome="VERIFIED", oracle_tier=2,
+        observed_effect_strength="independent_system_of_record",
+        authorization_passed=True, identity_passed=True, postcondition_passed=True,
+        effect_passed=True, delivery_uncertain=False, commit_index=1, reason="ok",
+    )  # fmt: skip
+    macro = verified.record_verified_macro(
+        "default-run", "t-v3", trace, {"name": "Acme"}
+    )
+    assert macro is not None
+    hit = verified.try_instantiate_macro("default-run", "t-v3", {"name": "Beta"})
+    assert hit is not None and hit[1][0]["value"] == "Beta"
+    assert verified.record_macro_outcome(macro.macro_id, False) is False
+    assert verified.try_instantiate_macro("default-run", "t-v3", {"name": "C"}) is None
