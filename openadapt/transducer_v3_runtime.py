@@ -23,6 +23,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from openadapt.transducer_cow_container import run_probes, synthesize_probes
+from openadapt.transducer_dual_egress import EgressDecision
+from openadapt.transducer_form_batch import (
+    FormFieldWrite,
+    FormSubmitPlan,
+    evaluate_readback_against_sop,
+    validate_form_plan,
+)
 from openadapt.transducer_macros import (
     CompiledCommitMacro,
     MacroStore,
@@ -62,6 +70,10 @@ _EDIT_ACTION_TYPES = frozenset(
     {"write", "write_file", "edit", "edit_file", "str_replace", "apply_patch"}
 )
 _MAX_HANDOFFS = 3
+
+
+def _no_exec(cmd: str) -> tuple[int, str, str]:
+    return 1, "", "no container_exec_fn configured"
 
 
 def _get(obj: Any, name: str, default: Any = None) -> Any:
@@ -174,6 +186,9 @@ class V3EpisodeState:
     tx_guard: TransactionalWorkspaceGuard | None = None
     intake_docs: list[str] = field(default_factory=list)
     egress_handled: bool = False
+    container_baseline: dict[str, str] | None = None
+    os_probes: list[Any] = field(default_factory=list)
+    container_violated: bool = False
 
 
 class TransducerV3Hooks:
@@ -194,8 +209,18 @@ class TransducerV3Hooks:
         ]
         | None = None,
         completeness_auditor: Callable[[str, str], Mapping[str, Any]] | None = None,
+        container_tx: Any = None,
+        container_exec_fn: Callable[[str], tuple[int, str, str]] | None = None,
+        sop_contract: Any = None,
+        dual_egress: Any = None,
+        compounding_handoff: Any = None,
     ) -> None:
         self.owner = owner
+        self.container_tx = container_tx
+        self.container_exec_fn = container_exec_fn
+        self.sop_contract = sop_contract
+        self.dual_egress = dual_egress
+        self.compounding_handoff = compounding_handoff
         self.completeness_auditor = completeness_auditor
         self.macro_store = macro_store
         self.regression_test_runner = regression_test_runner
@@ -231,6 +256,7 @@ class TransducerV3Hooks:
             self._start(state, task, ep)
         else:
             self._check_oracle_after_step(state, observation, ep)
+            self._check_container_after_step(state, observation, ep)
         ep.egress_handled = self.handles_egress(observation, task)
         raw_obs = _get(observation, "raw_observation")
         doc = raw_obs.get("document_text") if isinstance(raw_obs, Mapping) else None
@@ -246,6 +272,15 @@ class TransducerV3Hooks:
                 ep.oracle_snapshot = ImmutableOracleGuard.snapshot_directory(root)
                 ep.tx_guard = TransactionalWorkspaceGuard(root)
                 ep.tx_guard.begin_transaction()
+        if self.container_tx is not None:
+            ep.container_baseline = self.container_tx.begin()
+            ep.os_probes = synthesize_probes(
+                self._instruction(state, task),
+                baseline_files=ep.container_baseline,
+                watched_roots=self.container_tx.watched_roots,
+                baseline_tar=self.container_tx.baseline_tar,
+                protected_patterns=self.container_tx.protected_patterns,
+            )
         raw_cfg = _get(task, "raw_config")
         fields = (
             raw_cfg.get("structured_fields") if isinstance(raw_cfg, Mapping) else None
@@ -255,6 +290,83 @@ class TransducerV3Hooks:
                 self._instruction(state, task),
                 fields if isinstance(fields, Mapping) else None,
             )
+
+    def _check_container_after_step(
+        self, state: EpisodeState, observation: Any, ep: V3EpisodeState
+    ) -> None:
+        """After a mutating step, undo changes to protected container paths."""
+        tx = self.container_tx
+        if tx is None or not ep.mutated or ep.container_baseline is None:
+            return
+        report = tx.inspect_step_diff()
+        if not report.protected_violations:
+            return
+        ep.container_violated = True
+        bad = list(report.protected_violations)
+        restored = tx.rollback_paths(bad)
+        self.owner._deliver_intervention(
+            state,
+            kind="TRAP_REPAIR_HINT",
+            hint=(
+                "TRAP_REPAIR_HINT (CONTAINER_PROTECTED_TAMPER_ROLLED_BACK): "
+                f"protected paths {bad} were changed and have been restored "
+                f"({restored}). Do not touch them."
+            ),
+            delta_note="container_protected_tamper_rolled_back",
+            fast_forward_obs=observation,
+        )
+
+    def _form_gate(
+        self,
+        state: EpisodeState,
+        action: Any,
+        observation: Any,
+        task: Any,
+        history: Sequence[Any] | None,
+    ) -> Any:
+        """Validate a whole ``fill_form`` plan before any field is written."""
+        raw = _raw(action)
+        spec = raw.get("form_plan")
+        fields = spec.get("fields") if isinstance(spec, Mapping) else None
+        fields = fields or raw.get("fields")
+        if not isinstance(fields, Sequence) or isinstance(fields, str):
+            return action
+        plan = FormSubmitPlan(
+            fields=[
+                FormFieldWrite(
+                    selector=str(f.get("selector", "")),
+                    field_name=str(f.get("field_name") or f.get("name") or ""),
+                    value=str(f.get("value", "")),
+                    exact_code=bool(f.get("exact_code", False)),
+                )
+                for f in fields
+                if isinstance(f, Mapping)
+            ],
+            submit_selector=str(
+                (spec or {}).get("submit_selector", "")
+                if isinstance(spec, Mapping)
+                else ""
+            ),
+        )
+        res = validate_form_plan(
+            plan,
+            pinned_entities=self.owner.pinned,
+            required_obligations=self.ep(state).obligations,
+        )
+        if res.ok:
+            return action
+        self.owner._deliver_intervention(
+            state,
+            kind="TRAP_REPAIR_HINT",
+            hint=(
+                f"TRAP_REPAIR_HINT (FORM_PLAN_INVALID): {res.reason} "
+                f"Missing: {res.missing_fields}. Mismatched: {res.mismatched_fields}. "
+                f"Blank: {res.blank_fields}."
+            ),
+            delta_note="form_plan_invalid",
+            fast_forward_obs=observation,
+        )
+        return self.owner._call_inner_act(observation, task, history)
 
     def _check_oracle_after_step(
         self, state: EpisodeState, observation: Any, ep: V3EpisodeState
@@ -287,7 +399,7 @@ class TransducerV3Hooks:
         alone do not qualify: the legacy scope check also catches outlier paths
         and entities that the container-name match in ``egress_gate`` misses.
         """
-        return self.item_auditor is not None
+        return self.item_auditor is not None or self.dual_egress is not None
 
     def legacy_egress_skipped(self, state: EpisodeState) -> bool:
         return self.ep(state).egress_handled
@@ -313,6 +425,8 @@ class TransducerV3Hooks:
     ) -> Any:
         """Block unsafe shell commands; mark scoped mutations as commits."""
         owner = self.owner
+        if _type(action) == "fill_form":
+            return self._form_gate(state, action, observation, task, history)
         for _ in range(owner.config.max_repairs_per_commit + 2):
             command = self.shell_command(action)
             write = _write_target(action)
@@ -431,12 +545,69 @@ class TransducerV3Hooks:
             plan.escalate_effort or plan.switch_to_vision
         ):
             self.on_stall_escalate(plan)
-        if (
+        if self.compounding_handoff is not None and not plan.escalate_effort:
+            self._compound(state, observation, ep, plan)
+        elif (
             self.micro_handoff_resolver is not None
             and not plan.escalate_effort
             and ep.handoffs < _MAX_HANDOFFS
         ):
             self._handoff(state, observation, ep, plan)
+
+    def _compound(
+        self,
+        state: EpisodeState,
+        observation: Any,
+        ep: V3EpisodeState,
+        plan: StallRecoveryPlan,
+    ) -> None:
+        resolver = self.micro_handoff_resolver
+        if resolver is None or ep.handoffs >= _MAX_HANDOFFS:
+            return
+        ep.handoffs += 1
+
+        def human(ticket: MicroHandoffTicket) -> MicroHandoffResolution:
+            res = resolver(ticket)
+            if res is None:
+                raise LookupError("no human resolution")
+            return res
+
+        url = str(_get(observation, "url", "") or "")
+        try:
+            out = self.compounding_handoff.handle_stall(
+                run_id=state.run_id,
+                task_id=state.task_id,
+                task_kind="stall",
+                origin_path_pattern=url,
+                reason=plan.hint,
+                blocker_kind="no_progress",
+                missing_obligations=[
+                    o
+                    for o in ep.obligations
+                    if o.status is not ObligationStatus.VERIFIED
+                ],
+                stalled_selectors=plan.blacklisted_selectors,
+                human_resolver=human,
+            )
+        except LookupError:
+            return
+        if out.autonomy == "AVC_H":
+            with state._lock:
+                state.human_touches += 1
+        patch = out.patch or {}
+        ep.handoff_patches.append(patch)
+        hints = [h["selector"] for h in patch.get("selector_hints", [])]
+        if out.completed:
+            self.owner._deliver_intervention(
+                state,
+                kind="MICRO_HANDOFF_RESOLVED",
+                hint=(
+                    "A stored fix for this blocker applies. "
+                    + (f"Use: {', '.join(hints)}." if hints else "")
+                ).strip(),
+                delta_note=f"autonomy={out.autonomy}",
+                fast_forward_obs=observation,
+            )
 
     def _handoff(
         self,
@@ -503,6 +674,10 @@ class TransducerV3Hooks:
         """Strip out-of-scope outbound items, or repair once, never losing items."""
         items = _items(self.owner._extract_outbound_payload(action))
         containers = self._containers(observation, task)
+        if items is not None and self.dual_egress is not None:
+            return self._dual_egress_gate(
+                state, action, items, containers, observation, task
+            )
         if items is None or (containers is None and self.item_auditor is None):
             return action
         ep = self.ep(state)
@@ -550,6 +725,42 @@ class TransducerV3Hooks:
             return action
         ep.egress_clean = not evaluate_outbound_items(best, **kwargs).missing_anchors
         return out
+
+    def _dual_egress_gate(
+        self,
+        state: EpisodeState,
+        action: Any,
+        items: list[str],
+        containers: Mapping[str, Any] | None,
+        observation: Any,
+        task: Any,
+    ) -> Any:
+        ep = self.ep(state)
+        with state._lock:
+            anchors = list(state.required_task_anchors)
+        report = self.dual_egress.verify_outbound(
+            items,
+            task_prompt=self._instruction(state, task),
+            containers=containers,
+            required_anchors=anchors,
+        )
+        rewritten = (
+            _rewrite_payload(action, report.final_items) if report.final_items else None
+        )
+        if rewritten is None and (not report.final_items or report.stripped_items):
+            ep.egress_clean = False
+            return self.owner._abstain_action(
+                state,
+                trap_code="CONTEXTUAL_SCOPE_BLEED",
+                reason=f"Outbound egress refused: {report.reason}",
+                commit_index=state.next_commit_index,
+            )
+        ep.egress_clean = (
+            report.decision
+            in (EgressDecision.ALLOW_VERIFIED, EgressDecision.STRIP_VERIFIED)
+            and rewritten is not None
+        )
+        return rewritten if rewritten is not None else action
 
     def _abstain_egress(
         self,
@@ -660,6 +871,55 @@ class TransducerV3Hooks:
                     commit_index=commit_idx,
                 )
 
+        container_ok = False
+        tx = self.container_tx
+        if tx is not None and self.regression_test_runner is None:
+            report = tx.inspect_step_diff()
+            probes = run_probes(ep.os_probes, self.container_exec_fn or _no_exec)
+            if report.protected_violations or not probes.all_passed:
+                ep.container_violated = bool(report.protected_violations)
+                why = (
+                    f"protected paths changed: {report.protected_violations}; "
+                    f"failed probes: {probes.failed_details}"
+                )
+                held = self._hold(
+                    state, observation, task, history, budget,
+                    commit_idx + 30_000, "CONTAINER_POSTCONDITION_FAILED",
+                    f"HOLD_DONE (CONTAINER_POSTCONDITION_FAILED): {why}",
+                )  # fmt: skip
+                if held is not None:
+                    return held
+                tx.rollback_all()
+                return owner._abstain_action(
+                    state,
+                    trap_code="CONTAINER_POSTCONDITION_FAILED",
+                    reason=f"Container check failed at DONE: {why[:500]}",
+                    commit_index=commit_idx,
+                )
+            container_ok = True
+
+        sop_ok = False
+        if self.sop_contract is not None:
+            back = self.readback(state, observation, task)
+            if back is not None:
+                sop_res = evaluate_readback_against_sop(
+                    self.sop_contract,
+                    str(back["readback_text"]),
+                    is_editable=bool(back.get("is_editable")),
+                    is_toast=bool(back.get("is_toast")),
+                )
+                if not sop_res.passed:
+                    hint = f"HOLD_DONE (SOP_RULES_MISSING): {sop_res.repair_hint}"
+                    held = self._hold(
+                        state, observation, task, history, budget,
+                        commit_idx + 40_000, "SOP_RULES_MISSING", hint,
+                    )  # fmt: skip
+                    if held is not None:
+                        return held
+                    self._release_unverified(state, commit_idx, sop_res.reason)
+                    return action
+                sop_ok = True
+
         if ep.obligations or self.completeness_auditor is not None:
             back = self.readback(state, observation, task)
             if back is not None:
@@ -687,6 +947,18 @@ class TransducerV3Hooks:
                 )  # fmt: skip
                 return action
 
+        if sop_ok:
+            self._verified(
+                state, commit_idx, 1, "persisted_state_reacquisition",
+                "Saved read-back satisfies every declarative SOP rule.",
+            )  # fmt: skip
+            return action
+        if container_ok:
+            self._verified(
+                state, commit_idx, 2, "independent_system_of_record",
+                "Container CoW diff clean and synthesized OS postcondition probes passed.",
+            )  # fmt: skip
+            return action
         if ep.regression_passed:
             self._verified(
                 state, commit_idx, 2, "independent_system_of_record",
@@ -711,8 +983,9 @@ class TransducerV3Hooks:
             return action
         return None
 
-    @staticmethod
-    def _rollback_all(ep: V3EpisodeState) -> None:
+    def _rollback_all(self, ep: V3EpisodeState) -> None:
+        if self.container_tx is not None:
+            self.container_tx.rollback_all()
         if ep.tx_guard is not None:
             ep.tx_guard.rollback_all()
 
@@ -744,6 +1017,11 @@ class TransducerV3Hooks:
         if ep.tx_guard is not None:
             ep.tx_guard.cleanup()
             ep.tx_guard = None
+        if self.container_tx is not None and ep.container_baseline is not None:
+            if tests_passed is False or ep.container_violated:
+                rolled_back = self.container_tx.rollback_all() or rolled_back
+            self.container_tx.cleanup()
+            ep.container_baseline = None
         return {
             "restored": rolled_back,
             "oracle_intact": not tampered,

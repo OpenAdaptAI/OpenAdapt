@@ -1741,6 +1741,11 @@ class SimplexTransducer:
         ]
         | None = None,
         completeness_auditor: Callable[[str, str], Mapping[str, Any]] | None = None,
+        container_tx: Any = None,
+        container_exec_fn: Callable[[str], tuple[int, str, str]] | None = None,
+        sop_contract: Any = None,
+        dual_egress: Any = None,
+        compounding_handoff: Any = None,
     ) -> None:
         if not callable(getattr(agent, "act", None)):
             raise TypeError(
@@ -1778,6 +1783,11 @@ class SimplexTransducer:
             on_stall_escalate=on_stall_escalate,
             micro_handoff_resolver=micro_handoff_resolver,
             completeness_auditor=completeness_auditor,
+            container_tx=container_tx,
+            container_exec_fn=container_exec_fn,
+            sop_contract=sop_contract,
+            dual_egress=dual_egress,
+            compounding_handoff=compounding_handoff,
         )
         self.macro_store = macro_store
         self.record_verified_macro = self._v3.record_verified_macro
