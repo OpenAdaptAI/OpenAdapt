@@ -1476,6 +1476,42 @@ class RemoteDisplayBackend:
             delivered_at=datetime.now(timezone.utc).isoformat(),
         )
 
+    def verify_active_window_focus(self) -> bool:
+        """Return True iff the bound remote-display window currently holds active focus."""
+        win = self._find_window(refresh=True)
+        if win is None or not win.on_screen:
+            return False
+        return self._window_focus_matches(win)
+
+    def paste_and_verify(
+        self,
+        text: str,
+        *,
+        clipboard: Any = None,
+        paste_chord: str = "ControlOrMeta+v",
+        select_all_chord: str = "ControlOrMeta+a",
+        copy_chord: str = "ControlOrMeta+c",
+        verify_mode: str = "select_all_copy",
+        ocr_reader: Any = None,
+        region: Optional[tuple[int, int, int, int]] = None,
+        settle_s: float = 0.0,
+    ) -> Any:
+        """Paste ``text`` via the host clipboard, verify exact landing, and scrub."""
+        from openadapt_flow.backends.clipboard_paste import paste_and_verify
+
+        return paste_and_verify(
+            self,
+            text,
+            clipboard=clipboard,
+            paste_chord=paste_chord,
+            select_all_chord=select_all_chord,
+            copy_chord=copy_chord,
+            verify_mode=verify_mode,
+            ocr_reader=ocr_reader,
+            region=region,
+            settle_s=settle_s,
+        )
+
     def type_text(self, text: str) -> None:
         """Type ``text`` into the focused control (hardware-like key codes)."""
         if not text:

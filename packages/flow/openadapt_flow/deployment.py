@@ -198,6 +198,16 @@ class BackendConfig(BaseModel):
     #: Optional exact case-insensitive title. Zero or multiple exact matches are
     #: refused; the backend never selects a largest partial match.
     rdp_window_title: Optional[str] = None
+
+    # -- canvas (no-DOM HTML5 <canvas> browser VDI / noVNC) ------------------
+    #: CSS selector for the target HTML5 ``<canvas>`` element. Defaults to ``"canvas"``.
+    canvas_selector: str = "canvas"
+    #: Expected remote framebuffer width in pixels.
+    canvas_width: int = 1280
+    #: Expected remote framebuffer height in pixels.
+    canvas_height: int = 800
+    #: Preserve aspect ratio (letterbox) when mapping framebuffer coords to CSS bbox.
+    canvas_letterbox: bool = True
     # Exact reviewed geometry for derived remote settle comparisons. The
     # enclosing DeploymentConfig serialization binds this value at admission.
     remote_frame_contract: Optional[RemoteFrameContract] = None

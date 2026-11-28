@@ -36,23 +36,108 @@ import json
 import os
 import re
 import threading
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 __all__ = [
+    "ORD_NUM_KIND",
     "TOKEN",
     "Placeholders",
     "Pseudonyms",
     "StreamDetokenizer",
     "detokenize_response",
     "normalise",
+    "parse_canonical_number",
     "stream_refusal",
 ]
 
-#: A pseudonym token: ``[PERSON_1]``.
-TOKEN = re.compile(r"\[([A-Z]+)_(\d+)\]")
+#: A pseudonym token: ``[PERSON_1]`` or ``[ORD_NUM_0001]``.
+TOKEN = re.compile(r"\[([A-Z]+(?:_[A-Z]+)*)_(\d+)\]")
+ORD_NUM_KIND = "ORD_NUM"
+_ORD_NUM_DEFAULT_WIDTH = 4
 FILE_NAME = "pseudonyms.json"
 SCHEMA = "openadapt.flight-pseudonyms/v1"
+
+_CURRENCY_PREFIX = re.compile(
+    r"^(?:USD|CAD|EUR|GBP|AUD|CHF|JPY|CNY|\$|€|£|¥)\s*",
+    re.IGNORECASE,
+)
+_NUMERIC_BODY = re.compile(
+    r"^(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?$|^\.\d+$"
+)
+
+
+def parse_canonical_number(value: str | int | float | Decimal) -> Optional[Decimal]:
+    """Parse a numeric, currency, or percentage value into a canonical Decimal.
+
+    Handles leading/trailing whitespace, currency symbols/codes (``$``, ``USD``,
+    ``€``, ``£``, ``¥``), thousands commas, decimals, leading/trailing signs,
+    accounting parentheses (``($1,250.50)`` -> ``-1250.50``), and percentages
+    (``12.5%`` -> ``0.125``). Returns ``None`` for non-numeric or non-finite
+    inputs. Equal numeric values (e.g. ``"$25,000"`` and ``"25000.00"``) return
+    equal normalized Decimals.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, Decimal):
+        if not value.is_finite():
+            return None
+        return Decimal(0) if value == 0 else value.normalize()
+    if isinstance(value, int):
+        return Decimal(value)
+    if isinstance(value, float):
+        if value != value or value in (float("inf"), float("-inf")):
+            return None
+        d = Decimal(str(value))
+        return Decimal(0) if d == 0 else d.normalize()
+    if not isinstance(value, str):
+        return None
+
+    text = value.strip()
+    if not text:
+        return None
+
+    negative = False
+    if text.startswith("(") and text.endswith(")"):
+        negative = True
+        text = text[1:-1].strip()
+
+    is_percent = False
+    if text.endswith("%"):
+        is_percent = True
+        text = text[:-1].strip()
+
+    # Handle leading sign before or after currency symbol: "-$25,000" or "$-25,000"
+    if text.startswith("-"):
+        negative = not negative
+        text = text[1:].strip()
+    elif text.startswith("+"):
+        text = text[1:].strip()
+
+    text = _CURRENCY_PREFIX.sub("", text, count=1).strip()
+
+    if text.startswith("-"):
+        negative = not negative
+        text = text[1:].strip()
+    elif text.startswith("+"):
+        text = text[1:].strip()
+
+    if not text or not _NUMERIC_BODY.match(text):
+        return None
+
+    cleaned = text.replace(",", "")
+    try:
+        num = Decimal(cleaned)
+    except InvalidOperation:
+        return None
+    if not num.is_finite():
+        return None
+    if is_percent:
+        num = num / Decimal(100)
+    if negative:
+        num = -num
+    return Decimal(0) if num == 0 else num.normalize()
 
 
 def normalise(value: str) -> str:
@@ -86,6 +171,23 @@ class Placeholders:
     def seed_record(self, record: Mapping[str, Any]) -> int:
         return 0
 
+    def seed_numeric(
+        self,
+        values: Sequence[str | int | float | Decimal],
+        *,
+        kind: str = ORD_NUM_KIND,
+        width: int = _ORD_NUM_DEFAULT_WIDTH,
+    ) -> dict[str, str]:
+        return {str(v): f"<{kind}>" for v in values}
+
+    def numeric_token(
+        self,
+        value: str | int | float | Decimal,
+        *,
+        kind: str = ORD_NUM_KIND,
+    ) -> str:
+        return f"<{kind}>"
+
     def __len__(self) -> int:
         return 0
 
@@ -99,6 +201,8 @@ class Pseudonyms:
         self.path = Path(path) if path else None
         self._lock = threading.Lock()
         self._by_key: dict[str, str] = {}
+        self._by_numeric: dict[Decimal, str] = {}
+        self._numeric_width: int = _ORD_NUM_DEFAULT_WIDTH
         self._values: dict[str, str] = {}  # token -> first value seen
         self._counts: dict[str, int] = {}
         self._known: Optional[re.Pattern[str]] = None
@@ -108,8 +212,16 @@ class Pseudonyms:
         with self._lock:
             return len(self._values)
 
+    def _format_numeric_token(self, kind: str, rank: int, width: int) -> str:
+        return f"[{kind}_{rank:0{width}d}]"
+
     def token(self, kind: str, value: str) -> str:
         key = normalise(value)
+        cleaned = " ".join(value.split())
+        if kind == ORD_NUM_KIND:
+            num = parse_canonical_number(cleaned)
+            if num is not None:
+                return self._register_numeric_one(kind, cleaned, key, num)
         with self._lock:
             hit = self._by_key.get(key)
             if hit is not None:
@@ -117,11 +229,137 @@ class Pseudonyms:
             self._counts[kind] = self._counts.get(kind, 0) + 1
             token = f"[{kind}_{self._counts[kind]}]"
             self._by_key[key] = token
-            self._values[token] = " ".join(value.split())
+            self._values[token] = cleaned
             self._known = None
             snapshot = dict(self._values)
         self._save(snapshot)
         return token
+
+    def _register_numeric_one(
+        self, kind: str, cleaned: str, key: str, num: Decimal
+    ) -> str:
+        snapshot: Optional[dict[str, str]] = None
+        with self._lock:
+            existing = self._by_numeric.get(num)
+            if existing is not None:
+                if key not in self._by_key:
+                    self._by_key[key] = existing
+                    self._known = None
+                return existing
+            hit = self._by_key.get(key)
+            if hit is not None:
+                self._by_numeric[num] = hit
+                return hit
+            rank = self._counts.get(kind, 0) + 1
+            self._counts[kind] = rank
+            token = self._format_numeric_token(kind, rank, self._numeric_width)
+            self._by_numeric[num] = token
+            self._by_key[key] = token
+            self._values[token] = cleaned
+            self._known = None
+            snapshot = dict(self._values)
+        if snapshot is not None:
+            self._save(snapshot)
+        return token
+
+    def numeric_token(
+        self,
+        value: str | int | float | Decimal,
+        *,
+        kind: str = ORD_NUM_KIND,
+    ) -> str:
+        """Return the order-preserving rank token for a single numeric value.
+
+        Raises ``ValueError`` if ``value`` cannot be parsed as a finite number.
+        """
+        raw = str(value)
+        cleaned = " ".join(raw.split())
+        num = parse_canonical_number(value)
+        if num is None:
+            raise ValueError(f"cannot parse numeric value: {value!r}")
+        return self._register_numeric_one(kind, cleaned, normalise(cleaned), num)
+
+    def seed_numeric(
+        self,
+        values: Sequence[str | int | float | Decimal],
+        *,
+        kind: str = ORD_NUM_KIND,
+        width: int = _ORD_NUM_DEFAULT_WIDTH,
+    ) -> dict[str, str]:
+        """Pre-register a batch of numeric or currency values in ascending order.
+
+        Distinct canonical numeric values are sorted strictly ascending and
+        assigned zero-padded rank tokens (``[ORD_NUM_0001]``..``[ORD_NUM_N]``)
+        so lexicographical and numeric threshold comparisons are preserved
+        without exposing the underlying numbers. Equal numeric values (such as
+        ``"$25,000"`` and ``"25000.00"``) receive the same rank token, and
+        :meth:`detokenize` restores the first formatted representation seen for
+        that rank.
+
+        Raises ``ValueError`` if any item cannot be parsed as a finite number.
+        """
+        if width < 1:
+            raise ValueError("width must be at least 1")
+        parsed: list[tuple[str, str, str, Decimal]] = []
+        for item in values:
+            raw = str(item)
+            cleaned = " ".join(raw.split())
+            num = parse_canonical_number(item)
+            if num is None:
+                raise ValueError(f"cannot parse numeric value: {item!r}")
+            parsed.append((raw, cleaned, normalise(cleaned), num))
+
+        if not parsed:
+            return {}
+
+        snapshot: Optional[dict[str, str]] = None
+        mapping: dict[str, str] = {}
+        with self._lock:
+            first_repr: dict[Decimal, str] = {}
+            for _raw, cleaned, _key, num in parsed:
+                if num not in first_repr:
+                    first_repr[num] = cleaned
+
+            new_nums = sorted(n for n in first_repr if n not in self._by_numeric)
+            current_max = self._counts.get(kind, 0)
+            projected_max = current_max + len(new_nums)
+            effective_width = max(self._numeric_width, width, len(str(projected_max)))
+            if current_max == 0:
+                self._numeric_width = effective_width
+
+            changed = False
+            for num in new_nums:
+                current_max += 1
+                token = self._format_numeric_token(
+                    kind, current_max, self._numeric_width
+                )
+                self._by_numeric[num] = token
+                self._values[token] = first_repr[num]
+                changed = True
+            self._counts[kind] = current_max
+
+            for raw, _cleaned, key, num in parsed:
+                token = self._by_numeric[num]
+                if key not in self._by_key:
+                    self._by_key[key] = token
+                    self._known = None
+                mapping[raw] = token
+
+            if changed:
+                self._known = None
+                snapshot = dict(self._values)
+
+        if snapshot is not None:
+            self._save(snapshot)
+        return mapping
+
+    @staticmethod
+    def numeric_rank(token: str) -> Optional[int]:
+        """Return the integer rank of an ``[ORD_NUM_NNNN]`` token, or None."""
+        m = TOKEN.fullmatch(token)
+        if m is None or m.group(1) != ORD_NUM_KIND:
+            return None
+        return int(m.group(2))
 
     def value(self, token: str) -> Optional[str]:
         with self._lock:
@@ -215,6 +453,8 @@ class Pseudonyms:
                     for key in parts
                     if len(key) >= 2
                 ]
+                if not alternatives:
+                    return []
                 self._known = re.compile(
                     r"(?<!\w)(?:" + "|".join(alternatives) + r")(?!\w)",
                     re.IGNORECASE,

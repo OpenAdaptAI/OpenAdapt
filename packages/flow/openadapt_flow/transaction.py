@@ -31,7 +31,6 @@ import os
 import secrets
 import sqlite3
 import stat
-import tempfile
 import threading
 import time
 from datetime import datetime, timezone
@@ -718,19 +717,13 @@ class IdempotencyLedger:
         self._owner_path_value: Optional[str] = None
         self._closed = False
         if path is not None:
-            candidate = Path(path).expanduser().absolute()
-            # macOS exposes its real temporary directory through the
-            # root-owned /var symlink. Normalize only that known temporary
-            # root. Descendant symlinks remain in the path and are rejected by
-            # the managed-path checks below.
-            temporary_root = Path(tempfile.gettempdir()).absolute()
-            try:
-                relative_to_temporary = candidate.relative_to(temporary_root)
-            except ValueError:
-                pass
-            else:
-                candidate = temporary_root.resolve(strict=True) / relative_to_temporary
-            self.path = candidate
+            from openadapt_flow.path_safety import canonicalize_platform_root_symlinks
+
+            # macOS exposes /tmp -> /private/tmp and /var -> /private/var as
+            # root-owned platform symlinks. Canonicalize only those known
+            # platform roots; descendant symlinks remain lexical and are
+            # rejected by the managed-path checks below.
+            self.path = canonicalize_platform_root_symlinks(path)
         self._records: dict[str, dict[str, Optional[str]]] = {}
         self._memory_lock = threading.RLock()
         if self.path is not None:

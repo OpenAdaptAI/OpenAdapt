@@ -40,6 +40,8 @@ def _normalize_kind(kind: Optional[str]) -> str:
         # Convenience aliases: the remote-display client-window path is the
         # local variant of the `rdp` (pixel-only remote desktop) family.
         return "rdp"
+    if k in ("canvas-browser", "canvas_browser", "novnc"):
+        return "canvas"
     return k
 
 
@@ -144,6 +146,28 @@ def build_backend(
             allow_physical_input=cfg.linux_allow_physical_input,
         )
 
+    if kind == "canvas":
+        if page is None:
+            raise ValueError(
+                "backend.kind 'canvas' needs a live Playwright page; the caller "
+                "launches the browser and passes the page containing <canvas>"
+            )
+        from openadapt_flow.backends.canvas_backend import CanvasBrowserBackend
+
+        readiness_probe = _build_rdp_readiness_probe(cfg)
+        return CanvasBrowserBackend(
+            page,
+            width=int(getattr(cfg, "canvas_width", 1280)),
+            height=int(getattr(cfg, "canvas_height", 800)),
+            canvas_selector=str(getattr(cfg, "canvas_selector", "canvas") or "canvas"),
+            letterbox=bool(getattr(cfg, "canvas_letterbox", True)),
+            readiness_probe=readiness_probe,
+            application_marker=cfg.rdp_application_marker,
+            application_version_marker=cfg.rdp_application_version_marker,
+            environment_marker=cfg.rdp_environment_marker,
+            session_marker=cfg.rdp_session_marker,
+        )
+
     if kind == "rdp":
         return _build_rdp_backend(
             cfg,
@@ -155,7 +179,7 @@ def build_backend(
 
     raise ValueError(
         "unknown backend.kind "
-        f"{cfg.kind!r} (expected: web | windows | macos | linux | rdp | citrix)"
+        f"{cfg.kind!r} (expected: web | canvas | windows | macos | linux | rdp | citrix)"
     )
 
 

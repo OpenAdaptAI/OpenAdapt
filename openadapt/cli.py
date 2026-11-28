@@ -1772,7 +1772,13 @@ def flow(command_ctx: click.Context) -> None:
     command list, help, options, validation, and exit codes identical to the
     installed engine version.
     """
-    _run_flow(command_ctx.meta.get("task_argv", list(command_ctx.args)))
+    argv = command_ctx.meta.get("task_argv", list(command_ctx.args))
+    if argv[:1] == ["qualify"]:
+        from openadapt.qualify_local import has_local_flag, run_local_qualify_cli
+
+        if has_local_flag(argv[1:]):
+            sys.exit(run_local_qualify_cli(argv[1:]))
+    _run_flow(argv)
 
 
 for _verb, _help in (
@@ -2736,6 +2742,533 @@ def audit_sample(
         click.echo(format_sample_table(result.manifest))
         if out_path is not None:
             click.echo(f"\nManifest written to {out_path}")
+
+
+@main.group("trust")
+def trust() -> None:
+    """Manage customer-owned Ed25519 signing keys."""
+
+
+@trust.command("init")
+@click.option(
+    "--key-dir",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="User-level directory for trust metadata and 0600 key storage (default: ~/.openadapt/trust).",
+)
+@click.option(
+    "--storage",
+    type=click.Choice(["auto", "keychain", "file"], case_sensitive=False),
+    default="auto",
+    show_default=True,
+    help="Private key storage backend.",
+)
+@click.option(
+    "--owner",
+    default="customer",
+    show_default=True,
+    type=str,
+    help="Owner label stored in trust metadata.",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Overwrite an existing trust key in the target directory.",
+)
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    default=False,
+    help="Print trust key metadata as JSON.",
+)
+def trust_init_cmd(
+    key_dir: Optional[Path],
+    storage: str,
+    owner: str,
+    force: bool,
+    as_json: bool,
+) -> None:
+    """Generate a customer-owned Ed25519 keypair outside mutable bundle directories."""
+    from openadapt.trust_init import TrustInitError, init_trust_key
+
+    try:
+        result = init_trust_key(
+            key_dir=key_dir,
+            storage=storage.lower(),
+            force=force,
+            owner=owner,
+        )
+    except TrustInitError as exc:
+        raise click.ClickException(str(exc)) from None
+
+    if as_json:
+        click.echo(json.dumps(result.to_dict(), indent=2, sort_keys=True))
+    else:
+        click.echo(f"Initialized trust key {result.key_id}")
+        click.echo(f"  Fingerprint: {result.fingerprint_sha256}")
+        click.echo(f"  Storage:     {result.storage_backend}")
+        click.echo(f"  Public key:  {result.public_key_path}")
+        click.echo(f"  Metadata:    {result.metadata_path}")
+
+
+@main.command("cohort-receipt")
+@click.option(
+    "--worklist",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Batch worklist JSON or JSONL file.",
+)
+@click.option(
+    "--audit-sample",
+    "audit_sample_path",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Optional audit_sample_v1 JSON manifest from `openadapt audit sample`.",
+)
+@click.option(
+    "--receipts-dir",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Optional receipts directory or JSON/JSONL ledger to reconcile worklist outcomes.",
+)
+@click.option(
+    "--key-dir",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Trust key directory initialized with `openadapt trust init`.",
+)
+@click.option(
+    "--public-key",
+    "public_key_path",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Explicit Ed25519 public key PEM file for --verify.",
+)
+@click.option(
+    "--cohort-id",
+    default=None,
+    type=str,
+    help="Optional cohort identifier.",
+)
+@click.option(
+    "--pagination-complete/--pagination-incomplete",
+    default=None,
+    help="Override worklist pagination_complete flag.",
+)
+@click.option(
+    "--out",
+    "out_path",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Write signed cohort receipt manifest to this JSON path.",
+)
+@click.option(
+    "--verify",
+    "verify_path",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Verify an existing signed cohort receipt JSON file.",
+)
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    default=False,
+    help="Print output as JSON.",
+)
+def cohort_receipt_cmd(
+    worklist: Optional[Path],
+    audit_sample_path: Optional[Path],
+    receipts_dir: Optional[Path],
+    key_dir: Optional[Path],
+    public_key_path: Optional[Path],
+    cohort_id: Optional[str],
+    pagination_complete: Optional[bool],
+    out_path: Optional[Path],
+    verify_path: Optional[Path],
+    as_json: bool,
+) -> None:
+    """Build or verify a zero-PHI Ed25519 Merkle cohort receipt."""
+    from openadapt.cohort_receipt import (
+        CohortReceiptError,
+        build_cohort_receipt,
+        verify_cohort_receipt,
+    )
+    from openadapt.trust_init import TrustInitError
+
+    if verify_path is not None:
+        if not verify_path.is_file():
+            raise click.ClickException(f"Cohort receipt not found: {verify_path}")
+        try:
+            doc = json.loads(verify_path.read_text(encoding="utf-8"))
+        except ValueError as exc:
+            raise click.ClickException(f"Malformed JSON in {verify_path}: {exc}") from None
+        try:
+            ver = verify_cohort_receipt(
+                doc,
+                public_key_path=public_key_path,
+                key_dir=key_dir,
+            )
+        except (CohortReceiptError, TrustInitError) as exc:
+            raise click.ClickException(str(exc)) from None
+        if as_json:
+            click.echo(json.dumps(ver.to_dict(), indent=2, sort_keys=True))
+        else:
+            state = "valid" if ver.ok else "invalid"
+            root_prefix = ver.merkle_root[:16]
+            click.echo(
+                f"Cohort receipt {state}: {ver.reason} (leaves={ver.leaf_count}, root={root_prefix})"
+            )
+        if not ver.ok:
+            sys.exit(1)
+        return
+
+    if worklist is None:
+        raise click.UsageError("Provide --worklist to build a cohort receipt, or --verify FILE to verify one.")
+
+    try:
+        manifest = build_cohort_receipt(
+            worklist,
+            audit_sample_path=audit_sample_path,
+            receipts_source=receipts_dir,
+            key_dir=key_dir,
+            cohort_id=cohort_id,
+            pagination_complete=pagination_complete,
+        )
+    except (CohortReceiptError, TrustInitError) as exc:
+        raise click.ClickException(str(exc)) from None
+
+    if out_path is not None:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+
+    if as_json:
+        click.echo(json.dumps(manifest, indent=2, sort_keys=True))
+    else:
+        summary = manifest["summary"]
+        click.echo(
+            f"Cohort receipt {manifest['cohort_id']} | "
+            f"expected={summary['total_expected']} verified={summary['verified']} "
+            f"halted={summary['halted_for_human']} dropped={summary['silently_dropped']} "
+            f"root={manifest['merkle']['root'][:16]}"
+        )
+        if out_path is not None:
+            click.echo(f"Manifest written to {out_path}")
+
+
+@main.group("pool")
+def pool() -> None:
+    """Manage containerized xfreerdp3 + Xvfb worker pools."""
+
+
+@pool.command("up")
+@click.option(
+    "--workers",
+    required=True,
+    type=int,
+    help="Number of worker containers to launch.",
+)
+@click.option(
+    "--backend",
+    type=click.Choice(["xfreerdp"], case_sensitive=False),
+    default="xfreerdp",
+    show_default=True,
+    help="Remote desktop worker backend.",
+)
+@click.option(
+    "--pool-name",
+    default="openadapt-rdp",
+    show_default=True,
+    type=str,
+    help="Logical name for the worker pool.",
+)
+@click.option(
+    "--runtime",
+    type=click.Choice(["auto", "docker", "orbstack"], case_sensitive=False),
+    default="auto",
+    show_default=True,
+    help="Container runtime.",
+)
+@click.option(
+    "--platform",
+    "container_platform",
+    type=click.Choice(["auto", "linux/amd64", "linux/arm64"], case_sensitive=False),
+    default="auto",
+    show_default=True,
+    help="Container architecture platform (supports macOS Apple Silicon).",
+)
+@click.option(
+    "--image",
+    default=None,
+    type=str,
+    help="Worker container image.",
+)
+@click.option(
+    "--display-base",
+    default=99,
+    show_default=True,
+    type=int,
+    help="Starting Xvfb display number.",
+)
+@click.option(
+    "--rdp-host",
+    default=None,
+    type=str,
+    help="Optional RDP host passed to worker containers.",
+)
+@click.option(
+    "--state-dir",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Directory for persisted pool state metadata.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Emit the container command plan without starting containers.",
+)
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    default=False,
+    help="Print pool plan as JSON.",
+)
+def pool_up_cmd(
+    workers: int,
+    backend: str,
+    pool_name: str,
+    runtime: str,
+    container_platform: str,
+    image: Optional[str],
+    display_base: int,
+    rdp_host: Optional[str],
+    state_dir: Optional[Path],
+    dry_run: bool,
+    as_json: bool,
+) -> None:
+    """Launch containerized xfreerdp3 + Xvfb workers."""
+    from openadapt.pool import DEFAULT_IMAGE, PoolError, pool_up
+
+    try:
+        plan = pool_up(
+            workers=workers,
+            backend=backend.lower(),
+            pool_name=pool_name,
+            runtime=runtime.lower(),
+            container_platform=container_platform.lower(),
+            image=image or DEFAULT_IMAGE,
+            display_base=display_base,
+            rdp_host=rdp_host,
+            dry_run=dry_run,
+            state_dir=state_dir,
+        )
+    except PoolError as exc:
+        raise click.ClickException(str(exc)) from None
+
+    if as_json:
+        click.echo(json.dumps(plan.to_dict(), indent=2, sort_keys=True))
+    else:
+        mode = "DRY-RUN PLAN" if plan.dry_run else "STARTED"
+        click.echo(
+            f"Pool {plan.pool_name} ({mode}): {len(plan.workers)} {plan.backend} worker(s) "
+            f"on {plan.platform} via {plan.runtime}"
+        )
+        for worker in plan.workers:
+            click.echo(f"  - {worker.container_name} (DISPLAY={worker.display})")
+
+
+@pool.command("status")
+@click.option(
+    "--pool-name",
+    default="openadapt-rdp",
+    show_default=True,
+    type=str,
+    help="Logical name for the worker pool.",
+)
+@click.option(
+    "--runtime",
+    type=click.Choice(["auto", "docker", "orbstack"], case_sensitive=False),
+    default="auto",
+    show_default=True,
+    help="Container runtime.",
+)
+@click.option(
+    "--state-dir",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Directory for persisted pool state metadata.",
+)
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    default=False,
+    help="Print pool status as JSON.",
+)
+def pool_status_cmd(
+    pool_name: str,
+    runtime: str,
+    state_dir: Optional[Path],
+    as_json: bool,
+) -> None:
+    """Show worker pool container status and health."""
+    from openadapt.pool import PoolError, pool_status
+
+    try:
+        info = pool_status(
+            pool_name=pool_name,
+            runtime=runtime.lower(),
+            state_dir=state_dir,
+        )
+    except PoolError as exc:
+        raise click.ClickException(str(exc)) from None
+
+    if as_json:
+        click.echo(json.dumps(info, indent=2, sort_keys=True))
+    else:
+        click.echo(
+            f"Pool {info['pool_name']}: {info['running']}/{info['total']} running ({info['runtime']})"
+        )
+        for c in info["containers"]:
+            click.echo(
+                f"  - {c['container_name']}: state={c['state']} health={c['health']}"
+            )
+
+
+@pool.command("down")
+@click.option(
+    "--pool-name",
+    default="openadapt-rdp",
+    show_default=True,
+    type=str,
+    help="Logical name for the worker pool.",
+)
+@click.option(
+    "--runtime",
+    type=click.Choice(["auto", "docker", "orbstack"], case_sensitive=False),
+    default="auto",
+    show_default=True,
+    help="Container runtime.",
+)
+@click.option(
+    "--state-dir",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Directory for persisted pool state metadata.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Print teardown commands without removing containers.",
+)
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    default=False,
+    help="Print teardown result as JSON.",
+)
+def pool_down_cmd(
+    pool_name: str,
+    runtime: str,
+    state_dir: Optional[Path],
+    dry_run: bool,
+    as_json: bool,
+) -> None:
+    """Stop and remove worker pool containers."""
+    from openadapt.pool import PoolError, pool_down
+
+    try:
+        info = pool_down(
+            pool_name=pool_name,
+            runtime=runtime.lower(),
+            dry_run=dry_run,
+            state_dir=state_dir,
+        )
+    except PoolError as exc:
+        raise click.ClickException(str(exc)) from None
+
+    if as_json:
+        click.echo(json.dumps(info, indent=2, sort_keys=True))
+    else:
+        action = "Planned removal of" if info["dry_run"] else "Removed"
+        count = len(info["commands"]) if info["dry_run"] else len(info["removed"])
+        click.echo(f"Pool {info['pool_name']}: {action} {count} container(s).")
+
+
+@main.command("support-bundle")
+@click.argument(
+    "target",
+    type=click.Path(path_type=Path),
+)
+@click.option(
+    "--out",
+    "out_path",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Output path for the deterministic .approved.zip archive.",
+)
+@click.option(
+    "--verify",
+    "verify_only",
+    is_flag=True,
+    default=False,
+    help="Verify an existing .approved.zip archive instead of creating one.",
+)
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    default=False,
+    help="Print output as JSON.",
+)
+def support_bundle_cmd(
+    target: Path,
+    out_path: Optional[Path],
+    verify_only: bool,
+    as_json: bool,
+) -> None:
+    """Redact a run directory into a deterministic, hash-pinned .approved.zip."""
+    from openadapt.support_bundle import (
+        SupportBundleError,
+        create_support_bundle,
+        verify_support_bundle,
+    )
+
+    if verify_only:
+        ver = verify_support_bundle(target)
+        if as_json:
+            click.echo(json.dumps(ver.to_dict(), indent=2, sort_keys=True))
+        else:
+            state = "valid" if ver.ok else "invalid"
+            click.echo(f"Support bundle {state}: {ver.reason}")
+        if not ver.ok:
+            sys.exit(1)
+        return
+
+    try:
+        result = create_support_bundle(target, out_path=out_path)
+    except SupportBundleError as exc:
+        raise click.ClickException(str(exc)) from None
+
+    if as_json:
+        click.echo(json.dumps(result.to_dict(), indent=2, sort_keys=True))
+    else:
+        click.echo(f"Support bundle written to {result.output_path}")
+        included_count = len(result.included_files)
+        digest_prefix = result.bundle_sha256[:16]
+        click.echo(
+            f"  Engine: {result.redaction_engine} | "
+            f"included={included_count} excluded={result.excluded_count} "
+            f"sha256={digest_prefix}"
+        )
 
 
 @main.command(

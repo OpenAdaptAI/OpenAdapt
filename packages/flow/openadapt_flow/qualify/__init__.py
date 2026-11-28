@@ -21,7 +21,7 @@ from openadapt_flow.qualify.config import (
     parse_verify_config,
 )
 from openadapt_flow.qualify.environment import WebEnvironmentObserver
-from openadapt_flow.qualify.faults import WebFaultDriver
+from openadapt_flow.qualify.faults import PixelSurfaceFaultDriver, WebFaultDriver
 from openadapt_flow.qualify.windows import (
     WindowsEnvironmentObserver,
     WindowsFaultDriver,
@@ -29,6 +29,7 @@ from openadapt_flow.qualify.windows import (
 
 __all__ = [
     "CASES",
+    "PixelSurfaceFaultDriver",
     "QualifyConfigError",
     "QualifyError",
     "QualifyHooks",

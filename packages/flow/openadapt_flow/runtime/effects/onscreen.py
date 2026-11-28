@@ -64,10 +64,9 @@ from openadapt_flow.runtime.effects.effect import (
 from openadapt_flow.runtime.effects.readback_values import compare_value
 from openadapt_flow.verification import VerificationTier
 
-# Fuzzy-match floor for accepting an OCR read-back as the expected value.
-# Deliberately strict (mirrors resolver.OCR_MIN_RATIO): a near-miss on a
-# consequential read-back must HALT, not silently confirm.
-READBACK_MIN_RATIO = 0.9
+# Exact match requirement for read-back verification (100% character match on
+# identifiers, numbers, and coded values; no fuzzy pass).
+READBACK_MIN_RATIO = 1.0
 
 # Minimum OCR confidence for a line to count as "readable text present". Below
 # this the region is treated as unreadable -> INDETERMINATE (halt), never a
@@ -281,19 +280,26 @@ def _normalize(text: str) -> str:
 
 
 def value_matches(
-    haystack: str, expected: str, *, min_ratio: float = READBACK_MIN_RATIO
+    haystack: str,
+    expected: str,
+    *,
+    min_ratio: float = READBACK_MIN_RATIO,
+    label: Optional[str] = None,
 ) -> bool:
     """Whether normalized ``haystack`` is exactly ``expected`` (whole field).
 
     Typed and exact (:func:`~openadapt_flow.runtime.effects.readback_values.compare_value`):
     ``Ann Smith`` is not ``Ann Smithers`` and ``250`` is not ``$1,250.00``.
+    When ``label`` is provided, label-bound short values (such as ``Eye: OD``
+    vs ``Eye: OS``) are extracted and compared with 100% exact character match.
     There is no fuzzy or substring match; ``min_ratio`` is kept for callers
     and no longer used.
     """
 
+    del min_ratio
     if not _normalize(expected):
         return False
-    return compare_value(haystack, expected, source="structure") == "match"
+    return compare_value(haystack, expected, source="structure", label=label) == "match"
 
 
 class OnScreenReadbackVerifier(VerifierAdapterBase):
@@ -582,15 +588,17 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
         *,
         value_kind: str = "text",
         date_order: Optional[str] = None,
+        label: Optional[str] = None,
     ) -> EffectVerdict:
         """Rule on whether ``expected_text`` is on the saved-value region NOW.
 
-        - CONFIRMED   — the region reads as exactly the expected value, as a
-          whole field, normalized only by its kind (``readback_values``).
-        - INDETERMINATE — the region has no readable text, or the read differs
+        - CONFIRMED: the region reads as exactly the expected value, as a
+          whole field (or exact label-bound value when ``label`` is given),
+          normalized only by its kind (``readback_values``).
+        - INDETERMINATE: the region has no readable text, or the read differs
           from the expected value only in glyphs OCR confuses (``O``/``0``,
           ``l``/``1``) or is a date that reads two ways -> HALT.
-        - REFUTED     — the region has readable text that is NOT the expected
+        - REFUTED: the region has readable text that is NOT the expected
           value -> HALT (affirmative on-screen contradiction).
         """
         use_region = region if region is not None else self._region
@@ -622,6 +630,7 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
             source="ocr",
             date_order=date_order,
             exact=False,
+            label=label,
         )
         if comparison == "ambiguous":
             return EffectVerdict(
