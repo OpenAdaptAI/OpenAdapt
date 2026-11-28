@@ -1641,3 +1641,152 @@ def test_v4_completeness_auditor_blocks_verified_when_items_missing() -> None:
     )
     assert wrapped.last_receipt is not None
     assert wrapped.last_receipt.outcome != "VERIFIED"
+
+
+# -- v5: container CoW + probes, SOP read-back, form plans, dual egress, compounding --
+
+
+def test_v5_container_tamper_rolled_back_then_probes_give_verified(
+    tmp_path: Path,
+) -> None:
+    import subprocess
+
+    from openadapt.transducer_cow_container import ContainerDiffTransaction
+
+    def local_exec(cmd: str) -> tuple[int, str, str]:
+        p = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True)
+        return p.returncode, p.stdout, p.stderr
+
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "app.py").write_text("print(1)\n")
+    guarded = home / "test_app.py"
+    guarded.write_text("def test(): pass\n")
+    tx = ContainerDiffTransaction(
+        local_exec, watched_roots=[str(home)], baseline_tar=str(tmp_path / "b.tar.gz")
+    )
+    edit = _NativeAction(type="wait", raw_action={"fs_write": True})
+    agent = _ScriptedBenchmarkAgent([edit, _NativeAction(type="done")])
+    wrapped = openadapt.wrap(
+        agent, container_tx=tx, container_exec_fn=lambda cmd: (0, "", "")
+    )
+    task = _v3_task("Tidy the project.")
+    wrapped.act(_NativeObservation(), task)
+    guarded.unlink()
+    wrapped.act(_NativeObservation(), task)
+    assert any(
+        "CONTAINER_PROTECTED_TAMPER_ROLLED_BACK" in i["hint"]
+        for i in agent.interventions
+    )
+    assert guarded.exists()
+    assert wrapped.last_receipt is not None
+    assert wrapped.last_receipt.outcome == "VERIFIED"
+
+
+def test_v5_sop_contract_holds_done_then_verifies() -> None:
+    from openadapt.transducer_form_batch import DeclarativeSopContract, SopRule
+
+    sop = DeclarativeSopContract(
+        "s",
+        "clinical",
+        "1",
+        [SopRule("R1", "Policy cited", "token", required_tokens=("policy",))],
+    )
+    agent = _ScriptedBenchmarkAgent([_NativeAction(type="done")] * 3)
+    wrapped = openadapt.wrap(agent, sop_contract=sop)
+    task = _NativeTask(task_id="sop", instruction="Submit the appeal.")
+    wrapped.act(_NativeObservation(raw_observation={"readback_text": "Saved."}), task)
+    assert any("SOP_RULES_MISSING" in i["hint"] for i in agent.interventions)
+    assert wrapped.last_receipt.outcome != "VERIFIED"
+    agent2 = _ScriptedBenchmarkAgent([_NativeAction(type="done")] * 3)
+    ok = openadapt.wrap(agent2, sop_contract=sop)
+    ok.act(
+        _NativeObservation(raw_observation={"readback_text": "Saved per policy 12."}),
+        task,
+    )
+    assert ok.last_receipt.outcome == "VERIFIED"
+
+
+def test_v5_fill_form_plan_validated_atomically() -> None:
+    bad = _NativeAction(
+        type="fill_form",
+        raw_action={
+            "fields": [{"selector": "#c", "field_name": "claim_id", "value": "CLM-9"}]
+        },
+    )
+    good = _NativeAction(
+        type="fill_form",
+        raw_action={
+            "fields": [
+                {"selector": "#c", "field_name": "claim_id", "value": "CLM-1234"}
+            ]
+        },
+    )
+    agent = _ScriptedBenchmarkAgent([bad, good])
+    wrapped = openadapt.wrap(agent, pinned={"claim_id": "CLM-1234"})
+    out = wrapped.act(_NativeObservation(), _v3_task())
+    assert any("FORM_PLAN_INVALID" in i["hint"] for i in agent.interventions)
+    assert out.raw_action["fields"][0]["value"] == "CLM-1234"
+
+
+def _egress_action() -> _NativeAction:
+    return _NativeAction(
+        type="click",
+        target_name="Send",
+        raw_action={
+            "is_commit": True,
+            "parsed_json": {"shared_content": ["Q3 budget summary", "MRI results"]},
+        },
+    )
+
+
+def test_v5_dual_egress_strips_and_verifies_or_refuses() -> None:
+    from openadapt.transducer_dual_egress import DualStageEgressVerifier
+
+    def auditor(item: str, _prompt: str, _meta: Any) -> dict[str, Any]:
+        return {"allow": "MRI" not in item, "confidence": 0.95}
+
+    agent = _ScriptedBenchmarkAgent([_egress_action()] * 3)
+    wrapped = openadapt.wrap(agent, dual_egress=DualStageEgressVerifier(auditor))
+    out = wrapped.act(
+        _NativeObservation(),
+        _NativeTask(task_id="de", instruction="Send the Q3 budget summary."),
+    )
+    assert out.raw_action["parsed_json"]["shared_content"] == ["Q3 budget summary"]
+
+    none_ok = DualStageEgressVerifier(
+        lambda i, p, m: {"allow": False, "confidence": 0.95}
+    )
+    agent2 = _ScriptedBenchmarkAgent([_egress_action()] * 3)
+    refused = openadapt.wrap(agent2, dual_egress=none_ok)
+    out2 = refused.act(
+        _NativeObservation(),
+        _NativeTask(task_id="de2", instruction="Send the Q3 budget summary."),
+    )
+    assert getattr(out2, "is_abstained", False) or out2.type != "click"
+
+
+def test_v5_compounding_handoff_learns_from_human(tmp_path: Path) -> None:
+    from openadapt.transducer_form_batch import MicroHandoffCompoundingController
+    from openadapt.transducer_macros import ISOLATION_PERSISTENT, MacroStore
+    from openadapt.transducer_obligations import MicroHandoffResolution
+
+    store = MacroStore(tmp_path / "m.json", isolation_mode=ISOLATION_PERSISTENT)
+    ctl = MicroHandoffCompoundingController(store)
+
+    def resolver(ticket: Any) -> MicroHandoffResolution:
+        return MicroHandoffResolution(
+            ticket_id=ticket.ticket_id, resolved=True, learned_selector="#next"
+        )
+
+    click = _NativeAction(type="click", raw_action={"selector": "#stuck"})
+    agent = _ScriptedBenchmarkAgent([click] * 12)
+    wrapped = openadapt.wrap(
+        agent, compounding_handoff=ctl, micro_handoff_resolver=resolver
+    )
+    obs = _NativeObservation(raw_observation={"dom_elements": []})
+    task = _v3_task()
+    for _ in range(8):
+        wrapped.act(obs, task)
+    assert any("#next" in i["hint"] for i in agent.interventions)
+    assert sum(ctl.human_touches_by_task.values()) >= 1
