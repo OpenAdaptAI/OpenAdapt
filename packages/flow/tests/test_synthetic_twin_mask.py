@@ -271,7 +271,7 @@ def test_zdr_grounder_valid_and_anchor_cache_hit(tmp_path: Path) -> None:
         assert isinstance(grounder, Grounder)
         assert component_may_egress(grounder) is True
 
-        # 1st call hits mock HTTP server
+        # 1st call hits mock HTTP server; unverified return is NOT cached by default.
         match1 = grounder.locate(png, "Click Submit", ocr_text="Submit")
         assert isinstance(match1, GrounderMatch)
         assert match1.point == (320, 240)
@@ -279,25 +279,67 @@ def test_zdr_grounder_valid_and_anchor_cache_hit(tmp_path: Path) -> None:
         assert len(srv.requests) == 1
         assert srv.request_headers[0]["x-zero-data-retention"] == "true"
         assert srv.request_headers[0]["authorization"] == "Bearer test-key"
+        assert len(cache) == 0
 
-        # 2nd call hits HealedAnchorCache with 0 additional HTTP calls
+        # 2nd call without verification still hits HTTP server (no blind caching).
         match2 = grounder.locate(png, "Click Submit", ocr_text="Submit")
         assert match2 == match1
-        assert len(srv.requests) == 1
-        assert grounder.stats.http_calls == 1
-        assert grounder.stats.cache_hits == 1
-        assert cache.hit_rate == 0.5
+        assert len(srv.requests) == 2
+        assert grounder.stats.http_calls == 2
+        assert grounder.stats.cache_hits == 0
+        assert len(cache) == 0
 
-        # Reloading cache from disk also hits with 0 HTTP calls
+        # Commit anchor after post-action verification succeeds.
+        assert (
+            grounder.record_verified_anchor(
+                png, "Click Submit", match1, ocr_text="Submit"
+            )
+            is True
+        )
+        assert len(cache) == 1
+
+        # 3rd call hits HealedAnchorCache with 0 additional HTTP calls.
+        match3 = grounder.locate(png, "Click Submit", ocr_text="Submit")
+        assert match3 == match1
+        assert len(srv.requests) == 2
+        assert grounder.stats.http_calls == 2
+        assert grounder.stats.cache_hits == 1
+
+        # Reloading cache from disk also hits with 0 HTTP calls.
         reloaded = HealedAnchorCache(cache_path=cache_file)
         grounder2 = ZdrVlmGrounder(
             endpoint_url=srv.url,
             model="test-vision-model",
             healed_anchor_cache=reloaded,
         )
-        match3 = grounder2.locate(png, "Click Submit", ocr_text="Submit")
-        assert match3 == match1
+        match4 = grounder2.locate(png, "Click Submit", ocr_text="Submit")
+        assert match4 == match1
+        assert len(srv.requests) == 2
+
+
+def test_zdr_grounder_auto_cache_unverified_opt_in() -> None:
+    png = _make_png(800, 600)
+    cache = HealedAnchorCache()
+
+    with _MockVlmServer() as srv:
+        srv.reply_payload = {"x": 320, "y": 240, "confidence": 0.93}
+        grounder = ZdrVlmGrounder(
+            endpoint_url=srv.url,
+            model="test-vision-model",
+            healed_anchor_cache=cache,
+            auto_cache_unverified=True,
+        )
+        match1 = grounder.locate(png, "Click Submit", ocr_text="Submit")
+        assert match1 is not None
         assert len(srv.requests) == 1
+        assert len(cache) == 1
+
+        match2 = grounder.locate(png, "Click Submit", ocr_text="Submit")
+        assert match2 == match1
+        assert len(srv.requests) == 1
+        assert grounder.stats.http_calls == 1
+        assert grounder.stats.cache_hits == 1
+        assert cache.hit_rate == 0.5
 
 
 def test_zdr_grounder_downscales_large_png_and_maps_coordinates() -> None:

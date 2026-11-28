@@ -6,8 +6,10 @@ ZDR confirmation header, malformed JSON, low confidence, or missing/out-of-bound
 coordinates), :meth:`ZdrVlmGrounder.locate` returns ``None`` so the resolution
 ladder halts safely instead of clicking an unverified point.
 
-When a :class:`HealedAnchorCache` is attached, a grounded target is cached
-locally so subsequent runs reuse the healed anchor with zero HTTP calls.
+When a :class:`HealedAnchorCache` is attached, unverified VLM predictions are
+not cached automatically by default. Callers commit a grounded target via
+:meth:`ZdrVlmGrounder.record_verified_anchor` after post-action verification
+succeeds so subsequent runs reuse the healed anchor with zero HTTP calls.
 """
 
 from __future__ import annotations
@@ -51,6 +53,14 @@ _ZDR_PROMPT = (
     "If the target is not clearly visible or is ambiguous, reply with ONLY "
     '{{"x": null, "y": null, "confidence": 0.0}}.'
 )
+
+
+def _png_dims(png_bytes: bytes) -> tuple[int, int]:
+    """Return ``(width, height)`` of a PNG byte payload."""
+    from PIL import Image
+
+    with Image.open(io.BytesIO(png_bytes)) as raw_img:
+        return raw_img.size
 
 
 def _downscale_png(
@@ -266,6 +276,7 @@ class ZdrVlmGrounder:
         max_image_dim: int = _DEFAULT_MAX_IMAGE_DIM,
         min_confidence: float = 0.5,
         healed_anchor_cache: Optional[HealedAnchorCache] = None,
+        auto_cache_unverified: bool = False,
         client: Any = None,
     ) -> None:
         if not endpoint_url or not str(endpoint_url).strip():
@@ -292,6 +303,7 @@ class ZdrVlmGrounder:
         self._max_image_dim = int(max_image_dim)
         self._min_confidence = float(min_confidence)
         self._cache = healed_anchor_cache
+        self._auto_cache_unverified = bool(auto_cache_unverified)
         self._client = client
         self.stats = ZdrGrounderStats()
         self.last_mask_report: Optional[MaskReport] = None
@@ -423,11 +435,35 @@ class ZdrVlmGrounder:
             self.stats.abstentions += 1
             return None
 
-        if self._cache is not None:
+        if self._cache is not None and self._auto_cache_unverified:
             self._cache.put(intent, ocr_text, orig_dims, match)
 
         self.stats.resolved += 1
         return match
+
+    def record_verified_anchor(
+        self,
+        screen_png: bytes,
+        intent: str,
+        match: GrounderMatch,
+        *,
+        ocr_text: Optional[str] = None,
+    ) -> bool:
+        """Commit a post-action-verified match to the attached anchor cache.
+
+        Call this only after post-action verification confirms that acting on
+        ``match`` produced the expected state change. Returns ``True`` if the
+        anchor was stored, or ``False`` if no cache is attached or ``screen_png``
+        cannot be decoded.
+        """
+        if self._cache is None:
+            return False
+        try:
+            orig_dims = _png_dims(screen_png)
+        except Exception:
+            return False
+        self._cache.put(intent, ocr_text, orig_dims, match)
+        return True
 
     def _post(self, body: dict[str, Any]) -> Optional[dict[str, Any]]:
         headers = self._request_headers()
@@ -513,6 +549,7 @@ def zdr_grounder_from_env(
     projector: Optional[SyntheticTwinProjector] = None,
     ocr_provider: Optional[Callable[[bytes], Sequence[OcrTextBox]]] = None,
     healed_anchor_cache: Optional[HealedAnchorCache] = None,
+    auto_cache_unverified: bool = False,
 ) -> Optional[ZdrVlmGrounder]:
     """Build a :class:`ZdrVlmGrounder` from environment variables, or ``None``.
 
@@ -544,4 +581,5 @@ def zdr_grounder_from_env(
         require_zdr_header=require_zdr,
         timeout=timeout,
         healed_anchor_cache=healed_anchor_cache,
+        auto_cache_unverified=auto_cache_unverified,
     )

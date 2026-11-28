@@ -846,15 +846,18 @@ def _run_arm_d(cases: list[BakeoffCase], *, masked: bool) -> dict[str, Any]:
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
         latencies.append(elapsed_ms)
 
-        # Second pass checks anchor cache reuse at $0.
-        if match is not None:
-            _ = grounder.locate(case.live_png, case.intent, ocr_text=case.ocr_text)
-
         if grounder.last_mask_report is not None:
             total_masked_boxes += grounder.last_mask_report.masked_box_count
             total_raw_leaks += grounder.last_mask_report.raw_dossier_leaks
 
         outcome = _score_point(case, match)
+        # Only commit verified correct clicks to the anchor cache, then check
+        # repeat-pass cache reuse at $0.
+        if match is not None and outcome == "resolved":
+            grounder.record_verified_anchor(
+                case.live_png, case.intent, match, ocr_text=case.ocr_text
+            )
+            _ = grounder.locate(case.live_png, case.intent, ocr_text=case.ocr_text)
         if outcome == "resolved":
             resolved += 1
         elif outcome == "abstained":
@@ -957,7 +960,8 @@ def run_bakeoff() -> dict[str, Any]:
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Run the 4-arm pixel-only grounding escalation bakeoff."
+        description="Run the 4-arm pixel-only grounding escalation bakeoff.",
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--output",
