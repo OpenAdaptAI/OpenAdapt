@@ -1933,6 +1933,7 @@
     "benchmark/openimis_claims/deployment.eligibility.yaml",
     "benchmark/openimis_claims/environment.lock.json",
     "benchmark/openimis_claims/submit_binding_probe.json",
+    "benchmark/pixel_grounding/constellation_comparison.json",
     "benchmark/pixel_grounding/fixture/emr.html",
     "benchmark/pixel_grounding/results_grounding.json",
     "benchmark/pixel_grounding/results_latency.json",
