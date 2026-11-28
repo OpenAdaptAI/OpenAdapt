@@ -496,15 +496,12 @@ def run_tutorial_workflow(
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
     from openadapt_flow.deployment import (
         DeploymentConfig,
-        EffectsConfig,
         PolicySection,
-        build_effect_verifier,
     )
     from openadapt_flow.execution_profiles import (
         ExecutionProfile,
         execution_profile_contract,
     )
-    from openadapt_flow.mockmed.fault_server import MOCKMED_RECORDS_READ_CONTRACT
     from openadapt_flow.run_gate import build_runtime_authorization, evaluate_run_gate
     from openadapt_flow.runtime import Replayer
 
@@ -516,18 +513,7 @@ def run_tutorial_workflow(
 
     # The independent oracle: it reads the backend store over HTTP, never the
     # screen, so an optimistic banner cannot make it confirm anything.
-    verifier = build_effect_verifier(
-        EffectsConfig.model_validate(
-            {
-                **MOCKMED_RECORDS_READ_CONTRACT,
-                "base_url": base_url,
-                "timeout_s": 2.0,
-                "poll_interval_s": 0.05,
-            }
-        )
-    )
-    if verifier is None:
-        raise ValueError("the fixture record contract built no verifier")
+    verifier = _build_demo_effect_verifier(base_url)
     gate = evaluate_run_gate(
         workflow,
         bundle_dir=bundle_dir,
@@ -929,25 +915,50 @@ def demo_app_entry_url(base_url: str, *, workflow: Any, drift: Optional[str]) ->
     return f"{base_url.rstrip('/')}/?{'&'.join(query_parts)}#tasks"
 
 
+def _build_demo_effect_verifier(base_url: str) -> Any:
+    """Build the independent MockMed system-of-record verifier for ``base_url``."""
+    from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
+    from openadapt_flow.mockmed.fault_server import MOCKMED_RECORDS_READ_CONTRACT
+
+    verifier = build_effect_verifier(
+        EffectsConfig.model_validate(
+            {
+                **MOCKMED_RECORDS_READ_CONTRACT,
+                "base_url": base_url,
+                "timeout_s": 2.0,
+                "poll_interval_s": 0.05,
+            }
+        )
+    )
+    if verifier is None:
+        raise ValueError("the fixture record contract built no verifier")
+    return verifier
+
+
 def start_demo_app_for_replay(
     *,
     workflow: Any,
     drift: Optional[str] = None,
-) -> tuple[str, Callable[[], None]]:
-    """Start MockMed for ``flow replay --demo-app`` and return ``(url, stop)``.
+) -> tuple[str, Callable[[], None], Any]:
+    """Start MockMed for ``flow replay --demo-app`` and return ``(url, stop, verifier)``.
 
-    Does not attach an independent effect verifier: the Demo profile must still
-    refuse to report ``VERIFIED`` on declared consequential effects without an
-    explicit deployment or verifier.
+    For tasks bundles (such as the tutorial bundle), serves the fault-injectable
+    MockMed backend on ``#tasks`` and wires its independent system-of-record
+    ``EffectVerifier`` (``MOCKMED_RECORDS_READ_CONTRACT``) so declared
+    consequential effects are verified against ``/api/db``. The Demo profile
+    still classifies completed replays as ``COMPLETED_UNVERIFIED`` rather than
+    ``VERIFIED``.
     """
+    effect_verifier: Any = None
     if demo_app_is_tasks_bundle(workflow):
         from openadapt_flow.mockmed.fault_server import serve as serve_fault_demo
 
         base_url, _db, stop = serve_fault_demo(port=0)
+        effect_verifier = _build_demo_effect_verifier(base_url)
     else:
         base_url, stop = serve_demo_app(port=0)
     url = demo_app_entry_url(base_url, workflow=workflow, drift=drift)
-    return url, stop
+    return url, stop, effect_verifier
 
 
 def demo_execute_admissions() -> tuple[Any, ...]:
