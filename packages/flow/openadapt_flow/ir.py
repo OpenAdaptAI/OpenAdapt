@@ -122,6 +122,10 @@ class ActionKind(str, Enum):
     # wrong window (docs/MULTI_SURFACE.md).
     SWITCH_SURFACE = "switch_surface"
     SECOND_FACTOR = "second_factor"  # a person's sign-in code (second_factor.py)
+    #: Extract structured fields or table rows from the current view without writing.
+    EXTRACT = "extract"
+    #: Advance through paginated views until end-of-list with completeness checks.
+    PAGINATE_UNTIL_EOF = "paginate_until_eof"
 
 
 class Landmark(BaseModel):

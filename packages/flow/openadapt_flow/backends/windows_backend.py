@@ -2079,6 +2079,35 @@ class WindowsBackend:
             "pyautogui.mouseUp(button='left')"
         )
 
+    def paste_and_verify(
+        self,
+        text: str,
+        *,
+        clipboard: Any = None,
+        paste_chord: str = "Control+v",
+        select_all_chord: str = "Control+a",
+        copy_chord: str = "Control+c",
+        verify_mode: str = "select_all_copy",
+        ocr_reader: Any = None,
+        region: Optional[tuple[int, int, int, int]] = None,
+        settle_s: float = 0.0,
+    ) -> Any:
+        """Paste ``text`` via the host clipboard, verify exact landing, and scrub."""
+        from openadapt_flow.backends.clipboard_paste import paste_and_verify
+
+        return paste_and_verify(
+            self,
+            text,
+            clipboard=clipboard,
+            paste_chord=paste_chord,
+            select_all_chord=select_all_chord,
+            copy_chord=copy_chord,
+            verify_mode=verify_mode,
+            ocr_reader=ocr_reader,
+            region=region,
+            settle_s=settle_s,
+        )
+
     def type_text(self, text: str) -> None:
         """Type text into the currently focused element.
 

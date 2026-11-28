@@ -1374,9 +1374,10 @@ class MacOSBackend(RemoteDisplayBackend):
                 raise MacOSBackendError(
                     f"click ({x}, {y}) is outside captured viewport {self._viewport}"
                 )
-            scale = self._scale or 1.0
-            sx = bound.bounds[0] + x / scale
-            sy = bound.bounds[1] + y / scale
+            scale_x = self._scale_x or self._scale or 1.0
+            scale_y = self._scale_y or self._scale or 1.0
+            sx = bound.bounds[0] + x / scale_x
+            sy = bound.bounds[1] + y / scale_y
 
             point = (sx, sy)
             self._assert_bound_physical_target(bound, point=point)

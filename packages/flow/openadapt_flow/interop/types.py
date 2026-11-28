@@ -121,6 +121,8 @@ _FLOW_ONLY_ACTION_KINDS = frozenset(
         ir.ActionKind.SWITCH_SURFACE,
         ir.ActionKind.READ,
         ir.ActionKind.SECOND_FACTOR,
+        ir.ActionKind.EXTRACT,
+        ir.ActionKind.PAGINATE_UNTIL_EOF,
     }
 )
 ACTION_KIND_TO_ACTION_TYPE: dict[ir.ActionKind, str] = {

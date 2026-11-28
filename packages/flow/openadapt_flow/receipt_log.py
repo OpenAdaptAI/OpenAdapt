@@ -160,11 +160,29 @@ def inclusion_path(index: int, leaves: Sequence[bytes]) -> list[bytes]:
     return inclusion_path(index - k, leaves[k:]) + [tree_root(leaves[:k])]
 
 
+def validate_receipt_store_root(root: Path | str) -> Path:
+    """Validate a receipt store root: canonicalize platform root symlinks
+    (such as ``/tmp -> /private/tmp`` and ``/var -> /private/var``) while
+    refusing any symlink at or inside the store.
+    """
+    from openadapt_flow.path_safety import validate_no_store_symlinks
+
+    try:
+        return validate_no_store_symlinks(root, label="receipt store")
+    except ValueError as exc:
+        raise LogError(str(exc)) from exc
+
+
 class LocalLog:
     """The append-only leaf file and the log key under ``home/log``."""
 
     def __init__(self, home: Optional[Path] = None) -> None:
-        self.dir = (home or receipt_home()) / "log"
+        from openadapt_flow.path_safety import canonicalize_platform_root_symlinks
+
+        base = validate_receipt_store_root(home or receipt_home())
+        self.dir = canonicalize_platform_root_symlinks(base / "log")
+        if self.dir.is_symlink():
+            raise LogError(f"receipt log directory must not be a symlink: {self.dir}")
 
     def _private_key(self) -> Any:
         from cryptography.hazmat.primitives import serialization

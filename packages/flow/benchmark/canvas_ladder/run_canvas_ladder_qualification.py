@@ -49,6 +49,11 @@ from typing import TYPE_CHECKING, Optional
 
 from PIL import Image, ImageFilter, ImageOps
 
+from openadapt_flow.backends.canvas_backend import (  # noqa: F401
+    _PRESS_MAP,
+    CanvasBrowserBackend,
+)
+
 if TYPE_CHECKING:
     from openadapt_flow.ir import RunReport
 
@@ -62,194 +67,6 @@ NOTE_VALUE = "followup in two weeks"
 EXPECTED_MRN = "MRN 24682"  # Ada's MRN, written by the kiosk on save
 SAVE_PATH = "/opt/canvas_fixture/saved_note.txt"
 NOVNC_PATH = "vnc_lite.html?autoconnect=1&resize=off&reconnect=1"
-
-# Playwright press() token map for named keys / simple chords.
-_PRESS_MAP = {
-    "enter": "Enter",
-    "tab": "Tab",
-    "escape": "Escape",
-    "esc": "Escape",
-    "backspace": "Backspace",
-    "delete": "Delete",
-    "space": "Space",
-    "home": "Home",
-    "end": "End",
-    "pageup": "PageUp",
-    "pagedown": "PageDown",
-    "up": "ArrowUp",
-    "down": "ArrowDown",
-    "left": "ArrowLeft",
-    "right": "ArrowRight",
-}
-
-
-class CanvasBrowserBackend:
-    """`Backend` over a no-DOM HTML5 <canvas> rendered by noVNC (Playwright).
-
-    Implements ONLY the base :class:`openadapt_flow.backend.Backend` protocol --
-    NOT ``StructuralBackend`` / ``IdentityBackend`` / ``StructuralActionBackend``.
-    The <canvas> exposes no accessible content, so the resolver's structural rung
-    is unavailable by construction and resolution runs on the visual floor
-    (template / template_global / ocr / geometry); identity would fall back to
-    the OCR name+DOB tier -- exactly the Citrix Workspace-web constraint.
-
-    ``screenshot`` reads the canvas pixels; ``click`` / ``type_text`` / ``press``
-    / ``scroll`` inject at canvas-relative pixel coordinates that noVNC forwards
-    over the VNC wire to the remote session.
-    """
-
-    def __init__(self, page, *, width: int = 1280, height: int = 800) -> None:
-        self._page = page
-        self._w, self._h = width, height
-        self._canvas = page.locator("canvas").first
-        self._actuation_digest: Optional[str] = None
-        self._actuation_bbox: Optional[tuple[float, float, float, float]] = None
-        self._prepared_pointer: Optional[tuple[int, int]] = None
-
-    def _bbox(self) -> tuple[float, float, float, float]:
-        bb = self._canvas.bounding_box()
-        if bb is None:
-            raise RuntimeError("noVNC <canvas> not found / not visible")
-        return bb["x"], bb["y"], bb["width"], bb["height"]
-
-    @staticmethod
-    def _frame_digest(png: bytes) -> str:
-        """Hash decoded pixels, not PNG encoder metadata."""
-        image = Image.open(io.BytesIO(png)).convert("RGB")
-        return hashlib.sha256(
-            image.width.to_bytes(4, "big")
-            + image.height.to_bytes(4, "big")
-            + image.tobytes()
-        ).hexdigest()
-
-    def _consume_actuation_lease(
-        self,
-        *,
-        point: Optional[tuple[int, int]] = None,
-        require_prepared_pointer: bool = False,
-    ) -> None:
-        """Recheck the exact canvas frame before the first input edge."""
-        if self._actuation_digest is None or self._actuation_bbox is None:
-            return
-        try:
-            if require_prepared_pointer and self._prepared_pointer != point:
-                raise RuntimeError(
-                    "consequential canvas click was not pre-positioned at the "
-                    "freshly resolved target"
-                )
-            if self._bbox() != self._actuation_bbox:
-                raise RuntimeError(
-                    "noVNC canvas geometry changed after fresh-frame resolution"
-                )
-            current = self.screenshot()
-            if self._frame_digest(current) != self._actuation_digest:
-                raise RuntimeError(
-                    "noVNC canvas content changed after fresh-frame resolution"
-                )
-        finally:
-            # A consequential lease is one-shot even when it refuses.
-            self._actuation_digest = None
-            self._actuation_bbox = None
-
-    # -- Backend protocol ----------------------------------------------------
-    @property
-    def viewport(self) -> tuple[int, int]:
-        return (self._w, self._h)
-
-    def screenshot(self) -> bytes:
-        raw = self._canvas.screenshot()
-        img = Image.open(io.BytesIO(raw)).convert("RGB")
-        # Playwright element capture can be off-by-one on sub-pixel bounds; pin
-        # the frame to the exact framebuffer size so record/replay crops align.
-        if img.size != (self._w, self._h):
-            img = img.crop((0, 0, self._w, self._h))
-        out = io.BytesIO()
-        img.save(out, format="PNG")
-        return out.getvalue()
-
-    def prepare_pointer_actuation(self, x: int, y: int) -> None:
-        """Move before the final frame so remote hover/cursor paint can settle."""
-        self._actuation_digest = None
-        self._actuation_bbox = None
-        ox, oy, _, _ = self._bbox()
-        self._page.mouse.move(ox + int(x), oy + int(y))
-        previous: Optional[str] = None
-        stable = 0
-        for _ in range(8):
-            self._page.wait_for_timeout(100)
-            digest = self._frame_digest(self.screenshot())
-            if digest == previous:
-                stable += 1
-            else:
-                previous = digest
-                stable = 1
-            if stable >= 2:
-                self._prepared_pointer = (int(x), int(y))
-                return
-        self._prepared_pointer = None
-        raise RuntimeError("noVNC canvas did not settle after pointer positioning")
-
-    def acquire_actuation_frame(self) -> bytes:
-        """Arm a one-shot exact-frame lease for consequential remote input."""
-        png = self.screenshot()
-        self._actuation_bbox = self._bbox()
-        self._actuation_digest = self._frame_digest(png)
-        return png
-
-    def click(self, x: int, y: int, *, double: bool = False) -> None:
-        leased = self._actuation_digest is not None
-        if leased:
-            self._consume_actuation_lease(
-                point=(int(x), int(y)), require_prepared_pointer=True
-            )
-            # The pointer was moved before the final frame. Emit only button
-            # edges now; moving again would invalidate the frame we resolved.
-            count = 2 if double else 1
-            for index in range(count):
-                self._page.mouse.down(button="left", click_count=index + 1)
-                self._page.mouse.up(button="left", click_count=index + 1)
-            self._prepared_pointer = None
-        else:
-            ox, oy, _, _ = self._bbox()
-            self._page.mouse.click(
-                ox + int(x), oy + int(y), click_count=2 if double else 1
-            )
-        self._page.wait_for_timeout(120)
-
-    def type_text(self, text: str) -> None:
-        # noVNC forwards keydown/keyup on the focused canvas over VNC; a small
-        # per-char delay keeps the Tk Entry from dropping fast synthetic keys.
-        self._consume_actuation_lease()
-        self._page.keyboard.type(text, delay=35)
-        self._page.wait_for_timeout(120)
-
-    def press(self, key: str) -> None:
-        parts = [p.strip() for p in key.split("+") if p.strip()]
-        mapped = []
-        for p in parts:
-            low = p.lower()
-            if low in ("ctrl", "control", "controlormeta"):
-                # The browser is running on the orchestration host, but noVNC
-                # forwards keys into a Linux/Windows remote session. Resolve
-                # the portable local-host shortcut token to the remote
-                # platform's Control modifier instead of Playwright choosing
-                # Meta merely because the orchestrator happens to be macOS.
-                mapped.append("Control")
-            elif low in ("meta", "cmd", "super"):
-                mapped.append("Meta")
-            elif low in ("alt", "option"):
-                mapped.append("Alt")
-            elif low == "shift":
-                mapped.append("Shift")
-            else:
-                mapped.append(_PRESS_MAP.get(low, p if len(p) > 1 else p))
-        self._consume_actuation_lease()
-        self._page.keyboard.press("+".join(mapped))
-        self._page.wait_for_timeout(80)
-
-    def scroll(self, dx: int, dy: int) -> None:
-        self._page.mouse.wheel(int(dx), int(dy))
-        self._page.wait_for_timeout(80)
 
 
 # -- injected-drift wrapper (simulated drift on a real canvas session) ---------
@@ -460,10 +277,11 @@ def run_qualification(
     candidate_commit: str = "",
     base_commit: str = "",
 ) -> dict:
+    from playwright.sync_api import sync_playwright
+
     from openadapt_flow.compiler import compile_recording
     from openadapt_flow.recorder import Recorder
     from openadapt_flow.runtime.replayer import Replayer
-    from playwright.sync_api import sync_playwright
 
     work = out_dir / "work"
     work.mkdir(parents=True, exist_ok=True)

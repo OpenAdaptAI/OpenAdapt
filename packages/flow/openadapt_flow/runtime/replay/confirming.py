@@ -545,6 +545,37 @@ class Confirming(_Base):
         )
         return landed, changed
 
+    def _active_window_focus_refusal(self, step: Step) -> Optional[str]:
+        """Verify the target window still holds active focus before keystrokes.
+
+        Rank 16 guard: before retrying input after a no-change observation,
+        confirm the bound window is still focused so retry keystrokes cannot
+        land in a newly raised modal, popup, or background application.
+        """
+        for attr in (
+            "verify_active_window_focus",
+            "has_active_window_focus",
+            "is_window_focused",
+        ):
+            checker = getattr(self.backend, attr, None)
+            if callable(checker):
+                try:
+                    focused = bool(checker())
+                except (OSError, RuntimeError, ValueError, AttributeError) as exc:
+                    return (
+                        f"Typed input retry for step '{step.id}' ({step.intent}) "
+                        f"refused: active-window focus check failed ({type(exc).__name__}); "
+                        "run aborted"
+                    )
+                if not focused:
+                    return (
+                        f"Typed input retry for step '{step.id}' ({step.intent}) "
+                        "refused: target window no longer holds active focus before "
+                        "retry keystrokes; run aborted"
+                    )
+                return None
+        return None
+
     @timed_span("postcondition")
     def _verify_typed_input(
         self,
@@ -619,6 +650,12 @@ class Confirming(_Base):
                 f"({step.intent}): the target field showed no confirmed change; "
                 "refusing an unleased refocus/retype retry after possibly stray input"
             )
+        focus_refusal = self._active_window_focus_refusal(step)
+        if focus_refusal is not None:
+            result.input_verified = False
+            result.safety_halt = True
+            result.failure_category = "safety_halt"
+            return focus_refusal
         result.input_retried = True
         retry_resolution = resolution
         retry_region = field_region
@@ -751,6 +788,12 @@ class Confirming(_Base):
             result.safety_halt = True
             result.failure_category = "safety_halt"
             return locale_refusal
+        focus_refusal = self._active_window_focus_refusal(step)
+        if focus_refusal is not None:
+            result.input_verified = False
+            result.safety_halt = True
+            result.failure_category = "safety_halt"
+            return focus_refusal
         self._require_qualification_environment_current()
         self._deliver_backend_call(result, lambda: self.backend.type_text(text))
         landed, _changed = self._typed_input_landed(

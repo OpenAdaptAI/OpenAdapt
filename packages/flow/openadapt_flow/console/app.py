@@ -98,8 +98,11 @@ def _local_operator_identity() -> str:
 
 
 def _validated_root(value: Path | str, *, label: str) -> Path:
-    """Resolve a configured root once, refusing symlink path components."""
-    lexical = Path(value).expanduser().absolute()
+    """Resolve a configured root once, canonicalizing platform root symlinks
+    (``/tmp``, ``/var``) while refusing any other symlink component."""
+    from openadapt_flow.path_safety import canonicalize_platform_root_symlinks
+
+    lexical = canonicalize_platform_root_symlinks(value)
     for component in (lexical, *lexical.parents):
         if component.is_symlink():
             raise ValueError(f"{label} root must not traverse a symlink")

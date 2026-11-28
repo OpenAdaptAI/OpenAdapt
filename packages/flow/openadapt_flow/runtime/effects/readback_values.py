@@ -60,7 +60,9 @@ __all__ = [
     "Comparison",
     "ReadbackKind",
     "ValueKind",
+    "compare_label_bound_value",
     "compare_value",
+    "extract_label_bound_value",
     "infer_value_kind",
     "normalize_value",
     "token_occurrences",
@@ -303,6 +305,89 @@ def _folded_equal(observed: str, expected: str) -> bool:
     return observed.translate(OCR_CONFUSABLE) == expected.translate(OCR_CONFUSABLE)
 
 
+_SHORT_VALUE_MAX_LEN = 3
+
+
+def extract_label_bound_value(observed: str, label: str) -> Optional[str]:
+    """Extract the value bound immediately to ``label`` in an OCR/UI string.
+
+    Supports short clinical and coded values (``len < 4``) such as
+    ``"Eye: OD"`` vs ``"Eye: OS"``, ``"Sex: F"``, or ``"Dose = 5"`` without
+    fuzzy matching or blind acceptance.
+
+    Returns ``None`` when ``label`` is not present or appears multiple times
+    with conflicting values.
+    """
+    clean_label = " ".join(label.strip().rstrip(":=").split())
+    if not clean_label or not observed:
+        return None
+    escaped = re.escape(clean_label)
+    # Match "<label> : <value>" or "<label> = <value>" (optionally separated by
+    # whitespace) and stop at double-space, newline, comma, semicolon, pipe, or
+    # end of string.
+    pattern = re.compile(
+        rf"(?<!\w){escaped}\s*(?:[:=]\s*|\s+)(?P<val>[^\r\n,;|]+?)(?=\s{{2,}}|\s*[\r\n,;|]|$)",
+        re.IGNORECASE,
+    )
+    matches: list[str] = []
+    for match in pattern.finditer(observed):
+        val = match.group("val").strip()
+        if val:
+            matches.append(val)
+    if not matches:
+        return None
+    # If the label appears multiple times with different values, treat as unreadable/ambiguous.
+    distinct = {" ".join(m.split()).lower() for m in matches}
+    if len(distinct) > 1:
+        return None
+    return matches[0]
+
+
+def compare_label_bound_value(
+    observed: str,
+    expected: str,
+    *,
+    label: str,
+    kind: ValueKind = "text",
+    source: ReadSource = "ocr",
+    date_order: Optional[str] = None,
+) -> Comparison:
+    """Compare a label-bound value (including ``< 4``-char clinical values).
+
+    Extracts the value bound to ``label`` from ``observed`` and requires a
+    100% exact character match for short values, identifiers, numbers, and
+    coded values (never fuzzy-passing ``OD`` against ``OS``).
+    """
+    extracted = extract_label_bound_value(observed, label)
+    if extracted is None:
+        # Check if the label itself appeared multiple times with conflicting values.
+        clean_label = " ".join(label.strip().rstrip(":=").split())
+        if clean_label:
+            count = len(
+                re.findall(
+                    rf"(?<!\w){re.escape(clean_label)}(?!\w)", observed, re.IGNORECASE
+                )
+            )
+            if count > 1:
+                return "ambiguous"
+        return "mismatch"
+
+    # For short values (< 4 chars, e.g. "OD" vs "OS") or identifiers/codes/numbers,
+    # require exact whole-token comparison on the extracted value.
+    if len(expected.strip()) <= _SHORT_VALUE_MAX_LEN:
+        first_token = (
+            extracted.split()[0].strip(_TOKEN_EDGES) if extracted.split() else ""
+        )
+        target = expected.strip()
+        if first_token.lower() == target.lower():
+            return "match"
+        if source == "ocr" and _folded_equal(first_token.lower(), target.lower()):
+            return "ambiguous"
+        return "mismatch"
+
+    return _compare_whole(extracted, expected, kind, source == "ocr", date_order)
+
+
 def compare_value(
     observed: str,
     expected: str,
@@ -311,17 +396,32 @@ def compare_value(
     source: ReadSource = "ocr",
     date_order: Optional[str] = None,
     exact: bool = True,
+    label: Optional[str] = None,
 ) -> Comparison:
     """Judge one field read against its expected value.
 
     ``match`` only when the whole read equals the expected value under the
-    kind's normalization (see the module docstring). ``exact=False`` is for a
-    read that may hold more than the field: the expected value found inside it
-    as whole tokens, or several times, is ``ambiguous``, never ``match``.
+    kind's normalization (see the module docstring), or when ``label`` is
+    provided and the value bound to ``label`` matches 100% exactly (enabling
+    label-bound ``< 4``-char values such as ``Eye: OD`` vs ``OS``).
+    ``exact=False`` is for a read that may hold more than the field: the
+    expected value found inside it as whole tokens, or several times, is
+    ``ambiguous``, never ``match``.
     """
 
     ocr = source == "ocr"
     whole = _compare_whole(observed, expected, kind, ocr, date_order)
+    if whole == "match":
+        return whole
+    if label is not None and label.strip():
+        return compare_label_bound_value(
+            observed,
+            expected,
+            label=label,
+            kind=kind,
+            source=source,
+            date_order=date_order,
+        )
     if whole != "mismatch" or exact:
         return whole
     # The read holds more than the field: finding the value in it locates
