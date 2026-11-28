@@ -301,3 +301,82 @@ def test_single_turn_answer_task():
     assert is_single_turn_answer_task({"interactive": False}, {"type": "click"})
     assert not is_single_turn_answer_task({"elements": [{"id": 1}]}, {"type": "answer"})
     assert not is_single_turn_answer_task({"prompt": "q"}, {"type": "click"})
+
+
+# ---- v4 hardening ----
+def test_unshare_mount_blocked():
+    from openadapt.transducer_shell_and_egress import classify_shell_command as c
+
+    for cmd in (
+        "unshare --mount sh",
+        "unshare -m bash",
+        "unshare --map-root-user id",
+        "sudo unshare ls",
+    ):
+        assert c(cmd).blocked, cmd
+        assert c(cmd).trap_code == "DESTRUCTIVE_PRIVILEGED_COMMAND"
+    assert not c("unshare --mount sh", task_instruction="use unshare").blocked
+
+
+def test_recursive_script_inspection(tmp_path):
+    from openadapt.transducer_shell_and_egress import classify_shell_command as c
+
+    (tmp_path / "remount-home-readonly.sh").write_text(
+        "#!/bin/bash\necho hi\nmount -o remount,ro /home\n"
+    )
+    (tmp_path / "outer.sh").write_text("bash ./remount-home-readonly.sh\n")
+    (tmp_path / "loop.sh").write_text("bash loop.sh\n")
+    (tmp_path / "ok.sh").write_text("#!/bin/sh\necho ok\n")
+    root = str(tmp_path)
+    for cmd in (
+        "bash ./remount-home-readonly.sh",
+        "/bin/bash remount-home-readonly.sh",
+        "sh remount-home-readonly.sh",
+        "./remount-home-readonly.sh",
+        "source remount-home-readonly.sh",
+        "bash outer.sh",
+    ):
+        assert c(cmd, workspace_root=root).blocked, cmd
+    assert not c("bash ok.sh", workspace_root=root).blocked
+    assert not c("bash loop.sh", workspace_root=root).blocked
+    assert not c("bash remount-home-readonly.sh").blocked
+
+
+def test_classify_file_write(tmp_path):
+    from openadapt.transducer_shell_and_egress import classify_file_write as w
+
+    assert w("test_x.py", "x").trap_code == "ORACLE_TAMPER"
+    assert w("a.txt", "x", protected_oracle_paths=["a.txt"]).blocked
+    assert not w("test_x.py", "x", task_instruction="fix the tests").blocked
+    bad = w("go.sh", "#!/bin/sh\nmount -o remount,rw /\n")
+    assert bad.blocked and bad.trap_code == "DESTRUCTIVE_PRIVILEGED_COMMAND"
+    assert w("noext", "#!/bin/bash\nunshare -m sh\n").blocked
+    ok = w("go.sh", "#!/bin/sh\necho hi\n")
+    assert ok.is_commit and not ok.blocked
+    assert w("main.py", "print(1)").kind.value == "SCOPED_MUTATION"
+
+
+def test_three_arg_item_auditor():
+    from openadapt.transducer_shell_and_egress import evaluate_outbound_items as ev
+
+    calls = []
+
+    def aud(prompt, item, meta):
+        calls.append((item, meta))
+        return item != "bad"
+
+    r = ev(
+        ["good", "bad", "carol"],
+        task_prompt="list people in inbox",
+        containers={"inbox": ["good", "bad"], "archive": ["carol"]},
+        item_auditor=aud,
+    )
+    assert r.safe_items == ["good"]
+    assert sorted(r.stripped_items) == ["bad", "carol"]
+    assert [i for i, _ in calls] == ["good", "bad"]
+    meta = dict(calls)["good"]
+    assert meta["source_containers"] == ["inbox"]
+    assert meta["all_containers"] == ["inbox", "archive"]
+    assert meta["sibling_items"] == ["good", "bad", "carol"]
+    two = ev(["a", "b"], task_prompt="p", item_auditor=lambda p, i: i == "a")
+    assert two.safe_items == ["a"]

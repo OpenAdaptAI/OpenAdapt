@@ -2114,6 +2114,7 @@ def wrap(
     item_auditor: Callable[[str, str], bool] | None = None,
     on_stall_escalate: Callable[..., None] | None = None,
     micro_handoff_resolver: Callable[..., Any] | None = None,
+    completeness_auditor: Callable[[str, str], Mapping[str, Any]] | None = None,
 ) -> Any:
     """Wrap a Python function, coroutine, tool, or agent with commit-boundary checks.
 
@@ -2198,6 +2199,7 @@ def wrap(
                 item_auditor=item_auditor,
                 on_stall_escalate=on_stall_escalate,
                 micro_handoff_resolver=micro_handoff_resolver,
+                completeness_auditor=completeness_auditor,
             )
         if callable(obj) and not inspect.isclass(obj):
             action_name = (

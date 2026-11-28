@@ -16,6 +16,8 @@ Hooks:
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,17 +39,20 @@ from openadapt.transducer_obligations import (
     apply_human_resolution,
     build_micro_handoff,
     compile_obligations_from_spec,
-    diff_readback_against_obligations,
+    evaluate_readback_with_completeness,
     mark_drafted_from_action,
+    merge_obligations_from_document,
 )
 from openadapt.transducer_shell_and_egress import (
     ImmutableOracleGuard,
     PostEditTestGate,
+    classify_file_write,
     classify_shell_command,
     evaluate_outbound_items,
     is_single_turn_answer_task,
     select_best_egress,
 )
+from openadapt.transducer_transactions import TransactionalWorkspaceGuard
 
 if TYPE_CHECKING:  # pragma: no cover
     from openadapt.simplex_transducer import EpisodeState, SimplexTransducer
@@ -77,6 +82,45 @@ def _raw(action: Any) -> dict[str, Any]:
 def _type(action: Any) -> str:
     kind = _get(action, "type", "")
     return str(getattr(kind, "value", kind) or "").strip().lower()
+
+
+def observation_state_prefix(observation: Any) -> str:
+    """Compact screen identity: URL path plus a hash of the DOM state.
+
+    Empty when the observation carries neither. Used in commit fingerprints so
+    the same click on two different screens is not seen as a duplicate.
+    """
+    if observation is None:
+        return ""
+    url = str(_get(observation, "url", "") or "")
+    path = url.split("#", 1)[0].split("?", 1)[0]
+    if "://" in path:
+        path = "/" + path.split("://", 1)[1].partition("/")[2]
+    raw_obs = _get(observation, "raw_observation")
+    dom: Any = None
+    if isinstance(raw_obs, Mapping):
+        dom = raw_obs.get("dom_state_hash") or raw_obs.get("dom_elements")
+    if dom is None:
+        dom = _get(observation, "dom_elements")
+    if not dom:
+        return path
+    blob = dom if isinstance(dom, str) else json.dumps(dom, sort_keys=True, default=str)
+    return f"{path}#{hashlib.sha256(blob.encode()).hexdigest()[:12]}"
+
+
+def _write_target(action: Any) -> tuple[str, str] | None:
+    """``(path, content)`` for a write/edit-file action, else ``None``."""
+    if _type(action) not in ("write_file", "edit_file"):
+        return None
+    raw = _raw(action)
+    path = raw.get("path") or raw.get("file_path") or _get(action, "target_name")
+    content = (
+        raw.get("content")
+        or raw.get("new_str")
+        or raw.get("new_string")
+        or _get(action, "text")
+    )
+    return str(path or ""), str(content or "")
 
 
 def _rewrite_payload(action: Any, items: Sequence[str]) -> Any | None:
@@ -127,6 +171,9 @@ class V3EpisodeState:
     handoffs: int = 0
     handoff_patches: list[dict[str, Any]] = field(default_factory=list)
     stalls: list[StallRecoveryPlan] = field(default_factory=list)
+    tx_guard: TransactionalWorkspaceGuard | None = None
+    intake_docs: list[str] = field(default_factory=list)
+    egress_handled: bool = False
 
 
 class TransducerV3Hooks:
@@ -146,8 +193,10 @@ class TransducerV3Hooks:
             [MicroHandoffTicket], MicroHandoffResolution | None
         ]
         | None = None,
+        completeness_auditor: Callable[[str, str], Mapping[str, Any]] | None = None,
     ) -> None:
         self.owner = owner
+        self.completeness_auditor = completeness_auditor
         self.macro_store = macro_store
         self.regression_test_runner = regression_test_runner
         self.protected_oracle_paths = tuple(protected_oracle_paths)
@@ -175,16 +224,28 @@ class TransducerV3Hooks:
             or str(_get(task, "instruction", "") or "")
         )
 
-    # -- step 0 -----------------------------------------------------------
+    # -- context (every step) ---------------------------------------------
     def on_context(self, state: EpisodeState, observation: Any, task: Any) -> None:
         ep = self.ep(state)
-        if ep.started:
-            return
+        if not ep.started:
+            self._start(state, task, ep)
+        else:
+            self._check_oracle_after_step(state, observation, ep)
+        ep.egress_handled = self.handles_egress(observation, task)
+        raw_obs = _get(observation, "raw_observation")
+        doc = raw_obs.get("document_text") if isinstance(raw_obs, Mapping) else None
+        if isinstance(doc, str) and doc.strip() and doc not in ep.intake_docs:
+            ep.intake_docs.append(doc)
+            ep.obligations = merge_obligations_from_document(ep.obligations, doc)
+
+    def _start(self, state: EpisodeState, task: Any, ep: V3EpisodeState) -> None:
         ep.started = True
         if self.workspace_root:
             root = Path(self.workspace_root)
             if root.is_dir():
                 ep.oracle_snapshot = ImmutableOracleGuard.snapshot_directory(root)
+                ep.tx_guard = TransactionalWorkspaceGuard(root)
+                ep.tx_guard.begin_transaction()
         raw_cfg = _get(task, "raw_config")
         fields = (
             raw_cfg.get("structured_fields") if isinstance(raw_cfg, Mapping) else None
@@ -194,6 +255,42 @@ class TransducerV3Hooks:
                 self._instruction(state, task),
                 fields if isinstance(fields, Mapping) else None,
             )
+
+    def _check_oracle_after_step(
+        self, state: EpisodeState, observation: Any, ep: V3EpisodeState
+    ) -> None:
+        """Right after a mutating step, undo any change to test/evaluator files."""
+        if not (ep.mutated and ep.oracle_snapshot and ep.tx_guard):
+            return
+        intact, bad = ImmutableOracleGuard.verify_intact(
+            Path(self.workspace_root), ep.oracle_snapshot
+        )
+        if intact:
+            return
+        restored = ep.tx_guard.rollback_paths(bad)
+        self.owner._deliver_intervention(
+            state,
+            kind="TRAP_REPAIR_HINT",
+            hint=(
+                "TRAP_REPAIR_HINT (ORACLE_TAMPER_ROLLED_BACK): test or evaluator "
+                f"files {bad} were changed and have been restored ({restored}). "
+                "Fix the code under test instead."
+            ),
+            delta_note="oracle_tamper_rolled_back",
+            fast_forward_obs=observation,
+        )
+
+    def handles_egress(self, observation: Any, task: Any) -> bool:
+        """True when ``egress_gate`` is the single outbound check for this step.
+
+        That is the case when an ``item_auditor`` judges every item. Containers
+        alone do not qualify: the legacy scope check also catches outlier paths
+        and entities that the container-name match in ``egress_gate`` misses.
+        """
+        return self.item_auditor is not None
+
+    def legacy_egress_skipped(self, state: EpisodeState) -> bool:
+        return self.ep(state).egress_handled
 
     # -- shell gate -------------------------------------------------------
     @staticmethod
@@ -218,18 +315,31 @@ class TransducerV3Hooks:
         owner = self.owner
         for _ in range(owner.config.max_repairs_per_commit + 2):
             command = self.shell_command(action)
-            if command is None:
+            write = _write_target(action)
+            if command is None and write is None:
                 return action
-            result = classify_shell_command(
-                command,
-                task_instruction=self._instruction(state, task),
-                protected_oracle_paths=self.protected_oracle_paths,
-                workspace_root=self.workspace_root,
-            )
+            if write is not None:
+                result = classify_file_write(
+                    write[0],
+                    write[1],
+                    task_instruction=self._instruction(state, task),
+                    protected_oracle_paths=self.protected_oracle_paths,
+                    workspace_root=self.workspace_root,
+                )
+            else:
+                result = classify_shell_command(
+                    command or "",
+                    task_instruction=self._instruction(state, task),
+                    protected_oracle_paths=self.protected_oracle_paths,
+                    workspace_root=self.workspace_root,
+                )
             if not result.blocked:
-                if result.is_commit:
-                    self.ep(state).mutated = True
-                    return self._as_commit(action)
+                if result.is_commit or write is not None:
+                    ep = self.ep(state)
+                    ep.mutated = True
+                    if ep.tx_guard is not None:
+                        ep.tx_guard.snapshot_step()
+                    return action if write is not None else self._as_commit(action)
                 return action
             kind, outcome = owner._handle_trap(
                 state=state,
@@ -413,6 +523,10 @@ class TransducerV3Hooks:
             rewritten = _rewrite_payload(action, result.safe_items)
             ep.egress_clean = rewritten is not None
             return rewritten if rewritten is not None else action
+        if result.action == "ABSTAIN":
+            return self._abstain_egress(
+                state, action, observation, task, history, kwargs, result.reason
+            )
         if result.action != "REPAIR_ONCE":
             return action
         self.owner._deliver_intervention(
@@ -436,6 +550,47 @@ class TransducerV3Hooks:
             return action
         ep.egress_clean = not evaluate_outbound_items(best, **kwargs).missing_anchors
         return out
+
+    def _abstain_egress(
+        self,
+        state: EpisodeState,
+        action: Any,
+        observation: Any,
+        task: Any,
+        history: Sequence[Any] | None,
+        kwargs: dict[str, Any],
+        reason: str,
+    ) -> Any:
+        """No item is in scope: let the legacy scope check repair or strip, else halt."""
+        owner = self.owner
+        ep = self.ep(state)
+        ep.egress_handled = False  # re-enable the legacy check for this one pass
+        fixed = owner._check_and_repair_commit(
+            state=state,
+            action=action,
+            observation=observation,
+            task=task,
+            history=history,
+            commit_index=state.next_commit_index,
+        )
+        if _get(fixed, "is_abstained"):
+            return fixed
+        items = _items(owner._extract_outbound_payload(fixed)) or []
+        again = evaluate_outbound_items(items, **kwargs) if items else None
+        if again is not None and again.action == "ALLOW":
+            ep.egress_clean = True
+            return fixed
+        if again is not None and again.action == "STRIP_MONOTONIC":
+            rewritten = _rewrite_payload(fixed, again.safe_items)
+            if rewritten is not None:
+                ep.egress_clean = True
+                return rewritten
+        return owner._abstain_action(
+            state,
+            trap_code="CONTEXTUAL_SCOPE_BLEED",
+            reason=f"Outbound egress blocked: {reason}.",
+            commit_index=state.next_commit_index,
+        )
 
     # -- done gate --------------------------------------------------------
     def readback(
@@ -475,6 +630,7 @@ class TransducerV3Hooks:
                 Path(self.workspace_root), ep.oracle_snapshot
             )
             if not intact:
+                self._rollback_all(ep)
                 return owner._abstain_action(
                     state,
                     trap_code="ORACLE_TAMPER",
@@ -496,6 +652,7 @@ class TransducerV3Hooks:
                 )  # fmt: skip
                 if held is not None:
                     return held
+                self._rollback_all(ep)
                 return owner._abstain_action(
                     state,
                     trap_code="REGRESSION_TEST_FAILED",
@@ -503,14 +660,17 @@ class TransducerV3Hooks:
                     commit_index=commit_idx,
                 )
 
-        if ep.obligations:
+        if ep.obligations or self.completeness_auditor is not None:
             back = self.readback(state, observation, task)
             if back is not None:
-                diff = diff_readback_against_obligations(
+                intake = "\n\n".join([self._instruction(state, task), *ep.intake_docs])
+                diff = evaluate_readback_with_completeness(
                     ep.obligations,
                     str(back["readback_text"]),
+                    intake_context=intake,
                     is_editable=bool(back.get("is_editable")),
                     is_toast=bool(back.get("is_toast")),
+                    completeness_auditor=self.completeness_auditor,
                 )
                 if not diff.all_verified:
                     held = self._hold(
@@ -533,6 +693,16 @@ class TransducerV3Hooks:
                 "Existing regression tests pass after the edits.",
             )  # fmt: skip
             return action
+        if (
+            ep.tx_guard is not None
+            and not ep.mutated
+            and not ep.tx_guard.has_workspace_changes()
+        ):
+            self._verified(
+                state, commit_idx, 2, "independent_system_of_record",
+                "Read-only / clean workspace verified with zero unauthorized mutations.",
+            )  # fmt: skip
+            return action
         if ep.egress_clean and is_single_turn_answer_task(observation, action):
             self._verified(
                 state, commit_idx, 0, "immediate_screen_confirmation",
@@ -540,6 +710,46 @@ class TransducerV3Hooks:
             )  # fmt: skip
             return action
         return None
+
+    @staticmethod
+    def _rollback_all(ep: V3EpisodeState) -> None:
+        if ep.tx_guard is not None:
+            ep.tx_guard.rollback_all()
+
+    def finalize_episode(
+        self,
+        run_id: str,
+        task_id: str,
+        *,
+        tests_passed: bool | None = None,
+    ) -> dict[str, Any]:
+        """End an episode: roll back on tampered oracles or failing tests, then clean up."""
+        ep = self.ep(self.owner.get_state(run_id, task_id))
+        tampered: list[str] = []
+        if ep.oracle_snapshot is not None:
+            _, tampered = ImmutableOracleGuard.verify_intact(
+                Path(self.workspace_root), ep.oracle_snapshot
+            )
+        if (
+            tests_passed is None
+            and self.regression_test_runner is not None
+            and ep.mutated
+        ):
+            tests_passed = PostEditTestGate.verify_regression(
+                self.regression_test_runner
+            )[0]
+        rolled_back = False
+        if ep.tx_guard is not None and (tampered or tests_passed is False):
+            rolled_back = ep.tx_guard.rollback_all()
+        if ep.tx_guard is not None:
+            ep.tx_guard.cleanup()
+            ep.tx_guard = None
+        return {
+            "restored": rolled_back,
+            "oracle_intact": not tampered,
+            "tampered_paths": list(tampered),
+            "tests_passed": tests_passed,
+        }
 
     def skip_ui_reopen(self, observation: Any, action: Any) -> bool:
         return is_single_turn_answer_task(observation, action)
@@ -593,9 +803,9 @@ class TransducerV3Hooks:
         tier: Any,
         strength: str,
         reason: str,
-    ) -> None:
+    ) -> Any:
         self.owner._mark_verified(state, commit_idx, tier=tier)
-        self.owner._emit_receipt(
+        return self.owner._emit_receipt(
             state=state,
             outcome=self._verified_outcome(),
             oracle_tier=tier,
@@ -682,6 +892,19 @@ class TransducerV3Hooks:
             return None
         steps = instantiate_macro(macro, next_payload)
         return (macro, steps) if steps else None
+
+    def record_macro_verified_receipt(
+        self, run_id: str, task_id: str, macro_id: str, reason: str = ""
+    ) -> Any:
+        """Signed ``VERIFIED`` receipt for a completion replayed from a macro."""
+        state = self.owner.get_state(run_id, task_id)
+        return self._verified(
+            state,
+            max(1, state.next_commit_index - 1),
+            1,
+            "persisted_state_reacquisition",
+            f"Macro {macro_id} replayed and verified. {reason}".strip(),
+        )
 
     def record_macro_outcome(self, macro_id: str, succeeded: bool) -> bool:
         if self.macro_store is None:

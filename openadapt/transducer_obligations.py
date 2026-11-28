@@ -10,7 +10,7 @@ from __future__ import annotations
 import enum
 import re
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -26,7 +26,9 @@ __all__ = [
     "build_micro_handoff",
     "compile_obligations_from_spec",
     "diff_readback_against_obligations",
+    "evaluate_readback_with_completeness",
     "mark_drafted_from_action",
+    "merge_obligations_from_document",
 ]
 
 
@@ -59,7 +61,10 @@ class ObligationDiffResult:
     reason: str
 
 
-_ID_RE = re.compile(r"\b(?:REF|CLM|PA|ORD|MRN|POL)-[A-Za-z0-9][A-Za-z0-9-]*\b")
+_ID_RE = re.compile(
+    r"\b(?:REF|CLM|PA|ORD|MRN|POL|DEN|FAX|AUTH)-[A-Za-z0-9][A-Za-z0-9-]*\b"
+)
+_NPI_RE = re.compile(r"\bNPI\s*[:#]?\s*(\d{10})\b", re.IGNORECASE)
 _ISO_DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 _US_DATE_RE = re.compile(r"\b\d{1,2}/\d{1,2}/\d{4}\b")
 _AMOUNT_RE = re.compile(r"\$\d[\d,]*(?:\.\d{2})?")
@@ -145,6 +150,10 @@ def compile_obligations_from_spec(
         if free(m.span()):
             consumed.append(m.span())
             add("identifier", m.group(0).split("-")[0], m.group(0), exact=True)
+    for m in _NPI_RE.finditer(text):
+        if free(m.span(1)):
+            consumed.append(m.span(1))
+            add("identifier", "NPI", m.group(1), exact=True)
     for rx in (_ISO_DATE_RE, _US_DATE_RE):
         for m in rx.finditer(text):
             if free(m.span()):
@@ -167,6 +176,35 @@ def compile_obligations_from_spec(
             consumed.append(m.span())
             add("icd10", "ICD-10 code", m.group(0), exact=True)
     return out
+
+
+def _ob_key(ob: CompiledFieldObligation) -> tuple[str, str]:
+    return (ob.kind, _norm(ob.expected_value))
+
+
+def merge_obligations_from_document(
+    existing: list[CompiledFieldObligation],
+    document_text: str,
+    *,
+    source_label: str = "document",
+    structured_fields: Mapping[str, Any] | None = None,
+) -> list[CompiledFieldObligation]:
+    """Add obligations visible in a mid-episode document to ``existing``.
+
+    Existing obligations keep their status; duplicates (same kind and
+    case-insensitive value) are not added. Returns a new list.
+    """
+    merged = list(existing)
+    seen = {_ob_key(o) for o in merged}
+    for ob in compile_obligations_from_spec(document_text, structured_fields):
+        key = _ob_key(ob)
+        if key in seen:
+            continue
+        seen.add(key)
+        if source_label and source_label not in ob.label:
+            ob.label = f"{ob.label} ({source_label})"
+        merged.append(ob)
+    return merged
 
 
 def mark_drafted_from_action(
@@ -335,3 +373,68 @@ def apply_human_resolution(
         patch["human_action"] = dict(resolution.human_action)
     patch["applied"] = bool(patch["selector_hints"] or resolution.human_action)
     return patch
+
+
+def evaluate_readback_with_completeness(
+    obligations: Sequence[CompiledFieldObligation],
+    readback_text: str,
+    *,
+    intake_context: str = "",
+    is_editable: bool = False,
+    is_toast: bool = False,
+    completeness_auditor: Callable[[str, str], Mapping[str, Any]] | None = None,
+) -> ObligationDiffResult:
+    """Deterministic read-back diff plus an optional independent completeness audit."""
+    base = diff_readback_against_obligations(
+        obligations, readback_text, is_editable=is_editable, is_toast=is_toast
+    )
+    if is_toast or is_editable:
+        return base
+    if completeness_auditor is None or not intake_context:
+        return base
+    try:
+        verdict = completeness_auditor(intake_context, readback_text)
+        complete = bool(verdict.get("complete", False))
+        items = [
+            str(m).strip() for m in (verdict.get("missing") or []) if str(m).strip()
+        ]
+        reason = str(verdict.get("reason", ""))
+    except Exception as exc:  # refuse when the audit cannot be trusted
+        return ObligationDiffResult(
+            all_verified=False,
+            verified_ids=base.verified_ids,
+            missing_obligations=base.missing_obligations,
+            coverage_ratio=base.coverage_ratio,
+            reason=f"completeness audit failed ({type(exc).__name__}); cannot verify",
+        )
+    if complete and not items:
+        return base
+    narrative = [
+        CompiledFieldObligation(
+            field_id=f"narrative_criterion:{i}:{item}",
+            kind="narrative_criterion",
+            label="clinical_completeness",
+            expected_value=item,
+            exact_match=False,
+            required=True,
+            status=ObligationStatus.MISSING,
+        )
+        for i, item in enumerate(items)
+    ]
+    missing = list(base.missing_obligations) + narrative
+    if not missing:
+        return ObligationDiffResult(
+            all_verified=False,
+            verified_ids=base.verified_ids,
+            missing_obligations=[],
+            coverage_ratio=base.coverage_ratio,
+            reason=f"completeness audit says incomplete: {reason or 'no detail'}",
+        )
+    total = len(base.verified_ids) + len(missing)
+    return ObligationDiffResult(
+        all_verified=False,
+        verified_ids=base.verified_ids,
+        missing_obligations=missing,
+        coverage_ratio=len(base.verified_ids) / total if total else 0.0,
+        reason=build_hold_done_prompt(missing),
+    )
