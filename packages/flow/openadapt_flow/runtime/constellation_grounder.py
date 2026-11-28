@@ -27,6 +27,7 @@ top two distinct candidates fall within ``tie_margin``, the grounder returns
 from __future__ import annotations
 
 import difflib
+import io
 import math
 import re
 import statistics
@@ -53,6 +54,35 @@ DEFAULT_MAX_TOKENS = 24
 _FUZZY_MIN_RATIO = 0.85
 #: Overlap threshold for suppressing duplicate proposals of the same control.
 _OVERLAP_MERGE_THRESHOLD = 0.25
+
+#: Maximum horizontal gap (in median token heights) from the target's left edge
+#: to its immediate left-hand label token.
+_IMMEDIATE_LEFT_MAX_GAP_NORM = 3.5
+#: Maximum vertical gap (in median token heights) above the target's top edge
+#: to a stacked immediate label token.
+_IMMEDIATE_ABOVE_MAX_GAP_NORM = 2.5
+#: Maximum inter-word gap (in median token heights) within one label phrase.
+_IMMEDIATE_PHRASE_GAP_NORM = 2.0
+#: Maximum word count chained into one immediate label phrase.
+_IMMEDIATE_MAX_WORDS = 4
+#: Minimum average score across recorded immediate label tokens.
+_IMMEDIATE_MIN_SCORE = 0.45
+#: Tight spatial error limits (in median token heights) for immediate labels.
+_IMMEDIATE_MAX_DX_ERR_NORM = 2.25
+_IMMEDIATE_MAX_DY_ERR_NORM = 1.25
+
+#: Recording thresholds identifying a blank/low-ink input field interior.
+_BLANK_REC_MAX_EDGE_DENSITY = 0.03
+_BLANK_REC_MAX_INK_DENSITY = 0.04
+_BLANK_REC_MAX_LUMA_STD = 12.0
+
+#: Live thresholds flagging a recorded blank input box as occluded by a popup.
+_OCCLUDED_LIVE_MIN_EDGE_DENSITY = 0.07
+_OCCLUDED_LIVE_MIN_INK_DENSITY = 0.08
+_OCCLUDED_LIVE_MIN_LUMA_STD = 28.0
+_OCCLUDED_LIVE_STD_INK_MIN = 0.12
+_OCCLUDED_LIVE_CONTRAST_JUMP = 75.0
+_OCCLUDED_LIVE_MIN_CONTRAST = 90.0
 
 OcrFn = Callable[[bytes], Sequence[Any]]
 
@@ -87,6 +117,7 @@ class ConstellationToken(BaseModel):
     dx_norm: float
     dy_norm: float
     weight: float
+    is_immediate_label: bool = False
 
 
 class TargetConstellation(BaseModel):
@@ -98,6 +129,11 @@ class TargetConstellation(BaseModel):
     target_h_norm: float
     label: Optional[str] = None
     intent: Optional[str] = None
+    target_is_blank: bool = False
+    target_edge_density: Optional[float] = None
+    target_ink_density: Optional[float] = None
+    target_luma_std: Optional[float] = None
+    target_frame_contrast: Optional[float] = None
 
 
 class CandidateScore(BaseModel):
@@ -228,6 +264,334 @@ def _token_text_similarity(expected: str, observed: str) -> float:
     return 0.0
 
 
+class _InteriorStats:
+    __slots__ = ("edge_density", "ink_density", "luma_std", "frame_contrast")
+
+    def __init__(
+        self,
+        edge_density: float,
+        ink_density: float,
+        luma_std: float,
+        frame_contrast: float,
+    ) -> None:
+        self.edge_density = edge_density
+        self.ink_density = ink_density
+        self.luma_std = luma_std
+        self.frame_contrast = frame_contrast
+
+
+def _analyze_region_interior(
+    screen_png: bytes,
+    region: Region,
+) -> Optional[_InteriorStats]:
+    """Measure interior edge density, ink density, luminance std, and contrast.
+
+    Returns ``None`` when ``screen_png`` is not a decodable image, Pillow is
+    unavailable, or the inset interior is smaller than 4x4 pixels.
+    """
+    if not screen_png or len(screen_png) < 16:
+        return None
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    try:
+        with Image.open(io.BytesIO(screen_png)) as raw:
+            gray = raw.convert("L")
+    except Exception:  # noqa: BLE001
+        return None
+
+    img_w, img_h = gray.size
+    x, y, w, h = region
+    inset_x = max(2, min(int(round(w * 0.15)), 10))
+    inset_y = max(2, min(int(round(h * 0.22)), 10))
+    ix0 = max(0, x + inset_x)
+    iy0 = max(0, y + inset_y)
+    ix1 = min(img_w, x + w - inset_x)
+    iy1 = min(img_h, y + h - inset_y)
+    iw = ix1 - ix0
+    ih = iy1 - iy0
+    if iw < 4 or ih < 4:
+        return None
+
+    crop = gray.crop((ix0, iy0, ix1, iy1))
+    data = crop.tobytes()
+    n = len(data)
+    if n == 0:
+        return None
+
+    hist = crop.histogram()
+    mean_luma = sum(val * count for val, count in enumerate(hist)) / float(n)
+    var_luma = sum(
+        ((val - mean_luma) ** 2) * count for val, count in enumerate(hist)
+    ) / float(n)
+    luma_std = math.sqrt(var_luma)
+
+    half = n // 2
+    acc = 0
+    med_luma = 0
+    for val, count in enumerate(hist):
+        acc += count
+        if acc > half:
+            med_luma = val
+            break
+
+    ink_count = sum(
+        count for val, count in enumerate(hist) if abs(val - med_luma) >= 24
+    )
+    ink_density = ink_count / float(n)
+
+    edge_count = 0
+    edge_total = (ih - 1) * (iw - 1)
+    if edge_total > 0:
+        for row in range(1, ih):
+            row_off = row * iw
+            prev_off = row_off - iw
+            for col in range(1, iw):
+                px = data[row_off + col]
+                if (
+                    abs(px - data[row_off + col - 1]) >= 24
+                    or abs(px - data[prev_off + col]) >= 24
+                ):
+                    edge_count += 1
+        edge_density = edge_count / float(edge_total)
+    else:
+        edge_density = 0.0
+
+    thumb = gray.resize((64, 64))
+    thist = thumb.histogram()
+    thalf = (64 * 64) // 2
+    tacc = 0
+    frame_med = 0
+    for val, count in enumerate(thist):
+        tacc += count
+        if tacc > thalf:
+            frame_med = val
+            break
+
+    return _InteriorStats(
+        edge_density=edge_density,
+        ink_density=ink_density,
+        luma_std=luma_std,
+        frame_contrast=abs(float(med_luma) - float(frame_med)),
+    )
+
+
+def _is_blank_target_occluded(
+    screen_png: bytes,
+    region: Region,
+    constellation: TargetConstellation,
+) -> bool:
+    """Return True when a recorded blank input field appears occluded."""
+    if not constellation.target_is_blank:
+        return False
+    stats = _analyze_region_interior(screen_png, region)
+    if stats is None:
+        return False
+    if (
+        stats.edge_density >= _OCCLUDED_LIVE_MIN_EDGE_DENSITY
+        and stats.ink_density >= _OCCLUDED_LIVE_MIN_INK_DENSITY
+    ):
+        return True
+    if (
+        stats.luma_std >= _OCCLUDED_LIVE_MIN_LUMA_STD
+        and stats.ink_density >= _OCCLUDED_LIVE_STD_INK_MIN
+    ):
+        return True
+    if (
+        constellation.target_frame_contrast is not None
+        and stats.frame_contrast >= _OCCLUDED_LIVE_MIN_CONTRAST
+        and (stats.frame_contrast - constellation.target_frame_contrast)
+        >= _OCCLUDED_LIVE_CONTRAST_JUMP
+    ):
+        return True
+    return False
+
+
+def _find_immediate_label_indices(
+    outside_tokens: Sequence[OcrToken],
+    target_region: Region,
+    med_h: float,
+) -> set[int]:
+    """Identify indices of immediate adjacent label token(s) for ``target_region``.
+
+    Checks directly to the left of ``target_region`` first (standard horizontal
+    form layout), then immediately above (stacked label layout). Chains
+    contiguous words on the same line so multi-word field labels like
+    ``"Date of Birth"`` are tracked as one immediate label phrase.
+    """
+    rx, ry, rw, rh = target_region
+    x0, y0, x1, y1 = float(rx), float(ry), float(rx + rw), float(ry + rh)
+
+    # 1. Immediate left-hand label (same horizontal band).
+    left_candidates: list[tuple[float, int, OcrToken]] = []
+    for idx, tok in enumerate(outside_tokens):
+        if tok.cy < y0 - 0.6 * med_h or tok.cy > y1 + 0.6 * med_h:
+            continue
+        tok_right = tok.cx + tok.w / 2.0
+        if tok.cx >= x0 or tok_right > x0 + 0.5 * med_h:
+            continue
+        gap_left = max(0.0, x0 - tok_right)
+        if gap_left <= _IMMEDIATE_LEFT_MAX_GAP_NORM * med_h:
+            left_candidates.append((gap_left, idx, tok))
+
+    if left_candidates:
+        left_candidates.sort(key=lambda item: item[0])
+        _, anchor_idx, anchor = left_candidates[0]
+        selected = {anchor_idx}
+        cur_left = anchor.cx - anchor.w / 2.0
+        same_line_left = [
+            (idx, tok)
+            for idx, tok in enumerate(outside_tokens)
+            if idx != anchor_idx
+            and abs(tok.cy - anchor.cy) <= 0.6 * med_h
+            and (tok.cx + tok.w / 2.0) <= cur_left + 0.25 * med_h
+        ]
+        same_line_left.sort(key=lambda item: -(item[1].cx + item[1].w / 2.0))
+        for idx, tok in same_line_left:
+            if len(selected) >= _IMMEDIATE_MAX_WORDS:
+                break
+            tok_right = tok.cx + tok.w / 2.0
+            if cur_left - tok_right <= _IMMEDIATE_PHRASE_GAP_NORM * med_h:
+                selected.add(idx)
+                cur_left = min(cur_left, tok.cx - tok.w / 2.0)
+            else:
+                break
+        return selected
+
+    # 2. Immediate above label (stacked label layout).
+    above_candidates: list[tuple[float, float, int, OcrToken]] = []
+    target_cx = (x0 + x1) / 2.0
+    for idx, tok in enumerate(outside_tokens):
+        tok_left = tok.cx - tok.w / 2.0
+        tok_right = tok.cx + tok.w / 2.0
+        tok_bottom = tok.cy + tok.h / 2.0
+        if tok.cy >= y0 or tok_bottom > y0 + 0.5 * med_h:
+            continue
+        gap_above = max(0.0, y0 - tok_bottom)
+        if gap_above > _IMMEDIATE_ABOVE_MAX_GAP_NORM * med_h:
+            continue
+        if tok_right < x0 - 1.5 * med_h or tok_left > x1 + 1.5 * med_h:
+            continue
+        above_candidates.append((gap_above, abs(tok.cx - target_cx), idx, tok))
+
+    if above_candidates:
+        above_candidates.sort(key=lambda item: (item[0], item[1]))
+        _, _, anchor_idx, anchor = above_candidates[0]
+        selected = {anchor_idx}
+        same_line = [
+            (idx, tok)
+            for idx, tok in enumerate(outside_tokens)
+            if idx != anchor_idx
+            and abs(tok.cy - anchor.cy) <= 0.6 * med_h
+            and (tok.cx + tok.w / 2.0) >= x0 - 2.5 * med_h
+            and (tok.cx - tok.w / 2.0) <= x1 + 2.5 * med_h
+        ]
+        # Chain leftward then rightward from anchor.
+        cur_left = anchor.cx - anchor.w / 2.0
+        for idx, tok in sorted(
+            (item for item in same_line if item[1].cx < anchor.cx),
+            key=lambda item: -(item[1].cx + item[1].w / 2.0),
+        ):
+            if len(selected) >= _IMMEDIATE_MAX_WORDS:
+                break
+            if cur_left - (tok.cx + tok.w / 2.0) <= _IMMEDIATE_PHRASE_GAP_NORM * med_h:
+                selected.add(idx)
+                cur_left = min(cur_left, tok.cx - tok.w / 2.0)
+            else:
+                break
+        cur_right = anchor.cx + anchor.w / 2.0
+        for idx, tok in sorted(
+            (item for item in same_line if item[1].cx > anchor.cx),
+            key=lambda item: item[1].cx - item[1].w / 2.0,
+        ):
+            if len(selected) >= _IMMEDIATE_MAX_WORDS:
+                break
+            if (tok.cx - tok.w / 2.0) - cur_right <= _IMMEDIATE_PHRASE_GAP_NORM * med_h:
+                selected.add(idx)
+                cur_right = max(cur_right, tok.cx + tok.w / 2.0)
+            else:
+                break
+        return selected
+
+    return set()
+
+
+def _immediate_text_similarity(expected: str, observed: str) -> float:
+    """Text similarity for immediate labels, tolerating glued OCR words.
+
+    RapidOCR occasionally drops spaces between adjacent words across themes or
+    JPEG compression (for example, ``"Visit type"`` -> ``"Visittype"``). Allows
+    alphabetic-only substring matches (length >= 4, no digits) while keeping
+    numeric IDs exact.
+    """
+    base = _token_text_similarity(expected, observed)
+    if base > 0.0:
+        return base
+    if any(ch.isdigit() for ch in expected) or any(ch.isdigit() for ch in observed):
+        return 0.0
+    exp_alpha = re.sub(r"[^a-z]", "", expected)
+    obs_alpha = re.sub(r"[^a-z]", "", observed)
+    if min(len(exp_alpha), len(obs_alpha)) >= 4 and (
+        exp_alpha in obs_alpha or obs_alpha in exp_alpha
+    ):
+        return 0.8
+    return 0.0
+
+
+def _immediate_labels_supported(
+    cx: float,
+    cy: float,
+    live_tokens: Sequence[OcrToken],
+    live_med_h: float,
+    constellation: TargetConstellation,
+    *,
+    sigma_norm: float = DEFAULT_SIGMA_NORM,
+) -> bool:
+    """Verify recorded immediate adjacent label(s) exist near ``(cx, cy)``.
+
+    Distant header or banner tokens must never outvote a missing or shifted
+    immediate field label.
+    """
+    imm_tokens = [ct for ct in constellation.tokens if ct.is_immediate_label]
+    if not imm_tokens:
+        return True
+
+    score_sum = 0.0
+    matched = 0
+    for ct in imm_tokens:
+        ex = cx + ct.dx_norm * live_med_h
+        ey = cy + ct.dy_norm * live_med_h
+        max_dx_err = _IMMEDIATE_MAX_DX_ERR_NORM + 0.15 * abs(ct.dx_norm)
+        max_dy_err = _IMMEDIATE_MAX_DY_ERR_NORM + 0.08 * abs(ct.dy_norm)
+        eff_sigma_x = sigma_norm * (1.0 + 0.08 * abs(ct.dx_norm))
+        eff_sigma_y = min(sigma_norm, 1.1) * (1.0 + 0.05 * abs(ct.dy_norm))
+        best_token_score = 0.0
+        for lt in live_tokens:
+            text_sim = _immediate_text_similarity(ct.norm_text, lt.norm_text)
+            if text_sim <= 0.0:
+                continue
+            dx_err = abs(lt.cx - ex) / live_med_h
+            dy_err = abs(lt.cy - ey) / live_med_h
+            if dx_err > max_dx_err or dy_err > max_dy_err:
+                continue
+            spatial = math.exp(
+                -0.5 * ((dx_err / eff_sigma_x) ** 2 + (dy_err / eff_sigma_y) ** 2)
+            )
+            combined = text_sim * spatial
+            if combined > best_token_score:
+                best_token_score = combined
+        if any(ch.isdigit() for ch in ct.norm_text) and best_token_score < 0.35:
+            return False
+        if best_token_score >= 0.35:
+            matched += 1
+        score_sum += best_token_score
+
+    avg_score = score_sum / float(len(imm_tokens))
+    min_matched = max(1, math.ceil(0.5 * len(imm_tokens)))
+    return matched >= min_matched and avg_score >= _IMMEDIATE_MIN_SCORE
+
+
 def capture_constellation(
     screen_png: bytes,
     target_region: Region,
@@ -243,7 +607,10 @@ def capture_constellation(
 
     Tokens whose centers fall inside ``target_region`` are excluded so the
     constellation captures surrounding context rather than self-matching a
-    repeated button or field label.
+    repeated button or field label. Immediate adjacent label tokens (left or
+    above ``target_region``) are flagged so distant header tokens cannot
+    outvote them at match time. When ``target_region`` is a blank/low-ink input
+    box, its interior pixel statistics are recorded to detect live occlusion.
     """
     tokens = extract_ocr_tokens(screen_png, ocr_fn=ocr_fn)
     med_h = _median_token_height(tokens)
@@ -255,18 +622,31 @@ def capture_constellation(
             target_region[1] + target_region[3] / 2.0,
         )
     )
-    nearby: list[tuple[float, ConstellationToken]] = []
+    has_inner_tokens = False
+    outside: list[tuple[float, OcrToken]] = []
     for tok in tokens:
         if _point_in_region(tok.cx, tok.cy, target_region):
+            has_inner_tokens = True
             continue
         dx_norm = (tok.cx - tx) / med_h
         dy_norm = (tok.cy - ty) / med_h
         dist_norm = math.hypot(dx_norm, dy_norm)
         if dist_norm > max_radius_norm:
             continue
+        outside.append((dist_norm, tok))
+
+    outside_tokens = [item[1] for item in outside]
+    imm_indices = _find_immediate_label_indices(outside_tokens, target_region, med_h)
+
+    nearby: list[tuple[bool, float, ConstellationToken]] = []
+    for idx, (dist_norm, tok) in enumerate(outside):
+        dx_norm = (tok.cx - tx) / med_h
+        dy_norm = (tok.cy - ty) / med_h
         weight = 1.0 / (1.0 + dist_norm / 6.0)
+        is_imm = idx in imm_indices
         nearby.append(
             (
+                not is_imm,
                 dist_norm,
                 ConstellationToken(
                     text=tok.text,
@@ -274,11 +654,33 @@ def capture_constellation(
                     dx_norm=dx_norm,
                     dy_norm=dy_norm,
                     weight=weight,
+                    is_immediate_label=is_imm,
                 ),
             )
         )
-    nearby.sort(key=lambda item: item[0])
-    kept = [item[1] for item in nearby[:max_tokens]]
+    # Keep immediate label tokens first, then fill remaining slots by proximity.
+    nearby.sort(key=lambda item: (item[0], item[1]))
+    kept = [item[2] for item in nearby[:max_tokens]]
+
+    target_is_blank = False
+    target_edge_density: Optional[float] = None
+    target_ink_density: Optional[float] = None
+    target_luma_std: Optional[float] = None
+    target_frame_contrast: Optional[float] = None
+    if not has_inner_tokens and not (label or "").strip():
+        stats = _analyze_region_interior(screen_png, target_region)
+        if stats is not None:
+            target_edge_density = round(stats.edge_density, 5)
+            target_ink_density = round(stats.ink_density, 5)
+            target_luma_std = round(stats.luma_std, 3)
+            target_frame_contrast = round(stats.frame_contrast, 3)
+            if (
+                stats.edge_density <= _BLANK_REC_MAX_EDGE_DENSITY
+                and stats.ink_density <= _BLANK_REC_MAX_INK_DENSITY
+                and stats.luma_std <= _BLANK_REC_MAX_LUMA_STD
+            ):
+                target_is_blank = True
+
     return TargetConstellation(
         tokens=kept,
         median_token_height=med_h,
@@ -286,6 +688,11 @@ def capture_constellation(
         target_h_norm=max(0.25, float(target_region[3]) / med_h),
         label=label,
         intent=intent,
+        target_is_blank=target_is_blank,
+        target_edge_density=target_edge_density,
+        target_ink_density=target_ink_density,
+        target_luma_std=target_luma_std,
+        target_frame_contrast=target_frame_contrast,
     )
 
 
@@ -375,8 +782,10 @@ def disambiguate_candidates(
     Returns ``None`` whenever:
     - no candidates or constellation tokens are provided,
     - OCR produces no live tokens,
-    - the best candidate scores below ``min_score``, or
-    - the second-best distinct candidate is within ``tie_margin`` of the best.
+    - a candidate fails the recorded immediate adjacent label check,
+    - the best candidate scores below ``min_score``,
+    - the second-best distinct candidate is within ``tie_margin`` of the best, or
+    - a recorded blank input box is occluded on the live frame.
     """
     if not candidates or not constellation.tokens:
         return None
@@ -389,19 +798,33 @@ def disambiguate_candidates(
         return None
     live_med_h = _median_token_height(live_tokens)
 
-    scored = [
-        _score_point(
-            region[0] + region[2] / 2.0,
-            region[1] + region[3] / 2.0,
-            region,
+    scored: list[CandidateScore] = []
+    for region in candidates:
+        cx = region[0] + region[2] / 2.0
+        cy = region[1] + region[3] / 2.0
+        if not _immediate_labels_supported(
+            cx,
+            cy,
             live_tokens,
             live_med_h,
             constellation,
             sigma_norm=sigma_norm,
-            max_err_norm=max_err_norm,
+        ):
+            continue
+        scored.append(
+            _score_point(
+                cx,
+                cy,
+                region,
+                live_tokens,
+                live_med_h,
+                constellation,
+                sigma_norm=sigma_norm,
+                max_err_norm=max_err_norm,
+            )
         )
-        for region in candidates
-    ]
+    if not scored:
+        return None
     ranked = (
         _dedupe_overlapping(scored)
         if merge_overlapping
@@ -413,6 +836,8 @@ def disambiguate_candidates(
     if best.score < min_score or best.matched_tokens < 1:
         return None
     if len(ranked) >= 2 and (best.score - ranked[1].score) < tie_margin:
+        return None
+    if _is_blank_target_occluded(screen_png, best.region, constellation):
         return None
     return best
 

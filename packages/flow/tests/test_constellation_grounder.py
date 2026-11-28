@@ -337,6 +337,173 @@ def test_numeric_ids_do_not_fuzzy_collapse_to_sibling_row() -> None:
     )
 
 
+def test_inserted_row_above_target_never_clicks_wrong_row_despite_static_header() -> (
+    None
+):
+    """Distant static header tokens must not outvote a shifted immediate field label."""
+    record_lines = [
+        _FakeOcrLine("Intake Form: Ada Lovelace (MRN-482910)", (20, 18, 360, 16)),
+        _FakeOcrLine("Date of Birth", (20, 66, 110, 16)),
+    ]
+    dob_recorded: Region = (150, 58, 160, 28)
+
+    constellation = capture_constellation(
+        b"record",
+        dob_recorded,
+        intent="click dob",
+        ocr_fn=lambda _png: record_lines,
+    )
+    imm_norms = {t.norm_text for t in constellation.tokens if t.is_immediate_label}
+    assert imm_norms == {"date", "of", "birth"}
+
+    # Live screen: a new "Member ID" row is inserted at row 0, shifting
+    # "Date of Birth" down to row 1 while all 5 header tokens stay static.
+    member_id_box: Region = (150, 58, 160, 28)
+    dob_shifted: Region = (150, 108, 160, 28)
+    live_lines_shifted = [
+        _FakeOcrLine("Intake Form: Ada Lovelace (MRN-482910)", (20, 18, 360, 16)),
+        _FakeOcrLine("Member ID", (20, 66, 96, 16)),
+        _FakeOcrLine("Date of Birth", (20, 116, 110, 16)),
+    ]
+
+    grounder = ConstellationGrounder(
+        {"click dob": constellation},
+        ocr_fn=lambda _png: live_lines_shifted,
+    )
+    match = grounder.locate(b"live", "click dob", ocr_text=None)
+    if match is not None:
+        assert not _point_in_box(match.point, member_id_box, pad=0)
+        assert _point_in_box(match.point, dob_shifted, pad=6)
+
+    picked = disambiguate_candidates(
+        b"live",
+        [member_id_box, dob_shifted],
+        constellation,
+        ocr_fn=lambda _png: live_lines_shifted,
+    )
+    if picked is not None:
+        assert not _point_in_box(picked.point, member_id_box, pad=0)
+        assert _point_in_box(picked.point, dob_shifted, pad=6)
+
+    # When "Date of Birth" is gone altogether, the 5 static header tokens must
+    # still abstain rather than clicking the "Member ID" box.
+    live_lines_missing = [
+        _FakeOcrLine("Intake Form: Ada Lovelace (MRN-482910)", (20, 18, 360, 16)),
+        _FakeOcrLine("Member ID", (20, 66, 96, 16)),
+    ]
+    missing_grounder = ConstellationGrounder(
+        {"click dob": constellation},
+        ocr_fn=lambda _png: live_lines_missing,
+    )
+    assert missing_grounder.locate(b"live", "click dob", ocr_text=None) is None
+    assert (
+        disambiguate_candidates(
+            b"live",
+            [member_id_box],
+            constellation,
+            ocr_fn=lambda _png: live_lines_missing,
+        )
+        is None
+    )
+
+
+def test_occluded_blank_input_covered_by_calendar_popup_abstains() -> None:
+    """A recorded blank input covered by a calendar popup grid must abstain."""
+    lines = [
+        _FakeOcrLine("Appointment Details", (24, 18, 180, 16)),
+        _FakeOcrLine("Date of Birth", (24, 66, 110, 16)),
+        _FakeOcrLine("Optional", (345, 66, 72, 16)),
+    ]
+    dob_box: Region = (150, 58, 180, 32)
+
+    def _render_form(*, dark: bool = False, occlusion: str = "none") -> bytes:
+        bg = (28, 30, 34) if dark else (248, 248, 250)
+        fg = (235, 238, 242) if dark else (28, 30, 34)
+        box_bg = (42, 46, 52) if dark else (255, 255, 255)
+        img = Image.new("RGB", (460, 220), bg)
+        draw = ImageDraw.Draw(img)
+        x0, y0, w, h = dob_box
+        draw.rectangle([x0, y0, x0 + w, y0 + h], outline=fg, width=2, fill=box_bg)
+
+        if occlusion == "calendar":
+            # Draw a rendered calendar popup grid covering the input box.
+            px0, py0, px1, py1 = x0 - 6, y0 - 8, x0 + w + 12, y0 + h + 96
+            draw.rectangle(
+                [px0, py0, px1, py1],
+                outline=(60, 64, 72),
+                width=2,
+                fill=(252, 252, 255),
+            )
+            # Calendar header strip inside the upper portion of the input box.
+            draw.rectangle([px0 + 2, py0 + 2, px1 - 2, py0 + 22], fill=(45, 90, 165))
+            # 7x5 calendar grid lines and cell glyphs across the target box.
+            cols, rows = 7, 5
+            cell_w = (px1 - px0) / cols
+            cell_h = (py1 - (py0 + 24)) / rows
+            for c in range(1, cols):
+                gx = int(round(px0 + c * cell_w))
+                draw.line([(gx, py0 + 24), (gx, py1)], fill=(140, 145, 155), width=1)
+            for r in range(rows + 1):
+                gy = int(round(py0 + 24 + r * cell_h))
+                draw.line([(px0, gy), (px1, gy)], fill=(140, 145, 155), width=1)
+            for r in range(rows):
+                for c in range(cols):
+                    tx = int(round(px0 + c * cell_w + 5))
+                    ty = int(round(py0 + 24 + r * cell_h + 4))
+                    draw.text((tx, ty), str((r * cols + c) % 28 + 1), fill=(25, 28, 32))
+        elif occlusion == "dark_modal":
+            # Solid dark modal chrome covering the input box on a light page.
+            draw.rectangle(
+                [x0 - 10, y0 - 10, x0 + w + 10, y0 + h + 40],
+                fill=(32, 36, 44),
+            )
+
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+
+    clean_png = _render_form(dark=False, occlusion="none")
+    constellation = capture_constellation(
+        clean_png,
+        dob_box,
+        intent="click dob",
+        ocr_fn=lambda _png: lines,
+    )
+    assert constellation.target_is_blank is True
+
+    grounder = ConstellationGrounder(
+        {"click dob": constellation},
+        ocr_fn=lambda _png: lines,
+    )
+
+    # Unoccluded light and dark frames still hit cleanly.
+    light_hit = grounder.locate(clean_png, "click dob", ocr_text=None)
+    assert light_hit is not None
+    assert _point_in_box(light_hit.point, dob_box, pad=4)
+
+    dark_png = _render_form(dark=True, occlusion="none")
+    dark_hit = grounder.locate(dark_png, "click dob", ocr_text=None)
+    assert dark_hit is not None
+    assert _point_in_box(dark_hit.point, dob_box, pad=4)
+
+    # Calendar popup covering the blank input must abstain.
+    calendar_png = _render_form(dark=False, occlusion="calendar")
+    assert grounder.locate(calendar_png, "click dob", ocr_text=None) is None
+    assert (
+        disambiguate_candidates(
+            calendar_png,
+            [dob_box],
+            constellation,
+            ocr_fn=lambda _png: lines,
+        )
+        is None
+    )
+
+    # Solid dark popup chrome covering the blank input on a light page abstains.
+    modal_png = _render_form(dark=False, occlusion="dark_modal")
+    assert grounder.locate(modal_png, "click dob", ocr_text=None) is None
+
+
 # ---------------------------------------------------------------------------
 # 4. Integration with Grounder protocol and build_grounder chain
 # ---------------------------------------------------------------------------
