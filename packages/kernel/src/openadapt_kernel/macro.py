@@ -1,43 +1,215 @@
-"""Full-DOM schema extraction, transactional form staging, and stepwise live-DOM healing."""
+"""Full-DOM schema extraction (including Shadow DOM & iframes), indexed live-DOM grounding, transactional form staging, and stepwise healing."""
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Sequence
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 from openadapt_kernel.interceptor import CommitInterceptor
 from openadapt_kernel.ledger import ObligationLedger, ProvenanceViolation
 
-_OBSERVE_SCHEMA_JS = """() => {
-  const nodes = document.querySelectorAll(
-    'input, textarea, select, button, a[href], [role="button"], [role="textbox"], [role="combobox"], [role="checkbox"]'
-  );
-  const items = [];
-  const labelTextFor = (el) => {
+if TYPE_CHECKING:
+    from openadapt_kernel.canonical import FieldType
+
+_OBSERVE_SCHEMA_JS = """(startIdx = 0) => {
+  const selectorQuery = 'input, textarea, select, button, a[href], [contenteditable="true"], [role="button"], [role="textbox"], [role="combobox"], [role="checkbox"], [role="option"]';
+  const collected = [];
+  const walkRoot = (root, inShadow, hostChain) => {
+    const all = root.querySelectorAll('*');
+    for (const el of all) {
+      if (el.matches && el.matches(selectorQuery)) {
+        collected.push({ el, inShadow, root, hostChain });
+      }
+      if (el.shadowRoot) {
+        walkRoot(el.shadowRoot, true, hostChain.concat([el]));
+      }
+    }
+  };
+  walkRoot(document, false, []);
+
+  const labelTextFor = (el, root) => {
     if (el.getAttribute('aria-label')) return el.getAttribute('aria-label').trim();
-    if (el.id) {
-      const lbl = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+    if (el.id && root && root.querySelector) {
+      const lbl = root.querySelector(`label[for="${CSS.escape(el.id)}"]`);
       if (lbl) return (lbl.innerText || lbl.textContent || '').trim();
     }
-    const parentLabel = el.closest('label');
+    const parentLabel = el.closest ? el.closest('label') : null;
     if (parentLabel) return (parentLabel.innerText || parentLabel.textContent || '').trim();
+    const fieldWrap = el.closest ? el.closest('.v-input, .v-field, .field, .form-group') : null;
+    if (fieldWrap) {
+      const lbl = fieldWrap.querySelector('label');
+      if (lbl) return (lbl.innerText || lbl.textContent || '').trim();
+    }
     if (el.placeholder) return el.placeholder.trim();
     const txt = (el.innerText || el.textContent || '').trim();
     return txt.slice(0, 120);
   };
-  const cssSelectorFor = (el) => {
-    const tid = el.getAttribute('data-testid');
-    if (tid) return `[data-testid="${tid.replace(/"/g, '\\\\"')}"]`;
-    if (el.id) return `#${CSS.escape(el.id)}`;
-    const name = el.getAttribute('name');
-    if (name) return `${el.tagName.toLowerCase()}[name="${name.replace(/"/g, '\\\\"')}"]`;
-    const aria = el.getAttribute('aria-label');
-    if (aria) return `${el.tagName.toLowerCase()}[aria-label="${aria.replace(/"/g, '\\\\"')}"]`;
-    return '';
+
+  const vw = window.innerWidth || document.documentElement.clientWidth || 1280;
+  const vh = window.innerHeight || document.documentElement.clientHeight || 720;
+  const isVisibleBox = (n) => {
+    if (!n || !n.getBoundingClientRect) return false;
+    const st = window.getComputedStyle(n);
+    const r = n.getBoundingClientRect();
+    return st && st.display !== 'none' && st.visibility !== 'hidden' && parseFloat(st.opacity || '1') > 0 && r.width > 0 && r.height > 0;
   };
-  const modalRoot = document.querySelector('[role="dialog"], .v-dialog--active, .modal.show, dialog[open]');
-  for (const el of nodes) {
+  const modalSet = new Set();
+  for (const r of document.querySelectorAll('[aria-modal="true"], dialog[open], [role="dialog"], .modal.show')) {
+    if (isVisibleBox(r)) modalSet.add(r);
+  }
+  const hasInert = document.querySelector('[inert]') !== null;
+  if (hasInert && document.body) {
+    for (const ch of Array.from(document.body.children)) {
+      if (!ch.hasAttribute('inert') && isVisibleBox(ch) && ch.querySelector && ch.querySelector(selectorQuery)) {
+        modalSet.add(ch);
+      }
+    }
+  }
+  // Compositor hit-test backdrop/overlay detection (framework-agnostic, excludes thin sticky headers/navbars)
+  const samplePts = [[vw * 0.5, vh * 0.5], [vw * 0.5, vh * 0.35], [vw * 0.1, vh * 0.5]];
+  for (const [sx, sy] of samplePts) {
+    const stack = document.elementsFromPoint ? document.elementsFromPoint(sx, sy) : [];
+    for (const node of stack) {
+      if (!node || node === document.body || node === document.documentElement) break;
+      const t = node.tagName ? node.tagName.toLowerCase() : '';
+      if (t === 'header' || t === 'nav') continue;
+      const st = window.getComputedStyle(node);
+      const r = node.getBoundingClientRect();
+      const isOverlayPos = st.position === 'fixed' || st.position === 'absolute' || (st.transform && st.transform !== 'none');
+      const isFullBackdrop = r.width >= vw * 0.8 && r.height >= vh * 0.8 && (st.position === 'fixed' || st.position === 'absolute');
+      if (isFullBackdrop && node.querySelector && node.querySelector(selectorQuery)) {
+        modalSet.add(node);
+        break;
+      }
+      if (isOverlayPos && r.height >= vh * 0.2 && r.height <= vh * 0.98 && r.width >= vw * 0.2 && node.querySelector && node.querySelector(selectorQuery)) {
+        modalSet.add(node);
+        break;
+      }
+    }
+  }
+  const modalRoots = Array.from(modalSet);
+
+  const isInsideModal = (el) => {
+    let cur = el;
+    while (cur) {
+      if (modalSet.has(cur)) return true;
+      if (cur.parentElement) {
+        cur = cur.parentElement;
+      } else {
+        const rn = cur.getRootNode ? cur.getRootNode() : null;
+        cur = rn && rn.host ? rn.host : null;
+      }
+    }
+    return false;
+  };
+
+  const isCenterOccluded = (el, root, rect, hostChain) => {
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    if (cx < 0 || cy < 0 || cx > vw || cy > vh) return false;
+    const docStack = document.elementsFromPoint ? document.elementsFromPoint(cx, cy) : [];
+    if (!docStack || docStack.length === 0) return false;
+    const top = docStack[0];
+    if (top === el || (el.contains && el.contains(top)) || (top.contains && top.contains(el))) return false;
+    if (hostChain && hostChain.some(h => h === top || (top.contains && top.contains(h)) || (h.contains && h.contains(top)))) {
+      if (root && root.elementsFromPoint) {
+        const shStack = root.elementsFromPoint(cx, cy);
+        if (shStack && shStack.length > 0) {
+          const shTop = shStack[0];
+          if (shTop === el || (el.contains && el.contains(shTop)) || (shTop.contains && shTop.contains(el))) return false;
+          return true;
+        }
+      }
+      return false;
+    }
+    return true;
+  };
+
+  const hostSelectorFor = (h) => {
+    const esc = (s) => s.replace(/\\\\/g, '\\\\\\\\').replace(/"/g, '\\\\"');
+    const tid = h.getAttribute && h.getAttribute('data-testid');
+    if (tid) return `[data-testid="${esc(tid)}"]`;
+    if (h.id && !/^(input|v-input|checkbox|select|radio|textarea|switch|field)-\\d+$/i.test(h.id)) return `#${CSS.escape(h.id)}`;
+    return h.tagName ? h.tagName.toLowerCase() : '*';
+  };
+
+  const isEphemeralId = (id) => /^(input|v-input|checkbox|select|radio|textarea|switch|field)-\\d+$/i.test(id || '');
+
+  const visibleMatches = (root, sel) => {
+    try {
+      return Array.from(root.querySelectorAll(sel)).filter(n => {
+        const st = window.getComputedStyle(n);
+        const r = n.getBoundingClientRect();
+        return st && st.display !== 'none' && st.visibility !== 'hidden' && r.width > 0 && r.height > 0;
+      });
+    } catch (e) {
+      return [];
+    }
+  };
+
+  const durableSelectorFor = (el, root, tag, type, label, inModal, inShadow, hostChain) => {
+    const esc = (s) => s.replace(/\\\\/g, '\\\\\\\\').replace(/"/g, '\\\\"');
+    const prefix = (inShadow && hostChain && hostChain.length) ? hostChain.map(hostSelectorFor).join(' >> ') + ' >> ' : '';
+    const tid = el.getAttribute('data-testid');
+    if (tid) {
+      const s = `[data-testid="${esc(tid)}"]`;
+      if (visibleMatches(root, s)[0] === el) return prefix + s;
+    }
+    const name = el.getAttribute('name');
+    if (name) {
+      const s = `${tag}[name="${esc(name)}"]`;
+      if (visibleMatches(root, s)[0] === el) return prefix + s;
+    }
+    const aria = el.getAttribute('aria-label');
+    if (aria) {
+      const s = `${tag}[aria-label="${esc(aria)}"]`;
+      if (visibleMatches(root, s)[0] === el) return prefix + s;
+    }
+    if (el.id && !isEphemeralId(el.id)) {
+      const s = `#${CSS.escape(el.id)}`;
+      if (visibleMatches(root, s)[0] === el) return prefix + s;
+    }
+    const isEditable = el.getAttribute('contenteditable') === 'true';
+    const rawRole = (el.getAttribute('role') || '').toLowerCase();
+    const scopes = inShadow
+      ? ['form', '']
+      : (inModal ? ['[aria-modal="true"]', 'dialog[open]', '[role="dialog"]', 'form'] : ['main form', 'main', 'form', 'body']);
+    const basePart = isEditable ? `${tag}[contenteditable="true"]`
+      : (tag === 'input' && type) ? `input[type="${esc(type)}"]`
+      : (tag === 'button' && type === 'submit') ? 'button[type="submit"]'
+      : (rawRole === 'combobox' || rawRole === 'option') ? `[role="${esc(rawRole)}"]`
+      : tag;
+    for (const sc of scopes) {
+      const cand = sc ? `${sc} ${basePart}` : basePart;
+      const hits = visibleMatches(root, cand);
+      const pos = hits.indexOf(el);
+      if (pos === 0) return prefix + cand;
+      if (pos > 0) return prefix + `${cand} >> nth=${pos}`;
+    }
+    if (tag === 'button' && label && label.length <= 40) {
+      return prefix + `button:has-text("${esc(label)}")`;
+    }
+    if (el.id) return prefix + `#${CSS.escape(el.id)}`;
+    return prefix + basePart;
+  };
+
+  const items = [];
+  let idx = Number(startIdx) || 0;
+  for (const { el, inShadow, root, hostChain } of collected) {
     const st = window.getComputedStyle(el);
     if (!st || st.display === 'none' || st.visibility === 'hidden') continue;
     const type = (el.getAttribute('type') || '').toLowerCase();
@@ -45,29 +217,57 @@ _OBSERVE_SCHEMA_JS = """() => {
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) continue;
     const tag = el.tagName.toLowerCase();
-    const role = (el.getAttribute('role') || '').toLowerCase();
-    const inModal = Boolean(modalRoot && modalRoot.contains(el));
+    const role = (el.getAttribute('role') || (el.getAttribute('contenteditable') === 'true' ? 'textbox' : '')).toLowerCase();
+    const inModal = isInsideModal(el);
+    const occluded = isCenterOccluded(el, root, rect, hostChain);
+    const label = labelTextFor(el, root);
     const options = tag === 'select'
       ? Array.from(el.options).map(o => ({ value: o.value, text: (o.text || '').trim() }))
       : [];
+    el.setAttribute('data-oa-idx', String(idx));
     items.push({
+      control_index: idx,
       tag,
       input_type: type,
       role,
-      label: labelTextFor(el),
+      label,
       placeholder: (el.getAttribute('placeholder') || '').trim(),
       name: (el.getAttribute('name') || '').trim(),
       element_id: (el.id || '').trim(),
       testid: (el.getAttribute('data-testid') || '').trim(),
       in_modal: inModal,
-      selector: cssSelectorFor(el),
+      selector: durableSelectorFor(el, root, tag, type, label, inModal, inShadow, hostChain),
       value: tag === 'input' && (type === 'checkbox' || type === 'radio')
         ? String(Boolean(el.checked))
-        : String(el.value !== undefined ? el.value : ''),
+        : String(el.value !== undefined ? el.value : (el.getAttribute('data-value') || el.innerText || '').trim()),
       options,
+      in_shadow: inShadow,
+      disabled: Boolean(el.disabled || el.getAttribute('aria-disabled') === 'true'),
+      occluded,
     });
+    idx += 1;
   }
   return items;
+}"""
+
+_DETECT_OPAQUE_SURFACES_JS = """(minArea) => {
+  const surfaces = [];
+  for (const el of document.querySelectorAll('canvas, embed, object')) {
+    const st = window.getComputedStyle(el);
+    if (!st || st.display === 'none' || st.visibility === 'hidden') continue;
+    const r = el.getBoundingClientRect();
+    const area = Math.round(r.width * r.height);
+    if (area >= minArea && el.children.length === 0) {
+      surfaces.push({
+        tag: el.tagName.toLowerCase(),
+        id: el.id || '',
+        width: Math.round(r.width),
+        height: Math.round(r.height),
+        area,
+      });
+    }
+  }
+  return surfaces;
 }"""
 
 
@@ -85,6 +285,12 @@ class ControlSchema:
     selector: str
     value: str = ""
     options: List[Dict[str, str]] = field(default_factory=list)
+    in_shadow: bool = False
+    frame_index: int = -1
+    control_index: int = -1
+    disabled: bool = False
+    occluded: bool = False
+    frame_chain: Tuple[str, ...] = ()
 
 
 @dataclass
@@ -105,6 +311,7 @@ class PlanStep:
     value: Optional[str] = None
     is_commit: bool = False
     prefer_modal: bool = False
+    wait_ms: int = 250
 
 
 @dataclass
@@ -116,33 +323,97 @@ class HealResult:
 
 
 def _tokens(text: str) -> set[str]:
-    return set(re.findall(r"[a-z0-9]+", (text or "").lower()))
+    return set(re.findall(r"[^\W_]+", (text or "").casefold()))
 
 
-def observe_schema(page: Any) -> List[ControlSchema]:
-    """Extract all visible interactive controls across the full scrollable page."""
-    raw_items = page.evaluate(_OBSERVE_SCHEMA_JS) or []
-    return [ControlSchema(**item) for item in raw_items]
+def _compute_frame_chain(frame: Any, main_frame: Any) -> Tuple[str, ...]:
+    chain: List[str] = []
+    cur = frame
+    while cur is not None and cur != main_frame:
+        sel = ""
+        try:
+            fe = cur.frame_element()
+            if fe is not None:
+                sel = str(
+                    fe.evaluate(
+                        """el => {
+                          if (el.getAttribute('data-testid')) return `iframe[data-testid="${el.getAttribute('data-testid')}"]`;
+                          if (el.name) return `iframe[name="${el.name}"]`;
+                          if (el.id) return `iframe#${CSS.escape(el.id)}`;
+                          const all = Array.from((el.ownerDocument || document).querySelectorAll('iframe'));
+                          const i = all.indexOf(el);
+                          return i > 0 ? `iframe >> nth=${i}` : 'iframe';
+                        }"""
+                    )
+                    or "iframe"
+                )
+        except Exception:
+            fname = str(getattr(cur, "name", "") or "").strip()
+            sel = f'iframe[name="{fname}"]' if fname else "iframe"
+        if sel:
+            chain.append(sel)
+        cur = getattr(cur, "parent_frame", None)
+    chain.reverse()
+    return tuple(chain)
+
+
+def detect_opaque_visual_surfaces(page: Any, *, min_area_px: int = 10000) -> Dict[str, Any]:
+    """Detect large zero-child <canvas>/<embed>/<object> surfaces requiring visual grounding escalation."""
+    surfaces = list(page.evaluate(_DETECT_OPAQUE_SURFACES_JS, int(min_area_px)) or [])
+    return {"requires_visual_grounding": bool(surfaces), "surfaces": surfaces}
+
+
+def observe_schema(page: Any, *, include_frames: bool = True) -> List[ControlSchema]:
+    """Extract all visible interactive controls across main DOM, open Shadow DOM, and nested iframes."""
+    controls: List[ControlSchema] = []
+    raw_main = page.evaluate(_OBSERVE_SCHEMA_JS, 0) or []
+    for item in raw_main:
+        controls.append(ControlSchema(frame_index=-1, frame_chain=(), **item))
+    next_idx = max((c.control_index + 1 for c in controls if c.control_index >= 0), default=len(controls))
+
+    if include_frames and hasattr(page, "frames"):
+        frames = list(page.frames)
+        main_frame = getattr(page, "main_frame", frames[0] if frames else None)
+        for idx, frame in enumerate(frames):
+            if frame == main_frame:
+                continue
+            try:
+                fchain = _compute_frame_chain(frame, main_frame)
+                raw_sub = frame.evaluate(_OBSERVE_SCHEMA_JS, next_idx) or []
+                for item in raw_sub:
+                    ctrl = ControlSchema(frame_index=idx, frame_chain=fchain, **item)
+                    controls.append(ctrl)
+                    if ctrl.control_index >= next_idx:
+                        next_idx = ctrl.control_index + 1
+            except Exception:
+                continue
+    return controls
+
+
+observe_dom_schema = observe_schema
 
 
 def _match_control(
-    key: str,
+    key: Union[str, int],
     controls: Sequence[ControlSchema],
     *,
     prefer_modal: bool = False,
     allowed_tags: Optional[Sequence[str]] = None,
 ) -> Optional[ControlSchema]:
-    key_l = key.strip().lower()
-    key_toks = _tokens(key)
+    key_str = str(key)
+    key_l = key_str.strip().lower()
+    key_toks = _tokens(key_str)
     best: Optional[ControlSchema] = None
     best_score = 0.0
 
     for ctrl in controls:
-        if allowed_tags and ctrl.tag not in allowed_tags:
+        if allowed_tags and ctrl.tag not in allowed_tags and ctrl.role not in ("combobox", "textbox"):
             continue
         score = 0.0
         if ctrl.selector and ctrl.selector.lower() == key_l:
             score = 100.0
+        elif ctrl.control_index >= 0 and str(ctrl.control_index) == key_l:
+            score = 99.0
         elif ctrl.testid and ctrl.testid.lower() == key_l:
             score = 95.0
         elif ctrl.name and ctrl.name.lower() == key_l:
@@ -167,17 +438,48 @@ def _match_control(
     return best
 
 
+def _target_root(page: Any, ctrl: ControlSchema) -> Any:
+    if ctrl.frame_index >= 0 and hasattr(page, "frames"):
+        frames = list(page.frames)
+        if ctrl.frame_index < len(frames):
+            return frames[ctrl.frame_index]
+    return page
+
+
 def _resolve_locator(page: Any, ctrl: ControlSchema) -> Any:
+    if ctrl.frame_chain and hasattr(page, "frame_locator"):
+        fl = page.frame_locator(ctrl.frame_chain[0])
+        for sub_sel in ctrl.frame_chain[1:]:
+            fl = fl.frame_locator(sub_sel)
+        if ctrl.control_index >= 0:
+            idx_loc = fl.locator(f'[data-oa-idx="{ctrl.control_index}"]').first
+            try:
+                if idx_loc.count() > 0:
+                    return idx_loc
+            except Exception:
+                pass
+        if ctrl.selector:
+            return fl.locator(ctrl.selector).first
+        if ctrl.label and ctrl.tag in ("button", "a"):
+            return fl.locator(f"{ctrl.tag}:has-text({ctrl.label!r})").first
+    root = _target_root(page, ctrl)
+    if ctrl.control_index >= 0:
+        idx_loc = root.locator(f'[data-oa-idx="{ctrl.control_index}"]').first
+        try:
+            if idx_loc.count() > 0:
+                return idx_loc
+        except Exception:
+            pass
     if ctrl.selector:
-        return page.locator(ctrl.selector).first
+        return root.locator(ctrl.selector).first
     if ctrl.label and ctrl.tag in ("button", "a"):
-        return page.locator(f"{ctrl.tag}:has-text({ctrl.label!r})").first
+        return root.locator(f"{ctrl.tag}:has-text({ctrl.label!r})").first
     raise ValueError(f"Control lacks deterministic selector: {ctrl}")
 
 
 def stage_form(
     page: Any,
-    bindings: Dict[str, str],
+    bindings: Union[Mapping[str, str], Mapping[int, str], Mapping[Union[str, int], str]],
     *,
     ledger: Optional[ObligationLedger] = None,
     opaque_fields: Iterable[str] = (),
@@ -185,25 +487,31 @@ def stage_form(
     subject_key: Optional[str] = None,
     prefer_modal: bool = False,
 ) -> StageResult:
-    """Fill an entire form in one pre-commit batch and verify every DOM value."""
+    """Fill an entire form (main DOM, Shadow DOM, iframes, ARIA comboboxes) in one verified batch."""
+    str_bindings = {str(k): v for k, v in bindings.items()}
     if ledger is not None and opaque_fields:
         violations = ledger.verify_ssa_provenance(
-            bindings, opaque_fields=opaque_fields, target_subject_key=subject_key
+            str_bindings, opaque_fields=opaque_fields, target_subject_key=subject_key
         )
         if violations:
             return StageResult(ok=False, provenance_violations=violations)
 
     controls = observe_schema(page)
-    input_controls = [c for c in controls if c.tag in ("input", "textarea", "select")]
+    input_controls = [
+        c
+        for c in controls
+        if c.tag in ("input", "textarea", "select") or c.role in ("combobox", "textbox", "checkbox")
+    ]
     result = StageResult(ok=True)
 
-    for key, val in bindings.items():
+    for key, val in str_bindings.items():
         ctrl = _match_control(key, input_controls, prefer_modal=prefer_modal)
         if ctrl is None:
             result.unmatched.append(key)
             result.ok = False
             continue
 
+        root = _target_root(page, ctrl)
         loc = _resolve_locator(page, ctrl)
         loc.scroll_into_view_if_needed()
 
@@ -213,6 +521,15 @@ def stage_form(
             matched = actual == val or any(
                 o["text"].lower() == val.lower() and o["value"] == actual for o in ctrl.options
             )
+        elif ctrl.role == "combobox" and ctrl.tag not in ("input", "select"):
+            loc.click()
+            opt = root.locator(f'[role="option"]:has-text("{val}")').first
+            opt.wait_for(state="visible", timeout=1500)
+            opt.click()
+            actual = str(
+                loc.evaluate("el => (el.getAttribute('data-value') || el.innerText || '').trim()")
+            )
+            matched = val.lower() in actual.lower()
         elif ctrl.input_type in ("checkbox", "radio"):
             want_checked = str(val).strip().lower() in ("true", "1", "yes", "checked")
             if want_checked:
@@ -244,17 +561,19 @@ def stage_form(
 
 
 class StepwiseHealer:
-    """Replays compiled plans and re-grounds broken steps against the live mounted DOM."""
+    """Replays compiled plans and re-grounds broken steps via indexed live-DOM grounding."""
 
     def __init__(
         self,
         llm_selector_fn: Optional[Callable[[PlanStep, List[ControlSchema]], Optional[str]]] = None,
+        llm_index_fn: Optional[Callable[[PlanStep, List[ControlSchema]], Optional[int]]] = None,
     ) -> None:
         self._llm_selector_fn = llm_selector_fn
+        self._llm_index_fn = llm_index_fn
 
     def _execute_step(self, page: Any, step: PlanStep, selector: str) -> None:
         loc = page.locator(selector).first
-        loc.wait_for(state="visible", timeout=1500)
+        loc.wait_for(state="visible", timeout=2000)
         loc.scroll_into_view_if_needed()
         if step.action == "click":
             loc.click()
@@ -269,13 +588,36 @@ class StepwiseHealer:
                 loc.check()
             else:
                 loc.uncheck()
+        if step.wait_ms > 0 and hasattr(page, "wait_for_timeout"):
+            page.wait_for_timeout(step.wait_ms)
 
-    def _heal_live_step(self, page: Any, step: PlanStep) -> Optional[str]:
+    def _heal_live_step(self, page: Any, step: PlanStep) -> Tuple[Optional[str], Optional[str]]:
+        """Return (immediate_live_selector, durable_cached_selector) grounded on live DOM."""
         controls = observe_schema(page)
+        by_idx = {c.control_index: c for c in controls if c.control_index >= 0}
+
+        # 1. Preferred: Indexed selection (zero CSS syntax hallucination possible!)
+        if self._llm_index_fn is not None:
+            picked_idx = self._llm_index_fn(step, controls)
+            if picked_idx is not None and picked_idx in by_idx:
+                ctrl = by_idx[picked_idx]
+                live_sel = f'[data-oa-idx="{ctrl.control_index}"]'
+                durable = ctrl.selector or (
+                    f"{ctrl.tag}:has-text({ctrl.label!r})" if ctrl.label and ctrl.tag in ("button", "a") else live_sel
+                )
+                return live_sel, durable
+
+        # 2. Legacy free-form selector callback (only accepted if live-verified visible on DOM!)
         if self._llm_selector_fn is not None:
             proposed = self._llm_selector_fn(step, controls)
             if proposed:
-                return proposed
+                try:
+                    if page.locator(proposed).first.is_visible(timeout=500):
+                        return proposed, proposed
+                except Exception:
+                    pass
+
+        # 3. Deterministic semantic matcher fallback
         allowed = (
             ("button", "a")
             if step.action == "click"
@@ -283,19 +625,19 @@ class StepwiseHealer:
             if step.action == "select"
             else ("input", "textarea")
         )
-        ctrl = _match_control(
+        matched_ctrl = _match_control(
             step.semantic_label,
             controls,
             prefer_modal=step.prefer_modal or any(c.in_modal for c in controls),
             allowed_tags=allowed,
         )
-        if ctrl is None:
-            return None
-        if ctrl.selector:
-            return ctrl.selector
-        if ctrl.label and ctrl.tag in ("button", "a"):
-            return f"{ctrl.tag}:has-text({ctrl.label!r})"
-        return None
+        if matched_ctrl is None:
+            return None, None
+        live_sel = f'[data-oa-idx="{matched_ctrl.control_index}"]' if matched_ctrl.control_index >= 0 else matched_ctrl.selector
+        durable = matched_ctrl.selector or (
+            f"{matched_ctrl.tag}:has-text({matched_ctrl.label!r})" if matched_ctrl.label and matched_ctrl.tag in ("button", "a") else live_sel
+        )
+        return live_sel or durable, durable
 
     def run_and_heal(
         self,
@@ -313,8 +655,8 @@ class StepwiseHealer:
                 self._execute_step(page, step, step.selector)
                 healed_plan.append(step)
             except Exception:
-                new_selector = self._heal_live_step(page, step)
-                if not new_selector:
+                live_sel, durable_sel = self._heal_live_step(page, step)
+                if not live_sel:
                     return HealResult(
                         verified=False,
                         healed_steps=healed_ids,
@@ -322,7 +664,7 @@ class StepwiseHealer:
                         failure_reason=f"could_not_reground_step:{step.step_id}",
                     )
                 try:
-                    self._execute_step(page, step, new_selector)
+                    self._execute_step(page, step, live_sel)
                 except Exception as exc:
                     return HealResult(
                         verified=False,
@@ -335,11 +677,12 @@ class StepwiseHealer:
                     PlanStep(
                         step_id=step.step_id,
                         action=step.action,
-                        selector=new_selector,
+                        selector=durable_sel or live_sel,
                         semantic_label=step.semantic_label,
                         value=step.value,
                         is_commit=step.is_commit,
                         prefer_modal=step.prefer_modal,
+                        wait_ms=step.wait_ms,
                     )
                 )
 
@@ -352,3 +695,227 @@ class StepwiseHealer:
             )
 
         return HealResult(verified=True, healed_steps=healed_ids, healed_plan=healed_plan)
+
+
+_EPHEMERAL_SELECTOR_PATTERNS: Tuple[re.Pattern[str], ...] = (
+    re.compile(r"#[A-Za-z_][\w-]*[-_]\d+\b"),
+    re.compile(r"(?:\.|\[class[*^$~]?=[\"']?)(?:css-[a-z0-9]{4,}|sc-[A-Za-z0-9]{4,}|jss\d+|Mui\w+-\d+)\b|__[A-Za-z0-9]{5,}\b"),
+    re.compile(r"(?:#|id=[\"']?)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|#\\?:r[0-9a-z]+\\?:|#[0-9a-f]{8,}\b", re.IGNORECASE),
+)
+
+
+@dataclass(frozen=True)
+class ControlSignature:
+    in_modal: bool = False
+    tag: str = ""
+    input_type: str = ""
+    role: str = ""
+    name: str = ""
+    placeholder: str = ""
+    label_tokens: Tuple[str, ...] = ()
+    text_tokens: Tuple[str, ...] = ()
+    ordinal: int = 0
+
+    @classmethod
+    def from_control(cls, ctrl: ControlSchema, *, ordinal: int = 0, text: str = "") -> "ControlSignature":
+        return cls(
+            ctrl.in_modal, ctrl.tag.lower(), ctrl.input_type.lower(), ctrl.role.lower(), ctrl.name.strip(),
+            ctrl.placeholder.strip(), tuple(sorted(_tokens(ctrl.label))), tuple(sorted(_tokens(text or ctrl.value))), ordinal,
+        )
+
+
+@dataclass(frozen=True)
+class LiftedPackStep:
+    step_id: str
+    action: str
+    selector: Optional[str]
+    control_signature: Optional[ControlSignature]
+    value: Optional[str] = None
+    stripped_ephemeral_selector: Optional[str] = None
+    parameterized_var: Optional[str] = None
+
+
+@dataclass
+class LiftedPackSteps:
+    steps: List[LiftedPackStep] = field(default_factory=list)
+    stripped_selector_count: int = 0
+    parameterized_vars: List[str] = field(default_factory=list)
+    pruned_exploratory_count: int = 0
+
+
+def is_ephemeral_selector(sel: str) -> bool:
+    """Detect framework-generated ephemeral IDs, CSS-in-JS hashes, and UUID selectors."""
+    s = (sel or "").strip()
+    return bool(s) and any(pat.search(s) for pat in _EPHEMERAL_SELECTOR_PATTERNS)
+
+
+def parameterize_value_against_dossier(
+    val: str, dossier: Mapping[str, str], *, field_types: Optional[Mapping[str, FieldType]] = None
+) -> str:
+    """Replace a concrete value with a $var reference when it canonically matches a dossier entry."""
+    from openadapt_kernel import canonical as _can
+
+    if not val or val.startswith("$"):
+        return val
+    ftypes = field_types or {}
+    for key, d_val in dossier.items():
+        if not d_val:
+            continue
+        var_ref = _can.canonical_var_name(key)
+        explicit = ftypes.get(key) or ftypes.get(var_ref) or ftypes.get(var_ref.lstrip("$"))
+        if explicit is not None:
+            matched = _can.canonical_equal(d_val, val, explicit)
+        else:
+            matched = (
+                (_can.parse_canonical_date(d_val) is not None and _can.canonical_equal(d_val, val, "date"))
+                or (_can.parse_canonical_phone(d_val) is not None and _can.canonical_equal(d_val, val, "phone"))
+                or (
+                    any(ch in d_val or ch in val for ch in ("$", ",", "."))
+                    and _can.parse_canonical_currency_cents(d_val) is not None
+                    and _can.canonical_equal(d_val, val, "currency")
+                )
+                or _can.canonical_equal(d_val, val, "casefold_ws")
+            )
+        if matched:
+            return var_ref
+    return val
+
+
+def _build_signature_from_step(raw: Mapping[str, Any]) -> Optional[ControlSignature]:
+    ctrl = raw.get("control")
+    if isinstance(ctrl, ControlSchema):
+        return ControlSignature.from_control(ctrl, ordinal=int(raw.get("ordinal", 0)), text=str(raw.get("text", "")))
+    src: Mapping[str, Any] = ctrl if isinstance(ctrl, Mapping) else raw
+    label_val, text_val = str(src.get("label") or raw.get("semantic_label") or ""), str(src.get("text") or "")
+    if not any(src.get(k) for k in ("tag", "input_type", "role", "name", "placeholder", "in_modal")) and not (label_val or text_val):
+        return None
+    return ControlSignature(
+        bool(src.get("in_modal", raw.get("prefer_modal", False))), str(src.get("tag", "")).lower(),
+        str(src.get("input_type", "")).lower(), str(src.get("role", "")).lower(), str(src.get("name", "")).strip(),
+        str(src.get("placeholder", "")).strip(), tuple(sorted(_tokens(label_val))), tuple(sorted(_tokens(text_val))), int(src.get("ordinal", 0)),
+    )
+
+
+def _coerce_repair_step(step: Any, idx: int) -> Dict[str, Any]:
+    if isinstance(step, Mapping):
+        return dict(step)
+    var_key = str(getattr(step, "var_key", "") or "").strip()
+    arg = getattr(step, "arg", None)
+    val: Optional[str] = f"${var_key.lstrip('$')}" if var_key else (str(arg) if arg is not None else None)
+    sig = getattr(step, "ctrl_sig", ("", "", "", "")) or ("", "", "", "")
+    modal_ord = int(getattr(step, "modal_ordinal", -1))
+    return {
+        "step_id": f"repair_{idx}",
+        "action": str(getattr(step, "method", "click") or "click"),
+        "selector": str(getattr(step, "selector", "") or ""),
+        "value": val,
+        "in_modal": modal_ord >= 0,
+        "ordinal": max(0, modal_ord),
+        "tag": str(sig[0]) if len(sig) > 0 else "",
+        "input_type": str(sig[1]) if len(sig) > 1 else "",
+        "role": str(sig[2]) if len(sig) > 2 else "",
+        "label": str(sig[3]) if len(sig) > 3 else "",
+    }
+
+
+def lift_cold_trace_to_pack(
+    raw_steps: Sequence[Mapping[str, Any]],
+    dossier: Mapping[str, str],
+    *,
+    field_types: Optional[Mapping[str, FieldType]] = None,
+    verified_repair_steps: Sequence[Any] = (),
+    prune_exploratory_prefix_before_repair: bool = True,
+) -> LiftedPackSteps:
+    """Lift raw trace steps into durable pack steps, pruning unverified exploratory prefixes before verified repairs."""
+    pruned = 0
+    steps_to_lift: List[Mapping[str, Any]]
+    if verified_repair_steps and prune_exploratory_prefix_before_repair:
+        pruned = len(raw_steps)
+        steps_to_lift = [_coerce_repair_step(rs, i) for i, rs in enumerate(verified_repair_steps)]
+    else:
+        steps_to_lift = list(raw_steps)
+        if prune_exploratory_prefix_before_repair and steps_to_lift:
+            repair_idx = next(
+                (i for i, s in enumerate(steps_to_lift) if s.get("verified_repair") or s.get("source") == "distilled_repair"),
+                None,
+            )
+            if repair_idx is not None and repair_idx > 0:
+                pruned = repair_idx
+                steps_to_lift = steps_to_lift[repair_idx:]
+            else:
+                reset_indices = [i for i, s in enumerate(steps_to_lift) if s.get("is_navigation_reset")]
+                if reset_indices and reset_indices[-1] > 0:
+                    pruned = reset_indices[-1]
+                    steps_to_lift = steps_to_lift[reset_indices[-1]:]
+        if verified_repair_steps:
+            steps_to_lift.extend(_coerce_repair_step(rs, i) for i, rs in enumerate(verified_repair_steps))
+
+    lifted, seen_vars = LiftedPackSteps(pruned_exploratory_count=pruned), set()
+    for idx, raw in enumerate(steps_to_lift):
+        sel = str(raw.get("selector") or "").strip() or None
+        stripped = sel if (sel and is_ephemeral_selector(sel)) else None
+        if stripped is not None:
+            sel = None
+            lifted.stripped_selector_count += 1
+        raw_val = raw.get("value")
+        val_out = parameterize_value_against_dossier(str(raw_val), dossier, field_types=field_types) if raw_val is not None else None
+        param_var = val_out if (raw_val is not None and val_out is not None and val_out != str(raw_val) and val_out.startswith("$")) else None
+        if param_var and param_var not in seen_vars:
+            seen_vars.add(param_var)
+            lifted.parameterized_vars.append(param_var)
+        lifted.steps.append(
+            LiftedPackStep(str(raw.get("step_id") or f"step_{idx}"), str(raw.get("action") or "click"), sel, _build_signature_from_step(raw), val_out, stripped, param_var)
+        )
+    return lifted
+
+
+def lift_distilled_repair_to_pack(
+    repair_steps: Sequence[Any],
+    dossier: Mapping[str, str],
+    *,
+    exploratory_prefix: Sequence[Mapping[str, Any]] = (),
+    field_types: Optional[Mapping[str, FieldType]] = None,
+) -> LiftedPackSteps:
+    """Lift a verified DistilledRepairStep sequence into a pack, pruning any exploratory prefix."""
+    return lift_cold_trace_to_pack(
+        exploratory_prefix,
+        dossier,
+        field_types=field_types,
+        verified_repair_steps=repair_steps,
+        prune_exploratory_prefix_before_repair=True,
+    )
+
+
+_TEMPLATE_VAR_RE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def compile_freetext_template(
+    template_str: str,
+    dossier: Mapping[str, str],
+    *,
+    required_keys: Sequence[str] = (),
+) -> Tuple[str, List[str]]:
+    """Deterministically render a $var prose template from dossier slots, returning (rendered_text, missing_keys)."""
+    missing: List[str] = []
+
+    def _lookup(var_name: str) -> Optional[str]:
+        for cand in (var_name, f"${var_name}"):
+            if cand in dossier and str(dossier[cand]).strip():
+                return str(dossier[cand]).strip()
+        return None
+
+    def _replace(match: re.Match[str]) -> str:
+        name = match.group(1)
+        val = _lookup(name)
+        if val is None:
+            if name not in missing:
+                missing.append(name)
+            return match.group(0)
+        return val
+
+    rendered = _TEMPLATE_VAR_RE.sub(_replace, template_str or "")
+    for rk in required_keys:
+        clean = str(rk).lstrip("$").strip()
+        if clean and _lookup(clean) is None and clean not in missing:
+            missing.append(clean)
+    return rendered, missing

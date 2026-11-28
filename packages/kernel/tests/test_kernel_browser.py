@@ -146,8 +146,9 @@ def test_stepwise_healer_regrounds_unopened_v2_modal_live() -> None:
         )
         assert result.verified is True
         assert result.healed_steps == ["s1", "s2", "s3", "s4"]
-        assert result.healed_plan[1].selector == "#v-input-104"
-        assert result.healed_plan[2].selector == "#v-input-108"
+        # Durable structural selector synthesized instead of ephemeral numeric #v-input-104
+        assert result.healed_plan[1].selector == '[role="dialog"] input[type="text"]'
+        assert result.healed_plan[2].selector == '[role="dialog"] textarea'
 
         # Replay the healed v2 plan cleanly with zero further healing
         page.set_content(DRIFTED_MODAL_V2_HTML)

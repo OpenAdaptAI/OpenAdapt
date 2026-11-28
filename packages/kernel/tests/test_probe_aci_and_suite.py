@@ -15,9 +15,11 @@ from openadapt_kernel import (
     ObligationLedger,
     OnlineACICalibrator,
     SessionStartNormalizer,
+    compute_pixel_delta_ratio,
     generate_ephemeral_ed25519_keypair,
     mint_receipt,
     probe_before_click,
+    probe_hover_pixel_delta,
     run_portal_pack,
     stage_form,
     verify_cross_tab_dom,
@@ -127,6 +129,9 @@ def test_probe_detects_transparent_overlay_and_runner_refuses_click(tmp_path: Pa
             assert clear.safe_to_click
             assert not clear.occluded
             assert clear.focus_responded
+            assert compute_pixel_delta_ratio(b"\x00\x00\x00\x00", b"\x00\x00\x00\x00") == 0.0
+            assert compute_pixel_delta_ratio(b"\x00\x00\x00\x00", b"\xff\xff\x00\x00") == 0.5
+            assert probe_hover_pixel_delta(page, 80.0, 60.0) >= 0.0
             browser.close()
 
         pack_path = tmp_path / "pack.json"

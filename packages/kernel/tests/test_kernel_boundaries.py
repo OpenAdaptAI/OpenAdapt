@@ -7,7 +7,16 @@ from pathlib import Path
 
 SRC_DIR = Path(__file__).resolve().parents[1] / "src" / "openadapt_kernel"
 FORBIDDEN_IMPORTS = ("openadapt_flow", "openadapt_desktop", "openadapt_capture")
-FORBIDDEN_APP_NAMES = ("openemr", "medplum", "openimis", "mealie", "vikunja", "nationwide", "dentrix")
+FORBIDDEN_APP_NAMES = (
+    "openemr",
+    "medplum",
+    "openimis",
+    "mealie",
+    "vikunja",
+    "nationwide",
+    "dentrix",
+    "availity",
+)
 
 
 def test_zero_legacy_engine_imports_and_zero_app_names() -> None:

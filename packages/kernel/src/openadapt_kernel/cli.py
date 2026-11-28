@@ -5,22 +5,39 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import signal
 import sys
+import threading
 from dataclasses import asdict
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from openadapt_kernel.copilot import (
     generate_ephemeral_ed25519_keypair,
     qualify_verifier_offline,
     verify_receipt,
 )
+from openadapt_kernel.dgm_pr import (
+    FailureRecord,
+    cluster_pack_failures,
+    make_cli_coding_agent,
+    run_dgm_pr_coding_agent,
+)
+from openadapt_kernel.egress_guard import LocalEgressGuard
 from openadapt_kernel.extension_bridge import (
     induce_pack_from_extension_recordings,
     parse_extension_evidence_jsonl,
 )
 from openadapt_kernel.mcp_server import serve_stdio
+from openadapt_kernel.prepare import (
+    PrepareCard,
+    PrepareResumeResponse,
+    RubberStampViolationError,
+    UnresolvedSlot,
+    resume_from_prepare_card,
+)
 from openadapt_kernel.runner import format_run_result_json, run_portal_pack
+from openadapt_kernel.stateful_twin import synthesize_twin_with_coding_agent
 
 
 def _token_boundary_verifier(fields: Dict[str, str], text: str) -> bool:
@@ -154,6 +171,211 @@ def _cmd_serve_mcp(_args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_twin_synthesize(args: argparse.Namespace) -> int:
+    trace_data = json.loads(Path(args.trace).read_text(encoding="utf-8"))
+    agent_fn = make_cli_coding_agent(binary=args.binary, timeout_s=float(args.timeout))
+    twin = synthesize_twin_with_coding_agent(
+        trace_data,
+        coding_agent_fn=agent_fn,
+        ledger_path=Path(args.ledger) if args.ledger else None,
+    )
+    summary = {
+        "base_url": twin.base_url,
+        "pages": sorted(twin.pages.keys()),
+        "route_count": len(twin.route_specs),
+        "egress_audit": twin.egress_audit(),
+    }
+    if args.out:
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(
+                {
+                    **summary,
+                    "page_html": {k: v.sanitized_html for k, v in twin.pages.items()},
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+    print(json.dumps(summary, indent=2))
+    return 0
+
+
+def _cmd_dgm_propose(args: argparse.Namespace) -> int:
+    raw_items = json.loads(Path(args.failures).read_text(encoding="utf-8"))
+    records = [
+        FailureRecord(
+            pack_id=str(item.get("pack_id", "pack")),
+            failure_category=str(item.get("failure_category", "unknown")),
+            signature_tokens=tuple(str(t) for t in (item.get("signature_tokens") or [])),
+            error_message=str(item.get("error_message", "")),
+            tenant_id=str(item.get("tenant_id", "")),
+        )
+        for item in raw_items
+    ]
+    clusters = cluster_pack_failures(records, min_cluster_size=int(args.min_cluster_size))
+    if not clusters:
+        print(json.dumps({"proposals": [], "reason": "no_recurring_clusters"}))
+        return 1
+    agent_fn = make_cli_coding_agent(binary=args.binary, timeout_s=float(args.timeout))
+    proposal = run_dgm_pr_coding_agent(
+        clusters[0],
+        repo_root=Path(args.repo),
+        coding_agent_fn=agent_fn,
+        base_ref=args.base_ref,
+        open_draft_pr=bool(args.open_draft_pr),
+        run_checks=not bool(args.skip_checks),
+    )
+    payload = asdict(proposal)
+    if args.out:
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    print(json.dumps(payload, indent=2))
+    return 0 if proposal.safety_ok else 1
+
+
+def _cmd_egress_proxy(args: argparse.Namespace) -> int:
+    guard = LocalEgressGuard(Path(args.ledger))
+    stop_event = threading.Event()
+
+    def _on_signal(_signum: int, _frame: Any) -> None:
+        stop_event.set()
+
+    prev_int = signal.getsignal(signal.SIGINT)
+    prev_term = signal.getsignal(signal.SIGTERM)
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGINT, _on_signal)
+        signal.signal(signal.SIGTERM, _on_signal)
+
+    try:
+        with guard.serve_http(host=args.host, port=int(args.port)) as url:
+            print(
+                json.dumps(
+                    {"status": "listening", "url": url, "ledger": str(guard.ledger_path)}
+                ),
+                flush=True,
+            )
+            if args.max_seconds is not None:
+                stop_event.wait(timeout=float(args.max_seconds))
+            else:
+                stop_event.wait()
+    finally:
+        if threading.current_thread() is threading.main_thread():
+            signal.signal(signal.SIGINT, prev_int)
+            signal.signal(signal.SIGTERM, prev_term)
+    return 0
+
+
+def _cmd_prepare_inbox(args: argparse.Namespace) -> int:
+    raw_card = json.loads(Path(args.card).read_text(encoding="utf-8"))
+    slots = [
+        UnresolvedSlot(
+            control_idx=int(s.get("control_idx", i)),
+            control_label=str(s.get("control_label", "")),
+            reason=str(s.get("reason", "unresolved")),
+            candidate_vars=tuple(str(v) for v in (s.get("candidate_vars") or [])),
+            allowed_enum_options=tuple(str(o) for o in (s.get("allowed_enum_options") or [])),
+            expected_field_type=s.get("expected_field_type", "casefold_ws"),
+        )
+        for i, s in enumerate(raw_card.get("unresolved_slots") or [])
+    ]
+    card = PrepareCard(
+        card_id=str(raw_card["card_id"]),
+        portal_origin=str(raw_card.get("portal_origin", "")),
+        staged_bindings={int(k): str(v) for k, v in (raw_card.get("staged_bindings") or {}).items()},
+        unresolved_slots=slots,
+        control_labels={int(k): str(v) for k, v in (raw_card.get("control_labels") or {}).items()},
+        control_selectors={int(k): str(v) for k, v in (raw_card.get("control_selectors") or {}).items()},
+    )
+    dossier = json.loads(Path(args.dossier).read_text(encoding="utf-8")) if args.dossier else {}
+    raw_resp = (
+        json.loads(Path(args.response).read_text(encoding="utf-8"))
+        if args.response
+        else json.loads(sys.stdin.read())
+    )
+    response = PrepareResumeResponse(
+        card_id=str(raw_resp.get("card_id", card.card_id)),
+        operator_id=str(raw_resp.get("operator_id", "operator")),
+        parameter_values={str(k): str(v) for k, v in (raw_resp.get("parameter_values") or {}).items()},
+        confirmed_fields={str(k): str(v) for k, v in (raw_resp.get("confirmed_fields") or {}).items()},
+        slot_bindings={int(k): str(v) for k, v in (raw_resp.get("slot_bindings") or {}).items()},
+        approve_all=bool(raw_resp.get("approve_all", False)),
+        rejected=bool(raw_resp.get("rejected", False)),
+        timed_out=bool(raw_resp.get("timed_out", False)),
+        rejection_reason=str(raw_resp.get("rejection_reason", "")),
+    )
+    required_params = [s.control_label for s in slots if s.control_label]
+    try:
+        res = resume_from_prepare_card(card, response, dossier, required_params=required_params)
+    except RubberStampViolationError as exc:
+        print(
+            json.dumps(
+                {
+                    "status": "HALT",
+                    "reason": str(exc),
+                    "rubber_stamp_blocked": True,
+                    "updated_dossier": dossier,
+                },
+                indent=2,
+            )
+        )
+        return 1
+
+    print(
+        json.dumps(
+            {
+                "status": res.status,
+                "reason": res.reason,
+                "rubber_stamp_blocked": False,
+                "updated_dossier": res.updated_dossier,
+                "missing_params": res.missing_params,
+            },
+            indent=2,
+        )
+    )
+    return 0 if res.status == "RESUME" else 1
+
+
+def _cmd_verify_egress_ledger(args: argparse.Namespace) -> int:
+    from openadapt_kernel.lifecycle import verify_egress_ledger_file
+
+    report = verify_egress_ledger_file(args.ledger)
+    print(json.dumps(report, indent=2))
+    return 0 if report.get("integrity_valid") and report.get("phi_bytes_leaked", 0) == 0 else 1
+
+
+def _cmd_compile_demos(args: argparse.Namespace) -> int:
+    from openadapt_kernel.app_cartridge import compile_demo_traces_to_cartridge
+
+    demos = json.loads(Path(args.demos).read_text(encoding="utf-8"))
+    cartridge = compile_demo_traces_to_cartridge(
+        demos,
+        cartridge_id=args.cartridge_id,
+        portal_origin=args.origin,
+    )
+    out_path = Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(asdict(cartridge), indent=2), encoding="utf-8")
+    print(
+        json.dumps(
+            {
+                "cartridge_id": cartridge.cartridge_id,
+                "portal_origin": cartridge.portal_origin,
+                "branch_count": len(cartridge.sop_spec.branches),
+                "skill_count": len(cartridge.skills),
+                "oracle_count": len(cartridge.api_oracles),
+                "mutant_count": len(cartridge.mutants),
+                "consistency_ok": cartridge.sop_spec.consistency_ok,
+                "out": str(out_path),
+            },
+            indent=2,
+        )
+    )
+    return 0 if cartridge.sop_spec.consistency_ok else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="openadapt-kernel")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -201,6 +423,50 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_mcp = sub.add_parser("serve-mcp", help="Run the zero-dependency stdio JSON-RPC 2.0 MCP server")
     p_mcp.set_defaults(func=_cmd_serve_mcp)
+
+    p_twin = sub.add_parser("twin-synthesize", help="Synthesize a Zero-PHI StatefulTwinApp via a coding agent CLI")
+    p_twin.add_argument("--trace", required=True, help="Path to sanitized workflow summary JSON")
+    p_twin.add_argument("--binary", default="claude")
+    p_twin.add_argument("--timeout", type=float, default=120.0)
+    p_twin.add_argument("--ledger")
+    p_twin.add_argument("--out")
+    p_twin.set_defaults(func=_cmd_twin_synthesize)
+
+    p_dgm = sub.add_parser("dgm-propose", help="Run the outer-loop DGM-PR coding agent in an isolated worktree")
+    p_dgm.add_argument("--failures", required=True, help="Path to JSON array of FailureRecord dicts")
+    p_dgm.add_argument("--repo", default=".")
+    p_dgm.add_argument("--binary", default="claude")
+    p_dgm.add_argument("--base-ref", default="HEAD")
+    p_dgm.add_argument("--min-cluster-size", type=int, default=2)
+    p_dgm.add_argument("--timeout", type=float, default=120.0)
+    p_dgm.add_argument("--open-draft-pr", action="store_true")
+    p_dgm.add_argument("--skip-checks", action="store_true")
+    p_dgm.add_argument("--out")
+    p_dgm.set_defaults(func=_cmd_dgm_propose)
+
+    p_proxy = sub.add_parser("egress-proxy", help="Run standalone customer-hostable LocalEgressGuard HTTP proxy")
+    p_proxy.add_argument("--host", default="127.0.0.1")
+    p_proxy.add_argument("--port", type=int, default=8765)
+    p_proxy.add_argument("--ledger", required=True, help="Path to append-only SHA-256 JSONL compliance ledger")
+    p_proxy.add_argument("--max-seconds", type=float, default=None)
+    p_proxy.set_defaults(func=_cmd_egress_proxy)
+
+    p_prep = sub.add_parser("prepare-inbox", help="Validate operator PREPARE response and emit RESUME/HALT verdict")
+    p_prep.add_argument("--card", required=True, help="Path to PrepareCard JSON")
+    p_prep.add_argument("--response", help="Path to PrepareResumeResponse JSON (reads stdin if omitted)")
+    p_prep.add_argument("--dossier", help="Optional path to existing dossier JSON")
+    p_prep.set_defaults(func=_cmd_prepare_inbox)
+
+    p_aud = sub.add_parser("verify-egress-ledger", help="Verify SHA-256 hash chain and zero-PHI compliance of an egress ledger")
+    p_aud.add_argument("--ledger", required=True, help="Path to outbound_egress_ledger.jsonl")
+    p_aud.set_defaults(func=_cmd_verify_egress_ledger)
+
+    p_cd = sub.add_parser("compile-demos", help="Compile Zero-PHI demonstration traces into a verified AppCartridge")
+    p_cd.add_argument("--demos", required=True, help="Path to JSON list of Zero-PHI demonstration trace dicts")
+    p_cd.add_argument("--cartridge-id", required=True)
+    p_cd.add_argument("--origin", required=True)
+    p_cd.add_argument("--out", required=True)
+    p_cd.set_defaults(func=_cmd_compile_demos)
 
     return parser
 
