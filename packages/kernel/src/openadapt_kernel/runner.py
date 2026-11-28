@@ -579,7 +579,13 @@ def run_portal_pack(
                     )
                 staged.staged.update(pop_staged.staged)
                 if popup_submit_selector:
-                    popup_page.locator(popup_submit_selector).first.click()
+                    try:
+                        popup_page.locator(popup_submit_selector).first.click()
+                    except Exception as exc:
+                        # A popup submit control that synchronously calls window.close()
+                        # can close the target before Playwright receives the CDP click ack.
+                        if not (popup_page.is_closed() and "closed" in str(exc).lower()):
+                            raise
                     page.wait_for_timeout(200)
 
             if mode == "draft":
