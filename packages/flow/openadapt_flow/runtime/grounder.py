@@ -470,25 +470,29 @@ def build_grounder(
     fallback: Optional[Any] = None,
     *,
     local_model: Optional[Any] = None,
+    constellation: Optional[Any] = None,
 ) -> Optional[Any]:
     """Assemble the runtime's preferred grounder.
 
     Order of preference:
 
-    1. :class:`OCRAnchorGrounder` — the PRIMARY rung, active whenever the
+    1. :class:`OCRAnchorGrounder` - the PRIMARY rung, active whenever the
        ``grounding`` extra (openadapt-grounding) is installed. No appliance,
        GPU, or paid API needed.
-    2. ``fallback`` — an optional weaker grounder (e.g. the remote-VLM
+    2. ``fallback`` - an optional weaker grounder (e.g. the remote-VLM
        ``RemoteGrounder``) for text-less surfaces. Passed in by the caller so
        this module stays decoupled from ``runtime.remote_vlm``.
 
     ``local_model`` (a :class:`~openadapt_flow.runtime.local_grounder.
     LocalGroundingModel`, off unless the operator turns on local grounding)
-    joins the chain for the pixel-surface look-alike rung.
+    joins the chain for the pixel-surface look-alike rung. ``constellation``
+    (a :class:`~openadapt_flow.runtime.constellation_grounder.
+    ConstellationGrounder`) joins ahead of OCR anchoring for scale-normalized
+    surrounding-word disambiguation.
 
-    Returns a single grounder, a :class:`FallbackGrounder` chaining both, or
-    None when neither is available (equivalent to :class:`NullGrounder`: the
-    ladder simply has no grounder rung — the safe, model-free default).
+    Returns a single grounder, a :class:`FallbackGrounder` chaining them, or
+    None when none are available (equivalent to :class:`NullGrounder`: the
+    ladder simply has no grounder rung - the safe, model-free default).
     """
     chain: list[Any] = []
     if local_model is not None:
@@ -496,6 +500,8 @@ def build_grounder(
         # the recorded crop); its ``locate`` abstains, so it never shadows
         # the grounders behind it.
         chain.append(local_model)
+    if constellation is not None:
+        chain.append(constellation)
     ocr = OCRAnchorGrounder.available()
     if ocr is not None:
         chain.append(ocr)
