@@ -16,6 +16,7 @@ import re
 import shlex
 import subprocess
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
 from typing import Callable, Collection, Mapping, Sequence
 
 ExecFn = Callable[[str], "tuple[int, str, str]"]
@@ -99,6 +100,7 @@ class ContainerDiffTransaction:
         self.baseline_tar = baseline_tar
         self._docker_diff = docker_diff_fn or _default_docker_diff
         self._baseline: dict[str, str] = {}
+        self._baseline_dirs: set[str] = set()
         self._begun = False
 
     # -- scanning ---------------------------------------------------------
@@ -123,8 +125,21 @@ class ContainerDiffTransaction:
             scan[path] = digest
         return scan
 
+    def _scan_dirs(self) -> set[str]:
+        roots = " ".join(shlex.quote(r) for r in self.watched_roots)
+        code, out, _ = self._exec(
+            f"for r in {roots}; do "
+            'if [ -d "$r" ]; then find "$r" -type d -print0 || exit 1; fi; '
+            "done"
+        )
+        if code != 0:
+            raise RuntimeError("container directory scan failed")
+        return {path for path in out.split("\0") if path}
+
     def begin(self) -> dict[str, str]:
-        self._baseline = self._scan()
+        self._begun = False
+        baseline = self._scan()
+        baseline_dirs = self._scan_dirs()
         roots = " ".join(shlex.quote(r) for r in self.watched_roots)
         cmd = (
             f"set --; for r in {roots}; do "
@@ -134,6 +149,8 @@ class ContainerDiffTransaction:
         code, _, err = self._exec(cmd)
         if code != 0:
             raise RuntimeError(f"baseline backup failed: {err.strip()}")
+        self._baseline = baseline
+        self._baseline_dirs = baseline_dirs
         self._begun = True
         return dict(self._baseline)
 
@@ -207,6 +224,17 @@ class ContainerDiffTransaction:
         if not self._begun:
             return False
         now = self._scan()
+        now_dirs = self._scan_dirs()
+        keep_dirs = set(self.watched_roots)
+        # Keep parents needed for allowed files and directories, even when the
+        # parents themselves were created after the baseline.
+        for path in now.keys() | now_dirs:
+            if _is_allowed(path, allowed_write_paths):
+                if path in now_dirs:
+                    keep_dirs.add(path)
+                keep_dirs.update(str(parent) for parent in PurePosixPath(path).parents)
+        for root in self.watched_roots:
+            keep_dirs.update(str(parent) for parent in PurePosixPath(root).parents)
         for path in sorted(now):
             if path not in self._baseline and not _is_allowed(
                 path, allowed_write_paths
@@ -214,6 +242,11 @@ class ContainerDiffTransaction:
                 code, _, _ = self._exec(f"rm -f -- {shlex.quote(path)}")
                 if code != 0:
                     return False
+        new_dirs = now_dirs - self._baseline_dirs - keep_dirs
+        for path in sorted(new_dirs, key=lambda p: (p.count("/"), p), reverse=True):
+            code, _, _ = self._exec(f"rmdir -- {shlex.quote(path)}")
+            if code != 0:
+                return False
         code, _, _ = self._exec(f"tar -xzPf {shlex.quote(self.baseline_tar)}")
         if code != 0:
             return False
@@ -226,7 +259,8 @@ class ContainerDiffTransaction:
                 path, allowed_write_paths
             ):
                 return False
-        return True
+        after_dirs = self._scan_dirs()
+        return self._baseline_dirs <= after_dirs <= self._baseline_dirs | keep_dirs
 
     def cleanup(self) -> None:
         self._exec(f"rm -f -- {shlex.quote(self.baseline_tar)}")

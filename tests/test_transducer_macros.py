@@ -206,6 +206,48 @@ def test_dom_change_counts_as_progress():
     assert d.observe_step("/a", changed, None, _click("#b")) is None
 
 
+@pytest.mark.parametrize("observation", ["terminal_output", "text_digest"])
+def test_text_only_progress_and_stall(observation):
+    detector = NoProgressDetector(stall_threshold=1)
+    for step in range(5):
+        # Repeating commands can produce new observations on every step.
+        action = {"action": "run", "value": "a" if step % 2 else "b"}
+        assert (
+            detector.observe_step("", [], None, action, **{observation: str(step)})
+            is None
+        )
+    plan = detector.observe_step("", [], None, action, **{observation: "4"})
+    assert plan and plan.is_stalled and plan.stall_count == 1
+
+
+def test_terminal_states_can_alternate():
+    detector = NoProgressDetector(stall_threshold=5)
+    plan = None
+    for output in ("a", "b", "a", "b"):
+        plan = detector.observe_step("", [], None, None, terminal_output=output)
+    assert plan and plan.is_stalled and "alternate" in plan.hint
+
+
+def test_state_digest_uses_terminal_tail_alongside_browser_state():
+    digest = NoProgressDetector.state_digest
+    tail = "λ" * 2000
+    base = digest("/a", DOM, b"x", terminal_output=tail, text_digest="first")
+    assert (
+        digest("/a", DOM, b"x", terminal_output="prefix" + tail, text_digest="first")
+        == base
+    )
+    assert (
+        digest("/a", DOM, b"x", terminal_output=tail + "!", text_digest="first") != base
+    )
+    assert digest("/a", DOM, b"x", terminal_output=tail, text_digest="second") != base
+    assert digest("/a", DOM, b"y", terminal_output=tail, text_digest="first") != base
+    assert digest("/b", DOM, b"x", terminal_output=tail, text_digest="first") != base
+    assert digest("/a", [], b"x", terminal_output=tail, text_digest="first") != base
+    assert digest("/a", DOM, b"x") == digest(
+        "/a", DOM, b"x", terminal_output="", text_digest=""
+    )
+
+
 def test_surfaces_untried_controls_submit_first_including_below_fold():
     d = NoProgressDetector(stall_threshold=1)
     d.observe_step("/a", DOM, None, _click("#name"))
