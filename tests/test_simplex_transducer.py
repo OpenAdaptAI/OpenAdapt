@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import concurrent.futures
+import json
+import struct
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -549,3 +552,555 @@ def test_language_agnostic_boundary_detection_wire_and_cartridge() -> None:
     commits = wrapped.wal.commits_for("r-b", "t-b")
     assert len(commits) == 2
     assert all(c.state is SagaState.PENDING_EFFECT for c in commits)
+
+
+def _make_png(
+    width: int, height: int, *, solid_rgb: tuple[int, int, int] | None = None
+) -> bytes:
+    """Build a minimal valid 8-bit RGB PNG using stdlib only."""
+
+    def _chunk(ctype: bytes, data: bytes) -> bytes:
+        crc = zlib.crc32(ctype + data) & 0xFFFFFFFF
+        return struct.pack(">I", len(data)) + ctype + data + struct.pack(">I", crc)
+
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    rows = bytearray()
+    for y in range(height):
+        rows.append(0)  # Filter type 0 (None)
+        for x in range(width):
+            if solid_rgb is not None:
+                rows.extend(solid_rgb)
+            else:
+                rows.extend(((x * 37) % 256, (y * 53) % 256, ((x + y) * 19) % 256))
+    idat = zlib.compress(bytes(rows))
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + _chunk(b"IHDR", ihdr)
+        + _chunk(b"IDAT", idat)
+        + _chunk(b"IEND", b"")
+    )
+
+
+@dataclass
+class _NativeObservation:
+    screenshot: bytes | None = None
+    screenshot_path: str | None = None
+    viewport: tuple[int, int] | None = None
+    accessibility_tree: dict[str, Any] | None = None
+    window_title: str | None = None
+    focused_element: dict[str, Any] | None = None
+    raw_observation: dict[str, Any] | None = None
+
+
+@dataclass
+class _NativeAction:
+    type: str
+    target_node_id: str | None = None
+    target_name: str | None = None
+    text: str | None = None
+    key: str | None = None
+    answer: str | None = None
+    raw_action: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class _NativeTask:
+    task_id: str
+    instruction: str
+    domain: str = "desktop"
+    time_limit_steps: int | None = 20
+    raw_config: dict[str, Any] = field(default_factory=dict)
+
+
+def test_wal_idempotency_key_backward_compat_and_helpers(tmp_path: Path) -> None:
+    wal_path = tmp_path / "legacy_and_new.jsonl"
+    # Legacy WAL JSONL record without idempotency_key
+    legacy_line = {
+        "run_id": "run-legacy",
+        "task_id": "task-legacy",
+        "commit_index": 1,
+        "state": "VERIFIED",
+        "action_summary": {"op": "old-commit"},
+        "evidence": {"tier": 2},
+        "updated_at": "2026-11-01T00:00:00Z",
+    }
+    wal_path.write_text(json.dumps(legacy_line) + "\n", encoding="utf-8")
+
+    wal = WriteAheadSagaLog(wal_path)
+    legacy_rec = wal.get("run-legacy", "task-legacy", 1)
+    assert legacy_rec is not None
+    assert legacy_rec.state is SagaState.VERIFIED
+    assert legacy_rec.idempotency_key == ""
+    assert wal.find_by_idempotency_key("run-legacy", "task-legacy", "") is None
+
+    # New records with idempotency_key
+    wal.record_intent("run-1", "task-1", 1, {"item": "A"}, idempotency_key="key-A")
+    wal.record_pending_effect("run-1", "task-1", 1, idempotency_key="key-A")
+    assert [r.commit_index for r in wal.pending_effects_for("run-1", "task-1")] == [1]
+
+    wal.record_outcome("run-1", "task-1", 1, SagaState.VERIFIED, {"tier": 2})
+    assert wal.pending_effects_for("run-1", "task-1") == []
+
+    wal.record_intent("run-1", "task-1", 2, {"item": "B"}, idempotency_key="key-B")
+    wal.record_pending_effect("run-1", "task-1", 2, idempotency_key="key-B")
+
+    # Reload from disk and verify helpers
+    reloaded = WriteAheadSagaLog(wal_path)
+    found_a = reloaded.find_by_idempotency_key("run-1", "task-1", "key-A")
+    assert found_a is not None
+    assert found_a.commit_index == 1
+    assert found_a.state is SagaState.VERIFIED
+    found_b = reloaded.find_by_idempotency_key("run-1", "task-1", "key-B")
+    assert found_b is not None
+    assert found_b.commit_index == 2
+    assert found_b.state is SagaState.PENDING_EFFECT
+    assert [
+        r.commit_index for r in reloaded.pending_effects_for("run-1", "task-1")
+    ] == [2]
+
+
+def test_cold_resume_blocks_amnesic_duplicate_commit_by_content_key(
+    tmp_path: Path,
+) -> None:
+    wal_dir = tmp_path / "wal"
+    commit_a = _NativeAction(
+        type="click",
+        target_name="Save",
+        text="Item-Alpha",
+        raw_action={"is_commit": True, "item_id": "ALPHA-1"},
+    )
+    commit_b = _NativeAction(
+        type="click",
+        target_name="Save",
+        text="Item-Beta",
+        raw_action={"is_commit": True, "item_id": "BETA-2"},
+    )
+    task = {"run_id": "run-crash", "task_id": "task-crash"}
+
+    # Process 1: dispatches commit A on step 1, then step 2 proactively verifies
+    # commit A via rung3_verifier before a crash occurs.
+    verified_flag = {"a_persisted": False}
+
+    def _rung3(obs: Any, tsk: Any, st: Any) -> dict[str, Any]:
+        return {"verified": verified_flag["a_persisted"]}
+
+    agent1 = _ScriptedBenchmarkAgent(
+        [commit_a, _NativeAction(type="click", target_name="Next")]
+    )
+    wrapped1 = openadapt.wrap(
+        agent1,
+        supervisor_config=SupervisorConfig(wal_dir=wal_dir),
+        rung3_verifier=_rung3,
+    )
+    out1 = wrapped1.act({}, task)
+    assert out1.text == "Item-Alpha"
+    assert (
+        wrapped1.wal.get("run-crash", "task-crash", 1).state is SagaState.PENDING_EFFECT
+    )
+
+    # Step t+1: rung3 confirms commit A -> immediately transitions to VERIFIED in WAL
+    verified_flag["a_persisted"] = True
+    wrapped1.act({}, task)
+    rec1 = wrapped1.wal.get("run-crash", "task-crash", 1)
+    assert rec1 is not None
+    assert rec1.state is SagaState.VERIFIED
+    assert rec1.idempotency_key != ""
+
+    # Process 2 (cold restart from disk): amnesic agent tries to repeat commit A,
+    # receives WAL_CRASH_RESUME + WAL_SKIP_VERIFIED, and advances to commit B.
+    agent2 = _ScriptedBenchmarkAgent([commit_a, commit_b])
+    wrapped2 = openadapt.wrap(
+        agent2,
+        supervisor_config=SupervisorConfig(wal_dir=wal_dir),
+    )
+    out2 = wrapped2.act({}, task)
+    assert out2.text == "Item-Beta"
+    kinds = [
+        n.kind for n in wrapped2.get_state("run-crash", "task-crash").intervention_log
+    ]
+    assert "WAL_CRASH_RESUME" in kinds
+    assert "WAL_SKIP_VERIFIED" in kinds
+    # Commit 1 stayed Item-Alpha (VERIFIED); Commit 2 is Item-Beta (no duplicate!)
+    commits = wrapped2.wal.commits_for("run-crash", "task-crash")
+    assert len(commits) == 2
+    assert commits[0].commit_index == 1 and commits[0].state is SagaState.VERIFIED
+    assert commits[1].commit_index == 2 and commits[1].state is SagaState.PENDING_EFFECT
+    assert commits[0].idempotency_key != commits[1].idempotency_key
+
+    # Process 3: persistently amnesic agent repeats commit A past max_repairs -> abstains
+    agent3 = _ScriptedBenchmarkAgent([commit_a, commit_a, commit_a, commit_a])
+    wrapped3 = openadapt.wrap(
+        agent3,
+        supervisor_config=SupervisorConfig(wal_dir=wal_dir, max_repairs_per_commit=2),
+    )
+    res3 = wrapped3.act({}, task)
+    assert isinstance(res3, TransducerAction)
+    assert res3.is_abstained is True
+    assert res3.raw_action["trap_code"] == "WAL_DUPLICATE_COMMIT"
+
+
+def test_cold_start_pending_effect_reconciliation_and_rung2_step_reconcile(
+    tmp_path: Path,
+) -> None:
+    wal_dir = tmp_path / "wal_reconcile"
+    wal_file = wal_dir / "saga_wal.jsonl"
+    seed_wal = WriteAheadSagaLog(wal_file)
+    seed_wal.record_intent("r-rec", "t-rec", 1, {"op": "c1"}, idempotency_key="k1")
+    seed_wal.record_pending_effect("r-rec", "t-rec", 1, idempotency_key="k1")
+    seed_wal.record_outcome("r-rec", "t-rec", 1, SagaState.VERIFIED, {"tier": 2})
+    seed_wal.record_intent("r-rec", "t-rec", 2, {"op": "c2"}, idempotency_key="k2")
+    seed_wal.record_pending_effect("r-rec", "t-rec", 2, idempotency_key="k2")
+
+    # Cold start with rung3 confirming pending commit 2 before WAL_CRASH_RESUME
+    commit3 = _FakeAction(type="click", is_commit=True, raw_action={"op": "c3"})
+    agent = _ScriptedBenchmarkAgent(
+        [commit3, _FakeAction(type="click", raw_action={"nav": "next"})]
+    )
+    rung2_calls: list[int] = []
+
+    def _rung3(obs: Any, task: Any, st: Any) -> dict[str, Any]:
+        # Only confirm commit 2 (k2), not commit 3
+        return {"verified_keys": ["k2"]}
+
+    def _rung2(obs: Any, task: Any, st: Any) -> dict[str, Any]:
+        rung2_calls.append(st.step_count)
+        return {"verified": st.step_count >= 2}
+
+    wrapped = openadapt.wrap(
+        agent,
+        supervisor_config=SupervisorConfig(wal_dir=wal_dir),
+        rung3_verifier=_rung3,
+        rung2_verifier=_rung2,
+    )
+    task = {"run_id": "r-rec", "task_id": "t-rec"}
+    wrapped.act({}, task)
+
+    # Commit 2 was reconciled to VERIFIED on cold start, so commit3 became commit_index=3
+    assert wrapped.wal.get("r-rec", "t-rec", 2).state is SagaState.VERIFIED
+    assert wrapped.wal.get("r-rec", "t-rec", 3).state is SagaState.PENDING_EFFECT
+    resume_notes = [
+        n
+        for n in wrapped.get_state("r-rec", "t-rec").intervention_log
+        if n.kind == "WAL_CRASH_RESUME"
+    ]
+    assert len(resume_notes) == 1
+    assert "#2" in resume_notes[0].hint
+
+    # Step t+1: rung2 proactively verifies commit 3
+    wrapped.act({}, task)
+    assert wrapped.wal.get("r-rec", "t-rec", 3).state is SagaState.VERIFIED
+    assert len(rung2_calls) >= 1
+
+
+def test_stream_disconnect_guard_none_blank_and_window_title() -> None:
+    good_png = _make_png(16, 16, solid_rgb=None)
+    blank_png = _make_png(16, 16, solid_rgb=(0, 0, 0))
+    task = _NativeTask(task_id="t-vdi", instruction="Click Save")
+    agent = _ScriptedBenchmarkAgent(
+        [
+            _NativeAction(type="click", target_name="Field"),
+            _NativeAction(
+                type="click", target_name="Save", raw_action={"is_commit": True}
+            ),
+        ]
+    )
+    wrapped = openadapt.wrap(agent)
+
+    # Step 1: normal frame -> inner agent runs (calls == 1)
+    a1 = wrapped.act(
+        _NativeObservation(screenshot=good_png, window_title="Portal App"),
+        task,
+    )
+    assert isinstance(a1, _NativeAction)
+    assert a1.type == "click"
+    assert agent.calls == 1
+
+    # Step 2: screenshot drops to None -> wait returned directly, 0 LLM calls
+    a2 = wrapped.act(
+        _NativeObservation(screenshot=None, window_title="Portal App"),
+        task,
+    )
+    assert isinstance(a2, _NativeAction)
+    assert a2.type == "wait"
+    assert a2.raw_action.get("guard") == "STREAM_DISCONNECTED"
+    assert agent.calls == 1
+
+    # Step 3: zero-variance blank PNG -> wait returned directly, 0 LLM calls
+    a3 = wrapped.act(
+        _NativeObservation(screenshot=blank_png, window_title="Portal App"),
+        task,
+    )
+    assert isinstance(a3, _NativeAction)
+    assert a3.type == "wait"
+    assert agent.calls == 1
+
+    # Step 4: window title indicates reconnecting -> wait returned directly, 0 LLM calls
+    a4 = wrapped.act(
+        _NativeObservation(
+            screenshot=good_png, window_title="VDI Session - Reconnecting..."
+        ),
+        task,
+    )
+    assert isinstance(a4, _NativeAction)
+    assert a4.type == "wait"
+    assert agent.calls == 1
+
+    # Step 5: stream recovers -> inner agent resumes and commits
+    a5 = wrapped.act(
+        _NativeObservation(screenshot=good_png, window_title="Portal App"),
+        task,
+    )
+    assert a5.target_name == "Save"
+    assert agent.calls == 2
+
+
+def test_focus_steal_modal_guard_blocks_occluded_commit_and_allows_expected() -> None:
+    task = _NativeTask(
+        task_id="t-modal",
+        instruction="Submit the invoice for order ORD-42.",
+    )
+    modal_tree = {
+        "role": "window",
+        "name": "Portal",
+        "children": [
+            {
+                "role": "alertdialog",
+                "node_id": "dlg-99",
+                "name": "IT Policy Update - Action Required",
+                "children": [
+                    {"role": "button", "node_id": "btn-dismiss", "name": "Dismiss"}
+                ],
+            }
+        ],
+    }
+    obs_with_modal = _NativeObservation(
+        window_title="Portal",
+        accessibility_tree=modal_tree,
+        focused_element={
+            "role": "alertdialog",
+            "node_id": "dlg-99",
+            "name": "IT Policy Update - Action Required",
+        },
+    )
+    # Agent first tries to commit on occluded Save button, then repairs by dismissing modal
+    agent = _ScriptedBenchmarkAgent(
+        [
+            _NativeAction(
+                type="click",
+                target_node_id="btn-save",
+                target_name="Save",
+                raw_action={"is_commit": True},
+            ),
+            _NativeAction(
+                type="click",
+                target_node_id="btn-dismiss",
+                target_name="Dismiss",
+            ),
+        ]
+    )
+    wrapped = openadapt.wrap(agent)
+    out = wrapped.act(obs_with_modal, task)
+    assert out.target_name == "Dismiss"
+    assert any("FOCUS_STEAL_MODAL" in note["hint"] for note in agent.interventions)
+
+    # Expected dialog referenced in task.instruction is NOT blocked
+    expected_task = _NativeTask(
+        task_id="t-expected-modal",
+        instruction="Open the Confirm Delete dialog and click Confirm.",
+    )
+    expected_obs = _NativeObservation(
+        accessibility_tree={
+            "role": "dialog",
+            "node_id": "dlg-del",
+            "name": "Confirm Delete",
+            "children": [
+                {"role": "button", "node_id": "btn-confirm", "name": "Confirm"}
+            ],
+        }
+    )
+    agent2 = _ScriptedBenchmarkAgent(
+        [
+            _NativeAction(
+                type="click",
+                target_node_id="btn-other",
+                target_name="Proceed",
+                raw_action={"is_commit": True},
+            )
+        ]
+    )
+    wrapped2 = openadapt.wrap(agent2)
+    out2 = wrapped2.act(expected_obs, expected_task)
+    assert out2.target_name == "Proceed"
+    assert agent2.interventions == []
+
+
+def test_contextual_integrity_missing_task_anchor_repair() -> None:
+    task = _NativeTask(
+        task_id="t-anchor",
+        instruction=(
+            "Send an update to Bob about Project Orion and make sure to mention "
+            "3:00 PM and Dr. Patel."
+        ),
+    )
+    agent = _ScriptedBenchmarkAgent(
+        [
+            # First attempt omits "3:00 PM"
+            _NativeAction(
+                type="click",
+                target_name="Send",
+                raw_action={
+                    "is_commit": True,
+                    "parsed_json": {
+                        "shared_content": "Project Orion update: Dr. Patel confirmed the agenda."
+                    },
+                },
+            ),
+            # Repaired attempt includes both required anchors
+            _NativeAction(
+                type="click",
+                target_name="Send",
+                raw_action={
+                    "is_commit": True,
+                    "parsed_json": {
+                        "shared_content": (
+                            "Project Orion update: Dr. Patel confirmed the 3:00 PM agenda."
+                        )
+                    },
+                },
+            ),
+        ]
+    )
+    wrapped = openadapt.wrap(agent)
+    out = wrapped.act(_NativeObservation(), task)
+    assert "3:00 PM" in out.raw_action["parsed_json"]["shared_content"]
+    assert len(agent.interventions) == 1
+    assert "MISSING_TASK_ANCHOR" in agent.interventions[0]["hint"]
+
+
+def test_contextual_scope_bleed_selective_repair_co_location_and_abstain() -> None:
+    task = _NativeTask(
+        task_id="t-scope",
+        instruction="Share the Project Orion schedule update with Bob and make sure to mention 3:00 PM.",
+    )
+    obs = _NativeObservation(
+        raw_observation={
+            "containers": {
+                "team_notes": [
+                    "Project Orion review with Sarah is scheduled at 3:00 PM.",
+                ],
+                "hr_inbox": [
+                    "Marcus Vance requested a transfer to the Berlin office.",
+                ],
+            }
+        }
+    )
+
+    # Case A: co-located entity ("Sarah") in the same anchored source item is allowed
+    agent_ok = _ScriptedBenchmarkAgent(
+        [
+            _NativeAction(
+                type="click",
+                target_name="Send",
+                raw_action={
+                    "is_commit": True,
+                    "parsed_json": {
+                        "shared_content": [
+                            "Project Orion review with Sarah is at 3:00 PM."
+                        ]
+                    },
+                },
+            )
+        ]
+    )
+    wrapped_ok = openadapt.wrap(agent_ok)
+    out_ok = wrapped_ok.act(obs, task)
+    assert "Sarah" in out_ok.raw_action["parsed_json"]["shared_content"][0]
+    assert agent_ok.interventions == []
+
+    # Case B: leaking unrelated item ("Marcus Vance" from hr_inbox) triggers selective
+    # 1-turn TRAP_REPAIR_HINT (CONTEXTUAL_SCOPE_BLEED); agent removes only that item.
+    leaking_action = _NativeAction(
+        type="click",
+        target_name="Send",
+        raw_action={
+            "is_commit": True,
+            "parsed_json": {
+                "shared_content": [
+                    "Project Orion review with Sarah is at 3:00 PM.",
+                    "Marcus Vance requested a transfer to the Berlin office.",
+                ]
+            },
+        },
+    )
+    repaired_action = _NativeAction(
+        type="click",
+        target_name="Send",
+        raw_action={
+            "is_commit": True,
+            "parsed_json": {
+                "shared_content": [
+                    "Project Orion review with Sarah is at 3:00 PM.",
+                ]
+            },
+        },
+    )
+    agent_repair = _ScriptedBenchmarkAgent([leaking_action, repaired_action])
+    wrapped_repair = openadapt.wrap(agent_repair)
+    out_rep = wrapped_repair.act(obs, task)
+    assert len(agent_repair.interventions) == 1
+    assert "CONTEXTUAL_SCOPE_BLEED" in agent_repair.interventions[0]["hint"]
+    assert "Marcus Vance" in agent_repair.interventions[0]["hint"]
+    assert "Marcus Vance" not in str(
+        out_rep.raw_action["parsed_json"]["shared_content"]
+    )
+
+    # Case C: persistent bleed past max_repairs_per_commit abstains cleanly (0 SER)
+    agent_abstain = _ScriptedBenchmarkAgent(
+        [leaking_action, leaking_action, leaking_action]
+    )
+    wrapped_abstain = openadapt.wrap(
+        agent_abstain,
+        supervisor_config=SupervisorConfig(max_repairs_per_commit=1),
+    )
+    out_abs = wrapped_abstain.act(obs, task)
+    assert isinstance(out_abs, TransducerAction)
+    assert out_abs.is_abstained is True
+    assert out_abs.raw_action["trap_code"] == "CONTEXTUAL_SCOPE_BLEED"
+    assert wrapped_abstain.last_receipt is not None
+    assert wrapped_abstain.last_receipt.outcome == "HALTED"
+
+
+def test_contextual_scope_bleed_from_structured_instruction_sections() -> None:
+    task = _NativeTask(
+        task_id="t-sections",
+        instruction=(
+            "Reply to Elena with the Atlas launch checklist.\n"
+            "## Work Calendar\n"
+            "- Atlas launch checklist reviewed by Elena at 10:00 AM.\n"
+            "## Personal Messages\n"
+            "- Victor Morales asked about borrowing the garage key.\n"
+        ),
+    )
+    agent = _ScriptedBenchmarkAgent(
+        [
+            _NativeAction(
+                type="answer",
+                answer=(
+                    "Atlas launch checklist reviewed at 10:00 AM. "
+                    "Also Victor Morales asked about borrowing the garage key."
+                ),
+            ),
+            _NativeAction(
+                type="answer",
+                answer="Atlas launch checklist was reviewed at 10:00 AM.",
+            ),
+        ]
+    )
+    wrapped = openadapt.wrap(
+        agent,
+        supervisor_config=SupervisorConfig(enable_verify_before_done=False),
+    )
+    out = wrapped.act(_NativeObservation(), task)
+    assert out.type == "answer"
+    assert "Victor Morales" not in (out.answer or "")
+    assert any("CONTEXTUAL_SCOPE_BLEED" in n["hint"] for n in agent.interventions)
