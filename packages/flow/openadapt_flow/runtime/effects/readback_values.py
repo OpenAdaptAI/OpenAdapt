@@ -364,7 +364,9 @@ def compare_label_bound_value(
         clean_label = " ".join(label.strip().rstrip(":=").split())
         if clean_label:
             count = len(
-                re.findall(rf"(?<!\w){re.escape(clean_label)}(?!\w)", observed, re.IGNORECASE)
+                re.findall(
+                    rf"(?<!\w){re.escape(clean_label)}(?!\w)", observed, re.IGNORECASE
+                )
             )
             if count > 1:
                 return "ambiguous"
@@ -373,7 +375,9 @@ def compare_label_bound_value(
     # For short values (< 4 chars, e.g. "OD" vs "OS") or identifiers/codes/numbers,
     # require exact whole-token comparison on the extracted value.
     if len(expected.strip()) <= _SHORT_VALUE_MAX_LEN:
-        first_token = extracted.split()[0].strip(_TOKEN_EDGES) if extracted.split() else ""
+        first_token = (
+            extracted.split()[0].strip(_TOKEN_EDGES) if extracted.split() else ""
+        )
         target = expected.strip()
         if first_token.lower() == target.lower():
             return "match"

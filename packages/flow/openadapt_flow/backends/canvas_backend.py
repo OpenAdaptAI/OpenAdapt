@@ -260,7 +260,11 @@ class CanvasBrowserBackend:
         if img.size != (self._w, self._h):
             # Handle letterbox cropping when the captured image aspect ratio
             # differs from the remote framebuffer, then resize for DPI scaling.
-            if self._letterbox and abs(img.width - self._w) > 2 or abs(img.height - self._h) > 2:
+            if (
+                self._letterbox
+                and abs(img.width - self._w) > 2
+                or abs(img.height - self._h) > 2
+            ):
                 geom = _compute_canvas_geometry(
                     (0.0, 0.0, float(img.width), float(img.height)),
                     self._w,
@@ -270,7 +274,9 @@ class CanvasBrowserBackend:
                 left = int(round(geom.content_x))
                 top = int(round(geom.content_y))
                 right = min(img.width, int(round(geom.content_x + geom.content_width)))
-                bottom = min(img.height, int(round(geom.content_y + geom.content_height)))
+                bottom = min(
+                    img.height, int(round(geom.content_y + geom.content_height))
+                )
                 if right > left and bottom > top:
                     img = img.crop((left, top, right, bottom))
                 if img.size != (self._w, self._h):
@@ -403,7 +409,9 @@ class MixedCanvasDOMBackend:
         initial_mode: str = "dom",
     ) -> None:
         if initial_mode not in ("dom", "canvas"):
-            raise ValueError(f"initial_mode must be 'dom' or 'canvas', got {initial_mode!r}")
+            raise ValueError(
+                f"initial_mode must be 'dom' or 'canvas', got {initial_mode!r}"
+            )
         self._dom = dom_backend
         self._canvas = canvas_backend
         self._mode = initial_mode

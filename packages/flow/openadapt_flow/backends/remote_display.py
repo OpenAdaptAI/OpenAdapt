@@ -1478,8 +1478,11 @@ class RemoteDisplayBackend:
 
     def verify_active_window_focus(self) -> bool:
         """Return True iff the bound remote-display window currently holds active focus."""
-        win = self._find_window(refresh=True)
-        if win is None or not win.on_screen:
+        try:
+            win = self._resolve_window(refresh=True)
+        except RemoteDisplayError:
+            return False
+        if not win.on_screen:
             return False
         return self._window_focus_matches(win)
 

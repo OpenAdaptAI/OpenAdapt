@@ -447,7 +447,9 @@ def pool_down(
         ]
         res = runner(ps_cmd)
         if res.returncode == 0:
-            container_names = [line.strip() for line in res.stdout.splitlines() if line.strip()]
+            container_names = [
+                line.strip() for line in res.stdout.splitlines() if line.strip()
+            ]
 
     commands: list[list[str]] = [
         [resolved_runtime, "rm", "-f", name] for name in container_names

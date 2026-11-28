@@ -32,7 +32,9 @@ from openadapt_flow.runtime.replay.confirming import Confirming
 
 def test_rank15_exact_match_on_identifiers_numbers_and_codes():
     # Near-miss identifiers/codes/numbers must never fuzzy-pass.
-    assert compare_value("MRN-12346", "MRN-12345", kind="code", source="ocr") == "mismatch"
+    assert (
+        compare_value("MRN-12346", "MRN-12345", kind="code", source="ocr") == "mismatch"
+    )
     assert compare_value("MRN-12345", "MRN-12345", kind="code", source="ocr") == "match"
     assert compare_value("1006", "1005", kind="number", source="ocr") == "mismatch"
     assert compare_value("1005", "1005", kind="number", source="ocr") == "match"
@@ -46,13 +48,26 @@ def test_rank15_label_bound_short_clinical_values():
     assert extract_label_bound_value("Sex: F  Age: 42", "Sex") == "F"
 
     # Label-bound < 4-char values match exactly and reject wrong codes.
-    assert compare_label_bound_value("Eye: OD", "OD", label="Eye", source="ocr") == "match"
-    assert compare_label_bound_value("Eye: OS", "OD", label="Eye", source="ocr") == "mismatch"
-    assert compare_value("Eye: OD", "OD", label="Eye", source="ocr", exact=False) == "match"
-    assert compare_value("Eye: OS", "OD", label="Eye", source="ocr", exact=False) == "mismatch"
+    assert (
+        compare_label_bound_value("Eye: OD", "OD", label="Eye", source="ocr") == "match"
+    )
+    assert (
+        compare_label_bound_value("Eye: OS", "OD", label="Eye", source="ocr")
+        == "mismatch"
+    )
+    assert (
+        compare_value("Eye: OD", "OD", label="Eye", source="ocr", exact=False)
+        == "match"
+    )
+    assert (
+        compare_value("Eye: OS", "OD", label="Eye", source="ocr", exact=False)
+        == "mismatch"
+    )
 
     # Conflicting duplicate labels are ambiguous (halt, never guess).
-    assert compare_label_bound_value("Eye: OD  Eye: OS", "OD", label="Eye") == "ambiguous"
+    assert (
+        compare_label_bound_value("Eye: OD  Eye: OS", "OD", label="Eye") == "ambiguous"
+    )
 
 
 def test_rank15_onscreen_readback_verifier_label_bound():
@@ -76,11 +91,15 @@ def test_rank15_onscreen_readback_verifier_label_bound():
             img.save(buf, format="PNG")
             return buf.getvalue()
 
-    v_ok = OnScreenReadbackVerifier(_FakeBackend(), region=(0, 0, 200, 60), vision=_FakeVision("Eye: OD"))
+    v_ok = OnScreenReadbackVerifier(
+        _FakeBackend(), region=(0, 0, 200, 60), vision=_FakeVision("Eye: OD")
+    )
     verdict_ok = v_ok.read_back("OD", label="Eye")
     assert verdict_ok.verdict == Verdict.CONFIRMED
 
-    v_wrong = OnScreenReadbackVerifier(_FakeBackend(), region=(0, 0, 200, 60), vision=_FakeVision("Eye: OS"))
+    v_wrong = OnScreenReadbackVerifier(
+        _FakeBackend(), region=(0, 0, 200, 60), vision=_FakeVision("Eye: OS")
+    )
     verdict_wrong = v_wrong.read_back("OD", label="Eye")
     assert verdict_wrong.verdict == Verdict.REFUTED
 
@@ -280,7 +299,13 @@ def test_macos_backend_click_uses_y_scale_not_x_scale():
             self.moves.append((x, y))
 
         def mouse(
-            self, x: float, y: float, *, button: str = "left", down: bool, click_count: int = 1
+            self,
+            x: float,
+            y: float,
+            *,
+            button: str = "left",
+            down: bool,
+            click_count: int = 1,
         ) -> None:
             del button, click_count
             if down:
@@ -304,12 +329,18 @@ def test_macos_backend_click_uses_y_scale_not_x_scale():
 # -- Receipt store root symlink canonicalization --
 
 
-def test_receipt_store_canonicalizes_platform_roots_and_refuses_internal_symlinks(tmp_path: Path):
+def test_receipt_store_canonicalizes_platform_roots_and_refuses_internal_symlinks(
+    tmp_path: Path,
+):
     # 1. Platform root canonicalization: on macOS /tmp -> /private/tmp.
     if sys.platform == "darwin" and Path("/tmp").is_symlink():
-        canonical = canonicalize_platform_root_symlinks("/tmp/openadapt-unit-test-probe")
+        canonical = canonicalize_platform_root_symlinks(
+            "/tmp/openadapt-unit-test-probe"
+        )
         assert str(canonical).startswith("/private/tmp/")
-        canonical_var = canonicalize_platform_root_symlinks("/var/tmp/openadapt-unit-test-probe")
+        canonical_var = canonicalize_platform_root_symlinks(
+            "/var/tmp/openadapt-unit-test-probe"
+        )
         assert str(canonical_var).startswith("/private/var/")
 
     # 2. A normal store inside tmp_path passes validation (even if tmp_path is under /var/folders).

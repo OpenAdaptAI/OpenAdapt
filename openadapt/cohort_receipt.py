@@ -50,7 +50,17 @@ _DROPPED_STATUSES = frozenset(
 )
 
 _AGREE_VERDICTS = frozenset(
-    {"agree", "agreed", "match", "matched", "pass", "passed", "ok", "verified", "confirmed"}
+    {
+        "agree",
+        "agreed",
+        "match",
+        "matched",
+        "pass",
+        "passed",
+        "ok",
+        "verified",
+        "confirmed",
+    }
 )
 _DISAGREE_VERDICTS = frozenset(
     {"disagree", "disagreed", "mismatch", "fail", "failed", "refuted", "error"}
@@ -149,7 +159,9 @@ def _load_worklist(path: Path) -> tuple[list[dict[str, Any]], bool, Optional[str
             try:
                 obj = json.loads(stripped)
             except ValueError as exc:
-                raise CohortReceiptError(f"Malformed JSONL line in {path}: {exc}") from exc
+                raise CohortReceiptError(
+                    f"Malformed JSONL line in {path}: {exc}"
+                ) from exc
             if isinstance(obj, dict):
                 items.append(obj)
         return items, True, None
@@ -180,7 +192,9 @@ def _load_worklist(path: Path) -> tuple[list[dict[str, Any]], bool, Optional[str
     raise CohortReceiptError(f"Unsupported worklist structure in {path}.")
 
 
-def _compute_field_agreement_rate(audit_doc: dict[str, Any]) -> tuple[Optional[float], dict[str, Any]]:
+def _compute_field_agreement_rate(
+    audit_doc: dict[str, Any],
+) -> tuple[Optional[float], dict[str, Any]]:
     """Compute field agreement rate from an ``audit_sample_v1`` manifest."""
     if audit_doc.get("schema") != AUDIT_SAMPLE_SCHEMA:
         raise CohortReceiptError(
@@ -263,7 +277,10 @@ def build_cohort_receipt(
     observed_by_id: dict[str, tuple[str, str]] = {}
     if receipts_source is not None:
         for rec in load_run_records(receipts_source):
-            observed_by_id[rec.run_id] = (_normalize_status(rec.status), rec.receipt_digest)
+            observed_by_id[rec.run_id] = (
+                _normalize_status(rec.status),
+                rec.receipt_digest,
+            )
 
     verified = 0
     halted_for_human = 0
@@ -312,7 +329,9 @@ def build_cohort_receipt(
     field_agreement_rate: Optional[float] = None
     if audit_sample_path is not None:
         if not audit_sample_path.is_file():
-            raise CohortReceiptError(f"Audit sample file not found: {audit_sample_path}")
+            raise CohortReceiptError(
+                f"Audit sample file not found: {audit_sample_path}"
+            )
         try:
             audit_doc = json.loads(audit_sample_path.read_text(encoding="utf-8"))
         except ValueError as exc:
@@ -397,16 +416,28 @@ def verify_cohort_receipt(
     merkle = manifest.get("merkle")
     summary = manifest.get("summary")
     sig_block = manifest.get("signature")
-    if not isinstance(merkle, dict) or not isinstance(summary, dict) or not isinstance(sig_block, dict):
+    if (
+        not isinstance(merkle, dict)
+        or not isinstance(summary, dict)
+        or not isinstance(sig_block, dict)
+    ):
         return VerificationResult(
-            False, "Manifest missing required merkle, summary, or signature section.", "", "", 0
+            False,
+            "Manifest missing required merkle, summary, or signature section.",
+            "",
+            "",
+            0,
         )
 
     leaf_digests = merkle.get("leaf_digests")
     claimed_root = str(merkle.get("root") or "")
     claimed_count = merkle.get("leaf_count")
-    if not isinstance(leaf_digests, list) or not all(isinstance(d, str) for d in leaf_digests):
-        return VerificationResult(False, "Invalid merkle.leaf_digests list.", claimed_root, "", 0)
+    if not isinstance(leaf_digests, list) or not all(
+        isinstance(d, str) for d in leaf_digests
+    ):
+        return VerificationResult(
+            False, "Invalid merkle.leaf_digests list.", claimed_root, "", 0
+        )
     if claimed_count != len(leaf_digests):
         return VerificationResult(
             False,
@@ -448,7 +479,10 @@ def verify_cohort_receipt(
     verified = summary["verified"]
     halted = summary["halted_for_human"]
     dropped = summary["silently_dropped"]
-    if any(not isinstance(v, int) or isinstance(v, bool) or v < 0 for v in (total_expected, verified, halted, dropped)):
+    if any(
+        not isinstance(v, int) or isinstance(v, bool) or v < 0
+        for v in (total_expected, verified, halted, dropped)
+    ):
         return VerificationResult(
             False,
             "Summary counts must be non-negative integers.",
@@ -456,7 +490,9 @@ def verify_cohort_receipt(
             str(sig_block.get("key_id") or ""),
             len(leaf_digests),
         )
-    if verified + halted + dropped != total_expected or total_expected != len(leaf_digests):
+    if verified + halted + dropped != total_expected or total_expected != len(
+        leaf_digests
+    ):
         return VerificationResult(
             False,
             "Summary counts do not reconcile with total_expected and Merkle leaf count.",
@@ -492,12 +528,20 @@ def verify_cohort_receipt(
     key_id = str(sig_block.get("key_id") or "")
     sig_b64 = sig_block.get("signature_b64")
     if not isinstance(sig_b64, str) or not sig_b64:
-        return VerificationResult(False, "Missing signature_b64.", recomputed_root, key_id, len(leaf_digests))
+        return VerificationResult(
+            False, "Missing signature_b64.", recomputed_root, key_id, len(leaf_digests)
+        )
 
     try:
         sig_bytes = base64.b64decode(sig_b64)
     except ValueError:
-        return VerificationResult(False, "Malformed base64 signature.", recomputed_root, key_id, len(leaf_digests))
+        return VerificationResult(
+            False,
+            "Malformed base64 signature.",
+            recomputed_root,
+            key_id,
+            len(leaf_digests),
+        )
 
     verify_key: Optional[Ed25519PublicKey] = public_key
     if verify_key is None and public_key_path is not None:
@@ -515,7 +559,9 @@ def verify_cohort_receipt(
                 len(leaf_digests),
             )
         try:
-            verify_key = Ed25519PublicKey.from_public_bytes(base64.b64decode(embedded_b64))
+            verify_key = Ed25519PublicKey.from_public_bytes(
+                base64.b64decode(embedded_b64)
+            )
         except ValueError as exc:
             return VerificationResult(
                 False,
@@ -534,7 +580,10 @@ def verify_cohort_receipt(
             key_id,
             len(leaf_digests),
         )
-    if sig_block.get("fingerprint_sha256") and sig_block["fingerprint_sha256"] != expected_fp:
+    if (
+        sig_block.get("fingerprint_sha256")
+        and sig_block["fingerprint_sha256"] != expected_fp
+    ):
         return VerificationResult(
             False,
             "Public key fingerprint mismatch.",

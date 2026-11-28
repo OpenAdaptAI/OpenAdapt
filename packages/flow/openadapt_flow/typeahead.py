@@ -118,9 +118,7 @@ def disambiguate_candidates(
     primary_matches = [
         cand
         for cand in candidates
-        if _matches_key(
-            cand, primary_key, primary_value, allow_label_fallback=True
-        )
+        if _matches_key(cand, primary_key, primary_value, allow_label_fallback=True)
     ]
     if not primary_matches:
         return DisambiguationResult(

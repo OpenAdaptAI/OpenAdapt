@@ -21,7 +21,9 @@ from openadapt_flow.backends.factory import build_backend
 from openadapt_flow.deployment import BackendConfig
 
 
-def _png(size: tuple[int, int] = (1280, 800), color: tuple[int, int, int] = (240, 240, 240)) -> bytes:
+def _png(
+    size: tuple[int, int] = (1280, 800), color: tuple[int, int, int] = (240, 240, 240)
+) -> bytes:
     img = Image.new("RGB", size, color)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -96,7 +98,9 @@ class _FakePage:
 
     def locator(self, selector: str) -> _FakeLocator:
         if self.canvas is None:
-            return _FakeLocator(_FakeCanvas(bbox={"x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0}))
+            return _FakeLocator(
+                _FakeCanvas(bbox={"x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0})
+            )
         assert selector == self.expected_selector
         return _FakeLocator(self.canvas)
 
@@ -145,7 +149,9 @@ class _SimulatedAppBackend:
         low = chord.lower()
         if low.endswith("+v"):
             pasted = self._clip.value or ""
-            self.field_text = self._corrupt_paste if self._corrupt_paste is not None else pasted
+            self.field_text = (
+                self._corrupt_paste if self._corrupt_paste is not None else pasted
+            )
         elif low.endswith("+c"):
             self._clip.value = self.field_text
 
@@ -248,7 +254,9 @@ def test_mixed_canvas_dom_backend_switches_tabs():
     dom_page = _FakePage(has_canvas=False)
     canvas_backend = CanvasBrowserBackend(canvas_page)
 
-    mixed = MixedCanvasDOMBackend(dom_backend=dom_backend, canvas_backend=canvas_backend)
+    mixed = MixedCanvasDOMBackend(
+        dom_backend=dom_backend, canvas_backend=canvas_backend
+    )
     assert mixed.active_mode == "dom"
     mixed.click(50, 60)
     assert dom_backend.clicks == [(50, 60)]

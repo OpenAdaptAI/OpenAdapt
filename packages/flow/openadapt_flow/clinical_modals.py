@@ -154,7 +154,9 @@ class ModalPolicyPack:
                     continue
                 matched.extend(btn_hits)
 
-            if not (rule.all_text_terms or rule.any_text_terms or rule.any_button_terms):
+            if not (
+                rule.all_text_terms or rule.any_text_terms or rule.any_button_terms
+            ):
                 continue
 
             if rule.disposition is ModalDisposition.HALT_FOR_HUMAN:
@@ -165,10 +167,13 @@ class ModalPolicyPack:
                     matched_terms=tuple(matched),
                     recommended_button=None,
                     requires_human=True,
-                    reason=rule.description or f"policy rule {rule.rule_id} requires human review",
+                    reason=rule.description
+                    or f"policy rule {rule.rule_id} requires human review",
                 )
 
-            rec_btn = _find_matching_button(modal.buttons, rule.recommended_button_terms)
+            rec_btn = _find_matching_button(
+                modal.buttons, rule.recommended_button_terms
+            )
             if rule.recommended_button_terms and rec_btn is None:
                 return ModalClassification(
                     category=rule.category,

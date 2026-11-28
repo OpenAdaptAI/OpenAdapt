@@ -375,13 +375,19 @@ def mutate_pixel_frame(
         elif y0 - pad - ch >= 0:
             dx, dy = x0, y0 - pad - ch
         else:
-            dx = max(0, min(width - cw, (x0 + max(4, cw // 2)) % max(1, width - cw + 1)))
-            dy = max(0, min(height - ch, (y0 + max(4, ch // 2)) % max(1, height - ch + 1)))
+            dx = max(
+                0, min(width - cw, (x0 + max(4, cw // 2)) % max(1, width - cw + 1))
+            )
+            dy = max(
+                0, min(height - ch, (y0 + max(4, ch // 2)) % max(1, height - ch + 1))
+            )
         img.paste(crop, (dx, dy))
         # Ensure the destination region visibly differs even on a uniform canvas.
         if img.tobytes() == Image.open(io.BytesIO(frame_png)).convert("RGBA").tobytes():
             draw = ImageDraw.Draw(img)
-            draw.rectangle((dx, dy, dx + cw - 1, dy + ch - 1), outline=(220, 38, 38, 255))
+            draw.rectangle(
+                (dx, dy, dx + cw - 1, dy + ch - 1), outline=(220, 38, 38, 255)
+            )
     elif fault_kind == "wrong_identity":
         target_box = identifier_region if identifier_region is not None else region
         x0, y0, x1, y1 = _clamp_box(target_box, width, height)
@@ -451,7 +457,7 @@ class PixelSurfaceFaultDriver:
             frame = capture()
         except Exception:  # noqa: BLE001
             return None
-        return frame if isinstance(frame, (bytes, bytearray)) and frame else None
+        return bytes(frame) if isinstance(frame, (bytes, bytearray)) and frame else None
 
     def _publish_mutated_frame(
         self,

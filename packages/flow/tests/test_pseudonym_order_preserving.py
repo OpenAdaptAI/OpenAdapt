@@ -149,4 +149,7 @@ class TestOrderPreservingNumericRankTokenization:
     def test_placeholders_noop_parity(self) -> None:
         ph = Placeholders()
         assert ph.numeric_token("$25,000") == "<ORD_NUM>"
-        assert ph.seed_numeric(["$10", "$20"]) == {"$10": "<ORD_NUM>", "$20": "<ORD_NUM>"}
+        assert ph.seed_numeric(["$10", "$20"]) == {
+            "$10": "<ORD_NUM>",
+            "$20": "<ORD_NUM>",
+        }

@@ -172,7 +172,9 @@ class TestPixelSurfaceFaultDriver:
         driver.cleanup(backend)
         assert backend.screenshot() == frame
 
-    def test_ambiguity_clones_target_pixels_and_wrong_identity_alters_id_box(self) -> None:
+    def test_ambiguity_clones_target_pixels_and_wrong_identity_alters_id_box(
+        self,
+    ) -> None:
         frame = _make_sample_frame()
         amb_png = mutate_pixel_frame(
             frame,

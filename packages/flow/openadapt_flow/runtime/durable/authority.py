@@ -406,9 +406,7 @@ class DurableAuthority:
         """Reject a lexical authority path that crosses a link or junction."""
         from openadapt_flow.path_safety import canonicalize_platform_root_symlinks
 
-        parent = canonicalize_platform_root_symlinks(
-            self._configured_db_path.parent
-        )
+        parent = canonicalize_platform_root_symlinks(self._configured_db_path.parent)
         current = Path(parent.anchor)
         for component in parent.parts[1:]:
             current /= component

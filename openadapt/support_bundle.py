@@ -252,7 +252,9 @@ def _redact_file_bytes(rel_path: Path, raw: bytes, scrub: TextScrubber) -> bytes
         try:
             doc = json.loads(text)
             cleaned = _scrub_json_value(doc, scrub)
-            return (json.dumps(cleaned, indent=2, sort_keys=True) + "\n").encode("utf-8")
+            return (json.dumps(cleaned, indent=2, sort_keys=True) + "\n").encode(
+                "utf-8"
+            )
         except ValueError:
             return scrub(text).encode("utf-8")
 
@@ -299,8 +301,8 @@ def create_support_bundle(
     if not source_dir.is_dir():
         raise SupportBundleError(f"Run directory does not exist: {source_dir}")
 
-    target_zip = (out_path or default_output_path(source_dir)).expanduser().resolve(
-        strict=False
+    target_zip = (
+        (out_path or default_output_path(source_dir)).expanduser().resolve(strict=False)
     )
     if not target_zip.name.endswith(".approved.zip"):
         target_zip = target_zip.with_name(f"{target_zip.stem}.approved.zip")
@@ -385,7 +387,10 @@ def verify_support_bundle(bundle_path: Path) -> BundleVerifyResult:
                 False, f"Malformed {MANIFEST_FILENAME}: {exc}", 0, bundle_sha
             )
 
-        if not isinstance(manifest, dict) or manifest.get("schema") != SUPPORT_BUNDLE_SCHEMA:
+        if (
+            not isinstance(manifest, dict)
+            or manifest.get("schema") != SUPPORT_BUNDLE_SCHEMA
+        ):
             return BundleVerifyResult(
                 False,
                 f"Unsupported manifest schema: {manifest.get('schema') if isinstance(manifest, dict) else None!r}.",

@@ -63,9 +63,7 @@ _CURRENCY_PREFIX = re.compile(
     r"^(?:USD|CAD|EUR|GBP|AUD|CHF|JPY|CNY|\$|€|£|¥)\s*",
     re.IGNORECASE,
 )
-_NUMERIC_BODY = re.compile(
-    r"^(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?$|^\.\d+$"
-)
+_NUMERIC_BODY = re.compile(r"^(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?$|^\.\d+$")
 
 
 def parse_canonical_number(value: str | int | float | Decimal) -> Optional[Decimal]:

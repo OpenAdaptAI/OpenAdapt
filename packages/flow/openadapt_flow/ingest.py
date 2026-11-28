@@ -466,9 +466,7 @@ def _read_literal_string(buf: bytes, start: int) -> tuple[str, int]:
     return out.decode("latin-1", errors="replace"), idx
 
 
-def _extract_text_from_content_stream(
-    content: bytes, cmap: Mapping[bytes, str]
-) -> str:
+def _extract_text_from_content_stream(content: bytes, cmap: Mapping[bytes, str]) -> str:
     """Linear-time parser for PDF text operators (``Tj``, ``TJ``, ``'``, ``"``)."""
     cid_widths = tuple(sorted({len(k) for k in cmap}, reverse=True)) if cmap else ()
     n = len(content)
@@ -524,9 +522,7 @@ def _extract_text_from_content_stream(
                     if end == -1:
                         idx = n
                         break
-                    s = _decode_pdf_hex_string(
-                        content[idx + 1 : end], cmap, cid_widths
-                    )
+                    s = _decode_pdf_hex_string(content[idx + 1 : end], cmap, cid_widths)
                     arr.append(("str", s))
                     idx = end + 1
                 else:
@@ -614,9 +610,7 @@ def _extract_text_from_content_stream(
             if chunks and not chunks[-1].endswith("\n"):
                 chunks.append("\n")
             operands.clear()
-        elif tok and (
-            (48 <= tok[0] <= 57) or tok[0] in (ord("+"), ord("-"), ord("."))
-        ):
+        elif tok and ((48 <= tok[0] <= 57) or tok[0] in (ord("+"), ord("-"), ord("."))):
             operands.append(("num", tok))
         else:
             operands.clear()
@@ -761,7 +755,9 @@ def ingest_csv(
     all_rows = [tuple(cell for cell in row) for row in reader]
 
     headers: tuple[str, ...] = all_rows[0] if all_rows else ()
-    body_rows: tuple[tuple[str, ...], ...] = tuple(all_rows[1:]) if len(all_rows) > 1 else ()
+    body_rows: tuple[tuple[str, ...], ...] = (
+        tuple(all_rows[1:]) if len(all_rows) > 1 else ()
+    )
     table = TableData(name=table_name, headers=headers, rows=body_rows)
 
     spans: list[SpanAnchor] = []
@@ -817,9 +813,7 @@ def _read_xlsx_stdlib(data: bytes) -> list[TableData]:
         if "xl/sharedStrings.xml" in names:
             ss_root = ET.fromstring(zf.read("xl/sharedStrings.xml"))
             for si in ss_root.findall(f"{ns_main}si"):
-                parts = [
-                    elem.text or "" for elem in si.iter(f"{ns_main}t")
-                ]
+                parts = [elem.text or "" for elem in si.iter(f"{ns_main}t")]
                 shared_strings.append("".join(parts))
 
         # Resolve sheet names and target paths from workbook.xml + rels.
@@ -864,9 +858,7 @@ def _read_xlsx_stdlib(data: bytes) -> list[TableData]:
                     c_type = c_el.attrib.get("t", "")
                     val = ""
                     if c_type == "inlineStr":
-                        val = "".join(
-                            t.text or "" for t in c_el.iter(f"{ns_main}t")
-                        )
+                        val = "".join(t.text or "" for t in c_el.iter(f"{ns_main}t"))
                     else:
                         v_el = c_el.find(f"{ns_main}v")
                         raw_v = v_el.text if v_el is not None and v_el.text else ""
@@ -903,7 +895,7 @@ def ingest_xlsx(
 
     if use_openpyxl:
         try:
-            import openpyxl  # type: ignore[import-not-found]
+            import openpyxl  # type: ignore[import-not-found, import-untyped]
 
             wb = openpyxl.load_workbook(
                 io.BytesIO(data), read_only=True, data_only=True
@@ -917,7 +909,9 @@ def ingest_xlsx(
                     ]
                     headers = rows[0] if rows else ()
                     body = tuple(rows[1:]) if len(rows) > 1 else ()
-                    tables.append(TableData(name=sheet_name, headers=headers, rows=body))
+                    tables.append(
+                        TableData(name=sheet_name, headers=headers, rows=body)
+                    )
                 backend = "openpyxl"
             finally:
                 wb.close()
@@ -983,7 +977,9 @@ def ingest_file(
         return ingest_xlsx(file_path)
     if suffix in (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"):
         if ocr_hook is None:
-            raise ValueError(f"ocr_hook is required to ingest image file {file_path.name}")
+            raise ValueError(
+                f"ocr_hook is required to ingest image file {file_path.name}"
+            )
         return ingest_ocr(
             file_path.read_bytes(),
             ocr_hook,

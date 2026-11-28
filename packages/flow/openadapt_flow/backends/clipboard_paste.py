@@ -51,7 +51,9 @@ class ClipboardAdapter(Protocol):
 class HostClipboard:
     """Best-effort host OS clipboard adapter (macOS, Linux, Windows)."""
 
-    def __init__(self, *, platform: Optional[str] = None, timeout_s: float = 5.0) -> None:
+    def __init__(
+        self, *, platform: Optional[str] = None, timeout_s: float = 5.0
+    ) -> None:
         self._platform = platform or sys.platform
         self._timeout_s = timeout_s
 
@@ -158,7 +160,9 @@ def _default_ocr_text(png: bytes, region: Optional[tuple[int, int, int, int]]) -
     from openadapt_flow import vision
 
     lines = vision.ocr(png, region=region)
-    return " ".join(line.text for line in lines or [] if getattr(line, "text", "")).strip()
+    return " ".join(
+        line.text for line in lines or [] if getattr(line, "text", "")
+    ).strip()
 
 
 def paste_and_verify(
@@ -170,7 +174,9 @@ def paste_and_verify(
     select_all_chord: str = "ControlOrMeta+a",
     copy_chord: str = "ControlOrMeta+c",
     verify_mode: str = "select_all_copy",
-    ocr_reader: Optional[Callable[[bytes, Optional[tuple[int, int, int, int]]], str]] = None,
+    ocr_reader: Optional[
+        Callable[[bytes, Optional[tuple[int, int, int, int]]], str]
+    ] = None,
     region: Optional[tuple[int, int, int, int]] = None,
     settle_s: float = 0.0,
 ) -> PasteVerifyResult:
@@ -228,14 +234,20 @@ def paste_and_verify(
                 time.sleep(settle_s)
             observed = clip.read_text()
             verified = observed == text
-            error = None if verified else "clipboard readback did not match pasted value exactly"
+            error = (
+                None
+                if verified
+                else "clipboard readback did not match pasted value exactly"
+            )
         else:
             clip.clear()
             png = backend.screenshot()
             reader = ocr_reader if ocr_reader is not None else _default_ocr_text
             observed = reader(png, region)
             verified = observed == text
-            error = None if verified else "exact OCR readback did not match pasted value"
+            error = (
+                None if verified else "exact OCR readback did not match pasted value"
+            )
     finally:
         # Always zero first so sensitive text is overwritten even if restore fails.
         try:

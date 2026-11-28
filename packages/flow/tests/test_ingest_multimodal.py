@@ -248,7 +248,9 @@ class TestOcrConfidenceGating:
         assert len(checked) == 3
         assert len(flagged) == 2
         assert checked[0].low_confidence is True
-        assert "critical_ocr_confidence_below_threshold" in (checked[0].gate_reason or "")
+        assert "critical_ocr_confidence_below_threshold" in (
+            checked[0].gate_reason or ""
+        )
         assert checked[1].low_confidence is True
         assert checked[2].low_confidence is False
 

@@ -78,7 +78,9 @@ def _load_target_doc(target: Path) -> dict[str, Any]:
         try:
             doc = json.loads(target.read_text(encoding="utf-8"))
         except ValueError as exc:
-            raise LocalQualifyError(f"Target {target} is not valid JSON: {exc}") from exc
+            raise LocalQualifyError(
+                f"Target {target} is not valid JSON: {exc}"
+            ) from exc
         if not isinstance(doc, dict):
             raise LocalQualifyError(f"Target {target} must contain a JSON object.")
         return doc
@@ -107,7 +109,11 @@ def _has_explicit_save_step(doc: dict[str, Any]) -> bool:
                 continue
             kind = str(step.get("kind") or step.get("action") or "").lower()
             role = str(step.get("role") or "").lower()
-            if kind in ("save", "commit", "submit") or role in ("save", "commit", "submit"):
+            if kind in ("save", "commit", "submit") or role in (
+                "save",
+                "commit",
+                "submit",
+            ):
                 return True
             if step.get("is_commit") is True or step.get("is_save") is True:
                 return True
@@ -140,7 +146,11 @@ def _extract_readback_results(
     def _consume(container: dict[str, Any]) -> None:
         readback = container.get("readback") or container.get("persisted_state")
         if isinstance(readback, dict):
-            fields_map = readback.get("fields") if isinstance(readback.get("fields"), dict) else readback
+            fields_map = (
+                readback.get("fields")
+                if isinstance(readback.get("fields"), dict)
+                else readback
+            )
             for fname, fval in fields_map.items():
                 if fname in ("reload_verified", "method", "channel", "timestamp"):
                     continue

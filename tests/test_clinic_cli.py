@@ -192,7 +192,10 @@ def test_qualify_local_autosave_and_explicit_save(tmp_path: Path) -> None:
     assert autosave_report.qualified is True
     assert autosave_report.save_mode == "autosave"
     assert autosave_report.requires_save_button is False
-    assert autosave_report.persisted_fields_verified == ("status_code", "effective_date")
+    assert autosave_report.persisted_fields_verified == (
+        "status_code",
+        "effective_date",
+    )
 
     # CLI invocation via `openadapt qualify --local --inline-save --json`.
     runner = CliRunner()
@@ -516,9 +519,13 @@ def test_support_bundle_redaction_determinism_and_verify(
         encoding="utf-8",
     )
     # Excluded files that must never enter the support bundle:
-    (run_dir / "receipt.private.json").write_text('{"openings": "secret"}\n', encoding="utf-8")
+    (run_dir / "receipt.private.json").write_text(
+        '{"openings": "secret"}\n', encoding="utf-8"
+    )
     (run_dir / "screen.png").write_bytes(b"\x89PNG\r\n\x1a\nraw-pixels")
-    (run_dir / "signing.pem").write_text("-----BEGIN PRIVATE KEY-----\n", encoding="utf-8")
+    (run_dir / "signing.pem").write_text(
+        "-----BEGIN PRIVATE KEY-----\n", encoding="utf-8"
+    )
 
     out_a = tmp_path / "bundle-a.approved.zip"
     out_b = tmp_path / "bundle-b.approved.zip"

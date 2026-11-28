@@ -433,7 +433,9 @@ def init_trust_key(
                 priv_path.unlink()
         except Exception as exc:
             if storage == "keychain":
-                raise TrustInitError(f"Failed to store key in OS keystore: {exc}") from exc
+                raise TrustInitError(
+                    f"Failed to store key in OS keystore: {exc}"
+                ) from exc
             selected_backend = None
 
     if selected_backend is None:
@@ -481,7 +483,9 @@ def load_trust_metadata(key_dir: Optional[Path] = None) -> dict[str, Any]:
     try:
         doc = json.loads(metadata_path.read_text(encoding="utf-8"))
     except ValueError as exc:
-        raise TrustInitError(f"Malformed trust metadata at {metadata_path}: {exc}") from exc
+        raise TrustInitError(
+            f"Malformed trust metadata at {metadata_path}: {exc}"
+        ) from exc
     if not isinstance(doc, dict) or doc.get("schema") != TRUST_METADATA_SCHEMA:
         raise TrustInitError(f"Unsupported trust metadata schema in {metadata_path}.")
     return doc

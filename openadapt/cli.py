@@ -2904,7 +2904,9 @@ def cohort_receipt_cmd(
         try:
             doc = json.loads(verify_path.read_text(encoding="utf-8"))
         except ValueError as exc:
-            raise click.ClickException(f"Malformed JSON in {verify_path}: {exc}") from None
+            raise click.ClickException(
+                f"Malformed JSON in {verify_path}: {exc}"
+            ) from None
         try:
             ver = verify_cohort_receipt(
                 doc,
@@ -2926,7 +2928,9 @@ def cohort_receipt_cmd(
         return
 
     if worklist is None:
-        raise click.UsageError("Provide --worklist to build a cohort receipt, or --verify FILE to verify one.")
+        raise click.UsageError(
+            "Provide --worklist to build a cohort receipt, or --verify FILE to verify one."
+        )
 
     try:
         manifest = build_cohort_receipt(
