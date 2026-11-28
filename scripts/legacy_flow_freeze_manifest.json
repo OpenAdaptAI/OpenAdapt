@@ -1,5 +1,5 @@
 {
-  "about": "Legacy flow freeze manifest enforced by scripts/check_legacy_flow_freeze.py. New commit-boundary, staging, healing, and shadow-to-autopilot work belongs in packages/kernel (openadapt-kernel). Frozen legacy stacks in packages/flow may shrink or receive bug/security fixes, but must not add new Python modules, new top-level openadapt-flow CLI commands, or new launcher imports. Deleted Wave 1 stacks (form_tx/) must not be re-created. wrap/, flight/, and readiness/ are active subsystems (not frozen). See docs/architecture/KERNEL_CONSOLIDATION.md.",
+  "about": "Freeze manifest enforced by scripts/check_legacy_flow_freeze.py. NOTE (2026-11-27): Wave 2 wholesale deletions in docs/architecture/KERNEL_CONSOLIDATION.md are cancelled. wrap/, flight/, readiness/, hooks/, txplan/, and shadow*.py provide distinct capabilities and are active subsystems (not frozen and not slated for deletion). Only deleted Wave 1 stacks (form_tx/) and frozen experimental stacks (tx/, agent_guard/) are restricted here.",
   "deleted_directories": [
     "form_tx"
   ],
@@ -18,19 +18,6 @@
       "tx/types.py",
       "tx/wire_tap.py"
     ],
-    "txplan": [
-      "txplan/__init__.py",
-      "txplan/__main__.py",
-      "txplan/adapters.py",
-      "txplan/audit.py",
-      "txplan/cli.py",
-      "txplan/engine.py",
-      "txplan/proxy.py",
-      "txplan/proxy_cli.py",
-      "txplan/scoped.py",
-      "txplan/spec.py",
-      "txplan/state.py"
-    ],
     "agent_guard": [
       "agent_guard/__init__.py",
       "agent_guard/approval_fields.py",
@@ -46,23 +33,9 @@
       "agent_guard/screen_values.py",
       "agent_guard/session.py",
       "agent_guard/shadow_hold.py"
-    ],
-    "hooks": [
-      "hooks/__init__.py",
-      "hooks/__main__.py",
-      "hooks/agents.py",
-      "hooks/classify.py",
-      "hooks/cli.py",
-      "hooks/engine.py",
-      "hooks/install.py",
-      "hooks/systems.py"
     ]
   },
-  "frozen_root_shadow_modules": [
-    "shadow.py",
-    "shadow_db.py",
-    "shadow_report.py"
-  ],
+  "frozen_root_shadow_modules": [],
   "frozen_flow_cli_commands": [
     "admit",
     "api",

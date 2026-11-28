@@ -229,24 +229,25 @@ def check_it(tmp_path_factory: pytest.TempPathFactory, module_durable_authority)
             ROOT_ENV,
         )
     }
-    os.environ["OPENADAPT_HOME"] = str(home)
-    os.environ["OPENADAPT_BUNDLE_KEY"] = BUNDLE_KEY
-    # The person's answers are signed by Desktop's registered approver key,
-    # and the run verifies them against this key directory.
-    key_dir = work / "approver-keys"
-    os.environ[KEY_DIR_ENV] = str(key_dir)
-    os.environ[KEY_PASSPHRASE_ENV] = approver_keys.PASSPHRASE
-    approver_key, _signer = approver_keys.provision(key_dir)
-    # Desktop's runs pin the roster's root (approval_mode/approver_roster).
-    os.environ[ROOT_ENV] = approver_keys.root_of(key_dir)
-    env = {
-        **os.environ,
-        "OPENADAPT_HOME": str(home),
-        "OPENADAPT_BUNDLE_KEY": BUNDLE_KEY,
-    }
-    base_url, _db, stop = serve()
+    stop = None
     observer_patch = pytest.MonkeyPatch()
     try:
+        os.environ["OPENADAPT_HOME"] = str(home)
+        os.environ["OPENADAPT_BUNDLE_KEY"] = BUNDLE_KEY
+        # The person's answers are signed by Desktop's registered approver key,
+        # and the run verifies them against this key directory.
+        key_dir = work / "approver-keys"
+        os.environ[KEY_DIR_ENV] = str(key_dir)
+        os.environ[KEY_PASSPHRASE_ENV] = approver_keys.PASSPHRASE
+        approver_key, _signer = approver_keys.provision(key_dir)
+        # Desktop's runs pin the roster's root (approval_mode/approver_roster).
+        os.environ[ROOT_ENV] = approver_keys.root_of(key_dir)
+        env = {
+            **os.environ,
+            "OPENADAPT_HOME": str(home),
+            "OPENADAPT_BUNDLE_KEY": BUNDLE_KEY,
+        }
+        base_url, _db, stop = serve()
         recording = record_tutorial(base_url, work / "recording")
         plain = work / "compiled"
         workflow = compile_recording(
@@ -436,7 +437,8 @@ def check_it(tmp_path_factory: pytest.TempPathFactory, module_durable_authority)
         )
     finally:
         observer_patch.undo()
-        stop()
+        if stop is not None:
+            stop()
         for name, value in saved_env.items():
             if value is None:
                 os.environ.pop(name, None)

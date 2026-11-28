@@ -1,27 +1,20 @@
 #!/usr/bin/env python3
-"""Enforce the freeze boundary on overlapping legacy stacks in packages/flow.
+"""Enforce the freeze boundary on deleted/experimental stacks in packages/flow.
 
-New commit-boundary verification, macro staging, stepwise live-DOM healing, and
-shadow-to-autopilot work belongs in ``packages/kernel`` (``openadapt-kernel``).
-The overlapping legacy guard/transaction stacks in ``packages/flow`` listed in
-``scripts/legacy_flow_freeze_manifest.json`` remain in place for compatibility
-with ``openadapt-flow 4.0.0`` and existing callers, and may shrink or receive
-bug/security fixes, but must not grow new surfaces:
+NOTE (2026-11-27): Wholesale Wave 2 deletions in docs/architecture/KERNEL_CONSOLIDATION.md
+are cancelled. ``wrap/``, ``flight/``, ``readiness/``, ``hooks/``, ``txplan/``, and
+``shadow*.py`` hold distinct capabilities and are active subsystems (not frozen and
+not slated for deletion).
 
-1. No re-creation of deleted legacy stacks (``form_tx/``).
+This script enforces:
+1. No re-creation of deleted Wave 1 stacks (``form_tx/``).
 2. No new Python modules under remaining frozen directories (``tx/``,
-   ``txplan/``, ``agent_guard/``, ``hooks/``) or new root ``shadow*.py`` files
-   in ``openadapt_flow/``.
-3. No new top-level ``openadapt-flow`` CLI commands beyond the frozen set in
+   ``agent_guard/``) listed in ``scripts/legacy_flow_freeze_manifest.json``.
+3. No new top-level ``openadapt-flow`` CLI commands beyond the snapshot in
    ``packages/flow/tests/fixtures/cli_surface.json``.
-4. No new references from ``openadapt/`` to frozen or deleted legacy flow
-   stacks beyond the existing allowlist.
+4. No new references from ``openadapt/`` to frozen or deleted stacks beyond the
+   existing allowlist.
 5. Zero ``openadapt_flow`` imports inside ``packages/kernel/src/openadapt_kernel``.
-
-Note: ``wrap/`` (``openadapt wrap``), ``flight/`` (``openadapt flight``), and
-``readiness/`` (shadow scorecard) are active subsystems and are not frozen.
-
-Deleting files or commands is always allowed.
 
 Usage: python3 scripts/check_legacy_flow_freeze.py [--root PATH]
 """
@@ -85,14 +78,16 @@ def check_frozen_modules(root: Path, manifest: dict) -> list[str]:
                 "Add new runtime capabilities in packages/kernel/ instead."
             )
 
-    allowed_shadow = set(manifest["frozen_root_shadow_modules"])
-    actual_shadow = {p.name for p in flow_pkg.glob("shadow*.py")}
-    for name in sorted(actual_shadow - allowed_shadow):
-        violations.append(
-            f"Frozen legacy shadow stack gained new module "
-            f"packages/flow/openadapt_flow/{name}. "
-            "Add new shadow-to-autopilot work in packages/kernel/ instead."
-        )
+    raw_shadow = manifest.get("frozen_root_shadow_modules")
+    if raw_shadow:
+        allowed_shadow = set(raw_shadow)
+        actual_shadow = {p.name for p in flow_pkg.glob("shadow*.py")}
+        for name in sorted(actual_shadow - allowed_shadow):
+            violations.append(
+                f"Frozen legacy shadow stack gained new module "
+                f"packages/flow/openadapt_flow/{name}. "
+                "Add new shadow-to-autopilot work in packages/kernel/ instead."
+            )
 
     return violations
 
@@ -129,7 +124,7 @@ def check_launcher_imports(root: Path, manifest: dict) -> list[str]:
     frozen_stacks = (
         list(manifest.get("deleted_directories", []))
         + list(manifest["frozen_directories"].keys())
-        + ["shadow"]
+        + (["shadow"] if manifest.get("frozen_root_shadow_modules") else [])
     )
     allowed_map: dict[str, set[str]] = {
         k: set(v) for k, v in manifest["allowed_launcher_imports"].items()
