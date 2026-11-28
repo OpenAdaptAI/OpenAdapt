@@ -146,6 +146,46 @@ def __getattr__(name: str):
 
         return locals()[name]
 
+    # Unified SimplexTransducer runtime (stdlib-only at import time)
+    if name in (
+        "AppCartridge",
+        "AtomicCartridgeStore",
+        "DecisionRequest",
+        "DecisionResponse",
+        "EpisodeState",
+        "Obligation",
+        "ObligationKind",
+        "OpaqueCredentialVault",
+        "SagaState",
+        "SimplexTransducer",
+        "SpanAnchor",
+        "SupervisorConfig",
+        "TransducerAction",
+        "TransducerReceipt",
+        "TrustLevel",
+        "WriteAheadSagaLog",
+    ):
+        from openadapt.simplex_transducer import (  # noqa: F401
+            AppCartridge,
+            AtomicCartridgeStore,
+            DecisionRequest,
+            DecisionResponse,
+            EpisodeState,
+            Obligation,
+            ObligationKind,
+            OpaqueCredentialVault,
+            SagaState,
+            SimplexTransducer,
+            SpanAnchor,
+            SupervisorConfig,
+            TransducerAction,
+            TransducerReceipt,
+            TrustLevel,
+            WriteAheadSagaLog,
+        )
+
+        return locals()[name]
+
     # Demo library lives in openadapt-evals
     if name == "DemoLibrary":
         try:
@@ -173,6 +213,23 @@ __all__ = [
     "WrapLedger",
     "WrapOutcome",
     "verify_wrap_receipt",
+    # Unified SimplexTransducer runtime
+    "AppCartridge",
+    "AtomicCartridgeStore",
+    "DecisionRequest",
+    "DecisionResponse",
+    "EpisodeState",
+    "Obligation",
+    "ObligationKind",
+    "OpaqueCredentialVault",
+    "SagaState",
+    "SimplexTransducer",
+    "SpanAnchor",
+    "SupervisorConfig",
+    "TransducerAction",
+    "TransducerReceipt",
+    "TrustLevel",
+    "WriteAheadSagaLog",
     # From kernel (canonical runtime)
     "CommitInterceptor",
     "ObligationLedger",

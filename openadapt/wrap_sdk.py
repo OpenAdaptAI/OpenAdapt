@@ -2098,11 +2098,22 @@ def wrap(
     agent_id: str = "agent",
     workdir: str | Path | None = None,
     name: str | None = None,
+    supervisor_config: Any = None,
+    decision_resolver: Callable[..., Any] | None = None,
+    vault: Any = None,
+    wal: Any = None,
+    cartridge_store: Any = None,
+    cartridge: Any = None,
+    rung3_verifier: Callable[..., Any] | None = None,
+    rung2_verifier: Callable[..., Any] | None = None,
+    reopen_executor: Callable[..., Any] | None = None,
 ) -> Any:
     """Wrap a Python function, coroutine, tool, or agent with commit-boundary checks.
 
-    Supports both direct calls (``safe_fn = openadapt.wrap(fn, ...)``) and
-    decorator syntax (``@openadapt.wrap`` or ``@openadapt.wrap(pinned=...)``).
+    Supports direct calls (``safe_fn = openadapt.wrap(fn, ...)``), decorator
+    syntax (``@openadapt.wrap`` or ``@openadapt.wrap(pinned=...)``),
+    ``.run``/``.step`` agent objects, and ``BenchmarkAgent`` objects exposing
+    ``.act(observation, task, history)`` (backed by ``SimplexTransducer``).
     """
     if check is not None and expect is not None:
         raise ValueError("pass either check= or expect=, not both")
@@ -2154,6 +2165,26 @@ def wrap(
     )
 
     def _apply(obj: Any) -> Any:
+        if (
+            not inspect.isclass(obj)
+            and not inspect.isroutine(obj)
+            and callable(getattr(obj, "act", None))
+        ):
+            from openadapt.simplex_transducer import SimplexTransducer
+
+            return SimplexTransducer(
+                obj,
+                config=supervisor_config,
+                decision_resolver=decision_resolver,
+                vault=vault,
+                wal=wal,
+                cartridge_store=cartridge_store,
+                cartridge=cartridge,
+                rung3_verifier=rung3_verifier,
+                rung2_verifier=rung2_verifier,
+                reopen_executor=reopen_executor,
+                pinned=resolved_pinned,
+            )
         if callable(obj) and not inspect.isclass(obj):
             action_name = (
                 name
