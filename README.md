@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-openadapt.ai-0ea5e9)](https://docs.openadapt.ai)
 
-[Website](https://openadapt.ai) · [Docs](https://docs.openadapt.ai) · [Chrome Extension](https://chromewebstore.google.com/detail/openadapt-co-pilot/bcpliibliddclnibacbjbmbpgffkjefd) · [Live Demo](https://app.openadapt.ai/demo) · [Proof](https://openadapt.ai/proof) · [Discord](https://discord.gg/yF527cQbDG)
+[Website](https://openadapt.ai) · [Docs](https://docs.openadapt.ai) · [Chrome Extension](https://chromewebstore.google.com/detail/openadapt-co-pilot/bcpliibliddclnibacbjbmbpgffkjefd) · [Watch Real Runs](https://app.openadapt.ai/demo) · [Proof](https://openadapt.ai/proof) · [Discord](https://discord.gg/yF527cQbDG)
 
 </div>
 

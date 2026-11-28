@@ -1524,6 +1524,9 @@ def test_v030_onboarding_standalone_ux_and_zero_egress_invariants() -> None:
         "https://openadapt.ai/privacy-policy",
     ):
         assert url in html, f"Missing ecosystem link {url}"
+    assert html.count("Watch real runs &rarr;") == 2
+    assert "sample portal" not in html.lower()
+    assert "sample portal" not in js.lower()
 
     # No raw native-host jargon or scary error prefix
     assert "Native channel notice:" not in js

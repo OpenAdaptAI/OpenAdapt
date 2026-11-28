@@ -910,7 +910,7 @@
     } else {
       inspectResultEl.removeAttribute('data-tone');
       summary.textContent =
-        'No form fields detected on this page. Open a web form or try the sample portal.';
+        'No form fields detected on this page. Open any web form to inspect its fields locally.';
     }
     inspectResultEl.appendChild(summary);
 
@@ -962,7 +962,7 @@
         updateOnboardingSteps();
       } else if (resp && resp.error === 'no_web_page') {
         renderInspectionError(
-          'Open any http/https web form tab (or try the sample portal), then click Inspect this page.'
+          'Open any http/https web form tab, then click Inspect this page.'
         );
       } else {
         renderInspectionError(
