@@ -35,11 +35,11 @@ jobs:
           python-version: "3.12"
       - name: Install kernel dependencies and headless Chromium
         run: |
-          uv sync --extra browser --extra dev
-          uv run playwright install chromium
+          uv sync --locked --extra browser --extra dev
+          uv run --no-sync playwright install chromium
       - name: Lint with ruff
-        run: uv run ruff check src tests
+        run: uv run --no-sync ruff check src tests
       - name: Typecheck with mypy
-        run: uv run mypy --ignore-missing-imports src
+        run: uv run --no-sync mypy --ignore-missing-imports src
       - name: Run full test suite
-        run: uv run pytest tests -q
+        run: uv run --no-sync pytest tests -q
