@@ -2107,6 +2107,13 @@ def wrap(
     rung3_verifier: Callable[..., Any] | None = None,
     rung2_verifier: Callable[..., Any] | None = None,
     reopen_executor: Callable[..., Any] | None = None,
+    macro_store: Any = None,
+    regression_test_runner: Callable[[], tuple[bool, str]] | None = None,
+    protected_oracle_paths: Collection[str] = (),
+    workspace_root: str = "",
+    item_auditor: Callable[[str, str], bool] | None = None,
+    on_stall_escalate: Callable[..., None] | None = None,
+    micro_handoff_resolver: Callable[..., Any] | None = None,
 ) -> Any:
     """Wrap a Python function, coroutine, tool, or agent with commit-boundary checks.
 
@@ -2184,6 +2191,13 @@ def wrap(
                 rung2_verifier=rung2_verifier,
                 reopen_executor=reopen_executor,
                 pinned=resolved_pinned,
+                macro_store=macro_store,
+                regression_test_runner=regression_test_runner,
+                protected_oracle_paths=protected_oracle_paths,
+                workspace_root=workspace_root,
+                item_auditor=item_auditor,
+                on_stall_escalate=on_stall_escalate,
+                micro_handoff_resolver=micro_handoff_resolver,
             )
         if callable(obj) and not inspect.isclass(obj):
             action_name = (
