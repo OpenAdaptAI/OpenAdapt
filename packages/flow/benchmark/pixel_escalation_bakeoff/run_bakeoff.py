@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
-"""Reproducible 4-arm pixel-only grounding escalation bakeoff harness.
+"""Reproducible pixel-only grounding escalation bakeoff harness.
 
-Evaluates four grounding arms on pixel-only UI fixtures (scaled, dark-themed,
-blank-field, look-alike rows, and pixel-cropped choice_widgets captures):
+Evaluates grounding arms on synthetic pixel-only UI fixtures (scaled,
+dark-themed, blank-field, look-alike rows, and pixel-cropped choice_widgets
+captures):
 
 - Arm A (`arm_a_local_template_dinov2`): Local OpenCV template match plus
   DINOv2-small ONNX (`LocalGroundingModel`) with strict count-never-pick
   look-alike abstention.
+- Arm B (`arm_b_constellation_plus_dinov2`): Arm A first, falling back to
+  scale-normalized OCR constellation grounding (`ConstellationGrounder`) when
+  Arm A abstains. Runs 100% locally with zero network egress.
 - Arm C (`arm_c_lan_remote_vlm`): LAN `RemoteGrounder` when `OPENADAPT_VLM_URL`
   (or `OPENADAPT_FLOW_VLM_URL`) is configured; otherwise `skipped_no_credentials`.
 - Arm D Raw (`arm_d_zdr_vlm_raw`): `ZdrVlmGrounder` without Synthetic-Twin
-  masking when `OPENADAPT_ZDR_VLM_URL` is configured; otherwise
-  `skipped_no_credentials`.
+  masking (Pass 1 cold VLM call + Pass 2 warm `HealedAnchorCache`).
 - Arm D Masked (`arm_d_zdr_vlm_masked`): `ZdrVlmGrounder` with
-  `SyntheticTwinProjector` visual masking and `HealedAnchorCache` when
-  `OPENADAPT_ZDR_VLM_URL` is configured; otherwise `skipped_no_credentials`.
+  `SyntheticTwinProjector` visual masking and `HealedAnchorCache` (Pass 1 cold
+  VLM call + Pass 2 warm `HealedAnchorCache`).
 
 Hard safety gate: `wrong_clicks` must equal 0 for every measured arm.
 """
@@ -42,6 +45,10 @@ if str(PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(PKG_ROOT))
 
 from openadapt_flow.ir import Region  # noqa: E402
+from openadapt_flow.runtime.constellation_grounder import (  # noqa: E402
+    ConstellationGrounder,
+    capture_constellation,
+)
 from openadapt_flow.runtime.grounder import GrounderMatch  # noqa: E402
 from openadapt_flow.runtime.local_grounder import (  # noqa: E402
     LocalGroundingModel,
@@ -83,6 +90,8 @@ class BakeoffCase:
     intent: str
     ocr_text: Optional[str]
     template_png: bytes
+    recorded_png: bytes
+    recorded_target_box: Region
     live_png: bytes
     target_box: Region
     distractor_boxes: tuple[Region, ...]
@@ -208,6 +217,8 @@ def _render_scaled_submit_case() -> BakeoffCase:
         intent="Click the Submit button for Ada Lovelace",
         ocr_text="Submit",
         template_png=template_png,
+        recorded_png=_to_png(rec),
+        recorded_target_box=rec_btn,
         live_png=_to_png(live),
         target_box=target_box,
         distractor_boxes=(cancel_box,),
@@ -306,6 +317,8 @@ def _render_dark_theme_icon_case() -> BakeoffCase:
         intent="Click the Attach paperclip icon in the toolbar",
         ocr_text=None,
         template_png=template_png,
+        recorded_png=_to_png(rec),
+        recorded_target_box=rec_icon,
         live_png=_to_png(live),
         target_box=target_box,
         distractor_boxes=(distractor_box,),
@@ -364,6 +377,8 @@ def _render_blank_field_case() -> BakeoffCase:
         intent="Click the blank Date of Birth input field",
         ocr_text="Date of Birth",
         template_png=template_png,
+        recorded_png=_to_png(rec),
+        recorded_target_box=rec_field,
         live_png=_to_png(live),
         target_box=fields[1][1],
         distractor_boxes=(fields[0][1], fields[2][1]),
@@ -380,9 +395,15 @@ def _render_lookalike_rows_case() -> BakeoffCase:
         ("Ada Lovelace", "MRN-482910", "1988-04-14"),
         ("Katherine Johnson", "MRN-603841", "1975-08-26"),
     ]
-    # Recorded template from a single Open button
+    # Recorded full worklist screenshot with Ada Lovelace in row 0
     rec = Image.new("RGB", (720, 360), (255, 255, 255))
     rd = ImageDraw.Draw(rec)
+    rd.rectangle((0, 0, 720, 44), fill=(235, 240, 248))
+    rd.text((24, 14), "Patient Worklist", fill=(25, 35, 50), font=_font(16))
+    rd.rectangle((16, 80, 704, 130), fill=(248, 250, 253), outline=(218, 224, 232), width=1)
+    rd.text((28, 96), "Ada Lovelace", fill=(25, 30, 40), font=_font(15))
+    rd.text((230, 96), "MRN-482910", fill=(55, 65, 80), font=_font(15))
+    rd.text((390, 96), "1988-04-14", fill=(55, 65, 80), font=_font(15))
     rec_btn: Region = (590, 90, 86, 30)
     rd.rounded_rectangle(
         (590, 90, 676, 120),
@@ -436,6 +457,8 @@ def _render_lookalike_rows_case() -> BakeoffCase:
         intent="Click Open in the row for Ada Lovelace (MRN-482910)",
         ocr_text="Open",
         template_png=template_png,
+        recorded_png=_to_png(rec),
+        recorded_target_box=rec_btn,
         live_png=_to_png(live),
         target_box=target_box,
         distractor_boxes=tuple(distractors),
@@ -446,9 +469,30 @@ def _render_lookalike_rows_case() -> BakeoffCase:
 
 def _render_choice_widget_select2_case() -> BakeoffCase:
     """Pixel-cropped Select2 dropdown widget capture (125% scale)."""
-    # Recorded 100% option row
-    rec = Image.new("RGB", (420, 280), (255, 255, 255))
+    # Recorded 100% Select2 capture with full dropdown context
+    rec = Image.new("RGB", (420, 280), (248, 250, 252))
     rd = ImageDraw.Draw(rec)
+    rd.text(
+        (20, 14),
+        "Department for Ada Lovelace (1988-04-14)",
+        fill=(30, 35, 45),
+        font=_font(14),
+    )
+    rd.rectangle(
+        (20, 44, 384, 76), fill=(255, 255, 255), outline=(90, 130, 210), width=2
+    )
+    rd.text((30, 54), "Select department...", fill=(110, 120, 135), font=_font(13))
+    rd.rectangle(
+        (20, 78, 384, 248), fill=(255, 255, 255), outline=(180, 190, 205), width=2
+    )
+    for idx, opt in enumerate(["Neurology", "Cardiology", "Oncology", "Pediatrics"]):
+        oy = 90 + idx * 38
+        if opt == "Cardiology":
+            continue
+        rd.rectangle(
+            (30, oy, 370, oy + 32), fill=(255, 255, 255), outline=(220, 226, 235), width=1
+        )
+        rd.text((42, oy + 8), opt, fill=(20, 35, 65), font=_font(15))
     rec_opt: Region = (30, 128, 340, 32)
     rd.rectangle(
         (30, 128, 370, 160), fill=(232, 242, 255), outline=(120, 165, 230), width=1
@@ -503,6 +547,8 @@ def _render_choice_widget_select2_case() -> BakeoffCase:
         intent="Select Cardiology in the Select2 department dropdown",
         ocr_text="Cardiology",
         template_png=template_png,
+        recorded_png=_to_png(rec),
+        recorded_target_box=rec_opt,
         live_png=_to_png(live),
         target_box=target_box,
         distractor_boxes=tuple(distractors),
@@ -515,6 +561,23 @@ def _render_choice_widget_aria_listbox_case() -> BakeoffCase:
     """Pixel-cropped ARIA listbox widget capture in dark theme."""
     rec = Image.new("RGB", (400, 260), (255, 255, 255))
     rd = ImageDraw.Draw(rec)
+    rd.text(
+        (16, 12),
+        "Patient: Ada Lovelace  ada.lovelace@clinic.example",
+        fill=(25, 30, 40),
+        font=_font(13),
+    )
+    rd.text((16, 40), "Gender (ARIA listbox)", fill=(60, 70, 85), font=_font(14))
+    rd.rectangle((16, 64, 360, 232), fill=(250, 252, 255), outline=(170, 180, 195), width=2)
+    for idx, opt in enumerate(["Male", "Female", "Other", "Decline to state"]):
+        oy = 70 + idx * 38
+        if opt == "Female":
+            continue
+        rd.rectangle(
+            (28, oy, 348, oy + 34), fill=(255, 255, 255), outline=(180, 190, 205), width=1
+        )
+        rd.ellipse((40, oy + 10, 54, oy + 24), outline=(40, 90, 200), width=2)
+        rd.text((64, oy + 9), opt, fill=(25, 30, 40), font=_font(15))
     rec_opt: Region = (28, 108, 320, 34)
     rd.rectangle(
         (28, 108, 348, 142), fill=(240, 244, 250), outline=(140, 150, 170), width=1
@@ -569,6 +632,8 @@ def _render_choice_widget_aria_listbox_case() -> BakeoffCase:
         intent="Choose Female in the Gender ARIA listbox",
         ocr_text="Female",
         template_png=template_png,
+        recorded_png=_to_png(rec),
+        recorded_target_box=rec_opt,
         live_png=_to_png(live),
         target_box=target_box,
         distractor_boxes=tuple(distractors),
@@ -712,6 +777,101 @@ def _run_arm_a(cases: list[BakeoffCase]) -> dict[str, Any]:
     }
 
 
+def _run_arm_b(cases: list[BakeoffCase]) -> dict[str, Any]:
+    """Arm B: Arm A (template + DINOv2) with ConstellationGrounder fallback."""
+    local_model: Optional[LocalGroundingModel] = None
+    execution_mode = "local_constellation_plus_dinov2"
+    try:
+        local_model = LocalGroundingModel.load(download=False)
+    except (WeightsUnavailable, Exception):
+        execution_mode = "local_constellation_plus_template"
+
+    constellations = {
+        case.case_id: capture_constellation(
+            case.recorded_png,
+            case.recorded_target_box,
+            intent=case.case_id,
+        )
+        for case in cases
+    }
+    constellation_grounder = ConstellationGrounder(constellations)
+
+    per_case: list[dict[str, Any]] = []
+    latencies: list[float] = []
+    resolved = 0
+    abstained = 0
+    wrong_clicks = 0
+
+    for case in cases:
+        t0 = time.perf_counter()
+        match = _template_match_only(case.live_png, case.template_png)
+        source = "template" if match is not None else "none"
+        candidates_count = 0
+
+        if match is None and local_model is not None:
+            cands = local_model.locate_anchor(case.live_png, case.template_png)
+            candidates_count = len(cands)
+            if len(cands) == 1:
+                c = cands[0]
+                match = GrounderMatch(
+                    point=c.point,
+                    region=c.region,
+                    confidence=c.score,
+                )
+                source = "dinov2"
+
+        if match is None:
+            cmatch = constellation_grounder.locate(
+                case.live_png, case.case_id, ocr_text=None
+            )
+            if cmatch is not None:
+                match = cmatch
+                source = "constellation"
+
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        latencies.append(elapsed_ms)
+        outcome = _score_point(case, match)
+        if outcome == "resolved":
+            resolved += 1
+        elif outcome == "abstained":
+            abstained += 1
+        else:
+            wrong_clicks += 1
+
+        per_case.append(
+            {
+                "case_id": case.case_id,
+                "category": case.category,
+                "outcome": outcome,
+                "source": source,
+                "dinov2_candidates": candidates_count,
+                "constellation_tokens": len(constellations[case.case_id].tokens),
+                "latency_ms": round(elapsed_ms, 2),
+                "point": list(match.point) if match is not None else None,
+            }
+        )
+
+    total = len(cases)
+    return {
+        "arm": "arm_b_constellation_plus_dinov2",
+        "execution_mode": execution_mode,
+        "status": "measured",
+        "cases_total": total,
+        "resolved": resolved,
+        "abstained": abstained,
+        "wrong_clicks": wrong_clicks,
+        "resolved_rate": round(resolved / total, 4) if total else 0.0,
+        "human_interventions_per_100": round((abstained / total) * 100.0, 2)
+        if total
+        else 0.0,
+        "avg_latency_ms": round(sum(latencies) / len(latencies), 2)
+        if latencies
+        else 0.0,
+        "cache_hit_rate": 0.0,
+        "per_case": per_case,
+    }
+
+
 def _skipped_arm(
     arm: str, execution_mode: str, env_var: str, total: int
 ) -> dict[str, Any]:
@@ -801,54 +961,132 @@ def _run_arm_c(cases: list[BakeoffCase]) -> dict[str, Any]:
     }
 
 
-def _run_arm_d(cases: list[BakeoffCase], *, masked: bool) -> dict[str, Any]:
-    """Arm D: ZdrVlmGrounder raw or Synthetic-Twin masked when OPENADAPT_ZDR_VLM_URL is set."""
+def _resolve_arm_d_config(
+    *, allow_non_zdr_synthetic: bool
+) -> Optional[dict[str, Any]]:
+    """Resolve Arm D endpoint config without exposing any secret values."""
+    url = (os.environ.get("OPENADAPT_ZDR_VLM_URL") or "").strip()
+    timeout = float(os.environ.get("OPENADAPT_ZDR_VLM_TIMEOUT", "30.0"))
+    if url:
+        model = (os.environ.get("OPENADAPT_ZDR_VLM_MODEL") or "gpt-4o").strip()
+        api_key = (os.environ.get("OPENADAPT_ZDR_VLM_API_KEY") or "").strip()
+        if allow_non_zdr_synthetic:
+            req_hdr = False
+            zdr_verified = False
+            provider = "custom_non_zdr_synthetic_only"
+        else:
+            req_hdr = (
+                os.environ.get("OPENADAPT_ZDR_REQUIRE_HEADER") or "1"
+            ).strip().lower() not in ("0", "false", "no")
+            zdr_verified = req_hdr
+            provider = "zdr_vlm_endpoint"
+        return {
+            "url": url,
+            "model": model,
+            "api_key": api_key,
+            "timeout": timeout,
+            "require_zdr_header": req_hdr,
+            "zdr_verified": zdr_verified,
+            "provider": provider,
+        }
+
+    if not allow_non_zdr_synthetic:
+        return None
+
+    preferred = (os.environ.get("OPENADAPT_BAKEOFF_PROVIDER") or "").strip().lower()
+    openai_key = (os.environ.get("OPENAI_API_KEY") or "").strip()
+    together_key = (os.environ.get("TOGETHERAI_API_KEY") or "").strip()
+
+    if preferred == "together" and together_key:
+        return {
+            "url": "https://api.together.xyz/v1",
+            "model": (
+                os.environ.get("OPENADAPT_ZDR_VLM_MODEL")
+                or "Qwen/Qwen2.5-VL-72B-Instruct"
+            ).strip(),
+            "api_key": together_key,
+            "timeout": timeout,
+            "require_zdr_header": False,
+            "zdr_verified": False,
+            "provider": "together_standard_synthetic_only",
+        }
+    if openai_key:
+        return {
+            "url": "https://api.openai.com/v1",
+            "model": (os.environ.get("OPENADAPT_ZDR_VLM_MODEL") or "gpt-4o").strip(),
+            "api_key": openai_key,
+            "timeout": timeout,
+            "require_zdr_header": False,
+            "zdr_verified": False,
+            "provider": "openai_standard_synthetic_only",
+        }
+    if together_key:
+        return {
+            "url": "https://api.together.xyz/v1",
+            "model": (
+                os.environ.get("OPENADAPT_ZDR_VLM_MODEL")
+                or "Qwen/Qwen2.5-VL-72B-Instruct"
+            ).strip(),
+            "api_key": together_key,
+            "timeout": timeout,
+            "require_zdr_header": False,
+            "zdr_verified": False,
+            "provider": "together_standard_synthetic_only",
+        }
+    return None
+
+
+def _run_arm_d(
+    cases: list[BakeoffCase],
+    *,
+    masked: bool,
+    allow_non_zdr_synthetic: bool = False,
+) -> dict[str, Any]:
+    """Arm D: ZdrVlmGrounder raw or Synthetic-Twin masked (Pass 1 cold + Pass 2 warm cache)."""
     arm_name = "arm_d_zdr_vlm_masked" if masked else "arm_d_zdr_vlm_raw"
     mode_name = "zdr_vlm_synthetic_twin_masked" if masked else "zdr_vlm_raw"
-    url = (os.environ.get("OPENADAPT_ZDR_VLM_URL") or "").strip()
-    if not url:
+    cfg = _resolve_arm_d_config(allow_non_zdr_synthetic=allow_non_zdr_synthetic)
+    if cfg is None:
         return _skipped_arm(arm_name, mode_name, "OPENADAPT_ZDR_VLM_URL", len(cases))
-
-    model = (os.environ.get("OPENADAPT_ZDR_VLM_MODEL") or "gpt-4o").strip()
-    api_key = (os.environ.get("OPENADAPT_ZDR_VLM_API_KEY") or "").strip()
-    timeout = float(os.environ.get("OPENADAPT_ZDR_VLM_TIMEOUT", "10.0"))
-    req_hdr = (
-        os.environ.get("OPENADAPT_ZDR_REQUIRE_HEADER") or "1"
-    ).strip().lower() not in (
-        "0",
-        "false",
-        "no",
-    )
 
     cache = HealedAnchorCache()
     per_case: list[dict[str, Any]] = []
-    latencies: list[float] = []
-    resolved = 0
-    abstained = 0
-    wrong_clicks = 0
+    pass1_latencies: list[float] = []
+    pass2_latencies: list[float] = []
+    p1_resolved = 0
+    p1_abstained = 0
+    p1_wrong_clicks = 0
+    p1_http_calls = 0
+    p2_resolved = 0
+    p2_abstained = 0
+    p2_wrong_clicks = 0
+    p2_http_calls = 0
+    p2_cache_hits = 0
     total_masked_boxes = 0
     total_raw_leaks = 0
 
+    grounders: list[ZdrVlmGrounder] = []
+    pass1_rows: list[dict[str, Any]] = []
+
+    # Pass 1: cold VLM calls
     for case in cases:
         projector = SyntheticTwinProjector(case.dossier, seed=42) if masked else None
         grounder = ZdrVlmGrounder(
-            endpoint_url=url,
-            model=model,
-            api_key=api_key,
+            endpoint_url=cfg["url"],
+            model=cfg["model"],
+            api_key=cfg["api_key"],
             projector=projector,
             ocr_provider=(lambda _png, boxes=case.ocr_boxes: boxes) if masked else None,
-            require_zdr_header=req_hdr,
-            timeout=timeout,
+            require_zdr_header=cfg["require_zdr_header"],
+            timeout=cfg["timeout"],
             healed_anchor_cache=cache,
         )
+        grounders.append(grounder)
         t0 = time.perf_counter()
         match = grounder.locate(case.live_png, case.intent, ocr_text=case.ocr_text)
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
-        latencies.append(elapsed_ms)
-
-        # Second pass checks anchor cache reuse at $0.
-        if match is not None:
-            _ = grounder.locate(case.live_png, case.intent, ocr_text=case.ocr_text)
+        pass1_latencies.append(elapsed_ms)
+        p1_http_calls += grounder.stats.http_calls
 
         if grounder.last_mask_report is not None:
             total_masked_boxes += grounder.last_mask_report.masked_box_count
@@ -856,41 +1094,106 @@ def _run_arm_d(cases: list[BakeoffCase], *, masked: bool) -> dict[str, Any]:
 
         outcome = _score_point(case, match)
         if outcome == "resolved":
-            resolved += 1
+            p1_resolved += 1
         elif outcome == "abstained":
-            abstained += 1
+            p1_abstained += 1
         else:
-            wrong_clicks += 1
+            p1_wrong_clicks += 1
 
-        per_case.append(
+        pass1_rows.append(
             {
                 "case_id": case.case_id,
                 "category": case.category,
-                "outcome": outcome,
-                "latency_ms": round(elapsed_ms, 2),
-                "http_calls": grounder.stats.http_calls,
-                "cache_hits": grounder.stats.cache_hits,
-                "point": list(match.point) if match is not None else None,
+                "pass_1_outcome": outcome,
+                "pass_1_latency_ms": round(elapsed_ms, 2),
+                "pass_1_http_calls": grounder.stats.http_calls,
+                "pass_1_point": list(match.point) if match is not None else None,
+            }
+        )
+
+    # Pass 2: warm HealedAnchorCache reuse
+    for case, grounder, row in zip(cases, grounders, pass1_rows):
+        http_before = grounder.stats.http_calls
+        hits_before = grounder.stats.cache_hits
+        t0 = time.perf_counter()
+        match2 = grounder.locate(case.live_png, case.intent, ocr_text=case.ocr_text)
+        elapsed2_ms = (time.perf_counter() - t0) * 1000.0
+        pass2_latencies.append(elapsed2_ms)
+
+        delta_http = grounder.stats.http_calls - http_before
+        delta_hits = grounder.stats.cache_hits - hits_before
+        p2_http_calls += delta_http
+        p2_cache_hits += delta_hits
+
+        outcome2 = _score_point(case, match2)
+        if outcome2 == "resolved":
+            p2_resolved += 1
+        elif outcome2 == "abstained":
+            p2_abstained += 1
+        else:
+            p2_wrong_clicks += 1
+
+        per_case.append(
+            {
+                "case_id": row["case_id"],
+                "category": row["category"],
+                "outcome": row["pass_1_outcome"],
+                "latency_ms": row["pass_1_latency_ms"],
+                "http_calls": row["pass_1_http_calls"],
+                "point": row["pass_1_point"],
+                "pass_2_outcome": outcome2,
+                "pass_2_latency_ms": round(elapsed2_ms, 2),
+                "pass_2_http_calls": delta_http,
+                "pass_2_cache_hit": delta_hits > 0,
+                "pass_2_point": list(match2.point) if match2 is not None else None,
             }
         )
 
     total = len(cases)
+    pass_1_summary = {
+        "resolved": p1_resolved,
+        "abstained": p1_abstained,
+        "wrong_clicks": p1_wrong_clicks,
+        "resolved_rate": round(p1_resolved / total, 4) if total else 0.0,
+        "human_interventions_per_100": round((p1_abstained / total) * 100.0, 2)
+        if total
+        else 0.0,
+        "avg_latency_ms": round(sum(pass1_latencies) / len(pass1_latencies), 2)
+        if pass1_latencies
+        else 0.0,
+        "api_calls": p1_http_calls,
+    }
+    pass_2_summary = {
+        "resolved": p2_resolved,
+        "abstained": p2_abstained,
+        "wrong_clicks": p2_wrong_clicks,
+        "resolved_rate": round(p2_resolved / total, 4) if total else 0.0,
+        "cache_hits": p2_cache_hits,
+        "cache_hit_rate": round(p2_cache_hits / total, 4) if total else 0.0,
+        "avg_latency_ms": round(sum(pass2_latencies) / len(pass2_latencies), 2)
+        if pass2_latencies
+        else 0.0,
+        "api_calls": p2_http_calls,
+    }
     result: dict[str, Any] = {
         "arm": arm_name,
         "execution_mode": mode_name,
         "status": "measured",
+        "provider": cfg["provider"],
+        "model": cfg["model"],
+        "require_zdr_header": cfg["require_zdr_header"],
+        "zdr_verified": cfg["zdr_verified"],
+        "synthetic_fixtures_only": True,
         "cases_total": total,
-        "resolved": resolved,
-        "abstained": abstained,
-        "wrong_clicks": wrong_clicks,
-        "resolved_rate": round(resolved / total, 4) if total else 0.0,
-        "human_interventions_per_100": round((abstained / total) * 100.0, 2)
-        if total
-        else 0.0,
-        "avg_latency_ms": round(sum(latencies) / len(latencies), 2)
-        if latencies
-        else 0.0,
-        "cache_hit_rate": round(cache.hit_rate, 4),
+        "resolved": p1_resolved,
+        "abstained": p1_abstained,
+        "wrong_clicks": p1_wrong_clicks,
+        "resolved_rate": pass_1_summary["resolved_rate"],
+        "human_interventions_per_100": pass_1_summary["human_interventions_per_100"],
+        "avg_latency_ms": pass_1_summary["avg_latency_ms"],
+        "cache_hit_rate": pass_2_summary["cache_hit_rate"],
+        "pass_1_cold": pass_1_summary,
+        "pass_2_warm_cache": pass_2_summary,
         "per_case": per_case,
     }
     if masked:
@@ -933,14 +1236,17 @@ def _run_local_mask_audit(cases: list[BakeoffCase]) -> dict[str, Any]:
     }
 
 
-def run_bakeoff() -> dict[str, Any]:
-    """Run all 4 arms and return the JSON scoreboard."""
+def run_bakeoff(*, allow_non_zdr_synthetic: bool = False) -> dict[str, Any]:
+    """Run all configured arms and return the JSON scoreboard."""
     cases = build_cases()
     arms = [
         _run_arm_a(cases),
+        _run_arm_b(cases),
         _run_arm_c(cases),
-        _run_arm_d(cases, masked=False),
-        _run_arm_d(cases, masked=True),
+        _run_arm_d(
+            cases, masked=False, allow_non_zdr_synthetic=allow_non_zdr_synthetic
+        ),
+        _run_arm_d(cases, masked=True, allow_non_zdr_synthetic=allow_non_zdr_synthetic),
     ]
     hard_gate_ok = all(
         arm["wrong_clicks"] == 0 for arm in arms if arm["status"] == "measured"
@@ -948,6 +1254,8 @@ def run_bakeoff() -> dict[str, Any]:
     return {
         "schema": SCHEMA,
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "synthetic_fixtures_only": True,
+        "allow_non_zdr_synthetic": allow_non_zdr_synthetic,
         "cases": [{"case_id": c.case_id, "category": c.category} for c in cases],
         "hard_gate_zero_wrong_clicks": hard_gate_ok,
         "local_synthetic_twin_mask_audit": _run_local_mask_audit(cases),
@@ -957,7 +1265,7 @@ def run_bakeoff() -> dict[str, Any]:
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Run the 4-arm pixel-only grounding escalation bakeoff."
+        description="Run the pixel-only grounding escalation bakeoff."
     )
     parser.add_argument(
         "--output",
@@ -965,8 +1273,17 @@ def main(argv: Optional[list[str]] = None) -> int:
         default=None,
         help="Optional path to write the JSON scoreboard.",
     )
+    parser.add_argument(
+        "--allow-non-zdr-synthetic",
+        action="store_true",
+        default=False,
+        help=(
+            "Allow calling standard non-ZDR OpenAI/Together endpoints on the "
+            "100% synthetic bakeoff fixtures (records zdr_verified=false)."
+        ),
+    )
     args = parser.parse_args(argv)
-    scoreboard = run_bakeoff()
+    scoreboard = run_bakeoff(allow_non_zdr_synthetic=args.allow_non_zdr_synthetic)
     rendered = json.dumps(scoreboard, indent=2)
     if args.output is not None:
         args.output.parent.mkdir(parents=True, exist_ok=True)
