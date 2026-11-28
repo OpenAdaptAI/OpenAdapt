@@ -279,6 +279,12 @@ _SECTION_HEADER_RE = re.compile(
     r"Container:\s*(.+))$",
     re.IGNORECASE,
 )
+_FILE_PATH_RE = re.compile(r"\b[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+\b")
+_NON_DISTRIBUTE_RE = re.compile(
+    r"\b(?:do\s+not\s+(?:distribute|share|forward)|keep\s+(?:this\s+)?strictly\s+between|"
+    r"strictly\s+confidential|confidential)\b",
+    re.IGNORECASE,
+)
 
 
 def _utc_now_iso() -> str:
@@ -336,6 +342,16 @@ def _action_raw_dict(action: Any) -> dict[str, Any]:
     return {}
 
 
+def _quantize_coord(val: Any) -> Any:
+    """Coarsely quantize pointer coordinates so 1-10px jitter hashes identically."""
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        return val
+    f = float(val)
+    if 0.0 <= f <= 1.0:
+        return round(f, 1)
+    return int(f // 40)
+
+
 def _commit_fingerprint(action: Any) -> str:
     """Compute a deterministic content fingerprint for a commit action."""
     raw = _action_raw_dict(action)
@@ -345,7 +361,14 @@ def _commit_fingerprint(action: Any) -> str:
     if isinstance(explicit, str) and explicit.strip():
         return explicit.strip()
 
-    filtered_raw = {k: v for k, v in raw.items() if k not in _VOLATILE_FINGERPRINT_KEYS}
+    filtered_raw: dict[str, Any] = {}
+    for k, v in raw.items():
+        if k in _VOLATILE_FINGERPRINT_KEYS:
+            continue
+        if k in ("x", "y"):
+            filtered_raw[k] = _quantize_coord(v)
+        else:
+            filtered_raw[k] = v
     target_node_id = _extract_attr_or_key(action, "target_node_id", None)
     target_name = _extract_attr_or_key(action, "target_name", None)
     target_role = _extract_attr_or_key(action, "target_role", None)
@@ -372,14 +395,14 @@ def _commit_fingerprint(action: Any) -> str:
     has_semantic_payload = any(
         k in canonical
         for k in ("target_node_id", "target_name", "text", "answer", "entities")
-    ) or bool({k for k in filtered_raw if k != "is_commit"})
+    ) or bool({k for k in filtered_raw if k not in ("is_commit", "x", "y")})
     if not has_semantic_payload:
         x = _extract_attr_or_key(action, "x", None)
         y = _extract_attr_or_key(action, "y", None)
         if x is not None:
-            canonical["x"] = x
+            canonical["x"] = _quantize_coord(x)
         if y is not None:
-            canonical["y"] = y
+            canonical["y"] = _quantize_coord(y)
     return _sha256_hex(canonical)
 
 
@@ -901,7 +924,9 @@ class SourceItem:
     text: str
     entities: set[str] = field(default_factory=set)
     raw_entities: list[str] = field(default_factory=list)
+    file_paths: list[str] = field(default_factory=list)
     is_task_anchored: bool = False
+    is_restricted: bool = False
 
 
 @dataclass
@@ -1958,11 +1983,28 @@ class SimplexTransducer:
 
         raw_entities: list[str] = []
         seen_low: set[str] = set()
-        for ent in explicit_entities + _extract_proper_nouns(text):
+        extracted_pns = list(explicit_entities) + _extract_proper_nouns(text)
+        # Standalone single-token capitalized item (e.g. a person name record "Janice")
+        stripped_text = text.strip(" ,.;:!?()[]{}\"'")
+        if (
+            stripped_text
+            and " " not in stripped_text
+            and re.fullmatch(r"[A-Z][a-z]{2,}", stripped_text)
+            and stripped_text.lower() not in _GRAMMATICAL_STOPWORDS
+            and stripped_text.lower() not in _WEEKDAYS_AND_MONTHS
+        ):
+            extracted_pns.append(stripped_text)
+
+        file_paths = list(dict.fromkeys(_FILE_PATH_RE.findall(text)))
+        for fp in file_paths:
+            extracted_pns.append(fp)
+
+        for ent in extracted_pns:
             low = ent.strip().lower()
             if low and low not in seen_low and low not in _GRAMMATICAL_STOPWORDS:
                 seen_low.add(low)
                 raw_entities.append(ent.strip())
+        is_restricted = bool(_NON_DISTRIBUTE_RE.search(text))
         state.source_items.append(
             SourceItem(
                 item_id=item_id,
@@ -1970,55 +2012,84 @@ class SimplexTransducer:
                 text=text,
                 entities=seen_low,
                 raw_entities=raw_entities,
+                file_paths=file_paths,
                 is_task_anchored=False,
+                is_restricted=is_restricted,
             )
         )
+
+    def _ingest_container_body_unlocked(
+        self,
+        state: EpisodeState,
+        *,
+        cid_str: str,
+        body: Any,
+        depth: int = 0,
+    ) -> None:
+        if depth > 4:
+            return
+        if isinstance(body, Mapping):
+            list_fields = [
+                (k, v)
+                for k, v in body.items()
+                if isinstance(v, Sequence) and not isinstance(v, (str, bytes))
+            ]
+            if list_fields:
+                for sub_key, seq in list_fields:
+                    sub_cid = f"{cid_str}.{sub_key}"
+                    for item in seq:
+                        if isinstance(item, Mapping):
+                            nested_lists = [
+                                (nk, nv)
+                                for nk, nv in item.items()
+                                if isinstance(nv, Sequence)
+                                and not isinstance(nv, (str, bytes))
+                            ]
+                            if nested_lists:
+                                label = str(
+                                    item.get("contact")
+                                    or item.get("channel")
+                                    or item.get("name")
+                                    or item.get("title")
+                                    or item.get("id")
+                                    or sub_key
+                                ).strip()
+                                for _nk, nseq in nested_lists:
+                                    for sub_item in nseq:
+                                        self._index_source_item_unlocked(
+                                            state,
+                                            container_id=f"{cid_str}.{label}",
+                                            raw_item=sub_item,
+                                        )
+                                continue
+                        self._index_source_item_unlocked(
+                            state, container_id=sub_cid, raw_item=item
+                        )
+            else:
+                self._index_source_item_unlocked(
+                    state, container_id=cid_str, raw_item=body
+                )
+        elif isinstance(body, Sequence) and not isinstance(body, (str, bytes)):
+            for item in body:
+                self._index_source_item_unlocked(
+                    state, container_id=cid_str, raw_item=item
+                )
+        elif isinstance(body, str) and body.strip():
+            chunks = [
+                p.strip(" -*\t")
+                for p in re.split(r"\n\s*\n|\n(?=\s*[-*•]\s+)", body.strip())
+                if p.strip(" -*\t")
+            ]
+            for chunk in chunks:
+                self._index_source_item_unlocked(
+                    state, container_id=cid_str, raw_item=chunk
+                )
 
     def _ingest_containers_unlocked(self, state: EpisodeState, containers: Any) -> None:
         if isinstance(containers, Mapping):
             for cid, body in containers.items():
                 cid_str = str(cid).strip() or "container"
-                if isinstance(body, Mapping):
-                    nested = None
-                    for list_key in (
-                        "items",
-                        "records",
-                        "messages",
-                        "notes",
-                        "events",
-                        "entries",
-                        "emails",
-                    ):
-                        cand = body.get(list_key)
-                        if isinstance(cand, Sequence) and not isinstance(
-                            cand, (str, bytes)
-                        ):
-                            nested = cand
-                            break
-                    if nested is not None:
-                        for item in nested:
-                            self._index_source_item_unlocked(
-                                state, container_id=cid_str, raw_item=item
-                            )
-                    else:
-                        self._index_source_item_unlocked(
-                            state, container_id=cid_str, raw_item=body
-                        )
-                elif isinstance(body, Sequence) and not isinstance(body, (str, bytes)):
-                    for item in body:
-                        self._index_source_item_unlocked(
-                            state, container_id=cid_str, raw_item=item
-                        )
-                elif isinstance(body, str) and body.strip():
-                    chunks = [
-                        p.strip(" -*\t")
-                        for p in re.split(r"\n\s*\n|\n(?=\s*[-*•]\s+)", body.strip())
-                        if p.strip(" -*\t")
-                    ]
-                    for chunk in chunks:
-                        self._index_source_item_unlocked(
-                            state, container_id=cid_str, raw_item=chunk
-                        )
+                self._ingest_container_body_unlocked(state, cid_str=cid_str, body=body)
         elif isinstance(containers, Sequence) and not isinstance(
             containers, (str, bytes)
         ):
@@ -2032,31 +2103,9 @@ class SimplexTransducer:
                         or entry.get("app")
                         or f"container-{idx + 1}"
                     ).strip()
-                    nested = None
-                    for list_key in (
-                        "items",
-                        "records",
-                        "messages",
-                        "notes",
-                        "events",
-                        "entries",
-                        "emails",
-                    ):
-                        cand = entry.get(list_key)
-                        if isinstance(cand, Sequence) and not isinstance(
-                            cand, (str, bytes)
-                        ):
-                            nested = cand
-                            break
-                    if nested is not None:
-                        for item in nested:
-                            self._index_source_item_unlocked(
-                                state, container_id=cid_str, raw_item=item
-                            )
-                    else:
-                        self._index_source_item_unlocked(
-                            state, container_id=cid_str, raw_item=entry
-                        )
+                    self._ingest_container_body_unlocked(
+                        state, cid_str=cid_str, body=entry
+                    )
 
     def _ingest_task_and_containers_unlocked(
         self,
@@ -2069,42 +2118,44 @@ class SimplexTransducer:
         task_prompt = ""
         if isinstance(raw_cfg, Mapping):
             task_prompt = str(raw_cfg.get("task_prompt") or "").strip()
-        full_instr = instr
-        if task_prompt and task_prompt not in full_instr:
-            full_instr = (
-                f"{full_instr}\n{task_prompt}".strip() if full_instr else task_prompt
-            )
 
-        if full_instr and full_instr != state.task_instruction_indexed:
-            state.task_instruction_indexed = full_instr
-            # Parse structured app sections if embedded in instruction (2+ headers).
-            lines = full_instr.splitlines()
-            headers: list[tuple[int, str]] = []
-            for idx, line in enumerate(lines):
-                m = _SECTION_HEADER_RE.match(line.strip())
-                if m:
-                    hdr = next(g for g in m.groups() if g is not None).strip()
-                    headers.append((idx, hdr))
-            if len(headers) >= 2:
-                directive_lines = lines[: headers[0][0]]
-                for h_idx, (line_no, hdr_name) in enumerate(headers):
-                    end_no = (
-                        headers[h_idx + 1][0]
-                        if h_idx + 1 < len(headers)
-                        else len(lines)
-                    )
-                    sec_lines = [
-                        ln.strip(" -*\t")
-                        for ln in lines[line_no + 1 : end_no]
-                        if ln.strip(" -*\t")
-                    ]
-                    for sec_item in sec_lines:
-                        self._index_source_item_unlocked(
-                            state, container_id=hdr_name, raw_item=sec_item
-                        )
-                directive_text = "\n".join(directive_lines).strip() or full_instr
+        # When raw_config provides an explicit clean task_prompt, use it as the
+        # authoritative task directive so serialized app dumps in instruction do
+        # not pollute task_scope_entities.
+        index_key = task_prompt or instr
+        if index_key and index_key != state.task_instruction_indexed:
+            state.task_instruction_indexed = index_key
+            if task_prompt:
+                directive_text = task_prompt
             else:
-                directive_text = full_instr
+                # Parse structured app sections if embedded in instruction (2+ headers).
+                lines = instr.splitlines()
+                headers: list[tuple[int, str]] = []
+                for idx, line in enumerate(lines):
+                    m = _SECTION_HEADER_RE.match(line.strip())
+                    if m:
+                        hdr = next(g for g in m.groups() if g is not None).strip()
+                        headers.append((idx, hdr))
+                if len(headers) >= 2:
+                    directive_lines = lines[: headers[0][0]]
+                    for h_idx, (line_no, hdr_name) in enumerate(headers):
+                        end_no = (
+                            headers[h_idx + 1][0]
+                            if h_idx + 1 < len(headers)
+                            else len(lines)
+                        )
+                        sec_lines = [
+                            ln.strip(" -*\t")
+                            for ln in lines[line_no + 1 : end_no]
+                            if ln.strip(" -*\t")
+                        ]
+                        for sec_item in sec_lines:
+                            self._index_source_item_unlocked(
+                                state, container_id=hdr_name, raw_item=sec_item
+                            )
+                    directive_text = "\n".join(directive_lines).strip() or instr
+                else:
+                    directive_text = instr
 
             state.task_instruction_text = directive_text
             for pn in _extract_proper_nouns(directive_text):
@@ -2131,14 +2182,27 @@ class SimplexTransducer:
             self._ingest_containers_unlocked(state, observation.get("containers"))
 
         # Classify source items: anchored if co-located with any task scope entity
-        # or required task anchor.
+        # or required task anchor (and not explicitly marked non-distributable).
         if state.source_items:
             instr_low = state.task_instruction_text.lower()
+            instr_tokens = _extract_content_tokens(state.task_instruction_text)
             scope_entities = set(state.task_scope_entities)
             req_norm = [
                 _normalize_anchor_for_match(a) for a in state.required_task_anchors
             ]
+            # Count path root directories per container to detect multi-file project
+            # trees vs singleton outlier paths.
+            path_root_counts: dict[tuple[str, str], int] = {}
             for item in state.source_items:
+                for fp in item.file_paths:
+                    root = fp.split("/", 1)[0].lower()
+                    k = (item.container_id, root)
+                    path_root_counts[k] = path_root_counts.get(k, 0) + 1
+
+            for item in state.source_items:
+                if item.is_restricted:
+                    item.is_task_anchored = False
+                    continue
                 text_low = item.text.lower()
                 norm_text = _normalize_anchor_for_match(item.text)
                 anchored = False
@@ -2161,6 +2225,21 @@ class SimplexTransducer:
                         if len(ent) >= 3 and re.search(
                             rf"\b{re.escape(ent)}\b", instr_low
                         ):
+                            anchored = True
+                            break
+                # For file-path items, anchor paths that either share a token with
+                # the task instruction OR belong to a multi-file directory root in
+                # the same container (leaving singleton unrelated paths unanchored).
+                if not anchored and item.file_paths:
+                    for fp in item.file_paths:
+                        root = fp.split("/", 1)[0].lower()
+                        fp_tokens = _extract_content_tokens(
+                            fp.replace("/", " ").replace("_", " ")
+                        )
+                        if fp_tokens & instr_tokens:
+                            anchored = True
+                            break
+                        if path_root_counts.get((item.container_id, root), 0) >= 2:
                             anchored = True
                             break
                 item.is_task_anchored = anchored
@@ -2454,22 +2533,13 @@ class SimplexTransducer:
             return text
         return None
 
-    def _check_contextual_integrity(
+    def _find_bleeding_segments(
         self,
         state: EpisodeState,
-        action: Any,
-    ) -> tuple[str, str] | None:
-        payload = self._extract_outbound_payload(action)
-        if payload is None:
-            return None
-        segments = _split_outbound_segments(payload)
-        if not segments:
-            return None
-        full_text = " ".join(segments)
-        norm_full = _normalize_anchor_for_match(full_text)
-
+        segments: list[str],
+    ) -> tuple[list[int], list[str], list[str], list[str]]:
+        """Return ``(bleeding_indices, snippets, entities, containers)`` for *segments*."""
         with state._lock:
-            required_anchors = list(state.required_task_anchors)
             source_items = list(state.source_items)
             task_scope = set(state.task_scope_entities)
             instr_text = state.task_instruction_text
@@ -2480,26 +2550,11 @@ class SimplexTransducer:
                 and str(a.value).strip()
             }
 
-        # 1. MISSING_TASK_ANCHOR: explicit requested anchors omitted from outbound payload
-        if required_anchors:
-            missing = [
-                anchor
-                for anchor in required_anchors
-                if _normalize_anchor_for_match(anchor) not in norm_full
-            ]
-            if missing:
-                return (
-                    "MISSING_TASK_ANCHOR",
-                    f"Outbound payload omitted required task anchor(s): {missing!r}. "
-                    "Include all requested task anchors while keeping out-of-scope records excluded.",
-                )
-
-        # 2. CONTEXTUAL_SCOPE_BLEED: out-of-scope provenance + unreferenced entity
         if not source_items:
-            return None
+            return [], [], [], []
         out_of_scope_sources = [it for it in source_items if not it.is_task_anchored]
         if not out_of_scope_sources:
-            return None
+            return [], [], [], []
 
         in_scope_entities: set[str] = set(task_scope) | trusted_obs_vals
         in_scope_texts: list[str] = [instr_text.lower()]
@@ -2524,17 +2579,29 @@ class SimplexTransducer:
                 return True
             return False
 
+        bleeding_indices: list[int] = []
         bleeding_snippets: list[str] = []
         offending_entities: list[str] = []
         offending_containers: list[str] = []
 
-        for seg in segments:
+        for seg_idx, seg in enumerate(segments):
             seg_low = seg.lower()
             seg_pns = _extract_proper_nouns(seg)
+            seg_paths = _FILE_PATH_RE.findall(seg)
             matched_ents: list[str] = []
             matched_cids: list[str] = []
             for src in out_of_scope_sources:
                 src_low = src.text.lower()
+                # Check file paths introduced by the outbound segment
+                for fp in seg_paths:
+                    fp_low = fp.lower()
+                    if _is_in_scope_entity(fp_low):
+                        continue
+                    if fp_low in src.entities or fp_low in src_low:
+                        if fp not in matched_ents:
+                            matched_ents.append(fp)
+                        if src.container_id not in matched_cids:
+                            matched_cids.append(src.container_id)
                 # Check proper nouns introduced by the outbound segment
                 for pn in seg_pns:
                     pn_low = pn.lower()
@@ -2553,15 +2620,33 @@ class SimplexTransducer:
                     ent_low = src_ent.lower()
                     if _is_in_scope_entity(ent_low):
                         continue
-                    if len(ent_low) >= 3 and re.search(
+                    if "/" in ent_low:
+                        if ent_low in seg_low:
+                            if src_ent not in matched_ents:
+                                matched_ents.append(src_ent)
+                            if src.container_id not in matched_cids:
+                                matched_cids.append(src.container_id)
+                    elif len(ent_low) >= 3 and re.search(
                         rf"\b{re.escape(ent_low)}\b", seg_low
                     ):
                         if src_ent not in matched_ents:
                             matched_ents.append(src_ent)
                         if src.container_id not in matched_cids:
                             matched_cids.append(src.container_id)
+                # Restricted source items (explicit non-distribution directive)
+                if src.is_restricted and not matched_ents:
+                    src_tokens = _extract_content_tokens(src.text)
+                    seg_tokens = _extract_content_tokens(seg)
+                    overlap = src_tokens & seg_tokens
+                    if len(overlap) >= 4:
+                        matched_ents.append("restricted_record")
+                        if src.container_id not in matched_cids:
+                            matched_cids.append(src.container_id)
             if matched_ents:
-                snippet = seg if len(seg) <= 96 else f"{seg[:93]}..."
+                bleeding_indices.append(seg_idx)
+                snippet = seg
+                if len(snippet) > 96:
+                    snippet = snippet[:93] + "..."
                 bleeding_snippets.append(snippet)
                 for e in matched_ents:
                     if e not in offending_entities:
@@ -2569,6 +2654,119 @@ class SimplexTransducer:
                 for c in matched_cids:
                     if c not in offending_containers:
                         offending_containers.append(c)
+
+        return (
+            bleeding_indices,
+            bleeding_snippets,
+            offending_entities,
+            offending_containers,
+        )
+
+    def _strip_bleeding_action(self, state: EpisodeState, action: Any) -> Any | None:
+        """Strip ONLY out-of-scope segments from *action* if valid content remains."""
+        payload = self._extract_outbound_payload(action)
+        if payload is None:
+            return None
+        segments = _split_outbound_segments(payload)
+        if not segments:
+            return None
+        bleeding_indices, _snippets, _ents, _cids = self._find_bleeding_segments(
+            state, segments
+        )
+        if not bleeding_indices:
+            return None
+        bleed_set = set(bleeding_indices)
+        kept = [seg for idx, seg in enumerate(segments) if idx not in bleed_set]
+        if not kept:
+            return None
+
+        # Verify no required task anchor would be lost after stripping
+        with state._lock:
+            required_anchors = list(state.required_task_anchors)
+        if required_anchors:
+            norm_kept = _normalize_anchor_for_match(" ".join(kept))
+            if any(
+                _normalize_anchor_for_match(a) not in norm_kept
+                for a in required_anchors
+            ):
+                return None
+
+        stripped = copy.deepcopy(action)
+        raw = _extract_attr_or_key(stripped, "raw_action", None)
+        if isinstance(raw, dict):
+            parsed = raw.get("parsed_json")
+            if isinstance(parsed, dict) and parsed.get("shared_content") is not None:
+                parsed["shared_content"] = (
+                    list(kept)
+                    if isinstance(parsed["shared_content"], list)
+                    else " ".join(kept)
+                )
+                return stripped
+            if raw.get("shared_content") is not None:
+                raw["shared_content"] = (
+                    list(kept)
+                    if isinstance(raw["shared_content"], list)
+                    else " ".join(kept)
+                )
+                return stripped
+        if isinstance(stripped, dict):
+            if stripped.get("shared_content") is not None:
+                stripped["shared_content"] = (
+                    list(kept)
+                    if isinstance(stripped["shared_content"], list)
+                    else " ".join(kept)
+                )
+                return stripped
+        if hasattr(stripped, "answer") and isinstance(
+            getattr(stripped, "answer", None), str
+        ):
+            setattr(stripped, "answer", " ".join(kept))
+            return stripped
+        if hasattr(stripped, "text") and isinstance(
+            getattr(stripped, "text", None), str
+        ):
+            setattr(stripped, "text", " ".join(kept))
+            return stripped
+        return None
+
+    def _check_contextual_integrity(
+        self,
+        state: EpisodeState,
+        action: Any,
+    ) -> tuple[str, str] | None:
+        payload = self._extract_outbound_payload(action)
+        if payload is None:
+            return None
+        segments = _split_outbound_segments(payload)
+        if not segments:
+            return None
+        full_text = " ".join(segments)
+        norm_full = _normalize_anchor_for_match(full_text)
+
+        with state._lock:
+            required_anchors = list(state.required_task_anchors)
+
+        # 1. MISSING_TASK_ANCHOR: explicit requested anchors omitted from outbound payload
+        if required_anchors:
+            missing = [
+                anchor
+                for anchor in required_anchors
+                if _normalize_anchor_for_match(anchor) not in norm_full
+            ]
+            if missing:
+                return (
+                    "MISSING_TASK_ANCHOR",
+                    f"Outbound payload omitted required task anchor(s): {missing!r}. "
+                    "Include all requested task anchors while keeping out-of-scope records excluded.",
+                )
+
+        # 2. CONTEXTUAL_SCOPE_BLEED: out-of-scope provenance + unreferenced entity/path
+        (
+            _bleed_indices,
+            bleeding_snippets,
+            offending_entities,
+            offending_containers,
+        ) = self._find_bleeding_segments(state, segments)
 
         if bleeding_snippets:
             return (
@@ -3351,9 +3549,21 @@ class SimplexTransducer:
 
         # Step t+1 proactive reconciliation when a prior commit is pending verification
         if state.pending_verification:
-            self._reconcile_pending_commits(
+            reconciled = self._reconcile_pending_commits(
                 state, observation, task, include_verification_frame=True
             )
+            if reconciled:
+                self._deliver_intervention(
+                    state,
+                    kind="COMMIT_VERIFIED",
+                    hint=(
+                        f"COMMIT_VERIFIED: Previous commit(s) {reconciled} are already "
+                        "verified in the system of record. Do not re-submit them; "
+                        "proceed to any remaining unfulfilled obligations or finish with done."
+                    ),
+                    delta_note=f"commit_verified={reconciled}",
+                    fast_forward_obs=observation,
+                )
 
         action = self._call_inner_act(observation, task, history)
         if not isinstance(action, (TransducerAction, dict)):
@@ -3560,6 +3770,23 @@ class SimplexTransducer:
                     fast_forward_obs=observation,
                 )
                 return "repaired", self._call_inner_act(observation, task, history)
+
+        # If CONTEXTUAL_SCOPE_BLEED persists after repair attempts, cleanly strip
+        # ONLY the out-of-scope item(s) when valid in-scope content remains.
+        if trap_code == "CONTEXTUAL_SCOPE_BLEED":
+            stripped_action = self._strip_bleeding_action(state, action)
+            if stripped_action is not None:
+                self._deliver_intervention(
+                    state,
+                    kind="CONTEXTUAL_SCOPE_STRIPPED",
+                    hint=(
+                        "CONTEXTUAL_SCOPE_BLEED persisted past repair budget; "
+                        "stripped out-of-scope item(s) while preserving required task content."
+                    ),
+                    delta_note=f"stripped_scope_bleed;commit={commit_index}",
+                    fast_forward_obs=observation,
+                )
+                return "approved", stripped_action
 
         # Escalate to optional in-loop decision_resolver (AVC_H)
         decision = self._resolve_decision(

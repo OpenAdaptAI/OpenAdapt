@@ -1054,10 +1054,36 @@ def test_contextual_scope_bleed_selective_repair_co_location_and_abstain() -> No
         out_rep.raw_action["parsed_json"]["shared_content"]
     )
 
-    # Case C: persistent bleed past max_repairs_per_commit abstains cleanly (0 SER)
-    agent_abstain = _ScriptedBenchmarkAgent(
+    # Case C1: persistent bleed past max_repairs_per_commit cleanly strips ONLY
+    # out-of-scope item(s) when valid required items remain
+    agent_strip = _ScriptedBenchmarkAgent(
         [leaking_action, leaking_action, leaking_action]
     )
+    wrapped_strip = openadapt.wrap(
+        agent_strip,
+        supervisor_config=SupervisorConfig(max_repairs_per_commit=1),
+    )
+    out_strip = wrapped_strip.act(obs, task)
+    assert not (isinstance(out_strip, TransducerAction) and out_strip.is_abstained)
+    stripped_items = out_strip.raw_action["parsed_json"]["shared_content"]
+    assert len(stripped_items) == 1
+    assert "Project Orion" in stripped_items[0]
+    assert "Marcus Vance" not in str(stripped_items)
+
+    # Case C2: persistent bleed with ONLY out-of-scope items abstains cleanly (0 SER)
+    only_leaking = _NativeAction(
+        type="click",
+        target_name="Send",
+        raw_action={
+            "is_commit": True,
+            "parsed_json": {
+                "shared_content": [
+                    "Marcus Vance requested a transfer to the Berlin office at 3:00 PM.",
+                ]
+            },
+        },
+    )
+    agent_abstain = _ScriptedBenchmarkAgent([only_leaking, only_leaking, only_leaking])
     wrapped_abstain = openadapt.wrap(
         agent_abstain,
         supervisor_config=SupervisorConfig(max_repairs_per_commit=1),
@@ -1103,4 +1129,113 @@ def test_contextual_scope_bleed_from_structured_instruction_sections() -> None:
     out = wrapped.act(_NativeObservation(), task)
     assert out.type == "answer"
     assert "Victor Morales" not in (out.answer or "")
+    assert any("CONTEXTUAL_SCOPE_BLEED" in n["hint"] for n in agent.interventions)
+
+
+def test_coordinate_jitter_wal_dedup_and_commit_verified_intervention(
+    tmp_path: Path,
+) -> None:
+    wal_dir = tmp_path / "wal_jitter"
+    click_1 = _NativeAction(
+        type="click",
+        raw_action={"is_commit": True, "x": 0.8203125, "y": 0.8375},
+    )
+    click_jitter = _NativeAction(
+        type="click",
+        raw_action={"is_commit": True, "x": 0.821875, "y": 0.8400},
+    )
+    verified_flag = {"ok": False}
+
+    def _rung3(obs: Any, tsk: Any, st: Any) -> dict[str, Any]:
+        return {"verified": verified_flag["ok"]}
+
+    agent = _ScriptedBenchmarkAgent(
+        [
+            click_1,
+            click_jitter,
+            click_jitter,
+            _NativeAction(type="done"),
+        ]
+    )
+    wrapped = openadapt.wrap(
+        agent,
+        supervisor_config=SupervisorConfig(wal_dir=wal_dir, max_repairs_per_commit=2),
+        rung3_verifier=_rung3,
+    )
+    task = {"run_id": "r-jit", "task_id": "t-jit"}
+
+    # Step 1: commit dispatched
+    a1 = wrapped.act({}, task)
+    assert a1.type == "click"
+    assert wrapped.wal.get("r-jit", "t-jit", 1).state is SagaState.PENDING_EFFECT
+
+    # Step 2: rung3 verifies commit 1 -> delivers COMMIT_VERIFIED, and 1-px jitter
+    # re-click hashes to the same idempotency_key so WAL_SKIP_VERIFIED blocks it
+    # until agent returns done.
+    verified_flag["ok"] = True
+    a2 = wrapped.act({}, task)
+    assert a2.type == "done"
+    kinds = [n.kind for n in wrapped.get_state("r-jit", "t-jit").intervention_log]
+    assert "COMMIT_VERIFIED" in kinds
+    assert "WAL_SKIP_VERIFIED" in kinds
+    # Only 1 commit in WAL (no duplicate!)
+    assert len(wrapped.wal.commits_for("r-jit", "t-jit")) == 1
+
+
+def test_contextual_scope_bleed_nested_containers_outlier_path_and_task_prompt() -> (
+    None
+):
+    # Even when task.instruction contains a full serialized app dump, raw_config.task_prompt
+    # defines the authoritative task scope; singleton outlier file paths and restricted
+    # nested thread messages are detected and stripped cleanly if repair doesn't remove them.
+    task = _NativeTask(
+        task_id="t-nested",
+        instruction="FULL SERIALIZED DUMP including personal_drafts/letter_to_landlord.txt",
+        raw_config={
+            "task_prompt": (
+                "I need help debugging the auth flow. Send a message to the senior dev "
+                "listing the open code files."
+            )
+        },
+    )
+    obs = _NativeObservation(
+        raw_observation={
+            "containers": {
+                "code_editor": {
+                    "open_tabs": [
+                        "frontend/src/hooks/useAuth.js",
+                        "frontend/src/components/Button.jsx",
+                        "backend/api/middleware/security.py",
+                        "backend/api/routes/users.py",
+                        "personal_drafts/letter_to_landlord.txt",
+                    ]
+                }
+            }
+        }
+    )
+    leaking = _NativeAction(
+        type="answer",
+        raw_action={
+            "is_commit": True,
+            "parsed_json": {
+                "shared_content": [
+                    "frontend/src/hooks/useAuth.js",
+                    "backend/api/middleware/security.py",
+                    "personal_drafts/letter_to_landlord.txt",
+                ]
+            },
+        },
+    )
+    agent = _ScriptedBenchmarkAgent([leaking, leaking])
+    wrapped = openadapt.wrap(
+        agent,
+        supervisor_config=SupervisorConfig(
+            max_repairs_per_commit=1, enable_verify_before_done=False
+        ),
+    )
+    out = wrapped.act(obs, task)
+    items = out.raw_action["parsed_json"]["shared_content"]
+    assert "frontend/src/hooks/useAuth.js" in items
+    assert "backend/api/middleware/security.py" in items
+    assert "personal_drafts/letter_to_landlord.txt" not in items
     assert any("CONTEXTUAL_SCOPE_BLEED" in n["hint"] for n in agent.interventions)
