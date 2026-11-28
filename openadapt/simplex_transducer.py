@@ -39,6 +39,7 @@ __all__ = [
     "Obligation",
     "ObligationKind",
     "OpaqueCredentialVault",
+    "ReceiptOutcome",
     "SagaCommitRecord",
     "SagaState",
     "SimplexTransducer",
@@ -55,9 +56,7 @@ T = TypeVar("T")
 _TERMINAL_ACTION_TYPES: frozenset[str] = frozenset(
     {"done", "answer", "infeasible", "finish", "terminate"}
 )
-_MUTATING_WIRE_METHODS: frozenset[str] = frozenset(
-    {"POST", "PUT", "PATCH", "DELETE"}
-)
+_MUTATING_WIRE_METHODS: frozenset[str] = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 _EXACT_ID_SUFFIXES: tuple[str, ...] = (
     "_id",
     "_code",
@@ -100,11 +99,7 @@ def _sha256_hex(payload: Any) -> str:
 
 def _durable_fsync(fd: int) -> None:
     """Flush file descriptor to stable storage using F_FULLFSYNC on macOS."""
-    if (
-        sys.platform == "darwin"
-        and fcntl is not None
-        and hasattr(fcntl, "F_FULLFSYNC")
-    ):
+    if sys.platform == "darwin" and fcntl is not None and hasattr(fcntl, "F_FULLFSYNC"):
         try:
             fcntl.fcntl(fd, fcntl.F_FULLFSYNC)
             return
@@ -156,11 +151,31 @@ class ObligationKind(str, enum.Enum):
 class SagaState(str, enum.Enum):
     """Write-ahead saga commit lifecycle states."""
 
-    INTENT = "INTENT"
-    PENDING_EFFECT = "PENDING_EFFECT"
-    VERIFIED = "VERIFIED"
-    COMPENSATED_UNDO = "COMPENSATED_UNDO"
-    RECONCILE = "RECONCILE"
+    @staticmethod
+    def _generate_next_value_(
+        name: str, start: int, count: int, last_values: list[Any]
+    ) -> str:
+        return name
+
+    INTENT = enum.auto()
+    PENDING_EFFECT = enum.auto()
+    VERIFIED = enum.auto()
+    COMPENSATED_UNDO = enum.auto()
+    RECONCILE = enum.auto()
+
+
+class ReceiptOutcome(str, enum.Enum):
+    """Outcome recorded on a ``TransducerReceipt``."""
+
+    @staticmethod
+    def _generate_next_value_(
+        name: str, start: int, count: int, last_values: list[Any]
+    ) -> str:
+        return name
+
+    VERIFIED = enum.auto()
+    COMPLETED_UNVERIFIED = enum.auto()
+    HALTED = enum.auto()
 
 
 _VALID_SAGA_TRANSITIONS: dict[SagaState | None, frozenset[SagaState]] = {
@@ -181,9 +196,7 @@ _VALID_SAGA_TRANSITIONS: dict[SagaState | None, frozenset[SagaState]] = {
 class SupervisorConfig:
     """Configuration for ``SimplexTransducer``."""
 
-    isolation_mode: Literal["iid_ephemeral", "continual_persistent"] = (
-        "iid_ephemeral"
-    )
+    isolation_mode: Literal["iid_ephemeral", "continual_persistent"] = "iid_ephemeral"
     max_repairs_per_commit: int = 2
     min_budget_for_ui_reopen: int = 4
     max_semantic_fpr: float = 0.02
@@ -316,6 +329,10 @@ class TransducerAction:
     reported_success: bool = False
     is_commit: bool = False
 
+    @property
+    def is_abstained(self) -> bool:
+        return self.raw_action.get("outcome") == "abstained"
+
 
 @dataclass(frozen=True)
 class DecisionRequest:
@@ -389,11 +406,11 @@ class TransducerReceipt:
         # Map transducer outcome to ExecuteTerminalOutcomeV1 while respecting
         # the ExecuteEvidenceReceiptV1 proof ladder (production seals require
         # oracle tier 2/3 system-of-record evidence).
-        if self.outcome == "HALTED":
+        if self.outcome == ReceiptOutcome.HALTED:
             terminal = ExecuteTerminalOutcomeV1.HALTED_BEFORE_EFFECT
             delivery_uncertain = self.delivery_uncertain
         elif (
-            self.outcome == "VERIFIED"
+            self.outcome == ReceiptOutcome.VERIFIED
             and obs_strength is EffectStrengthV1.INDEPENDENT_SYSTEM_OF_RECORD
         ):
             terminal = ExecuteTerminalOutcomeV1.VERIFIED
@@ -470,9 +487,7 @@ class OpaqueCredentialVault:
     def is_handle(cls, value: Any) -> bool:
         return isinstance(value, str) and value.startswith(cls.HANDLE_PREFIX)
 
-    def resolve_for_callback(
-        self, handle: str, callback: Callable[[str], T]
-    ) -> T:
+    def resolve_for_callback(self, handle: str, callback: Callable[[str], T]) -> T:
         """Resolve ``vault://<key_name>`` strictly inside *callback*."""
         if not self.is_handle(handle):
             raise ValueError("handle must start with 'vault://'")
@@ -669,9 +684,7 @@ class WriteAheadSagaLog:
         with self._lock:
             return self._records.get((run_id, task_id, commit_index))
 
-    def is_commit_verified(
-        self, run_id: str, task_id: str, commit_index: int
-    ) -> bool:
+    def is_commit_verified(self, run_id: str, task_id: str, commit_index: int) -> bool:
         rec = self.get(run_id, task_id, commit_index)
         return rec is not None and rec.state is SagaState.VERIFIED
 
@@ -694,9 +707,7 @@ class WriteAheadSagaLog:
             k += 1
         return k
 
-    def pending_reconcile(
-        self, run_id: str, task_id: str
-    ) -> list[SagaCommitRecord]:
+    def pending_reconcile(self, run_id: str, task_id: str) -> list[SagaCommitRecord]:
         """Return commits left in ``PENDING_EFFECT`` or ``RECONCILE`` after a halt."""
         return [
             rec
@@ -722,12 +733,8 @@ class AppCartridge:
         return {
             "cartridge_id": self.cartridge_id,
             "commit_signatures": list(self.commit_signatures),
-            "reopen_paths": {
-                k: list(v) for k, v in sorted(self.reopen_paths.items())
-            },
-            "micro_skills": {
-                k: dict(v) for k, v in sorted(self.micro_skills.items())
-            },
+            "reopen_paths": {k: list(v) for k, v in sorted(self.reopen_paths.items())},
+            "micro_skills": {k: dict(v) for k, v in sorted(self.micro_skills.items())},
             "non_terminal_statuses": list(self.non_terminal_statuses),
             "version": self.version,
         }
@@ -744,8 +751,7 @@ class AppCartridge:
                 for k, v in (data.get("reopen_paths") or {}).items()
             },
             micro_skills={
-                str(k): dict(v)
-                for k, v in (data.get("micro_skills") or {}).items()
+                str(k): dict(v) for k, v in (data.get("micro_skills") or {}).items()
             },
             non_terminal_statuses=list(
                 data.get("non_terminal_statuses") or _DEFAULT_NON_TERMINAL_STATUSES
@@ -812,9 +818,7 @@ class AtomicCartridgeStore:
         payload = json.dumps(
             {
                 "schema": "openadapt.cartridge_store/v1",
-                "cartridges": {
-                    k: v.to_json() for k, v in sorted(data.items())
-                },
+                "cartridges": {k: v.to_json() for k, v in sorted(data.items())},
             },
             indent=2,
             sort_keys=True,
@@ -967,14 +971,22 @@ class SimplexTransducer:
         agent: Any,
         *,
         config: SupervisorConfig | None = None,
-        decision_resolver: Callable[[DecisionRequest], DecisionResponse | Mapping[str, Any] | bool] | None = None,
+        decision_resolver: Callable[
+            [DecisionRequest], DecisionResponse | Mapping[str, Any] | bool
+        ]
+        | None = None,
         vault: OpaqueCredentialVault | None = None,
         wal: WriteAheadSagaLog | None = None,
         cartridge_store: AtomicCartridgeStore | None = None,
         cartridge: AppCartridge | None = None,
-        rung3_verifier: Callable[[Any, Any, EpisodeState], dict[str, Any] | bool] | None = None,
-        rung2_verifier: Callable[[Any, Any, EpisodeState], dict[str, Any] | bool] | None = None,
-        reopen_executor: Callable[[list[dict[str, Any]], Any, EpisodeState], dict[str, Any] | None] | None = None,
+        rung3_verifier: Callable[[Any, Any, EpisodeState], dict[str, Any] | bool]
+        | None = None,
+        rung2_verifier: Callable[[Any, Any, EpisodeState], dict[str, Any] | bool]
+        | None = None,
+        reopen_executor: Callable[
+            [list[dict[str, Any]], Any, EpisodeState], dict[str, Any] | None
+        ]
+        | None = None,
         pinned: Mapping[str, Any] | None = None,
     ) -> None:
         if not callable(getattr(agent, "act", None)):
@@ -1059,16 +1071,13 @@ class SimplexTransducer:
         if callable(inner_reset):
             sig = inspect.signature(inner_reset)
             if kwargs and any(
-                p.kind == inspect.Parameter.VAR_KEYWORD
-                for p in sig.parameters.values()
+                p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
             ):
                 inner_reset(**kwargs)
             else:
                 inner_reset()
 
-    def _resolve_ids(
-        self, observation: Any, task: Any
-    ) -> tuple[str, str]:
+    def _resolve_ids(self, observation: Any, task: Any) -> tuple[str, str]:
         run_id = str(
             _extract_attr_or_key(task, "run_id", None)
             or _extract_attr_or_key(observation, "run_id", None)
@@ -1132,9 +1141,7 @@ class SimplexTransducer:
                                 ),
                                 kind=kind,
                                 target=str(item.get("target", "")),
-                                expected_state=dict(
-                                    item.get("expected_state") or {}
-                                ),
+                                expected_state=dict(item.get("expected_state") or {}),
                             )
                         )
 
@@ -1202,8 +1209,7 @@ class SimplexTransducer:
         # Pass a shallow copy of history so inner agent cannot mutate caller's prefix.
         safe_history = list(history) if history is not None else None
         if len(params) >= 3 or any(
-            p.kind == inspect.Parameter.VAR_POSITIONAL
-            for p in sig.parameters.values()
+            p.kind == inspect.Parameter.VAR_POSITIONAL for p in sig.parameters.values()
         ):
             return inner_act(observation, task, safe_history)
         return inner_act(observation, task)
@@ -1306,12 +1312,16 @@ class SimplexTransducer:
                 "Action originated from UNTRUSTED_DATA; blocked to prevent indirect prompt injection.",
             )
 
-        target_origin = str(
-            _extract_attr_or_key(action, "target_origin", None)
-            or raw.get("target_origin")
-            or raw.get("origin")
-            or ""
-        ).strip().lower()
+        target_origin = (
+            str(
+                _extract_attr_or_key(action, "target_origin", None)
+                or raw.get("target_origin")
+                or raw.get("origin")
+                or ""
+            )
+            .strip()
+            .lower()
+        )
         with state._lock:
             trusted_origins = set(state.trusted_origins)
             anchors = dict(state.observed_entities)
@@ -1514,9 +1524,7 @@ class SimplexTransducer:
                 statuses.add(str(item).strip().lower())
         return statuses
 
-    def _evaluate_verification_frame(
-        self, frame: Any
-    ) -> tuple[bool, str, str | None]:
+    def _evaluate_verification_frame(self, frame: Any) -> tuple[bool, str, str | None]:
         """Verify non-editable, non-toast persisted delta + frame status.
 
         Returns ``(verified, reason, observed_effect_strength)``.
@@ -1538,7 +1546,11 @@ class SimplexTransducer:
             }
         is_toast = bool(frame.get("is_toast", False))
         if is_toast:
-            return False, "Toast notification alone is not persisted verification.", None
+            return (
+                False,
+                "Toast notification alone is not persisted verification.",
+                None,
+            )
         editable = frame.get("is_editable")
         if editable is None:
             editable = frame.get("editable")
@@ -1560,14 +1572,22 @@ class SimplexTransducer:
         if has_delta is None:
             has_delta = bool(frame.get("delta")) or bool(status_str)
         if not has_delta:
-            return False, "No persisted state delta observed on verification frame.", None
+            return (
+                False,
+                "No persisted state delta observed on verification frame.",
+                None,
+            )
 
         strength = (
             "independent_session"
             if frame.get("separate_session") is True
             else "persisted_state_reacquisition"
         )
-        return True, f"Verified persisted frame status={status_str or 'persisted'}.", strength
+        return (
+            True,
+            f"Verified persisted frame status={status_str or 'persisted'}.",
+            strength,
+        )
 
     def _compile_reopen_path(
         self,
@@ -1583,8 +1603,7 @@ class SimplexTransducer:
             or "default"
         )
         path_key = str(
-            _extract_attr_or_key(observation, "obligation_key", None)
-            or state.task_id
+            _extract_attr_or_key(observation, "obligation_key", None) or state.task_id
         )
         cart = AppCartridge(
             cartridge_id=cartridge_id,
@@ -1623,12 +1642,16 @@ class SimplexTransducer:
         # 1. Check Rung 3 / Rung 2 attached verifiers first
         if self.rung3_verifier is not None:
             res = self.rung3_verifier(observation, task, state)
-            ok = bool(res.get("verified", False)) if isinstance(res, Mapping) else bool(res)
+            ok = (
+                bool(res.get("verified", False))
+                if isinstance(res, Mapping)
+                else bool(res)
+            )
             if ok:
                 self._mark_verified(state, commit_idx, tier=2)
                 self._emit_receipt(
                     state=state,
-                    outcome="VERIFIED",
+                    outcome=ReceiptOutcome.VERIFIED.value,
                     oracle_tier=2,
                     observed_effect_strength="independent_system_of_record",
                     authorization_passed=True,
@@ -1643,12 +1666,16 @@ class SimplexTransducer:
 
         if self.rung2_verifier is not None:
             res = self.rung2_verifier(observation, task, state)
-            ok = bool(res.get("verified", False)) if isinstance(res, Mapping) else bool(res)
+            ok = (
+                bool(res.get("verified", False))
+                if isinstance(res, Mapping)
+                else bool(res)
+            )
             if ok:
                 self._mark_verified(state, commit_idx, tier=1)
                 self._emit_receipt(
                     state=state,
-                    outcome="VERIFIED",
+                    outcome=ReceiptOutcome.VERIFIED.value,
                     oracle_tier=1,
                     observed_effect_strength="independent_session",
                     authorization_passed=True,
@@ -1675,7 +1702,7 @@ class SimplexTransducer:
                             self._mark_verified(state, commit_idx, tier=tier)
                             self._emit_receipt(
                                 state=state,
-                                outcome="VERIFIED",
+                                outcome=ReceiptOutcome.VERIFIED.value,
                                 oracle_tier=tier,
                                 observed_effect_strength=strength,
                                 authorization_passed=True,
@@ -1695,9 +1722,7 @@ class SimplexTransducer:
             if ok and strength is not None:
                 tier = 1 if strength == "independent_session" else 0
                 self._mark_verified(state, commit_idx, tier=tier)
-                reopen_steps = _extract_attr_or_key(
-                    observation, "reopen_steps", None
-                )
+                reopen_steps = _extract_attr_or_key(observation, "reopen_steps", None)
                 if isinstance(reopen_steps, list):
                     self._compile_reopen_path(state, observation, reopen_steps)
                 elif state.last_reopen_steps:
@@ -1706,7 +1731,7 @@ class SimplexTransducer:
                     )
                 self._emit_receipt(
                     state=state,
-                    outcome="VERIFIED",
+                    outcome=ReceiptOutcome.VERIFIED.value,
                     oracle_tier=tier,
                     observed_effect_strength=strength,
                     authorization_passed=True,
@@ -1806,9 +1831,7 @@ class SimplexTransducer:
                     SagaState.VERIFIED,
                     evidence={"tier": tier},
                 )
-                state.saga_commits = self.wal.commits_for(
-                    state.run_id, state.task_id
-                )
+                state.saga_commits = self.wal.commits_for(state.run_id, state.task_id)
                 _ = rec
 
     def act(
@@ -1830,9 +1853,7 @@ class SimplexTransducer:
         if state.pending_verification and verif_frame is not None:
             ok, _reason, _strength = self._evaluate_verification_frame(verif_frame)
             if ok:
-                reopen_steps = _extract_attr_or_key(
-                    observation, "reopen_steps", None
-                )
+                reopen_steps = _extract_attr_or_key(observation, "reopen_steps", None)
                 if isinstance(reopen_steps, list):
                     self._compile_reopen_path(state, observation, reopen_steps)
                 elif state.last_reopen_steps:
@@ -1901,9 +1922,7 @@ class SimplexTransducer:
             # Resume guard: if this commit_index was already verified in WAL, skip re-dispatch
             if self.wal.is_commit_verified(run_id, task_id, commit_index):
                 with state._lock:
-                    state.next_commit_index = self.wal.resume_point(
-                        run_id, task_id
-                    )
+                    state.next_commit_index = self.wal.resume_point(run_id, task_id)
                 self._deliver_intervention(
                     state,
                     kind="WAL_SKIP_VERIFIED",
@@ -1921,11 +1940,7 @@ class SimplexTransducer:
                 history=history,
                 commit_index=commit_index,
             )
-            if (
-                isinstance(action, TransducerAction)
-                and action.type == "error"
-                and action.raw_action.get("outcome") == "abstained"
-            ):
+            if isinstance(action, TransducerAction) and action.is_abstained:
                 return action
 
             if self._is_commit_boundary(action):
@@ -1933,9 +1948,7 @@ class SimplexTransducer:
                     "type": _action_type_str(action),
                     "raw_action": self.vault.redact(_action_raw_dict(action)),
                 }
-                self.wal.record_intent(
-                    run_id, task_id, commit_index, safe_summary
-                )
+                self.wal.record_intent(run_id, task_id, commit_index, safe_summary)
                 self.wal.record_pending_effect(
                     run_id, task_id, commit_index, safe_summary
                 )
@@ -1953,9 +1966,7 @@ class SimplexTransducer:
                 state.last_reopen_steps.append(
                     {
                         "type": _action_type_str(action),
-                        "raw_action": self.vault.redact(
-                            _action_raw_dict(action)
-                        ),
+                        "raw_action": self.vault.redact(_action_raw_dict(action)),
                     }
                 )
         return action
