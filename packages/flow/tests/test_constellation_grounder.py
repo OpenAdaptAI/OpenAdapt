@@ -14,6 +14,8 @@ from openadapt_flow.runtime.constellation_grounder import (
     ConstellationGrounder,
     capture_constellation,
     disambiguate_candidates,
+    normalize_token_text,
+    strip_widget_glyph_noise,
 )
 from openadapt_flow.runtime.grounder import (
     FallbackGrounder,
@@ -621,3 +623,298 @@ def test_rendered_subscriber_vs_patient_date_real_ocr_dark_and_scaled() -> None:
     match = grounder.locate(dark_scaled_png, "sub_date", ocr_text=None)
     assert match is not None
     assert _point_in_box(match.point, sub_box_scaled, pad=10)
+
+
+# ---------------------------------------------------------------------------
+# 6. Constellation v2: widget glyph normalization, row-band weighting, pruning
+# ---------------------------------------------------------------------------
+
+
+def test_widget_glyph_prefix_normalization_preserves_numeric_ids() -> None:
+    """Checkbox/radio glyph prefixes are stripped without mangling numeric IDs."""
+    cases = [
+        ("O Morning", "morning"),
+        ("o Allergies", "allergies"),
+        ("0 Afternoon", "afternoon"),
+        ("v Smoker", "smoker"),
+        ("< Insured", "insured"),
+        ("> Next", "next"),
+        ("\u2022 Diabetic", "diabetic"),
+        ("[ ] Allergies", "allergies"),
+        ("[x] Smoker", "smoker"),
+        ("( ) Morning", "morning"),
+        ("(*) Evening", "evening"),
+        ("Morning o", "morning"),
+        ("Allergies [x]", "allergies"),
+        ("[ ]", ""),
+        ("[x]", ""),
+        ("( )", ""),
+        ("(*)", ""),
+    ]
+    for raw, expected in cases:
+        assert normalize_token_text(raw) == expected, f"failed on {raw!r}"
+
+    # Genuine numeric and alphanumeric IDs (including O/0 inside IDs) stay intact.
+    assert strip_widget_glyph_noise("MRN-482910") == "MRN-482910"
+    assert normalize_token_text("MRN-482910") == "mrn-482910"
+    assert normalize_token_text("500612") == "500612"
+    assert normalize_token_text("5OO612") == "5oo612"
+    assert normalize_token_text("O/0") == "o/0"
+    assert normalize_token_text("0 12345") == "0 12345"
+
+
+def test_toggled_checkbox_and_radio_glyph_noise_resolves_with_zero_wrong_clicks() -> (
+    None
+):
+    """Toggled radio glyphs and repeated row labels resolve checkboxes cleanly."""
+    rec_lines = [
+        _FakeOcrLine("Row Alpha", (37, 109, 78, 21)),
+        _FakeOcrLine("Row Bravo", (36, 151, 81, 24)),
+        _FakeOcrLine("Allergies", (56, 225, 70, 24)),
+        _FakeOcrLine("O Morning", (297, 225, 85, 24)),
+        _FakeOcrLine("Smoker", (56, 258, 62, 21)),
+        _FakeOcrLine("Afternoon", (317, 258, 75, 22)),
+        _FakeOcrLine("Diabetic", (56, 287, 66, 23)),
+        _FakeOcrLine("O Evening", (297, 286, 85, 24)),
+        _FakeOcrLine("<", (40, 321, 18, 16)),
+        _FakeOcrLine("Insured", (56, 319, 62, 21)),
+    ]
+    # Live frame toggles radio from Morning -> Afternoon and changes checkbox glyph.
+    live_lines = [
+        _FakeOcrLine("Row Alpha", (37, 109, 78, 21)),
+        _FakeOcrLine("Row Bravo", (36, 151, 81, 24)),
+        _FakeOcrLine("[x] Allergies", (37, 225, 89, 24)),
+        _FakeOcrLine("Morning", (315, 225, 67, 24)),
+        _FakeOcrLine("[ ] Smoker", (37, 258, 81, 21)),
+        _FakeOcrLine("O Afternoon", (298, 258, 94, 22)),
+        _FakeOcrLine("Diabetic", (56, 287, 66, 23)),
+        _FakeOcrLine("O Evening", (297, 286, 85, 24)),
+        _FakeOcrLine("Insured", (56, 319, 62, 21)),
+    ]
+
+    # Render clean unchecked 16x16 checkbox at recording time, then filled
+    # checked 16x16 checkbox at replay time to verify square checkboxes do not
+    # trigger blank-input occlusion refusal.
+    def _render_box(checked: bool) -> bytes:
+        img = Image.new("RGB", (440, 380), (248, 248, 250))
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([40, 230, 56, 246], outline=(30, 30, 30), fill=(255, 255, 255))
+        if checked:
+            draw.rectangle([42, 232, 54, 244], fill=(25, 100, 220))
+            draw.line([(44, 238), (47, 242), (53, 234)], fill=(255, 255, 255), width=2)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+
+    rec_png = _render_box(checked=False)
+    live_png = _render_box(checked=True)
+
+    chk_allergies: Region = (40, 230, 16, 16)
+    rad_morning: Region = (299, 230, 16, 16)
+    rad_afternoon: Region = (299, 261, 16, 16)
+
+    c_chk = capture_constellation(
+        rec_png,
+        chk_allergies,
+        intent="chk_allergies",
+        ocr_fn=lambda _png: rec_lines,
+    )
+    c_morn = capture_constellation(
+        rec_png,
+        rad_morning,
+        intent="rad_morning",
+        ocr_fn=lambda _png: rec_lines,
+    )
+    c_aft = capture_constellation(
+        rec_png,
+        rad_afternoon,
+        intent="rad_afternoon",
+        ocr_fn=lambda _png: rec_lines,
+    )
+    # Leading radio glyph 'O' must not enter constellations as a standalone token.
+    assert all(t.norm_text != "o" for t in c_chk.tokens)
+    assert all(t.norm_text != "o" for t in c_morn.tokens)
+    assert c_chk.target_is_blank is False
+
+    grounder = ConstellationGrounder(
+        {
+            "chk_allergies": c_chk,
+            "rad_morning": c_morn,
+            "rad_afternoon": c_aft,
+        },
+        ocr_fn=lambda _png: live_lines,
+    )
+    for key, truth in [
+        ("chk_allergies", chk_allergies),
+        ("rad_morning", rad_morning),
+        ("rad_afternoon", rad_afternoon),
+    ]:
+        hit = grounder.locate(live_png, key, ocr_text=None)
+        assert hit is not None, f"expected hit for {key}"
+        assert _point_in_box(hit.point, truth, pad=6)
+
+
+def test_row_band_mode_survives_reordered_rows_and_abstains_on_missing_row() -> None:
+    """Same-row horizontal weighting tracks a row action after table reorder."""
+    rec_lines = [
+        _FakeOcrLine("Grace Hopper", (30, 170, 110, 18)),
+        _FakeOcrLine("MRN 48213", (235, 170, 90, 18)),
+        _FakeOcrLine("08:30", (405, 170, 48, 18)),
+        _FakeOcrLine("Alan Turing", (30, 214, 100, 18)),
+        _FakeOcrLine("MRN 57390", (235, 214, 90, 18)),
+        _FakeOcrLine("08:45", (405, 214, 48, 18)),
+        _FakeOcrLine("Ada Lovelace", (30, 258, 110, 18)),
+        _FakeOcrLine("MRN 36428", (235, 258, 90, 18)),
+        _FakeOcrLine("09:00", (405, 258, 48, 18)),
+        _FakeOcrLine("Edsger Dijkstra", (30, 302, 120, 18)),
+        _FakeOcrLine("MRN 92147", (235, 302, 90, 18)),
+        _FakeOcrLine("09:15", (405, 302, 48, 18)),
+        _FakeOcrLine("Appointment", (700, 100, 110, 18)),
+        _FakeOcrLine("Note", (700, 256, 44, 18)),
+    ]
+    ada_rec_btn: Region = (508, 253, 28, 28)
+
+    constellation = capture_constellation(
+        b"rec",
+        ada_rec_btn,
+        intent="edit-Ada",
+        ocr_fn=lambda _png: rec_lines,
+    )
+    assert constellation.row_band_mode is True
+    norms = {t.norm_text for t in constellation.tokens}
+    assert {"ada", "lovelace", "36428", "09:00"}.issubset(norms)
+
+    # Reorder table: Ada moves from row 2 (y=258) to row 0 (y=170).
+    reordered_lines = [
+        _FakeOcrLine("Ada Lovelace", (30, 170, 110, 18)),
+        _FakeOcrLine("MRN 36428", (235, 170, 90, 18)),
+        _FakeOcrLine("09:00", (405, 170, 48, 18)),
+        _FakeOcrLine("Edsger Dijkstra", (30, 214, 120, 18)),
+        _FakeOcrLine("MRN 92147", (235, 214, 90, 18)),
+        _FakeOcrLine("09:15", (405, 214, 48, 18)),
+        _FakeOcrLine("Grace Hopper", (30, 258, 110, 18)),
+        _FakeOcrLine("MRN 48213", (235, 258, 90, 18)),
+        _FakeOcrLine("08:30", (405, 258, 48, 18)),
+        _FakeOcrLine("Alan Turing", (30, 302, 100, 18)),
+        _FakeOcrLine("MRN 57390", (235, 302, 90, 18)),
+        _FakeOcrLine("08:45", (405, 302, 48, 18)),
+        _FakeOcrLine("Appointment", (700, 100, 110, 18)),
+        _FakeOcrLine("Note", (700, 256, 44, 18)),
+    ]
+    ada_moved_btn: Region = (508, 165, 28, 28)
+
+    grounder = ConstellationGrounder(
+        {"edit-Ada": constellation},
+        ocr_fn=lambda _png: reordered_lines,
+    )
+    hit = grounder.locate(b"live", "edit-Ada", ocr_text=None)
+    assert hit is not None
+    assert _point_in_box(hit.point, ada_moved_btn, pad=6)
+
+    # Safety: if Ada's row disappears and only confusable MRN 36429 remains, abstain.
+    missing_ada_lines = [
+        _FakeOcrLine("Ada Lovelace", (30, 170, 110, 18)),
+        _FakeOcrLine("MRN 36429", (235, 170, 90, 18)),
+        _FakeOcrLine("08:30", (405, 170, 48, 18)),
+        _FakeOcrLine("Grace Hopper", (30, 258, 110, 18)),
+        _FakeOcrLine("MRN 48213", (235, 258, 90, 18)),
+        _FakeOcrLine("08:45", (405, 258, 48, 18)),
+        _FakeOcrLine("Appointment", (700, 100, 110, 18)),
+        _FakeOcrLine("Note", (700, 256, 44, 18)),
+    ]
+    missing_grounder = ConstellationGrounder(
+        {"edit-Ada": constellation},
+        ocr_fn=lambda _png: missing_ada_lines,
+    )
+    assert missing_grounder.locate(b"live", "edit-Ada", ocr_text=None) is None
+
+
+def test_dynamic_token_pruning_survives_vanished_table_rows() -> None:
+    """Static controls resolve cleanly when all recorded patient rows change."""
+    rec_lines = [
+        _FakeOcrLine("Patient Notes Benchmark Harness", (10, 10, 240, 18)),
+        _FakeOcrLine("Search", (536, 48, 48, 18)),
+        _FakeOcrLine("James", (24, 140, 42, 18)),
+        _FakeOcrLine("Alvarez", (210, 140, 52, 18)),
+        _FakeOcrLine("1981-05-21", (405, 140, 72, 18)),
+        _FakeOcrLine("Maria", (24, 184, 42, 18)),
+        _FakeOcrLine("Alvarez", (210, 184, 52, 18)),
+        _FakeOcrLine("1979-11-02", (405, 184, 72, 18)),
+        _FakeOcrLine("Oskar", (24, 228, 42, 18)),
+        _FakeOcrLine("Bakke", (210, 228, 48, 18)),
+        _FakeOcrLine("1992-06-18", (405, 228, 72, 18)),
+        _FakeOcrLine("Clinical note:", (20, 320, 92, 18)),
+        _FakeOcrLine("Patient: James Alvarez (1981-05-21)", (230, 320, 230, 18)),
+        _FakeOcrLine("Loaded 10 patients", (20, 482, 130, 18)),
+        _FakeOcrLine("Save Note", (526, 482, 68, 18)),
+    ]
+    save_btn: Region = (512, 474, 96, 30)
+    search_input: Region = (20, 42, 480, 26)
+
+    # Auto-pruning without explicit entity_values removes repeating data rows
+    # and propagated entity values while preserving static UI chrome.
+    save_const = capture_constellation(
+        b"rec",
+        save_btn,
+        label="Save Note",
+        intent="save_note",
+        ocr_fn=lambda _png: rec_lines,
+    )
+    search_const = capture_constellation(
+        b"rec",
+        search_input,
+        intent="search_input",
+        ocr_fn=lambda _png: rec_lines,
+    )
+    for const in (save_const, search_const):
+        norms = {t.norm_text for t in const.tokens}
+        assert "james" not in norms
+        assert "alvarez" not in norms
+        assert "1981-05-21" not in norms
+        assert "bakke" not in norms
+
+    # Explicit entity_values also prunes caller-supplied dossier strings even
+    # when auto-pruning is disabled.
+    explicit_const = capture_constellation(
+        b"rec",
+        save_btn,
+        label="Save Note",
+        intent="save_note_explicit",
+        exclude_dynamic_tokens=False,
+        entity_values=["James Alvarez", "1981-05-21", "Maria Alvarez", "1979-11-02"],
+        ocr_fn=lambda _png: rec_lines,
+    )
+    explicit_norms = {t.norm_text for t in explicit_const.tokens}
+    assert "james" not in explicit_norms
+    assert "alvarez" not in explicit_norms
+    assert "1981-05-21" not in explicit_norms
+
+    # Replay frame: completely different patient search result; every recorded
+    # patient name and DOB has vanished.
+    live_lines = [
+        _FakeOcrLine("Patient Notes Benchmark Harness", (10, 10, 240, 18)),
+        _FakeOcrLine("Neil", (26, 48, 30, 18)),
+        _FakeOcrLine("Search", (536, 48, 48, 18)),
+        _FakeOcrLine("Neil", (24, 140, 34, 18)),
+        _FakeOcrLine("Sorensen", (210, 140, 62, 18)),
+        _FakeOcrLine("1983-01-19", (405, 140, 72, 18)),
+        _FakeOcrLine("Clinical note:", (20, 320, 92, 18)),
+        _FakeOcrLine("Patient: Neil Sorensen (1983-01-19)", (230, 320, 230, 18)),
+        _FakeOcrLine("Loaded 1 patients", (20, 482, 124, 18)),
+        _FakeOcrLine("Save Note", (526, 482, 68, 18)),
+    ]
+
+    grounder = ConstellationGrounder(
+        {
+            "save_note": save_const,
+            "search_input": search_const,
+        },
+        ocr_fn=lambda _png: live_lines,
+    )
+    save_hit = grounder.locate(b"live", "save_note", ocr_text="Save Note")
+    assert save_hit is not None
+    assert _point_in_box(save_hit.point, save_btn, pad=4)
+
+    search_hit = grounder.locate(b"live", "search_input", ocr_text=None)
+    assert search_hit is not None
+    assert _point_in_box(search_hit.point, search_input, pad=6)

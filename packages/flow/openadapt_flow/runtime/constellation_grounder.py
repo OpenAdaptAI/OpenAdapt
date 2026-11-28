@@ -71,6 +71,47 @@ _IMMEDIATE_MIN_SCORE = 0.45
 _IMMEDIATE_MAX_DX_ERR_NORM = 2.25
 _IMMEDIATE_MAX_DY_ERR_NORM = 1.25
 
+#: Same-row horizontal band geometry and weighting for table/list row actions.
+_ROW_BAND_DY_NORM = 0.9
+_ROW_BAND_MAX_RADIUS_NORM = 28.0
+_ROW_BAND_SAME_BOOST = 3.0
+_ROW_BAND_OTHER_DECAY = 0.25
+_ROW_BAND_SIBLING_MIN_DY_NORM = 1.1
+_ROW_BAND_SIBLING_MAX_DY_NORM = 5.5
+
+#: Static-context pruning thresholds and fallback radius for ephemeral tables.
+_MIN_STATIC_TOKENS = 4
+_STATIC_FALLBACK_RADIUS_NORM = 32.0
+
+#: Checkbox/radio/bullet OCR glyph patterns stripped around alphabetic labels.
+_WIDGET_BRACKET_RE = re.compile(
+    r"^(?:\[\s*[xXvV\u2713\u2714\u2022*]?\s*\]|\(\s*[xXvV\u2022*oO0]?\s*\))$"
+)
+_WIDGET_LEADING_BRACKET_RE = re.compile(
+    r"^\s*(?:\[\s*[xXvV\u2713\u2714\u2022*]?\s*\]|\(\s*[xXvV\u2022*oO0]?\s*\))\s*"
+)
+_WIDGET_TRAILING_BRACKET_RE = re.compile(
+    r"\s*(?:\[\s*[xXvV\u2713\u2714\u2022*]?\s*\]|\(\s*[xXvV\u2022*oO0]?\s*\))\s*$"
+)
+_WIDGET_SINGLE_GLYPH_RE = re.compile(
+    r"^[oO0vV<>\u2022\u25a1\u25a0\u25cb\u25cf\u2610\u2611\u2713\u2714\u2717\u2715]$"
+)
+_WIDGET_LEADING_GLYPH_RE = re.compile(
+    r"^\s*[oO0vV<>\u2022\u25a1\u25a0\u25cb\u25cf\u2610\u2611\u2713\u2714\u2717\u2715]"
+    r"\s+(?=[A-Za-z]{2})"
+)
+_WIDGET_TRAILING_GLYPH_RE = re.compile(
+    r"(?<=[A-Za-z]{2})\s+"
+    r"[oO0vV<>\u2022\u25a1\u25a0\u25cb\u25cf\u2610\u2611\u2713\u2714\u2717\u2715]\s*$"
+)
+
+#: Ephemeral/dynamic value formats (dates, timestamps, counts, row IDs).
+_ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_SLASH_DATE_RE = re.compile(r"^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$")
+_CLOCK_TIME_RE = re.compile(r"^\d{1,2}:\d{2}(?::\d{2})?$")
+_PURE_INT_RE = re.compile(r"^\d+$")
+_ROW_ID_VALUE_RE = re.compile(r"^(?:\d{4,}|[a-z]{2,5}[-_]\d{4,})$")
+
 #: Recording thresholds identifying a blank/low-ink input field interior.
 _BLANK_REC_MAX_EDGE_DENSITY = 0.03
 _BLANK_REC_MAX_INK_DENSITY = 0.04
@@ -134,6 +175,7 @@ class TargetConstellation(BaseModel):
     target_ink_density: Optional[float] = None
     target_luma_std: Optional[float] = None
     target_frame_contrast: Optional[float] = None
+    row_band_mode: bool = False
 
 
 class CandidateScore(BaseModel):
@@ -146,10 +188,86 @@ class CandidateScore(BaseModel):
     total_tokens: int
 
 
+def strip_widget_glyph_noise(text: str) -> str:
+    """Strip leading/trailing checkbox/radio OCR glyph noise from a label.
+
+    Removes bracketed markers (``[ ]``, ``[x]``, ``( )``, ``(*)``) and 1-char
+    glyph prefixes/suffixes (``o ``, ``O ``, ``0 ``, ``v ``, ``< ``, ``> ``,
+    ``• ``) only when separated by whitespace from an alphabetic word of at
+    least 2 letters. Genuine numeric or alphanumeric IDs (such as
+    ``MRN-482910``, ``500612``, or ``5OO612``) are never altered.
+    """
+    cleaned = text.strip()
+    if not cleaned:
+        return ""
+    if _WIDGET_BRACKET_RE.match(cleaned):
+        return ""
+    prev = None
+    while prev != cleaned:
+        prev = cleaned
+        cleaned = _WIDGET_LEADING_BRACKET_RE.sub("", cleaned)
+        cleaned = _WIDGET_TRAILING_BRACKET_RE.sub("", cleaned)
+        cleaned = _WIDGET_LEADING_GLYPH_RE.sub("", cleaned)
+        cleaned = _WIDGET_TRAILING_GLYPH_RE.sub("", cleaned)
+        cleaned = cleaned.strip()
+    return cleaned
+
+
 def normalize_token_text(text: str) -> str:
-    """Lowercase and strip surrounding punctuation from a word token."""
-    cleaned = re.sub(r"^[^0-9a-zA-Z]+|[^0-9a-zA-Z]+$", "", text.strip())
+    """Lowercase and strip widget glyph noise and surrounding punctuation."""
+    stripped = strip_widget_glyph_noise(text)
+    if not stripped:
+        return ""
+    cleaned = re.sub(r"^[^0-9a-zA-Z]+|[^0-9a-zA-Z]+$", "", stripped)
     return cleaned.lower()
+
+
+def _trim_line_widget_glyph_matches(
+    matches: list[re.Match[str]],
+) -> list[re.Match[str]]:
+    """Drop leading/trailing widget glyph matches while keeping line offsets."""
+    trimmed = list(matches)
+    changed = True
+    while changed and trimmed:
+        changed = False
+        first = trimmed[0].group(0)
+        if _WIDGET_BRACKET_RE.match(first):
+            trimmed.pop(0)
+            changed = True
+            continue
+        if len(trimmed) >= 2:
+            pair = f"{first} {trimmed[1].group(0)}"
+            if _WIDGET_BRACKET_RE.match(pair):
+                trimmed = trimmed[2:]
+                changed = True
+                continue
+            second = trimmed[1].group(0)
+            if _WIDGET_SINGLE_GLYPH_RE.match(first) and re.match(
+                r"^[A-Za-z]{2}", second
+            ):
+                trimmed.pop(0)
+                changed = True
+                continue
+
+        if not trimmed:
+            break
+        last = trimmed[-1].group(0)
+        if _WIDGET_BRACKET_RE.match(last):
+            trimmed.pop()
+            changed = True
+            continue
+        if len(trimmed) >= 2:
+            pair = f"{trimmed[-2].group(0)} {last}"
+            if _WIDGET_BRACKET_RE.match(pair):
+                trimmed = trimmed[:-2]
+                changed = True
+                continue
+            prev = trimmed[-2].group(0)
+            if _WIDGET_SINGLE_GLYPH_RE.match(last) and re.search(r"[A-Za-z]{2}$", prev):
+                trimmed.pop()
+                changed = True
+                continue
+    return trimmed
 
 
 def _default_ocr(screen_png: bytes) -> Sequence[Any]:
@@ -179,6 +297,8 @@ def extract_ocr_tokens(
         region = getattr(line, "region", None)
         if not raw_text.strip() or region is None:
             continue
+        if not strip_widget_glyph_noise(raw_text):
+            continue
         x, y, w, h = (
             float(region[0]),
             float(region[1]),
@@ -189,7 +309,10 @@ def extract_ocr_tokens(
             continue
         conf = float(getattr(line, "confidence", 1.0) or 1.0)
         line_len = len(raw_text)
-        for match in re.finditer(r"\S+", raw_text):
+        word_matches = _trim_line_widget_glyph_matches(
+            list(re.finditer(r"\S+", raw_text))
+        )
+        for match in word_matches:
             word = match.group(0)
             # RapidOCR frequently drops spaces between adjacent TitleCase words
             # at 1.0x scale (e.g. "SubscriberSection"). Split camelCase
@@ -412,6 +535,8 @@ def _find_immediate_label_indices(
     outside_tokens: Sequence[OcrToken],
     target_region: Region,
     med_h: float,
+    *,
+    target_label: Optional[str] = None,
 ) -> set[int]:
     """Identify indices of immediate adjacent label token(s) for ``target_region``.
 
@@ -422,6 +547,7 @@ def _find_immediate_label_indices(
     """
     rx, ry, rw, rh = target_region
     x0, y0, x1, y1 = float(rx), float(ry), float(rx + rw), float(ry + rh)
+    label_norm = normalize_token_text(target_label) if target_label else ""
 
     # 1. Immediate left-hand label (same horizontal band).
     left_candidates: list[tuple[float, int, OcrToken]] = []
@@ -460,9 +586,14 @@ def _find_immediate_label_indices(
         return selected
 
     # 2. Immediate above label (stacked label layout).
+    # Skip stacked-above tokens that repeat the target's own label text: a
+    # repeated "Delete" button or "Unassigned" dropdown directly above is a
+    # sibling row control, not a stacked field label for this target.
     above_candidates: list[tuple[float, float, int, OcrToken]] = []
     target_cx = (x0 + x1) / 2.0
     for idx, tok in enumerate(outside_tokens):
+        if label_norm and tok.norm_text == label_norm:
+            continue
         tok_left = tok.cx - tok.w / 2.0
         tok_right = tok.cx + tok.w / 2.0
         tok_bottom = tok.cy + tok.h / 2.0
@@ -592,6 +723,214 @@ def _immediate_labels_supported(
     return matched >= min_matched and avg_score >= _IMMEDIATE_MIN_SCORE
 
 
+def _is_dynamic_value_token(norm_text: str) -> bool:
+    """Return True for dates, clock times, and standalone integer counts."""
+    return bool(
+        _ISO_DATE_RE.match(norm_text)
+        or _SLASH_DATE_RE.match(norm_text)
+        or _CLOCK_TIME_RE.match(norm_text)
+        or _PURE_INT_RE.match(norm_text)
+    )
+
+
+def _is_table_row_dynamic_cell(norm_text: str) -> bool:
+    """Return True for date, time, or ID values typical of dynamic table rows."""
+    return bool(
+        _ISO_DATE_RE.match(norm_text)
+        or _SLASH_DATE_RE.match(norm_text)
+        or _CLOCK_TIME_RE.match(norm_text)
+        or _ROW_ID_VALUE_RE.match(norm_text)
+    )
+
+
+def _tokenize_entity_values(entity_values: Sequence[str]) -> set[str]:
+    """Normalize recorded dossier/entity strings into a set of word tokens."""
+    out: set[str] = set()
+    for val in entity_values:
+        if not val:
+            continue
+        for match in re.finditer(r"\S+", val):
+            for part in re.split(r"(?<=[a-z])(?=[A-Z])", match.group(0)):
+                norm = normalize_token_text(part)
+                if norm:
+                    out.add(norm)
+    return out
+
+
+def _group_tokens_by_row(
+    tokens: Sequence[OcrToken], med_h: float
+) -> list[tuple[float, list[int]]]:
+    """Cluster token indices into horizontal text rows."""
+    band_px = _ROW_BAND_DY_NORM * med_h
+    rows: list[tuple[float, list[int]]] = []
+    for idx in sorted(range(len(tokens)), key=lambda i: tokens[i].cy):
+        cy = tokens[idx].cy
+        placed = False
+        for r_idx, (row_cy, members) in enumerate(rows):
+            if abs(cy - row_cy) <= band_px:
+                members.append(idx)
+                new_cy = sum(tokens[m].cy for m in members) / float(len(members))
+                rows[r_idx] = (new_cy, members)
+                placed = True
+                break
+        if not placed:
+            rows.append((cy, [idx]))
+    return rows
+
+
+def _detect_row_band_side(
+    outside_tokens: Sequence[OcrToken],
+    tx: float,
+    ty: float,
+    med_h: float,
+    *,
+    target_is_blank: bool,
+    max_row_radius_norm: float = _ROW_BAND_MAX_RADIUS_NORM,
+) -> Optional[str]:
+    """Detect whether a non-blank target sits on a repeating table/list row.
+
+    Returns ``"left"`` when the target has same-row label tokens to its left
+    and at least one vertically adjacent column-aligned sibling row within
+    standard table row pitch.
+    """
+    if target_is_blank:
+        return None
+    left_same_row = [
+        tok
+        for tok in outside_tokens
+        if abs(tok.cy - ty) <= _ROW_BAND_DY_NORM * med_h
+        and -max_row_radius_norm <= (tok.cx - tx) / med_h <= -0.5
+    ]
+    if not left_same_row:
+        return None
+    align_tol = 1.5 * med_h
+    for tok in outside_tokens:
+        dy_norm = abs(tok.cy - ty) / med_h
+        if not (
+            _ROW_BAND_SIBLING_MIN_DY_NORM <= dy_norm <= _ROW_BAND_SIBLING_MAX_DY_NORM
+        ):
+            continue
+        tok_left = tok.cx - tok.w / 2.0
+        for row_tok in left_same_row:
+            row_left = row_tok.cx - row_tok.w / 2.0
+            if (
+                abs(tok.cx - row_tok.cx) <= align_tol
+                or abs(tok_left - row_left) <= align_tol
+            ):
+                return "left"
+    return None
+
+
+def _find_dynamic_token_indices(
+    all_tokens: Sequence[OcrToken],
+    *,
+    ty: float,
+    med_h: float,
+    row_band_active: bool,
+    exclude_dynamic_tokens: bool,
+    entity_values: Optional[Sequence[str]],
+) -> set[int]:
+    """Identify indices of ephemeral/dynamic tokens to exclude at capture time.
+
+    Protects the target's own horizontal band when ``row_band_active`` is True
+    (row-action targets rely on their own row's patient name, MRN, or time).
+    """
+    dynamic: set[int] = set()
+    same_row_band_px = _ROW_BAND_DY_NORM * med_h
+
+    def _is_own_row(tok: OcrToken) -> bool:
+        return abs(tok.cy - ty) <= same_row_band_px
+
+    if entity_values:
+        explicit_norms = _tokenize_entity_values(entity_values)
+        for idx, tok in enumerate(all_tokens):
+            if row_band_active and _is_own_row(tok):
+                continue
+            if tok.norm_text in explicit_norms:
+                dynamic.add(idx)
+
+    if not exclude_dynamic_tokens:
+        return dynamic
+
+    # 1. Direct dynamic value tokens (dates, clock times, standalone counts)
+    # strictly outside the target's own horizontal band.
+    for idx, tok in enumerate(all_tokens):
+        if _is_own_row(tok):
+            continue
+        if _is_dynamic_value_token(tok.norm_text):
+            dynamic.add(idx)
+
+    # 2. Structural repeating data-table rows: >= 2 horizontal rows sharing a
+    # column-aligned dynamic cell (date, time, or 4+ digit ID). Skip summary
+    # or form header rows containing colon-terminated field labels (e.g. "Patient:").
+    rows = _group_tokens_by_row(all_tokens, med_h)
+    dyn_cells_by_row: list[tuple[int, float, list[OcrToken]]] = []
+    for r_idx, (row_cy, members) in enumerate(rows):
+        if any(all_tokens[m].text.strip().endswith(":") for m in members):
+            continue
+        cells = [
+            all_tokens[m]
+            for m in members
+            if _is_table_row_dynamic_cell(all_tokens[m].norm_text)
+        ]
+        if cells:
+            dyn_cells_by_row.append((r_idx, row_cy, cells))
+
+    col_tol = 1.5 * med_h
+    data_row_indices: set[int] = set()
+    for i in range(len(dyn_cells_by_row)):
+        ri, _, cells_i = dyn_cells_by_row[i]
+        for j in range(i + 1, len(dyn_cells_by_row)):
+            rj, _, cells_j = dyn_cells_by_row[j]
+            if any(abs(ci.cx - cj.cx) <= col_tol for ci in cells_i for cj in cells_j):
+                data_row_indices.add(ri)
+                data_row_indices.add(rj)
+
+    if data_row_indices:
+        # Collect TitleCase entity words appearing inside detected data rows
+        # (excluding colon-suffixed field labels like "Patient:").
+        table_entity_norms: set[str] = set()
+        for r_idx in data_row_indices:
+            row_cy, members = rows[r_idx]
+            is_target_row = abs(row_cy - ty) <= same_row_band_px
+            for m in members:
+                tok = all_tokens[m]
+                if not is_target_row:
+                    dynamic.add(m)
+                raw = tok.text.strip()
+                if (
+                    len(tok.norm_text) >= 3
+                    and raw
+                    and raw[0].isupper()
+                    and not raw.endswith(":")
+                    and tok.norm_text.isalpha()
+                ):
+                    table_entity_norms.add(tok.norm_text)
+
+        # Propagate detected table entity names onto summary/banner rows that
+        # also carry a dynamic value (for example: "Patient: James Alvarez (1981-05-21)"),
+        # leaving static labels ("Patient:", "Clinical", "note:") intact.
+        if table_entity_norms:
+            for r_idx, (row_cy, members) in enumerate(rows):
+                if r_idx in data_row_indices:
+                    continue
+                if abs(row_cy - ty) <= same_row_band_px:
+                    continue
+                if not any(
+                    _is_table_row_dynamic_cell(all_tokens[m].norm_text) for m in members
+                ):
+                    continue
+                for m in members:
+                    tok = all_tokens[m]
+                    if (
+                        tok.norm_text in table_entity_norms
+                        and not tok.text.strip().endswith(":")
+                    ):
+                        dynamic.add(m)
+
+    return dynamic
+
+
 def capture_constellation(
     screen_png: bytes,
     target_region: Region,
@@ -601,6 +940,9 @@ def capture_constellation(
     intent: Optional[str] = None,
     max_radius_norm: float = DEFAULT_MAX_RADIUS_NORM,
     max_tokens: int = DEFAULT_MAX_TOKENS,
+    row_band_mode: bool | str = "auto",
+    exclude_dynamic_tokens: bool = True,
+    entity_values: Optional[Sequence[str]] = None,
     ocr_fn: Optional[OcrFn] = None,
 ) -> TargetConstellation:
     """Record nearby OCR words around ``target_region`` in scale-normalized units.
@@ -611,7 +953,22 @@ def capture_constellation(
     above ``target_region``) are flagged so distant header tokens cannot
     outvote them at match time. When ``target_region`` is a blank/low-ink input
     box, its interior pixel statistics are recorded to detect live occlusion.
+
+    When ``row_band_mode`` is ``True`` (or ``"auto"`` detects a repeating
+    table/list row action), same-row horizontal tokens (``|dy| <= 0.9 * med_h``)
+    receive higher weight and an extended horizontal capture radius so
+    reordering rows preserves match score.
+
+    When ``exclude_dynamic_tokens`` is ``True`` or ``entity_values`` are
+    provided, ephemeral off-row tokens (dates, timestamps, counts, repeating
+    table-body data rows, and explicit dossier values) are pruned so static
+    controls do not depend on changing data rows.
     """
+    if row_band_mode not in (True, False, "auto"):
+        raise ValueError(
+            f"row_band_mode must be True, False, or 'auto', got {row_band_mode!r}"
+        )
+
     tokens = extract_ocr_tokens(screen_png, ocr_fn=ocr_fn)
     med_h = _median_token_height(tokens)
     tx, ty = (
@@ -622,52 +979,31 @@ def capture_constellation(
             target_region[1] + target_region[3] / 2.0,
         )
     )
+
     has_inner_tokens = False
-    outside: list[tuple[float, OcrToken]] = []
-    for tok in tokens:
+    all_outside: list[tuple[int, float, OcrToken]] = []
+    for tok_idx, tok in enumerate(tokens):
         if _point_in_region(tok.cx, tok.cy, target_region):
             has_inner_tokens = True
             continue
         dx_norm = (tok.cx - tx) / med_h
         dy_norm = (tok.cy - ty) / med_h
         dist_norm = math.hypot(dx_norm, dy_norm)
-        if dist_norm > max_radius_norm:
-            continue
-        outside.append((dist_norm, tok))
-
-    outside_tokens = [item[1] for item in outside]
-    imm_indices = _find_immediate_label_indices(outside_tokens, target_region, med_h)
-
-    nearby: list[tuple[bool, float, ConstellationToken]] = []
-    for idx, (dist_norm, tok) in enumerate(outside):
-        dx_norm = (tok.cx - tx) / med_h
-        dy_norm = (tok.cy - ty) / med_h
-        weight = 1.0 / (1.0 + dist_norm / 6.0)
-        is_imm = idx in imm_indices
-        nearby.append(
-            (
-                not is_imm,
-                dist_norm,
-                ConstellationToken(
-                    text=tok.text,
-                    norm_text=tok.norm_text,
-                    dx_norm=dx_norm,
-                    dy_norm=dy_norm,
-                    weight=weight,
-                    is_immediate_label=is_imm,
-                ),
-            )
-        )
-    # Keep immediate label tokens first, then fill remaining slots by proximity.
-    nearby.sort(key=lambda item: (item[0], item[1]))
-    kept = [item[2] for item in nearby[:max_tokens]]
+        all_outside.append((tok_idx, dist_norm, tok))
 
     target_is_blank = False
     target_edge_density: Optional[float] = None
     target_ink_density: Optional[float] = None
     target_luma_std: Optional[float] = None
     target_frame_contrast: Optional[float] = None
-    if not has_inner_tokens and not (label or "").strip():
+    target_w_norm = max(0.25, float(target_region[2]) / med_h)
+    target_h_norm = max(0.25, float(target_region[3]) / med_h)
+    # Blank-interior occlusion checks apply to wide text/form inputs, not tiny
+    # square checkboxes or radio buttons whose interiors legitimately toggle ink.
+    is_input_like_geometry = (
+        target_w_norm >= 2.0 and target_region[2] >= target_region[3] * 1.4
+    )
+    if not has_inner_tokens and not (label or "").strip() and is_input_like_geometry:
         stats = _analyze_region_interior(screen_png, target_region)
         if stats is not None:
             target_edge_density = round(stats.edge_density, 5)
@@ -681,11 +1017,116 @@ def capture_constellation(
             ):
                 target_is_blank = True
 
+    all_outside_tokens = [item[2] for item in all_outside]
+    max_row_radius_norm = max(max_radius_norm, _ROW_BAND_MAX_RADIUS_NORM)
+    if row_band_mode is True:
+        row_side: Optional[str] = "both"
+    elif row_band_mode is False:
+        row_side = None
+    else:
+        row_side = _detect_row_band_side(
+            all_outside_tokens,
+            tx,
+            ty,
+            med_h,
+            target_is_blank=target_is_blank,
+            max_row_radius_norm=max_row_radius_norm,
+        )
+    row_band_active = row_side is not None
+
+    def _is_same_row_band(tok: OcrToken) -> bool:
+        if not row_band_active:
+            return False
+        if abs(tok.cy - ty) > _ROW_BAND_DY_NORM * med_h:
+            return False
+        if row_side == "left":
+            return (tok.cx - tx) < 0.0
+        return True
+
+    def _in_capture_radius(dist_norm: float, tok: OcrToken, radius_norm: float) -> bool:
+        if dist_norm <= radius_norm:
+            return True
+        if _is_same_row_band(tok) and dist_norm <= max(
+            radius_norm, max_row_radius_norm
+        ):
+            return True
+        return False
+
+    initial_outside = [
+        (tok_idx, dist_norm, tok)
+        for tok_idx, dist_norm, tok in all_outside
+        if _in_capture_radius(dist_norm, tok, max_radius_norm)
+    ]
+    initial_tokens = [item[2] for item in initial_outside]
+    imm_local_indices = _find_immediate_label_indices(
+        initial_tokens,
+        target_region,
+        med_h,
+        target_label=label,
+    )
+    imm_global_indices = {initial_outside[i][0] for i in imm_local_indices}
+
+    dynamic_indices = _find_dynamic_token_indices(
+        tokens,
+        ty=ty,
+        med_h=med_h,
+        row_band_active=row_band_active,
+        exclude_dynamic_tokens=exclude_dynamic_tokens,
+        entity_values=entity_values,
+    )
+    # Immediate labels are never pruned by automatic heuristics; explicit
+    # entity_values still respect immediate labels to prevent unsafe drift.
+    dynamic_indices -= imm_global_indices
+
+    filtered = [item for item in initial_outside if item[0] not in dynamic_indices]
+    pruned_any = len(filtered) < len(initial_outside)
+    if pruned_any and len(filtered) < _MIN_STATIC_TOKENS:
+        expanded_radius = max(max_radius_norm * 1.8, _STATIC_FALLBACK_RADIUS_NORM)
+        expanded = [
+            item
+            for item in all_outside
+            if item[0] not in dynamic_indices
+            and _in_capture_radius(item[1], item[2], expanded_radius)
+        ]
+        if expanded:
+            filtered = expanded
+    if not filtered:
+        # Never produce an empty constellation when unpruned context exists.
+        filtered = initial_outside
+
+    nearby: list[tuple[int, float, ConstellationToken]] = []
+    for tok_idx, dist_norm, tok in filtered:
+        dx_norm = (tok.cx - tx) / med_h
+        dy_norm = (tok.cy - ty) / med_h
+        weight = 1.0 / (1.0 + dist_norm / 6.0)
+        is_imm = tok_idx in imm_global_indices
+        same_row = _is_same_row_band(tok)
+        if row_band_active:
+            weight *= _ROW_BAND_SAME_BOOST if same_row else _ROW_BAND_OTHER_DECAY
+        priority = 0 if is_imm else (1 if same_row else 2)
+        nearby.append(
+            (
+                priority,
+                dist_norm,
+                ConstellationToken(
+                    text=tok.text,
+                    norm_text=tok.norm_text,
+                    dx_norm=dx_norm,
+                    dy_norm=dy_norm,
+                    weight=weight,
+                    is_immediate_label=is_imm,
+                ),
+            )
+        )
+    # Keep immediate label tokens first, same-row tokens second, then by proximity.
+    nearby.sort(key=lambda item: (item[0], item[1]))
+    kept = [item[2] for item in nearby[:max_tokens]]
+
     return TargetConstellation(
         tokens=kept,
         median_token_height=med_h,
-        target_w_norm=max(0.25, float(target_region[2]) / med_h),
-        target_h_norm=max(0.25, float(target_region[3]) / med_h),
+        target_w_norm=target_w_norm,
+        target_h_norm=target_h_norm,
         label=label,
         intent=intent,
         target_is_blank=target_is_blank,
@@ -693,6 +1134,7 @@ def capture_constellation(
         target_ink_density=target_ink_density,
         target_luma_std=target_luma_std,
         target_frame_contrast=target_frame_contrast,
+        row_band_mode=row_band_active,
     )
 
 
@@ -723,18 +1165,28 @@ def _score_point(
     for ct in constellation.tokens:
         ex = cx + ct.dx_norm * live_med_h
         ey = cy + ct.dy_norm * live_med_h
-        dist_norm = math.hypot(ct.dx_norm, ct.dy_norm)
-        eff_sigma = sigma_norm * (1.0 + 0.08 * dist_norm)
-        eff_max_err = max_err_norm * (1.0 + 0.08 * dist_norm)
+        eff_sigma_x = sigma_norm * (1.0 + 0.08 * abs(ct.dx_norm))
+        eff_max_dx = max_err_norm * (1.0 + 0.08 * abs(ct.dx_norm))
+        if constellation.row_band_mode and abs(ct.dy_norm) <= _ROW_BAND_DY_NORM:
+            # Keep vertical tolerance tight for same-row tokens so row labels
+            # never grant credit to adjacent sibling rows above or below.
+            eff_sigma_y = min(sigma_norm, 0.85)
+            eff_max_dy = min(max_err_norm, 1.4)
+        else:
+            eff_sigma_y = sigma_norm * (1.0 + 0.08 * abs(ct.dy_norm))
+            eff_max_dy = max_err_norm * (1.0 + 0.08 * abs(ct.dy_norm))
         best_token_score = 0.0
         for lt in live_tokens:
             text_sim = _token_text_similarity(ct.norm_text, lt.norm_text)
             if text_sim <= 0.0:
                 continue
-            err_norm = math.hypot(lt.cx - ex, lt.cy - ey) / live_med_h
-            if err_norm > eff_max_err:
+            dx_err = abs(lt.cx - ex) / live_med_h
+            dy_err = abs(lt.cy - ey) / live_med_h
+            if dx_err > eff_max_dx or dy_err > eff_max_dy:
                 continue
-            spatial = math.exp(-0.5 * (err_norm / eff_sigma) ** 2)
+            spatial = math.exp(
+                -0.5 * ((dx_err / eff_sigma_x) ** 2 + (dy_err / eff_sigma_y) ** 2)
+            )
             combined = text_sim * spatial
             if combined > best_token_score:
                 best_token_score = combined
@@ -776,6 +1228,7 @@ def disambiguate_candidates(
     merge_overlapping: bool = True,
     ocr_fn: Optional[OcrFn] = None,
     _live_tokens: Optional[Sequence[OcrToken]] = None,
+    _candidate_unit_heights: Optional[Sequence[float]] = None,
 ) -> Optional[CandidateScore]:
     """Pick the single candidate matching ``constellation``, or abstain (None).
 
@@ -799,14 +1252,20 @@ def disambiguate_candidates(
     live_med_h = _median_token_height(live_tokens)
 
     scored: list[CandidateScore] = []
-    for region in candidates:
+    for idx, region in enumerate(candidates):
         cx = region[0] + region[2] / 2.0
         cy = region[1] + region[3] / 2.0
+        unit_h = (
+            _candidate_unit_heights[idx]
+            if _candidate_unit_heights is not None
+            and idx < len(_candidate_unit_heights)
+            else live_med_h
+        )
         if not _immediate_labels_supported(
             cx,
             cy,
             live_tokens,
-            live_med_h,
+            unit_h,
             constellation,
             sigma_norm=sigma_norm,
         ):
@@ -817,7 +1276,7 @@ def disambiguate_candidates(
                 cy,
                 region,
                 live_tokens,
-                live_med_h,
+                unit_h,
                 constellation,
                 sigma_norm=sigma_norm,
                 max_err_norm=max_err_norm,
@@ -922,14 +1381,14 @@ def _refined_unit_height(
     return float(statistics.median(ratios))
 
 
-def _vote_candidate_regions(
+def _vote_candidate_regions_with_scale(
     live_tokens: Sequence[OcrToken],
     constellation: TargetConstellation,
     *,
     cluster_radius_norm: float = 1.5,
     max_spread_share: float = 0.35,
-) -> list[Region]:
-    """Generate candidate regions for blank/unlabeled targets via back-projection.
+) -> list[tuple[Region, float]]:
+    """Generate ``(region, refined_unit_h)`` hypotheses via back-projection.
 
     Every live token matching a recorded constellation word votes for the
     target center implied by the recorded scale-normalized offset. Votes within
@@ -941,20 +1400,22 @@ def _vote_candidate_regions(
     if not live_tokens or not constellation.tokens:
         return []
     live_med_h = _median_token_height(live_tokens)
-    votes: list[tuple[float, float, float, ConstellationToken, OcrToken]] = []
-    for ct in constellation.tokens:
+    votes: list[tuple[float, float, float, int, ConstellationToken, OcrToken]] = []
+    for ct_idx, ct in enumerate(constellation.tokens):
         for lt in live_tokens:
             sim = _token_text_similarity(ct.norm_text, lt.norm_text)
             if sim <= 0.0:
                 continue
             pred_cx = lt.cx - ct.dx_norm * live_med_h
             pred_cy = lt.cy - ct.dy_norm * live_med_h
-            votes.append((pred_cx, pred_cy, ct.weight * sim, ct, lt))
+            votes.append((pred_cx, pred_cy, ct.weight * sim, ct_idx, ct, lt))
     if not votes:
         return []
 
     radius_px = cluster_radius_norm * live_med_h
-    clusters: list[list[tuple[float, float, float, ConstellationToken, OcrToken]]] = []
+    clusters: list[
+        list[tuple[float, float, float, int, ConstellationToken, OcrToken]]
+    ] = []
     for item in sorted(votes, key=lambda v: -v[2]):
         vx, vy = item[0], item[1]
         placed = False
@@ -969,12 +1430,32 @@ def _vote_candidate_regions(
         if not placed:
             clusters.append([item])
 
-    regions: list[Region] = []
+    results: list[tuple[Region, float]] = []
     min_votes = 2 if len(constellation.tokens) >= 2 else 1
     for cluster in clusters:
         if len(cluster) < min_votes:
             continue
-        pairs = [(c[3], c[4], c[2]) for c in cluster]
+        # Keep at most one (closest-to-median) live match per recorded token so
+        # cross-row collisions of repeated words (like "Row") do not distort RMS.
+        anchor_cx = float(statistics.median(c[0] for c in cluster))
+        anchor_cy = float(statistics.median(c[1] for c in cluster))
+        best_by_ct: dict[
+            int, tuple[float, float, float, int, ConstellationToken, OcrToken]
+        ] = {}
+        for item in cluster:
+            ct_idx = item[3]
+            prev = best_by_ct.get(ct_idx)
+            if prev is None:
+                best_by_ct[ct_idx] = item
+                continue
+            d_new = math.hypot(item[0] - anchor_cx, item[1] - anchor_cy)
+            d_prev = math.hypot(prev[0] - anchor_cx, prev[1] - anchor_cy)
+            if (d_new, -item[2]) < (d_prev, -prev[2]):
+                best_by_ct[ct_idx] = item
+        deduped = list(best_by_ct.values())
+        if len(deduped) < min_votes:
+            continue
+        pairs = [(c[4], c[5], c[2]) for c in deduped]
         unit_h = _refined_unit_height(pairs, live_med_h)
         # If inter-token spacing scale contradicts OCR glyph height scale by
         # more than 22%, the layout reflowed anisotropically; abstain safely.
@@ -995,8 +1476,27 @@ def _vote_candidate_regions(
             continue
         x0 = max(0, int(round(mcx - box_w / 2.0)))
         y0 = max(0, int(round(mcy - box_h / 2.0)))
-        regions.append((x0, y0, box_w, box_h))
-    return regions
+        results.append(((x0, y0, box_w, box_h), unit_h))
+    return results
+
+
+def _vote_candidate_regions(
+    live_tokens: Sequence[OcrToken],
+    constellation: TargetConstellation,
+    *,
+    cluster_radius_norm: float = 1.5,
+    max_spread_share: float = 0.35,
+) -> list[Region]:
+    """Generate candidate regions for blank/unlabeled targets via back-projection."""
+    return [
+        region
+        for region, _ in _vote_candidate_regions_with_scale(
+            live_tokens,
+            constellation,
+            cluster_radius_norm=cluster_radius_norm,
+            max_spread_share=max_spread_share,
+        )
+    ]
 
 
 class ConstellationGrounder:
@@ -1064,10 +1564,13 @@ class ConstellationGrounder:
             return None
 
         label = (ocr_text or "").strip() or (constellation.label or "").strip()
+        candidate_unit_heights: Optional[list[float]] = None
         if label:
             candidates = _label_candidate_regions(live_tokens, label)
         else:
-            candidates = _vote_candidate_regions(live_tokens, constellation)
+            voted = _vote_candidate_regions_with_scale(live_tokens, constellation)
+            candidates = [r for r, _ in voted]
+            candidate_unit_heights = [u for _, u in voted]
         if not candidates:
             return None
 
@@ -1081,6 +1584,7 @@ class ConstellationGrounder:
             max_err_norm=self._max_err_norm,
             ocr_fn=self._ocr_fn,
             _live_tokens=live_tokens,
+            _candidate_unit_heights=candidate_unit_heights,
         )
         if winner is None:
             return None
