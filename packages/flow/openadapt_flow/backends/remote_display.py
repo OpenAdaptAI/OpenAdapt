@@ -81,6 +81,11 @@ _LEASE_ARMED = 1
 _LEASE_INVALIDATED = 2
 _SESSION_DIGEST_HEX_LENGTH = 64
 
+DEFAULT_FRAME_SETTLE_MAX_WAIT_S = 0.6
+DEFAULT_FRAME_SETTLE_POLL_S = 0.05
+DEFAULT_FRAME_SETTLE_MAX_MEAN_DELTA = 1.5
+DEFAULT_HOVER_JITTER_TOLERANCE_PX = 2
+
 _MACOS_CHROME_AX_TITLE_SUFFIXES = {
     "Google Chrome": "Google Chrome",
     "Google Chrome for Testing": "Google Chrome for Testing",
@@ -435,6 +440,122 @@ def _canonical_rgb_digest(png: bytes) -> bytes:
     return digest.digest()
 
 
+@dataclass(frozen=True)
+class FrameSettleResult:
+    """Outcome of bounded AVC444/H.264 frame-settle polling."""
+
+    frame_png: bytes
+    settled: bool
+    frames_checked: int
+    last_mean_delta: float
+    elapsed_s: float
+
+
+def frame_mean_abs_delta(frame_a_png: bytes, frame_b_png: bytes) -> float:
+    """Return per-pixel mean absolute RGB delta in [0, 255] between two PNG frames.
+
+    Returns ``float("inf")`` when the decoded frame dimensions differ so a
+    window resize or DPI change never counts as settled.
+    """
+    with Image.open(io.BytesIO(frame_a_png)) as img_a:
+        rgb_a = img_a.convert("RGB")
+    with Image.open(io.BytesIO(frame_b_png)) as img_b:
+        rgb_b = img_b.convert("RGB")
+    if rgb_a.size != rgb_b.size:
+        return float("inf")
+    total_samples = rgb_a.size[0] * rgb_a.size[1] * 3
+    if total_samples == 0:
+        return 0.0
+    diff = ImageChops.difference(rgb_a, rgb_b)
+    hist = diff.histogram()
+    weighted_sum = sum((idx % 256) * count for idx, count in enumerate(hist))
+    return weighted_sum / float(total_samples)
+
+
+def wait_for_frame_settle(
+    capture_fn: Callable[[], bytes],
+    *,
+    max_wait_s: float = DEFAULT_FRAME_SETTLE_MAX_WAIT_S,
+    poll_interval_s: float = DEFAULT_FRAME_SETTLE_POLL_S,
+    max_mean_delta: float = DEFAULT_FRAME_SETTLE_MAX_MEAN_DELTA,
+    stable_pairs: int = 1,
+    sleep_fn: Callable[[float], None] = time.sleep,
+    monotonic_fn: Callable[[], float] = time.monotonic,
+) -> FrameSettleResult:
+    """Poll consecutive frames until AVC444/H.264 refinement settles or times out.
+
+    Captures an initial frame and compares consecutive frames using
+    :func:`frame_mean_abs_delta`. Returns immediately once ``stable_pairs``
+    consecutive frame pairs stay at or below ``max_mean_delta`` (for the
+    default ``stable_pairs=1``, two consecutive stable frames return without
+    sleeping). On timeout, returns the latest frame with ``settled=False``
+    rather than raising.
+    """
+    if max_wait_s < 0:
+        raise ValueError("max_wait_s must be non-negative")
+    if poll_interval_s < 0:
+        raise ValueError("poll_interval_s must be non-negative")
+    if max_mean_delta < 0:
+        raise ValueError("max_mean_delta must be non-negative")
+    if stable_pairs < 1:
+        raise ValueError("stable_pairs must be at least 1")
+
+    start = monotonic_fn()
+    deadline = start + max_wait_s
+    prev = capture_fn()
+    frames_checked = 1
+    consecutive_stable = 0
+    last_delta = 0.0
+
+    while True:
+        curr = capture_fn()
+        frames_checked += 1
+        last_delta = frame_mean_abs_delta(prev, curr)
+        if last_delta <= max_mean_delta:
+            consecutive_stable += 1
+            if consecutive_stable >= stable_pairs:
+                return FrameSettleResult(
+                    frame_png=curr,
+                    settled=True,
+                    frames_checked=frames_checked,
+                    last_mean_delta=last_delta,
+                    elapsed_s=max(0.0, monotonic_fn() - start),
+                )
+        else:
+            consecutive_stable = 0
+        prev = curr
+        remaining = deadline - monotonic_fn()
+        if remaining <= 0:
+            return FrameSettleResult(
+                frame_png=prev,
+                settled=False,
+                frames_checked=frames_checked,
+                last_mean_delta=last_delta,
+                elapsed_s=max(0.0, monotonic_fn() - start),
+            )
+        if poll_interval_s > 0:
+            sleep_fn(min(poll_interval_s, remaining))
+
+
+def points_within_hover_jitter(
+    expected: tuple[int, int],
+    observed: tuple[int, int],
+    *,
+    max_jitter_px: int = DEFAULT_HOVER_JITTER_TOLERANCE_PX,
+) -> bool:
+    """Return True when ``observed`` is within ``max_jitter_px`` of ``expected``.
+
+    Uses Chebyshev distance (max of ``|dx|``, ``|dy|``) so a 1 to 2 px
+    sub-pixel or hover-highlight shift under H.264/AVC444 compression is
+    tolerated while real layout drift or occlusion still fails strictly.
+    """
+    if max_jitter_px < 0:
+        raise ValueError("max_jitter_px must be non-negative")
+    dx = abs(int(expected[0]) - int(observed[0]))
+    dy = abs(int(expected[1]) - int(observed[1]))
+    return max(dx, dy) <= int(max_jitter_px)
+
+
 def _clean_marker(marker: Optional[str], *, name: str) -> Optional[str]:
     """Normalize an explicitly PHI-free marker without observing screen text."""
 
@@ -695,9 +816,13 @@ class RemoteDisplayBackend:
         session_marker_probe: Optional[Callable[[bytes], bool]] = None,
         session_identity_observer: Optional[Callable[[], Optional[str]]] = None,
         remote_frame_contract: Optional["RemoteFrameContract"] = None,
+        hover_jitter_tolerance_px: int = 0,
     ) -> None:
         self._client = client if client is not None else _default_window_client()
         self._remote_frame_contract = remote_frame_contract
+        self._hover_jitter_tolerance_px = int(hover_jitter_tolerance_px)
+        if not (0 <= self._hover_jitter_tolerance_px <= 4):
+            raise ValueError("hover_jitter_tolerance_px must be between 0 and 4")
         self._owner_substr = owner_substr
         self._title_substr = title_substr
         self._require_input_trust = require_input_trust
@@ -1186,12 +1311,39 @@ class RemoteDisplayBackend:
         click (:meth:`prepare_pointer_actuation`); emits no button edge."""
         self.prepare_pointer_actuation(x, y)
 
+    def wait_for_frame_settle(
+        self,
+        *,
+        max_wait_s: float = DEFAULT_FRAME_SETTLE_MAX_WAIT_S,
+        poll_interval_s: float = DEFAULT_FRAME_SETTLE_POLL_S,
+        max_mean_delta: float = DEFAULT_FRAME_SETTLE_MAX_MEAN_DELTA,
+        stable_pairs: int = 1,
+    ) -> FrameSettleResult:
+        """Poll consecutive screenshots until progressive codec refinement settles."""
+        return wait_for_frame_settle(
+            self.screenshot,
+            max_wait_s=max_wait_s,
+            poll_interval_s=poll_interval_s,
+            max_mean_delta=max_mean_delta,
+            stable_pairs=stable_pairs,
+        )
+
+    def _prepared_point_matches(self, point: tuple[int, int]) -> bool:
+        """Check whether ``point`` matches the pre-positioned pointer point."""
+        if self._prepared_pointer_point is None:
+            return False
+        return points_within_hover_jitter(
+            self._prepared_pointer_point,
+            point,
+            max_jitter_px=self._hover_jitter_tolerance_px,
+        )
+
     def click(self, x: int, y: int, *, double: bool = False) -> None:
         """Click (or double-click) at captured-pixel coordinates (x, y)."""
         with self._input_lock:
             point = (int(x), int(y))
             if self._actuation_lease_state == _LEASE_ARMED:
-                if self._prepared_pointer_point != point:
+                if not self._prepared_point_matches(point):
                     self._actuation_lease_state = _LEASE_INVALIDATED
                     self._prepared_pointer_point = None
                     raise RemoteDisplayError(
@@ -1294,7 +1446,7 @@ class RemoteDisplayBackend:
         with self._input_lock:
             point = (int(x), int(y))
             if self._actuation_lease_state == _LEASE_ARMED:
-                if self._prepared_pointer_point != point:
+                if not self._prepared_point_matches(point):
                     self._actuation_lease_state = _LEASE_INVALIDATED
                     self._prepared_pointer_point = None
                     raise RemoteDisplayError(
@@ -1380,7 +1532,7 @@ class RemoteDisplayBackend:
             start = (int(x), int(y))
             end = (int(end_x), int(end_y))
             if self._actuation_lease_state == _LEASE_ARMED:
-                if self._prepared_pointer_point != start:
+                if not self._prepared_point_matches(start):
                     self._actuation_lease_state = _LEASE_INVALIDATED
                     self._prepared_pointer_point = None
                     raise RemoteDisplayError(
