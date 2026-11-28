@@ -45,20 +45,9 @@ __all__ = [
     "validate_form_plan",
 ]
 
-_CODE_KEY_RE = re.compile(
-    r"(?:^|[^a-z0-9])(mrn|cpt|hcpcs|icd[-_ ]?\d*|ref|policy[-_ ]?id|npi|"
-    r"claim[-_ ]?id|auth(?:orization)?[-_ ]?(?:id|number))(?:$|[^a-z0-9])"
-)
-
 
 def _norm_key(text: str) -> str:
     return " ".join(str(text).lower().replace("_", " ").split())
-
-
-def _is_code_key(name: str) -> bool:
-    return (
-        _CODE_KEY_RE.search("_" + _norm_key(name).replace(" ", "_") + "_") is not None
-    )
 
 
 @dataclass
@@ -98,7 +87,7 @@ def validate_form_plan(
     pinned_entities: Mapping[str, str] | Sequence[Any] = (),
     required_obligations: Sequence[Any] = (),
 ) -> FormPlanValidationResult:
-    """Check every field before anything is dispatched. Any problem blocks all."""
+    """Check field integrity and any explicitly requested obligation coverage."""
     pinned: dict[str, str] = {}
     if isinstance(pinned_entities, Mapping):
         pinned = {_norm_key(k): str(v) for k, v in pinned_entities.items()}
@@ -108,23 +97,18 @@ def validate_form_plan(
     problems: list[str] = []
     by_name: dict[str, list[FormFieldWrite]] = {}
     for fw in plan.fields:
-        by_name.setdefault(_norm_key(fw.field_name), []).append(fw)
-        if not str(fw.selector).strip():
+        key = _norm_key(fw.field_name)
+        by_name.setdefault(key, []).append(fw)
+        if not str(fw.selector or "").strip():
             problems.append(f"{fw.field_name}: empty selector")
-        if not str(fw.value).strip():
+        if fw.value is None or not str(fw.value).strip():
             blank.append(fw.field_name)
             continue
-        key = _norm_key(fw.field_name)
-        if key in pinned and (fw.exact_code or _is_code_key(fw.field_name)):
-            if fw.value != pinned[key]:
-                mismatched.append(fw.field_name)
-                problems.append(
-                    f"{fw.field_name}: expected exactly {pinned[key]!r}, got {fw.value!r}"
-                )
-        elif key in pinned and fw.value != pinned[key]:
-            if _norm_key(fw.value) != _norm_key(pinned[key]):
-                mismatched.append(fw.field_name)
-                problems.append(f"{fw.field_name}: expected {pinned[key]!r}")
+        if key in pinned and fw.value != pinned[key]:
+            mismatched.append(fw.field_name)
+            problems.append(
+                f"{fw.field_name}: expected exactly {pinned[key]!r}, got {fw.value!r}"
+            )
     for ob in required_obligations:
         if not _ob_attr(ob, "required", True):
             continue
@@ -132,17 +116,24 @@ def validate_form_plan(
         expected = str(_ob_attr(ob, "expected_value"))
         field_id = str(_ob_attr(ob, "field_id"))
         exact = bool(_ob_attr(ob, "exact_match", True))
-        hits = by_name.get(_norm_key(label), []) + by_name.get(_norm_key(field_id), [])
-        found = False
-        for fw in hits:
-            if not expected:
-                found = bool(str(fw.value).strip())
-            elif exact:
-                found = fw.value == expected
-            else:
-                found = _norm_key(expected) in _norm_key(fw.value)
-            if found:
-                break
+        if not expected:
+            hits = by_name.get(_norm_key(label), []) + by_name.get(
+                _norm_key(field_id), []
+            )
+            found = any(fw.value is not None and str(fw.value).strip() for fw in hits)
+        elif exact:
+            token = re.compile(rf"(?<![\w-]){re.escape(expected)}(?![\w-])")
+            found = any(
+                token.search(str(fw.value))
+                for fw in plan.fields
+                if fw.value is not None
+            )
+        else:
+            found = any(
+                _norm_key(expected) in _norm_key(fw.value)
+                for fw in plan.fields
+                if fw.value is not None
+            )
         if not found:
             missing.append(label or field_id)
     if not plan.fields:

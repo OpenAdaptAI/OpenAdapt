@@ -214,6 +214,9 @@ _NULL_SINKS = frozenset({"/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty"})
 _WRAPPERS = frozenset(
     {"sudo", "time", "nohup", "command", "exec", "nice", "builtin", "doas", "xargs"}
 )
+_SHELL_CONTROL_WORDS = frozenset(
+    {"if", "then", "elif", "else", "while", "until", "do", "!"}
+)
 
 
 def _strip_wrappers(words: list[str]) -> tuple[list[str], bool]:
@@ -221,8 +224,8 @@ def _strip_wrappers(words: list[str]) -> tuple[list[str], bool]:
     privileged = False
     out = list(words)
     while out:
-        head = out[0]
-        if re.fullmatch(r"[A-Za-z_]\w*=.*", head):
+        head = os.path.basename(out[0])
+        if re.fullmatch(r"[A-Za-z_]\w*=.*", out[0]) or out[0] in _SHELL_CONTROL_WORDS:
             out.pop(0)
         elif head in ("sudo", "doas"):
             privileged = True
@@ -303,6 +306,21 @@ def _instruction_mentions(instruction: str, *words: str) -> bool:
 
 
 _DANGEROUS_HOME = ("~", "$HOME", "${HOME}")
+_SCRIPT_SUFFIXES = (".sh", ".bash")
+_SCRIPT_WRITE_AUTH = re.compile(
+    r"\b(?:create|write)\b[^.\n;]{0,100}(?:\bscripts?\b|[\w./-]+\.(?:sh|bash)\b)",
+    re.IGNORECASE,
+)
+
+
+def _is_in_workspace(path: str, workspace_root: str) -> bool:
+    if not workspace_root:
+        return False
+    root = os.path.realpath(workspace_root)
+    target = os.path.realpath(os.path.join(root, os.path.expanduser(path)))
+    return target == root or target.startswith(root.rstrip(os.sep) + os.sep)
+
+
 _SYSTEM_PREFIXES = (
     "/etc", "/usr", "/bin", "/sbin", "/lib", "/var", "/home", "/root", "/boot",
     "/opt", "/Users", "/System", "/Library", "/dev", "/sys", "/proc", "/mnt",
@@ -316,13 +334,12 @@ def _is_dangerous_target(target: str, workspace_root: str) -> bool:
     for home in _DANGEROUS_HOME:
         if t == home or t.startswith(home + "/"):
             return True
-    if t == ".." or t.startswith("../"):
+    norm = os.path.normpath(t)
+    if norm == ".." or norm.startswith("../"):
         return True
-    if os.path.isabs(t):
-        norm = os.path.normpath(t.replace("/*", ""))
-        if workspace_root:
-            root = os.path.normpath(workspace_root)
-            return not (norm == root or norm.startswith(root + os.sep))
+    if workspace_root:
+        return not _is_in_workspace(t, workspace_root)
+    if os.path.isabs(norm):
         parts = [p for p in norm.split("/") if p]
         return (
             len(parts) <= 1
@@ -334,6 +351,10 @@ def _is_dangerous_target(target: str, workspace_root: str) -> bool:
 
 _POWER_CMDS = frozenset({"shutdown", "reboot", "halt", "poweroff", "init"})
 _FORK_BOMB = re.compile(r":\s*\(\s*\)\s*\{[^}]*:\s*\|\s*:?\s*&?[^}]*\}\s*;?\s*:")
+_PRIVILEGED_HOST_REASON = (
+    "Live execution of privileged host command blocked; "
+    "validate syntax with sh -n / bash -n instead of executing."
+)
 
 _NET_TOOLS = frozenset(
     {
@@ -387,6 +408,15 @@ _READ_ONLY_GIT = frozenset(
         "grep",
     }
 )
+_SHELL_NAMES = frozenset({"bash", "sh", "zsh", "dash", "ksh"})
+
+
+def _shell_syntax_check(words: list[str]) -> bool:
+    return (
+        os.path.basename(words[0]) in _SHELL_NAMES
+        and words[1:2] == ["-n"]
+        and (len(words) < 3 or words[2] == "--" or not words[2].startswith("-"))
+    )
 
 
 def _write_targets(
@@ -435,7 +465,7 @@ def _write_targets(
 
 
 def _classify_stage(
-    stage: str, instruction: str, workspace_root: str
+    stage: str, instruction: str, workspace_root: str, *, authoring_script: bool = False
 ) -> tuple[ShellEffectKind, str, list[str], list[str]]:
     """Classify one simple command. Returns (kind, reason, targets, oracle_checkable_targets)."""
     words, redirects = _tokenize(stage)
@@ -457,10 +487,7 @@ def _classify_stage(
     destructive = ""
     auth_words: tuple[str, ...] = ()
     if cmd in ("mount", "umount", "remount", "unmount") or cmd.startswith("mount."):
-        destructive, auth_words = (
-            f"{cmd} changes filesystem mounts",
-            ("mount", "remount", "umount", "unmount"),
-        )
+        destructive = f"{cmd} changes filesystem mounts"
     elif cmd == "unshare" and (
         _privileged
         or "m" in flags
@@ -472,33 +499,26 @@ def _classify_stage(
             ("unshare", "namespace"),
         )
     elif cmd.startswith("mkfs") or cmd in ("fdisk", "parted", "wipefs", "mke2fs"):
-        destructive, auth_words = (
-            f"{cmd} writes a filesystem or partition table",
-            (cmd, "mkfs", "format"),
-        )
+        destructive = f"{cmd} writes a filesystem or partition table"
     elif cmd == "dd" and any(w.startswith("of=/dev/") for w in words[1:]):
-        destructive, auth_words = "dd writes to a raw device", ("dd",)
+        destructive = "dd writes to a raw device"
     elif cmd == "rm" and ("r" in flags.lower() or "--recursive" in words):
         bad = [a for a in args if _is_dangerous_target(a, workspace_root)]
         if bad:
-            destructive, auth_words = (
-                f"recursive rm outside the workspace scope: {bad[0]}",
-                ("rm -rf", "rm -r", "delete everything", "wipe"),
-            )
-    elif cmd in ("chmod", "chown", "chgrp") and "R" in flags:
+            destructive = f"recursive rm outside the workspace scope: {bad[0]}"
+    elif cmd in ("chmod", "chown", "chgrp") and (
+        "R" in flags or "--recursive" in words
+    ):
         bad = [
             a
             for a in args[1:]
             if _is_dangerous_target(a, workspace_root)
-            or a.rstrip("/") in ("/home", "/etc", "/usr", "/var")
+            or os.path.normpath(a) in _SYSTEM_PREFIXES
         ]
         if bad:
-            destructive, auth_words = (
-                f"recursive {cmd} on {bad[0]}",
-                (f"{cmd} -R", f"recursive {cmd}"),
-            )
+            destructive = f"recursive {cmd} on {bad[0]}"
     elif cmd == "kill" and "-9" in words and "-1" in words:
-        destructive, auth_words = "kill -9 -1 terminates every process", ("kill -9 -1",)
+        destructive = "kill -9 -1 terminates every process"
     elif cmd in (
         "ufw",
         "iptables",
@@ -510,12 +530,10 @@ def _classify_stage(
     ):
         joined = " ".join(words[1:])
         if re.search(
-            r"(?<!\S)(disable|-F|--flush|flush|0|permissive|off|-X)(?!\S)", joined
+            r"(?<!\S)(disable|-F|--flush|--flush-rules|flush|0|permissive|off|-X)(?!\S)",
+            joined,
         ):
-            destructive, auth_words = (
-                f"{cmd} disables the firewall or access control",
-                ("firewall", cmd),
-            )
+            destructive = f"{cmd} disables the firewall or access control"
     elif (
         cmd in ("systemctl", "service")
         and re.search(r"\b(stop|disable|mask)\b", " ".join(words[1:]))
@@ -523,10 +541,7 @@ def _classify_stage(
             r"firewall|ufw|iptables|sshd|auditd|selinux|apparmor", " ".join(words), re.I
         )
     ):
-        destructive, auth_words = (
-            f"{cmd} stops a security service",
-            ("firewall", "sshd", "auditd"),
-        )
+        destructive = f"{cmd} stops a security service"
     elif cmd in ("passwd", "usermod", "visudo", "userdel", "deluser") and (
         cmd != "passwd" or "-d" in words
     ):
@@ -535,8 +550,18 @@ def _classify_stage(
             (cmd, "password", "sudoers"),
         )
     elif cmd in _POWER_CMDS:
-        destructive, auth_words = f"{cmd} stops the machine", (cmd,)
+        destructive = f"{cmd} stops the machine"
     if destructive:
+        # Host operations have no prompt-based execution override.
+        if not auth_words:
+            if authoring_script:
+                return ShellEffectKind.SCOPED_MUTATION, destructive, args, []
+            return (
+                ShellEffectKind.DESTRUCTIVE_PRIVILEGED,
+                _PRIVILEGED_HOST_REASON,
+                args,
+                [],
+            )
         if _instruction_mentions(instruction, *auth_words):
             return (
                 ShellEffectKind.SCOPED_MUTATION,
@@ -557,6 +582,8 @@ def _classify_stage(
         )
 
     # ---- read only ----
+    if _shell_syntax_check(words):
+        return ShellEffectKind.READ_ONLY, "shell syntax check", [], []
     if cmd == "curl" and not any(
         w in ("-o", "-O", "--output", "--remote-name", "-T", "--upload-file")
         for w in words
@@ -598,26 +625,30 @@ def _is_exfil(chunk: str) -> bool:
     return bool(_SENSITIVE.search(chunk))
 
 
-_SHELL_NAMES = frozenset({"bash", "sh", "zsh", "dash", "ksh"})
 _MAX_SCRIPT_BYTES = 64 * 1024
 _MAX_SCRIPT_DEPTH = 8
 
 
-def _script_ref(stage: str) -> str:
-    """Return the script file a simple command runs, or an empty string."""
+def _script_invocation(stage: str) -> tuple[str, str]:
+    """Return the script path or inline shell body a command executes."""
     words, _ = _tokenize(stage)
     words, _ = _strip_wrappers(words)
     if not words:
-        return ""
+        return "", ""
     head = os.path.basename(words[0])
     if head in _SHELL_NAMES:
+        if _shell_syntax_check(words):
+            return "", ""
+        if words[1:2] == ["-c"] and len(words) > 2:
+            return "", words[2]
         rest = [w for w in words[1:] if not w.startswith("-")]
-        return rest[0] if rest and rest[0].endswith((".sh", ".bash")) else ""
+        if rest and rest[0].endswith(_SCRIPT_SUFFIXES):
+            return rest[0], ""
     if words[0] in ("source", ".") and len(words) > 1:
-        return words[1]
-    if words[0].endswith((".sh", ".bash")):
-        return words[0]
-    return ""
+        return words[1], ""
+    if words[0].endswith(_SCRIPT_SUFFIXES):
+        return words[0], ""
+    return "", ""
 
 
 def _find_script(ref: str, workspace_root: str) -> Path | None:
@@ -633,12 +664,14 @@ def _find_script(ref: str, workspace_root: str) -> Path | None:
     return None
 
 
-def _script_body(script: Path) -> str:
+def _script_body(script: Path) -> str | None:
     try:
         with script.open("rb") as handle:
-            data = handle.read(_MAX_SCRIPT_BYTES)
+            data = handle.read(_MAX_SCRIPT_BYTES + 1)
     except OSError:
-        return ""
+        return None
+    if len(data) > _MAX_SCRIPT_BYTES:
+        return None
     lines = data.decode("utf-8", errors="replace").splitlines()
     return "\n".join(ln for ln in lines if not ln.lstrip().startswith("#"))
 
@@ -666,6 +699,8 @@ def _classify_impl(
     protected_oracle_paths: Collection[str],
     workspace_root: str,
     seen: frozenset[str],
+    *,
+    authoring_script: bool = False,
 ) -> ShellClassification:
     text = command or ""
     if _FORK_BOMB.search(text):
@@ -695,22 +730,42 @@ def _classify_impl(
             )
         for stage in _split_quoted(chunk, ["|", "&", "(", ")", "`", "{", "}"]):
             kind, why, targets, checkable = _classify_stage(
-                stage, task_instruction, workspace_root
+                stage,
+                task_instruction,
+                workspace_root,
+                authoring_script=authoring_script,
             )
             all_targets.extend(targets)
-            ref = _script_ref(stage) if workspace_root else ""
-            script = _find_script(ref, workspace_root) if ref else None
+            ref, body = _script_invocation(stage)
+            script = (
+                _find_script(ref, workspace_root) if ref and workspace_root else None
+            )
+            script_seen = seen
             if script is not None and str(script) not in seen:
-                if len(seen) < _MAX_SCRIPT_DEPTH:
-                    inner = _classify_impl(
-                        _script_body(script),
-                        task_instruction,
-                        protected_oracle_paths,
-                        workspace_root,
-                        seen | {str(script)},
+                body = _script_body(script) if len(seen) < _MAX_SCRIPT_DEPTH else None
+                if body is None:
+                    raise_to(
+                        ShellEffectKind.DESTRUCTIVE_PRIVILEGED,
+                        f"Cannot inspect all of script {ref}. Validate syntax with sh -n / bash -n.",
                     )
-                    if inner.blocked:
-                        raise_to(inner.kind, f"script {ref} contains: {inner.reason}")
+                script_seen = seen | {str(script)}
+            if body:
+                inner = _classify_impl(
+                    body,
+                    task_instruction,
+                    protected_oracle_paths,
+                    workspace_root,
+                    script_seen,
+                    authoring_script=authoring_script,
+                )
+                if inner.blocked:
+                    reason_prefix = f"script {ref} contains: " if ref else ""
+                    raise_to(
+                        inner.kind,
+                        inner.reason
+                        if inner.reason == _PRIVILEGED_HOST_REASON
+                        else reason_prefix + inner.reason,
+                    )
             for path in checkable:
                 explicit = _is_protected(path, protected_oracle_paths, workspace_root)
                 pattern = _is_oracle_pattern(path)
@@ -761,16 +816,22 @@ def classify_file_write(
             (path,),
         )
     body = content or ""
-    if path.endswith((".sh", ".bash")) or body.startswith(
+    if path.endswith(_SCRIPT_SUFFIXES) or body.startswith(
         ("#!/bin/sh", "#!/bin/bash", "#!/usr/bin/env bash", "#!/usr/bin/env sh")
     ):
-        inner = classify_shell_command(
+        inner = _classify_impl(
             "\n".join(
                 ln for ln in body.splitlines() if not ln.lstrip().startswith("#")
             ),
             task_instruction=task_instruction,
             protected_oracle_paths=protected_oracle_paths,
             workspace_root=workspace_root,
+            seen=frozenset(),
+            authoring_script=(
+                path.endswith(_SCRIPT_SUFFIXES)
+                and _is_in_workspace(path, workspace_root)
+                and bool(_SCRIPT_WRITE_AUTH.search(task_instruction))
+            ),
         )
         if inner.blocked:
             return ShellClassification(
@@ -839,20 +900,73 @@ class ImmutableOracleGuard:
         return (not bad, sorted(bad))
 
 
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+_PYTEST_NODE_ID = r"(?:[A-Za-z]:)?[^:\n]+(?:::[^:\s\[]+)+(?:\[.*?\])?"
+_PYTEST_SUMMARY_FAILURE = re.compile(
+    rf"^(?:FAILED|ERROR)\s+({_PYTEST_NODE_ID})(?:\s+-\s+.*)?$"
+)
+_PYTEST_VERBOSE_FAILURE = re.compile(
+    rf"^({_PYTEST_NODE_ID})\s+(?:FAILED|ERROR)(?:\s+\[\s*\d+%\])?$"
+)
+_UNITTEST_FAILURE = re.compile(r"^(?:FAIL|ERROR):\s+(\S+) \(([^)]+)\)")
+
+
 class PostEditTestGate:
     """Run existing project tests before allowing a task to finish."""
+
+    @staticmethod
+    def _run(
+        run_test_fn: Callable[[], tuple[bool, str]],
+    ) -> tuple[bool | None, str]:
+        try:
+            passed, summary = run_test_fn()
+        except Exception as exc:  # the runner itself failing is a failed gate
+            return None, f"test runner raised {type(exc).__name__}: {exc}"
+        if passed:
+            return True, ""
+        return False, summary or "existing tests failed"
 
     @staticmethod
     def verify_regression(
         run_test_fn: Callable[[], tuple[bool, str]],
     ) -> tuple[bool, str]:
-        try:
-            passed, summary = run_test_fn()
-        except Exception as exc:  # the runner itself failing is a failed gate
-            return False, f"test runner raised {type(exc).__name__}: {exc}"
-        if passed:
-            return True, ""
-        return False, summary or "existing tests failed"
+        passed, summary = PostEditTestGate._run(run_test_fn)
+        return passed is True, summary
+
+    @staticmethod
+    def parse_failing_tests(output: str) -> frozenset[str]:
+        """Extract pytest node IDs and qualified unittest method names."""
+        failures: set[str] = set()
+        for line in _ANSI_ESCAPE.sub("", output).splitlines():
+            line = line.strip()
+            match = _PYTEST_SUMMARY_FAILURE.match(
+                line
+            ) or _PYTEST_VERBOSE_FAILURE.match(line)
+            if match:
+                failures.add(match[1])
+                continue
+            match = _UNITTEST_FAILURE.match(line)
+            if match:
+                method, qualified_name = match.groups()
+                if qualified_name.rsplit(".", 1)[-1] != method:
+                    qualified_name = f"{qualified_name}.{method}"
+                failures.add(qualified_name)
+        return frozenset(failures)
+
+    @staticmethod
+    def verify_regression_relative(
+        run_test_fn: Callable[[], tuple[bool, str]],
+        baseline_failures: Collection[str],
+    ) -> tuple[bool, str, bool]:
+        """Compare failures with the baseline. An identical failing set is a contradiction."""
+        passed, summary = PostEditTestGate._run(run_test_fn)
+        if passed is not False:
+            return passed is True, summary, False
+        failing_now = PostEditTestGate.parse_failing_tests(summary)
+        if not failing_now:
+            return False, summary, False
+        baseline = frozenset(baseline_failures)
+        return failing_now <= baseline, summary, failing_now == baseline
 
 
 # --------------------------------------------------------------------------

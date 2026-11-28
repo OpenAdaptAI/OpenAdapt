@@ -7,7 +7,7 @@ Two app-agnostic components:
   binds the next item's payload into executable steps. ``MacroStore`` keeps the
   macros on disk, scoped by ``isolation_mode``. A macro that drifts is demoted
   so the caller falls back to the base model.
-* ``NoProgressDetector`` hashes the page state after each step and returns a
+* ``NoProgressDetector`` hashes the observed state after each step and returns a
   ``StallRecoveryPlan`` when consecutive steps change nothing or two states
   alternate.
 
@@ -367,6 +367,7 @@ class MacroStore:
 _INPUT_TAGS = {"input", "textarea", "select"}
 _INTERACTIVE_TAGS = _INPUT_TAGS | {"button", "a"}
 _REGION_FLAGS = ("in_modal", "in_main", "below_fold", "below_the_fold")
+_TERMINAL_TAIL_CHARS = 2000
 
 
 @dataclass
@@ -435,7 +436,7 @@ class NoProgressDetector:
 
     def reset(self) -> None:
         self._prev_digest: tuple[str, str, str] | None = None
-        self._history: list[tuple[str, tuple[str, str, str]]] = []
+        self._history: list[tuple[str, str, tuple[str, str, str]]] = []
         self._stall_count = 0
         self._escalations = 0
         self._attempted: set[str] = set()
@@ -446,8 +447,15 @@ class NoProgressDetector:
         url: str,
         dom_elements: Sequence[Mapping[str, Any]] | None,
         screenshot: bytes | None,
+        *,
+        terminal_output: str = "",
+        text_digest: str = "",
     ) -> tuple[str, str, str]:
         shot = hashlib.sha256(screenshot).hexdigest() if screenshot else ""
+        if terminal_output or text_digest:
+            terminal = terminal_output[-_TERMINAL_TAIL_CHARS:]
+            state = json.dumps((shot, terminal, text_digest))
+            shot = hashlib.sha256(state.encode()).hexdigest()
         return (url, _dom_hash(dom_elements), shot)
 
     def observe_step(
@@ -456,8 +464,17 @@ class NoProgressDetector:
         dom_elements: Sequence[Mapping[str, Any]] | None,
         screenshot: bytes | None,
         last_action: Mapping[str, Any] | None,
+        *,
+        terminal_output: str = "",
+        text_digest: str = "",
     ) -> StallRecoveryPlan | None:
-        digest = self.state_digest(url, dom_elements, screenshot)
+        digest = self.state_digest(
+            url,
+            dom_elements,
+            screenshot,
+            terminal_output=terminal_output,
+            text_digest=text_digest,
+        )
         action = _action_key(last_action)
         selector = action[1]
         if selector:
@@ -465,7 +482,8 @@ class NoProgressDetector:
         first = self._prev_digest is None
         unchanged = (not first) and digest == self._prev_digest
         self._prev_digest = digest
-        self._history.append((url, action))
+        modality_digest = digest[2] if terminal_output or text_digest else ""
+        self._history.append((url, modality_digest, action))
         self._history = self._history[-4:]
 
         if unchanged:

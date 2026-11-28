@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import inspect
 import json
+import re
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -48,6 +50,7 @@ from openadapt.transducer_obligations import (
     build_micro_handoff,
     compile_obligations_from_spec,
     evaluate_readback_with_completeness,
+    is_multi_record_list_view,
     mark_drafted_from_action,
     merge_obligations_from_document,
 )
@@ -189,6 +192,7 @@ class V3EpisodeState:
     container_baseline: dict[str, str] | None = None
     os_probes: list[Any] = field(default_factory=list)
     container_violated: bool = False
+    modal_hint_step: int | None = None
 
 
 class TransducerV3Hooks:
@@ -259,10 +263,52 @@ class TransducerV3Hooks:
             self._check_container_after_step(state, observation, ep)
         ep.egress_handled = self.handles_egress(observation, task)
         raw_obs = _get(observation, "raw_observation")
-        doc = raw_obs.get("document_text") if isinstance(raw_obs, Mapping) else None
+        doc = _get(raw_obs, "document_text")
         if isinstance(doc, str) and doc.strip() and doc not in ep.intake_docs:
-            ep.intake_docs.append(doc)
-            ep.obligations = merge_obligations_from_document(ep.obligations, doc)
+            if not is_multi_record_list_view(doc):
+                ep.intake_docs.append(doc)
+            ep.obligations = merge_obligations_from_document(
+                ep.obligations, doc, task_instruction=self._instruction(state, task)
+            )
+        self._modal_focus_hint(state, ep, observation, raw_obs)
+
+    def _modal_focus_hint(
+        self, state: EpisodeState, ep: V3EpisodeState, observation: Any, raw_obs: Any
+    ) -> None:
+        controls = _get(raw_obs, "modal_controls")
+        error = str(
+            _get(raw_obs, "last_error") or _get(observation, "last_error") or ""
+        ).lower()
+        modal_open = (
+            _get(raw_obs, "modal_open") is True
+            or controls
+            or "modal" in error
+            or "dialog" in error
+        )
+        blocked = re.search(r"pointer[ -]events?|timeout|timed out", error) is not None
+        if _get(raw_obs, "open_modal_with_inputs") is not True and not (
+            modal_open and blocked
+        ):
+            return
+        with state._lock:
+            if ep.modal_hint_step == state.step_count:
+                return
+            ep.modal_hint_step = state.step_count
+        hint = (
+            "MODAL_FOCUS_HINT: A modal dialog is open and background elements are "
+            "occluded. Use the controls inside the dialog to finish or dismiss it."
+        )
+        if controls:
+            if isinstance(controls, Sequence) and not isinstance(controls, str):
+                controls = ", ".join(str(control) for control in controls)
+            hint += f" Modal controls: {controls}."
+        self.owner._deliver_intervention(
+            state,
+            kind="MODAL_FOCUS_HINT",
+            hint=hint,
+            delta_note="modal_focus",
+            fast_forward_obs=observation,
+        )
 
     def _start(self, state: EpisodeState, task: Any, ep: V3EpisodeState) -> None:
         ep.started = True
@@ -325,48 +371,59 @@ class TransducerV3Hooks:
         history: Sequence[Any] | None,
     ) -> Any:
         """Validate a whole ``fill_form`` plan before any field is written."""
-        raw = _raw(action)
-        spec = raw.get("form_plan")
-        fields = spec.get("fields") if isinstance(spec, Mapping) else None
-        fields = fields or raw.get("fields")
-        if not isinstance(fields, Sequence) or isinstance(fields, str):
-            return action
-        plan = FormSubmitPlan(
-            fields=[
-                FormFieldWrite(
-                    selector=str(f.get("selector", "")),
-                    field_name=str(f.get("field_name") or f.get("name") or ""),
-                    value=str(f.get("value", "")),
-                    exact_code=bool(f.get("exact_code", False)),
+        ep = self.ep(state)
+        for attempt in range(2):
+            if _type(action) != "fill_form":
+                return self.shell_gate(state, action, observation, task, history)
+            raw = _raw(action)
+            spec = raw.get("form_plan")
+            if not isinstance(spec, Mapping):
+                spec = {}
+            fields = spec.get("fields", raw.get("fields"))
+            if (
+                not isinstance(fields, Sequence)
+                or isinstance(fields, (str, bytes))
+                or not all(isinstance(write, Mapping) for write in fields)
+            ):
+                fields = ()
+            plan = FormSubmitPlan(
+                fields=[
+                    FormFieldWrite(
+                        selector=str(write.get("selector") or ""),
+                        field_name=str(
+                            write.get("field_name") or write.get("name") or ""
+                        ),
+                        value=str(write["value"])
+                        if write.get("value") is not None
+                        else "",
+                        exact_code=bool(write.get("exact_code", False)),
+                    )
+                    for write in fields
+                ],
+                submit_selector=str(spec.get("submit_selector") or ""),
+            )
+            res = validate_form_plan(
+                plan, pinned_entities=self.owner.pinned, required_obligations=()
+            )
+            if res.ok:
+                for fw in plan.fields:
+                    mark_drafted_from_action(ep.obligations, fw.value)
+                return action
+            if attempt == 0:
+                self.owner._deliver_intervention(
+                    state,
+                    kind="TRAP_REPAIR_HINT",
+                    hint=f"TRAP_REPAIR_HINT (FORM_PLAN_INVALID): {res.reason}",
+                    delta_note="form_plan_invalid",
+                    fast_forward_obs=observation,
                 )
-                for f in fields
-                if isinstance(f, Mapping)
-            ],
-            submit_selector=str(
-                (spec or {}).get("submit_selector", "")
-                if isinstance(spec, Mapping)
-                else ""
-            ),
-        )
-        res = validate_form_plan(
-            plan,
-            pinned_entities=self.owner.pinned,
-            required_obligations=self.ep(state).obligations,
-        )
-        if res.ok:
-            return action
-        self.owner._deliver_intervention(
+                action = self.owner._call_inner_act(observation, task, history)
+        return self.owner._abstain_action(
             state,
-            kind="TRAP_REPAIR_HINT",
-            hint=(
-                f"TRAP_REPAIR_HINT (FORM_PLAN_INVALID): {res.reason} "
-                f"Missing: {res.missing_fields}. Mismatched: {res.mismatched_fields}. "
-                f"Blank: {res.blank_fields}."
-            ),
-            delta_note="form_plan_invalid",
-            fast_forward_obs=observation,
+            trap_code="FORM_PLAN_INVALID",
+            reason=res.reason,
+            commit_index=state.next_commit_index,
         )
-        return self.owner._call_inner_act(observation, task, history)
 
     def _check_oracle_after_step(
         self, state: EpisodeState, observation: Any, ep: V3EpisodeState
@@ -505,7 +562,27 @@ class TransducerV3Hooks:
         raw_obs = _get(observation, "raw_observation")
         dom = raw_obs.get("dom_elements") if isinstance(raw_obs, Mapping) else None
         shot = _get(observation, "screenshot")
-        plan = ep.detector.observe_step(
+        observe_step = ep.detector.observe_step
+        try:
+            params = inspect.signature(observe_step).parameters
+        except (TypeError, ValueError):
+            params = {}
+        accepts_kwargs = any(
+            p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()
+        )
+        keyword_names = {
+            p.name
+            for p in params.values()
+            if p.kind
+            in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+        }
+        optional_inputs = {
+            name: value
+            for name in ("terminal_output", "text_digest")
+            if (accepts_kwargs or name in keyword_names)
+            and (value := _get(raw_obs, name, _get(observation, name))) is not None
+        }
+        plan = observe_step(
             str(_get(observation, "url", "") or ""),
             dom,
             shot if isinstance(shot, bytes) else None,
@@ -516,6 +593,7 @@ class TransducerV3Hooks:
                 ),
                 "value": str(_get(action, "text") or raw.get("value") or ""),
             },
+            **optional_inputs,
         )
         if plan is not None and plan.is_stalled:
             self._on_stall(state, observation, ep, plan)

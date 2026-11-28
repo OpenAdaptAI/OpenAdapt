@@ -10,6 +10,7 @@ from openadapt.transducer_obligations import (
     compile_obligations_from_spec,
     diff_readback_against_obligations,
     evaluate_readback_with_completeness,
+    is_multi_record_list_view,
     mark_drafted_from_action,
     merge_obligations_from_document,
 )
@@ -151,6 +152,52 @@ def test_merge_dedups_and_preserves_status():
     assert len(refs) == 1 and refs[0].status is ObligationStatus.DRAFTED
     again = merge_obligations_from_document(merged, DOC)
     assert len(again) == len(merged)
+
+
+@pytest.mark.parametrize(
+    "text, multi_record",
+    [
+        ("CLM-1 CLM-2 CLM-3 CLM-4", True),
+        ("DOC-A DOC-B DOC-C DOC-D", True),
+        ("JOB-4-A job-4-b JOB-4-C job-4-d", True),
+        ("CLM-1 CLM-2 CLM-3 clm-1 CLM-1 REF-4", False),
+        ("CLM-1 CLM-2 REF-1 REF-2 DOC-1 DOC-2", False),
+        ("follow-up follow-through follow-on follow-back", False),
+        ("", False),
+    ],
+)
+def test_worklist_cardinality_is_per_prefix_and_distinct(text, multi_record):
+    assert is_multi_record_list_view(text) is multi_record
+
+
+def test_worklist_filters_all_values_to_existing_obligations_or_task_anchors():
+    worklist = "\n".join(f"CLM-{i} | $10.00 | 2025-01-01" for i in range(1, 41))
+    existing = compile_obligations_from_spec("CLM-7")
+    existing[0].status = ObligationStatus.DRAFTED
+
+    merged = merge_obligations_from_document(
+        existing,
+        worklist,
+        structured_fields={"unrelated": "REF-42", "selected_claim": "CLM-7"},
+        task_instruction="Open clm-17 for 2025-01-01. Exclude sample CLM-3-extra.",
+    )
+
+    assert by_kind(merged) == {
+        "identifier": ["CLM-7", "CLM-17"],
+        "date": ["2025-01-01"],
+        "field": ["CLM-7"],
+    }
+    assert merged[0] is existing[0] and merged[0].status is ObligationStatus.DRAFTED
+    assert merge_obligations_from_document(existing, worklist) == existing
+    assert merge_obligations_from_document([], worklist) == []
+
+
+def test_worklist_accepts_an_anchored_id_from_an_unfamiliar_prefix():
+    merged = merge_obligations_from_document(
+        [], "DOC-A DOC-B DOC-C DOC-D", task_instruction="Review DOC-C."
+    )
+    assert by_kind(merged) == {"identifier": ["DOC-C"]}
+    assert merged[0].label == "DOC (document)"
 
 
 def test_completeness_combines_deterministic_and_narrative():

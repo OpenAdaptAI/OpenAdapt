@@ -59,6 +59,18 @@ def test_exact_code_flag_on_unknown_key():
     assert validate_form_plan(plan, pinned_entities={"Widget": "AB-1"}).ok
 
 
+def test_pinned_text_value_requires_exact_match():
+    plan = FormSubmitPlan([FormFieldWrite("#title", "Item_Title", "sample item")])
+    result = validate_form_plan(plan, pinned_entities={"Item Title": "Sample Item"})
+    assert not result.ok and result.mismatched_fields == ["Item_Title"]
+
+
+def test_blank_selector_rejected():
+    plan = FormSubmitPlan([FormFieldWrite("  ", "Note", "A note")])
+    result = validate_form_plan(plan)
+    assert not result.ok and result.problems == ["Note: empty selector"]
+
+
 def test_blank_value_rejected():
     plan = _plan()
     plan.fields[2].value = "  "
@@ -74,6 +86,39 @@ def test_missing_required_obligation():
     ]
     r = validate_form_plan(_plan(), pinned_entities=PINNED, required_obligations=obs)
     assert not r.ok and r.missing_fields == ["NPI"]
+
+
+def test_required_values_can_appear_in_any_submitted_field():
+    plan = FormSubmitPlan(
+        [
+            FormFieldWrite("#title", "Title", "Flag for FOLLOW-UP"),
+            FormFieldWrite("#ref", "REF", "Other reference"),
+            FormFieldWrite("#note", "Note", "Record updated (REF-17)."),
+        ]
+    )
+    obligations = [
+        CompiledFieldObligation("ref", "identifier", "REF (document)", "REF-17"),
+        CompiledFieldObligation("phrase", "phrase", "Summary", "follow-up", False),
+    ]
+    assert validate_form_plan(plan, required_obligations=obligations).ok
+
+
+@pytest.mark.parametrize("wrong_value", ["ref-17", "REF-170", "REF-17-A", "X-REF-17"])
+def test_exact_obligation_rejects_partial_or_differently_cased_ids(wrong_value):
+    plan = FormSubmitPlan([FormFieldWrite("#note", "Note", f"See {wrong_value}.")])
+    obligation = CompiledFieldObligation(
+        "ref", "identifier", "REF (document)", "REF-17"
+    )
+    result = validate_form_plan(plan, required_obligations=[obligation])
+    assert not result.ok and result.missing_fields == ["REF (document)"]
+
+
+def test_required_obligation_with_no_expected_value_needs_named_field():
+    obligation = CompiledFieldObligation("field:note", "field", "Note", "")
+    assert validate_form_plan(_plan(), required_obligations=[obligation]).ok
+    plan = FormSubmitPlan([FormFieldWrite("#title", "Title", "Note")])
+    result = validate_form_plan(plan, required_obligations=[obligation])
+    assert not result.ok and result.missing_fields == ["Note"]
 
 
 def test_empty_plan_rejected():

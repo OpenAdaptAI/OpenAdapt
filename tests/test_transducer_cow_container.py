@@ -129,6 +129,72 @@ def test_rollback_all_keeps_allowed_new_files(env):
     assert keep.exists()
 
 
+def test_rollback_all_removes_new_directory_trees_and_restores_baseline(env):
+    tx, home, ssh, _ = env
+    project = home / "project"
+    baseline_empty = project / "empty"
+    baseline_empty.mkdir()
+    tx.begin()
+    baseline_empty.rmdir()
+    module = project / "app.py"
+    module.unlink()
+    impostor = project / "app" / "nested dir" / "child"
+    impostor.mkdir(parents=True)
+    (impostor / "payload.txt").write_text("new file")
+    (ssh / "unused\nfolder").mkdir()
+    module.mkdir()
+
+    assert tx.rollback_all() is True
+    assert module.read_text() == "print(1)\n"
+    assert baseline_empty.is_dir()
+    assert not (project / "app").exists()
+    assert not (ssh / "unused\nfolder").exists()
+    assert tx.rollback_all() is True
+
+
+def test_rollback_all_keeps_allowed_directories_and_new_parents(env):
+    tx, home, *_ = env
+    tx.begin()
+    output = home / "new" / "out"
+    output.mkdir(parents=True)
+    keep_file = output / "result.txt"
+    keep_file.write_text("result")
+    allowed_dir = output / "empty"
+    allowed_dir.mkdir()
+    unwanted = output / "discard"
+    unwanted.mkdir()
+
+    assert tx.rollback_all(allowed_write_paths=[str(keep_file), str(allowed_dir)])
+    assert keep_file.read_text() == "result"
+    assert allowed_dir.is_dir()
+    assert not unwanted.exists()
+
+
+def test_rollback_all_preserves_new_watched_root(tmp_path):
+    watched = tmp_path / "optional"
+    tx = ContainerDiffTransaction(
+        local_exec,
+        watched_roots=[str(watched)],
+        baseline_tar=str(tmp_path / "base.tar.gz"),
+    )
+    tx.begin()
+    (watched / "extra").mkdir(parents=True)
+
+    assert tx.rollback_all() is True
+    assert list(watched.iterdir()) == []
+
+
+def test_rollback_all_refuses_if_new_directory_cannot_be_removed(env):
+    tx, home, *_ = env
+    tx.begin()
+    added = home / "new"
+    added.mkdir()
+    (added / "link").symlink_to(home / "project", target_is_directory=True)
+
+    assert tx.rollback_all() is False
+    assert (home / "project" / "app.py").is_file()
+
+
 def test_rollback_all_before_begin_refuses(env):
     tx, *_ = env
     assert tx.rollback_all() is False

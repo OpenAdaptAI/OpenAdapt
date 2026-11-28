@@ -13,7 +13,7 @@ import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Iterator
 
 __all__ = [
     "CompiledFieldObligation",
@@ -27,6 +27,7 @@ __all__ = [
     "compile_obligations_from_spec",
     "diff_readback_against_obligations",
     "evaluate_readback_with_completeness",
+    "is_multi_record_list_view",
     "mark_drafted_from_action",
     "merge_obligations_from_document",
 ]
@@ -63,6 +64,9 @@ class ObligationDiffResult:
 
 _ID_RE = re.compile(
     r"\b(?:REF|CLM|PA|ORD|MRN|POL|DEN|FAX|AUTH)-[A-Za-z0-9][A-Za-z0-9-]*\b"
+)
+_STRUCTURED_ID_RE = re.compile(
+    r"(?<![\w-])([A-Za-z][A-Za-z0-9]*)-([A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)(?![\w-])"
 )
 _NPI_RE = re.compile(r"\bNPI\s*[:#]?\s*(\d{10})\b", re.IGNORECASE)
 _ISO_DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
@@ -182,21 +186,60 @@ def _ob_key(ob: CompiledFieldObligation) -> tuple[str, str]:
     return (ob.kind, _norm(ob.expected_value))
 
 
+def _structured_ids(text: str) -> Iterator[tuple[str, str]]:
+    for match in _STRUCTURED_ID_RE.finditer(text):
+        prefix, suffix = match.groups()
+        if prefix.isupper() or any(char.isdigit() for char in suffix):
+            yield prefix.upper(), match[0]
+
+
+def is_multi_record_list_view(text: str) -> bool:
+    """Identify worklists by four distinct IDs sharing one structured prefix."""
+    ids_by_prefix: dict[str, set[str]] = {}
+    for prefix, value in _structured_ids(text):
+        ids = ids_by_prefix.setdefault(prefix, set())
+        ids.add(value.lower())
+        if len(ids) >= 4:
+            return True
+    return False
+
+
 def merge_obligations_from_document(
     existing: list[CompiledFieldObligation],
     document_text: str,
     *,
     source_label: str = "document",
     structured_fields: Mapping[str, Any] | None = None,
+    task_instruction: str = "",
 ) -> list[CompiledFieldObligation]:
     """Add obligations visible in a mid-episode document to ``existing``.
 
     Existing obligations keep their status; duplicates (same kind and
     case-insensitive value) are not added. Returns a new list.
+    On worklists, only values already in scope can become obligations.
     """
     merged = list(existing)
     seen = {_ob_key(o) for o in merged}
-    for ob in compile_obligations_from_spec(document_text, structured_fields):
+    candidates = compile_obligations_from_spec(document_text, structured_fields)
+    if is_multi_record_list_view(document_text):
+        existing_values = {value for _, value in seen}
+        instruction = _norm(task_instruction)
+
+        def in_scope(value: str) -> bool:
+            value = _norm(value)
+            return bool(value) and (
+                value in existing_values
+                or re.search(rf"(?<![\w-]){re.escape(value)}(?![\w-])", instruction)
+                is not None
+            )
+
+        candidates = [ob for ob in candidates if in_scope(ob.expected_value)]
+        candidates.extend(
+            CompiledFieldObligation(f"identifier:{value}", "identifier", prefix, value)
+            for prefix, value in _structured_ids(document_text)
+            if in_scope(value)
+        )
+    for ob in candidates:
         key = _ob_key(ob)
         if key in seen:
             continue
