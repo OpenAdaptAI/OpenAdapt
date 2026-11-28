@@ -381,7 +381,11 @@ def test_a_one_time_step_is_its_own_action_an_older_runtime_refuses() -> None:
         dumped = step.model_dump(mode="json")
         assert dumped["action"] == "second_factor"
         assert dumped["action"] not in RELEASED_ACTIONS
-    assert {k.value for k in ActionKind} - RELEASED_ACTIONS == {"second_factor"}
+    assert {k.value for k in ActionKind} - RELEASED_ACTIONS == {
+        "second_factor",
+        "extract",
+        "paginate_until_eof",
+    }
     # Nothing can route a one-time step around the person: no anchor, text,
     # param, secret, API binding or effects.
     for bad in (
