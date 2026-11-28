@@ -559,6 +559,64 @@ def test_grounder_protocol_and_build_grounder_chain(
     assert fallback.calls == 1
 
 
+def test_build_grounder_orders_constellation_ahead_of_local_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ConstellationGrounder runs before LocalGroundingModel and short-circuits on hit."""
+    record_lines, sub_date, _pat_date = _subscriber_vs_patient_form()
+    constellation = capture_constellation(
+        b"record",
+        sub_date,
+        label="Date",
+        ocr_fn=lambda _png: record_lines,
+    )
+    cg = ConstellationGrounder(
+        {"click subscriber date": constellation},
+        ocr_fn=lambda _png: record_lines,
+    )
+
+    class _StubLocalModel:
+        MAY_EGRESS = False
+
+        def __init__(self, match: GrounderMatch) -> None:
+            self._match = match
+            self.locate_calls = 0
+            self.anchor_calls = 0
+
+        def locate(self, screen_png: bytes, intent: str, ocr_text: str | None = None):
+            self.locate_calls += 1
+            return self._match
+
+        def locate_anchor(self, screen_png: bytes, template_png: bytes):
+            self.anchor_calls += 1
+            return ["anchor-candidate"]
+
+    monkeypatch.setattr(OCRAnchorGrounder, "available", staticmethod(lambda: None))
+    local_match = GrounderMatch(point=(99, 99), region=(90, 90, 18, 18), confidence=0.8)
+    local_model = _StubLocalModel(local_match)
+
+    chain = build_grounder(local_model=local_model, constellation=cg)
+    assert isinstance(chain, FallbackGrounder)
+    assert chain._grounders[0] is cg
+    assert chain._grounders[1] is local_model
+    assert component_may_egress(chain) is False
+
+    # Constellation hit short-circuits before local_model (0 calls to DINOv2).
+    hit = chain.locate(b"live", "click subscriber date", ocr_text="Date")
+    assert hit is not None
+    assert _point_in_box(hit.point, sub_date)
+    assert local_model.locate_calls == 0
+
+    # Constellation miss falls back to local_model.
+    fb_hit = chain.locate(b"live", "icon-only target", ocr_text=None)
+    assert fb_hit == local_match
+    assert local_model.locate_calls == 1
+
+    # locate_anchor still delegates through to local_model.
+    assert chain.locate_anchor(b"live", b"crop") == ["anchor-candidate"]
+    assert local_model.anchor_calls == 1
+
+
 # ---------------------------------------------------------------------------
 # 5. End-to-end rendered image test with real RapidOCR (guarded)
 # ---------------------------------------------------------------------------
