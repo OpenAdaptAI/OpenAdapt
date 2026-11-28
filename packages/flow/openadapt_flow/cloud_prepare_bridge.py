@@ -158,9 +158,7 @@ def canonical_json(value: Any) -> str:
 def compute_resolution_sha256(payload: Mapping[str, Any]) -> str:
     """Compute the canonical SHA-256 hex digest over the unsigned resolution payload."""
     unsigned = {
-        key: val
-        for key, val in payload.items()
-        if key not in _DIGEST_ENVELOPE_KEYS
+        key: val for key, val in payload.items() if key not in _DIGEST_ENVELOPE_KEYS
     }
     return hashlib.sha256(canonical_json(unsigned).encode("utf-8")).hexdigest()
 
@@ -171,7 +169,9 @@ def verify_resolution_digest(payload: Mapping[str, Any]) -> str | None:
     Returns the verified hex digest, or ``None`` if neither digest field is present.
     Raises ``ValueError`` when a digest or signature preview does not match.
     """
-    has_payload_sha = "payload_sha256" in payload and payload["payload_sha256"] is not None
+    has_payload_sha = (
+        "payload_sha256" in payload and payload["payload_sha256"] is not None
+    )
     has_digest_sha = "digest_sha256" in payload and payload["digest_sha256"] is not None
     if not has_payload_sha and not has_digest_sha:
         return None
@@ -181,7 +181,9 @@ def verify_resolution_digest(payload: Mapping[str, Any]) -> str | None:
     if has_payload_sha:
         claimed = payload["payload_sha256"]
         if not isinstance(claimed, str) or not claimed.strip():
-            raise ValueError("Resolution payload_sha256 must be a non-empty hex string.")
+            raise ValueError(
+                "Resolution payload_sha256 must be a non-empty hex string."
+            )
         if not hmac.compare_digest(claimed.strip().lower(), recomputed):
             raise ValueError(
                 "Resolution payload_sha256 digest mismatch; payload may have been tampered with."
@@ -266,9 +268,7 @@ def form_halt_to_prepare_card(
         raise ValueError("portal_origin must be a non-empty string.")
     parsed_origin = urllib.parse.urlsplit(clean_origin)
     if parsed_origin.username or parsed_origin.password:
-        raise ZeroPhiViolationError(
-            "Refused credentials embedded in portal_origin."
-        )
+        raise ZeroPhiViolationError("Refused credentials embedded in portal_origin.")
 
     if (
         is_secret_key_name(halt.dossier_key)
@@ -392,7 +392,11 @@ def _extract_bound_slot_value(
                     return text
 
         sorted_items = sorted(
-            ((int(k), str(v).strip()) for k, v in mapping.items() if str(k).lstrip("-").isdigit()),
+            (
+                (int(k), str(v).strip())
+                for k, v in mapping.items()
+                if str(k).lstrip("-").isdigit()
+            ),
             key=lambda pair: pair[0],
         )
         for _, text in sorted_items:
@@ -704,7 +708,10 @@ class CloudPrepareClient:
             bound = CopilotBoundDecision(binding=binding, decision=decision)
 
             def _default_validate(item: CopilotBoundDecision) -> None:
-                if item.binding != binding or item.binding.expires_at_unix <= time.time():
+                if (
+                    item.binding != binding
+                    or item.binding.expires_at_unix <= time.time()
+                ):
                     raise ValueError(
                         "Cloud Prepare decision does not match an active run binding."
                     )
