@@ -120,6 +120,32 @@ def __getattr__(name: str):
                 "Install with: pip install openadapt-kernel"
             )
 
+    # Lightweight 2-line Python SDK wrapper (stdlib-only at import time)
+    if name in (
+        "wrap",
+        "WrapResult",
+        "WrapReceipt",
+        "WrapError",
+        "WrapBlockedError",
+        "WrapVerificationError",
+        "WrapLedger",
+        "WrapOutcome",
+        "verify_wrap_receipt",
+    ):
+        from openadapt.wrap_sdk import (  # noqa: F401
+            WrapBlockedError,
+            WrapError,
+            WrapLedger,
+            WrapOutcome,
+            WrapReceipt,
+            WrapResult,
+            WrapVerificationError,
+            verify_wrap_receipt,
+            wrap,
+        )
+
+        return locals()[name]
+
     # Demo library lives in openadapt-evals
     if name == "DemoLibrary":
         try:
@@ -137,6 +163,16 @@ def __getattr__(name: str):
 
 __all__ = [
     "__version__",
+    # 2-line Python SDK wrapper
+    "wrap",
+    "WrapResult",
+    "WrapReceipt",
+    "WrapError",
+    "WrapBlockedError",
+    "WrapVerificationError",
+    "WrapLedger",
+    "WrapOutcome",
+    "verify_wrap_receipt",
     # From kernel (canonical runtime)
     "CommitInterceptor",
     "ObligationLedger",
