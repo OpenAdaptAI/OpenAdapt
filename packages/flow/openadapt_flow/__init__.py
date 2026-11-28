@@ -32,6 +32,12 @@ if TYPE_CHECKING:
         UnarmedStep,
         Workflow,
     )
+    from openadapt_flow.pixel_prepare_card import (
+        OcrWord,
+        diff_popup_region,
+        extract_pixel_prepare_card,
+        pixel_prepare_card_to_form_halt,
+    )
 
 
 def __getattr__(name: str) -> Any:
@@ -101,6 +107,22 @@ def __getattr__(name: str) -> Any:
         )
 
         return prepare_resolution_to_human_input
+    if name == "OcrWord":
+        from openadapt_flow.pixel_prepare_card import OcrWord
+
+        return OcrWord
+    if name == "diff_popup_region":
+        from openadapt_flow.pixel_prepare_card import diff_popup_region
+
+        return diff_popup_region
+    if name == "extract_pixel_prepare_card":
+        from openadapt_flow.pixel_prepare_card import extract_pixel_prepare_card
+
+        return extract_pixel_prepare_card
+    if name == "pixel_prepare_card_to_form_halt":
+        from openadapt_flow.pixel_prepare_card import pixel_prepare_card_to_form_halt
+
+        return pixel_prepare_card_to_form_halt
     # Importing the package used to load ``ir`` and the modules it imports, so
     # these submodules were attributes of the package with no import of their
     # own. Keep that working: each loads on first access. ``import a.b as c``
@@ -221,6 +243,7 @@ __all__ = [
     "CloudPrepareClient",
     "HealEvent",
     "Landmark",
+    "OcrWord",
     "Postcondition",
     "PostconditionKind",
     "Resolution",
@@ -229,7 +252,10 @@ __all__ = [
     "StepResult",
     "UnarmedStep",
     "Workflow",
+    "diff_popup_region",
+    "extract_pixel_prepare_card",
     "form_halt_to_prepare_card",
+    "pixel_prepare_card_to_form_halt",
     "prepare_resolution_to_human_input",
 ]
 
