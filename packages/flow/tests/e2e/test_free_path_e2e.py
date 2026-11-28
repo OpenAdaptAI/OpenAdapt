@@ -238,10 +238,14 @@ def test_demo_replay_still_cannot_reach_verified(
 ) -> None:
     """The Demo profile was not loosened to make the tutorial verify.
 
-    ``replay`` runs the same bundle with ``require_effect_contracts=False`` and
-    no independent verifier.  Faced with a declared consequential effect it
-    cannot check, it HALTS rather than guessing -- and in no case reports
-    ``VERIFIED``.  ``report-run`` must still refuse the result.
+    ``replay --demo-app`` wires the bundled MockMed effect verifier so the
+    tutorial bundle completes and confirms its writes against ``/api/db``, but
+    under the Demo profile it still ends ``COMPLETED_UNVERIFIED`` (never
+    ``VERIFIED``) and ``report-run`` still refuses to emit a receipt.
+
+    Without an independent verifier (for example ``replay --url`` with no
+    ``--effects-kind``), faced with a declared consequential effect it cannot
+    check, ``replay`` still HALTS rather than guessing.
     """
 
     run_dir = tmp_path / "demo-run"
@@ -255,17 +259,41 @@ def test_demo_replay_still_cannot_reach_verified(
                 str(run_dir),
             ]
         )
-        == 1
+        == 0
     )
     report = _report(run_dir)
     assert report.execution_profile == "demo"
     assert report.execution_outcome != "VERIFIED"
-    assert report.execution_outcome == "HALTED"
+    assert report.execution_outcome == "COMPLETED_UNVERIFIED"
     assert report.transaction_billable is not True
 
     receipt_dir = tmp_path / "refused"
     assert cli_main(["report-run", str(run_dir), "--receipt", str(receipt_dir)]) == 0
     assert not receipt_dir.exists(), "a non-VERIFIED run emitted a receipt"
+
+    # Without an EffectVerifier, replay still HALTS on declared effects.
+    base_url, _db, stop = serve()
+    try:
+        unverified_run_dir = tmp_path / "no-verifier-run"
+        assert (
+            cli_main(
+                [
+                    "replay",
+                    str(free_path.bundle_dir),
+                    "--url",
+                    f"{base_url.rstrip('/')}/?fault=ok&idempotency=demo#tasks",
+                    "--run-dir",
+                    str(unverified_run_dir),
+                ]
+            )
+            == 1
+        )
+    finally:
+        stop()
+    halted_report = _report(unverified_run_dir)
+    assert halted_report.execution_profile == "demo"
+    assert halted_report.execution_outcome == "HALTED"
+    assert halted_report.transaction_billable is not True
 
 
 @pytest.fixture(scope="module")
