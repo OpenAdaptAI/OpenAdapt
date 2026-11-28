@@ -13,6 +13,11 @@ __version__ = "4.0.1"
 from openadapt_flow import no_outbound as _no_outbound
 
 if TYPE_CHECKING:
+    from openadapt_flow.cloud_prepare_bridge import (
+        CloudPrepareClient,
+        form_halt_to_prepare_card,
+        prepare_resolution_to_human_input,
+    )
     from openadapt_flow.ir import (
         ActionKind,
         Anchor,
@@ -82,6 +87,20 @@ def __getattr__(name: str) -> Any:
         from openadapt_flow.ir import Workflow
 
         return Workflow
+    if name == "CloudPrepareClient":
+        from openadapt_flow.cloud_prepare_bridge import CloudPrepareClient
+
+        return CloudPrepareClient
+    if name == "form_halt_to_prepare_card":
+        from openadapt_flow.cloud_prepare_bridge import form_halt_to_prepare_card
+
+        return form_halt_to_prepare_card
+    if name == "prepare_resolution_to_human_input":
+        from openadapt_flow.cloud_prepare_bridge import (
+            prepare_resolution_to_human_input,
+        )
+
+        return prepare_resolution_to_human_input
     # Importing the package used to load ``ir`` and the modules it imports, so
     # these submodules were attributes of the package with no import of their
     # own. Keep that working: each loads on first access. ``import a.b as c``
@@ -199,6 +218,7 @@ def __getattr__(name: str) -> Any:
 __all__ = [
     "ActionKind",
     "Anchor",
+    "CloudPrepareClient",
     "HealEvent",
     "Landmark",
     "Postcondition",
@@ -209,6 +229,8 @@ __all__ = [
     "StepResult",
     "UnarmedStep",
     "Workflow",
+    "form_halt_to_prepare_card",
+    "prepare_resolution_to_human_input",
 ]
 
 _no_outbound.enforce_from_env()
