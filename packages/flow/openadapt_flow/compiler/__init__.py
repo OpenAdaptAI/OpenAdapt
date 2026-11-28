@@ -44,6 +44,14 @@ from openadapt_flow.compiler.induction import (
     structural_trace_coverage,
     validate_held_out,
 )
+from openadapt_flow.compiler.living_program import (
+    GuardedBranch,
+    LivingBranchTable,
+    PruningReport,
+    match_branch,
+    prune_coincidences_from_two_runs,
+    splice_prepare_branch,
+)
 from openadapt_flow.compiler.loop_authoring import (
     LoopAuthoringError,
     author_data_driven_loop,
@@ -146,4 +154,10 @@ __all__ = [
     "LazyLLMQualificationProposer",
     "collect_suggestions",
     "sanitize_recording_metadata",
+    "GuardedBranch",
+    "LivingBranchTable",
+    "PruningReport",
+    "match_branch",
+    "prune_coincidences_from_two_runs",
+    "splice_prepare_branch",
 ]
