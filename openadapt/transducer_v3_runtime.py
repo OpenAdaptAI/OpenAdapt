@@ -275,7 +275,11 @@ class TransducerV3Hooks:
         if self.container_tx is not None:
             ep.container_baseline = self.container_tx.begin()
             ep.os_probes = synthesize_probes(
-                self._instruction(state, task), baseline_files=ep.container_baseline
+                self._instruction(state, task),
+                baseline_files=ep.container_baseline,
+                watched_roots=self.container_tx.watched_roots,
+                baseline_tar=self.container_tx.baseline_tar,
+                protected_patterns=self.container_tx.protected_patterns,
             )
         raw_cfg = _get(task, "raw_config")
         fields = (
@@ -740,7 +744,10 @@ class TransducerV3Hooks:
             containers=containers,
             required_anchors=anchors,
         )
-        if report.decision is EgressDecision.REFUSE_ABSTAIN:
+        rewritten = (
+            _rewrite_payload(action, report.final_items) if report.final_items else None
+        )
+        if rewritten is None and (not report.final_items or report.stripped_items):
             ep.egress_clean = False
             return self.owner._abstain_action(
                 state,
@@ -748,7 +755,6 @@ class TransducerV3Hooks:
                 reason=f"Outbound egress refused: {report.reason}",
                 commit_index=state.next_commit_index,
             )
-        rewritten = _rewrite_payload(action, report.final_items)
         ep.egress_clean = (
             report.decision
             in (EgressDecision.ALLOW_VERIFIED, EgressDecision.STRIP_VERIFIED)

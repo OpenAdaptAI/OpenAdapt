@@ -1,3 +1,5 @@
+import pytest
+
 from openadapt.transducer_dual_egress import (
     DualStageEgressVerifier,
     EgressDecision,
@@ -27,6 +29,61 @@ def test_clean_pass():
     assert r.agreement_ratio == 1.0
 
 
+@pytest.mark.parametrize("always", [False, True])
+def test_high_confidence_kept_item_cross_check_is_opt_in(always):
+    r = DualStageEgressVerifier(
+        auditor, lambda i, p, m: False, always_cross_check=always
+    ).verify_outbound(["Q3 budget summary"], task_prompt=PROMPT, containers=BOXES)
+    if always:
+        assert r.decision is EgressDecision.ALLOW_UNVERIFIED
+        assert r.final_items == []
+        assert r.stripped_items == ["Q3 budget summary"]
+        assert r.tie_breakers_used == 1
+        assert r.agreement_ratio == 0.0
+    else:
+        assert r.decision is EgressDecision.ALLOW_VERIFIED
+        assert r.final_items == ["Q3 budget summary"]
+        assert r.tie_breakers_used == 0
+
+
+def test_cross_check_kept_item_after_later_strip():
+    r = DualStageEgressVerifier(auditor, lambda i, p, m: False).verify_outbound(
+        ["Q3 budget summary", "MRI results"], task_prompt=PROMPT, containers=BOXES
+    )
+    assert r.decision is EgressDecision.ALLOW_UNVERIFIED
+    assert r.final_items == []
+    assert r.stripped_items == ["MRI results", "Q3 budget summary"]
+    assert r.tie_breakers_used == 2
+
+
+@pytest.mark.parametrize("second_confidence", [0.5, 0.95])
+def test_cross_check_kept_and_recovered_items(second_confidence):
+    calls = []
+
+    def second(item, prompt, meta):
+        calls.append(item)
+        confidence = second_confidence if "budget" in item else 0.95
+        return ItemSphereVote(item, True, confidence)
+
+    r = DualStageEgressVerifier(auditor, second).verify_outbound(
+        ["Q3 headcount table"],
+        task_prompt=PROMPT,
+        containers=BOXES,
+        required_anchors=["budget"],
+    )
+    assert calls == ["Q3 headcount table", "Q3 budget summary"]
+    assert r.tie_breakers_used == 2
+    if second_confidence < 0.8:
+        assert r.decision is EgressDecision.ALLOW_UNVERIFIED
+        assert r.final_items == ["Q3 headcount table"]
+        assert r.recovered_items == []
+        assert r.agreement_ratio == 0.5
+    else:
+        assert r.decision is EgressDecision.ALLOW_VERIFIED
+        assert r.recovered_items == ["Q3 budget summary"]
+        assert r.agreement_ratio == 1.0
+
+
 def test_bool_auditor():
     r = DualStageEgressVerifier(lambda i, p, m: True).verify_outbound(
         ["x"], task_prompt=PROMPT
@@ -54,7 +111,7 @@ def test_provenance_conflict_without_tiebreaker_strips():
 def test_low_confidence_tiebreaker_resolves():
     low = lambda i, p, m: {"allow": True, "confidence": 0.5}  # noqa: E731
     tb = lambda i, p, m: ItemSphereVote(i, True, 0.9)  # noqa: E731
-    r = DualStageEgressVerifier(low, tb).verify_outbound(
+    r = DualStageEgressVerifier(low, tb, always_cross_check=True).verify_outbound(
         ["Q3 budget summary"], task_prompt=PROMPT
     )
     assert r.decision is EgressDecision.ALLOW_VERIFIED

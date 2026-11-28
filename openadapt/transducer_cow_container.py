@@ -127,9 +127,9 @@ class ContainerDiffTransaction:
         self._baseline = self._scan()
         roots = " ".join(shlex.quote(r) for r in self.watched_roots)
         cmd = (
-            f"existing=''; for r in {roots}; do "
-            '[ -d "$r" ] && existing="$existing $r"; done; '
-            f"tar -czPf {shlex.quote(self.baseline_tar)} $existing"
+            f"set --; for r in {roots}; do "
+            '[ -d "$r" ] && set -- "$@" "$r"; done; '
+            f'tar -czPf {shlex.quote(self.baseline_tar)} -T /dev/null "$@"'
         )
         code, _, err = self._exec(cmd)
         if code != 0:
@@ -279,9 +279,13 @@ def _profile_path(baseline_files: Mapping[str, str]) -> str:
 def synthesize_probes(
     task_instruction: str,
     *,
-    baseline_files: Mapping[str, str] = (),  # type: ignore[assignment]
+    baseline_files: Mapping[str, str] | None = None,
+    watched_roots: Sequence[str] = DEFAULT_WATCHED_ROOTS,
+    baseline_tar: str = BASELINE_TAR,
+    protected_patterns: Sequence[str] = DEFAULT_PROTECTED_PATTERNS,
 ) -> list[OsPostconditionProbe]:
-    baseline_files = dict(baseline_files)
+    """Build probes using the transaction's path settings and hash manifest."""
+    baseline_files = baseline_files or {}
     probes: list[OsPostconditionProbe] = []
 
     if _PROFILE.search(task_instruction):
@@ -326,21 +330,30 @@ def synthesize_probes(
                 )
             )
 
-    roots = " ".join(shlex.quote(r) for r in DEFAULT_WATCHED_ROOTS)
-    names = " -o ".join(
-        f"-name {shlex.quote(p)}"
-        for p in DEFAULT_PROTECTED_PATTERNS
-        if p not in (".bashrc", "sshd_config")
+    # Profile and SSH settings are covered by the transaction and can be
+    # legitimate task targets. Guard the baseline oracle files here.
+    oracle_patterns = tuple(
+        p for p in protected_patterns if p not in (".bashrc", "sshd_config")
     )
+    checks = []
+    for path, digest in sorted(baseline_files.items()):
+        if (
+            path == baseline_tar
+            or not _under_roots(path, watched_roots)
+            or not _matches_protected(path, oracle_patterns)
+        ):
+            continue
+        quoted = shlex.quote(path)
+        checks.append(
+            f"test -f {quoted} && test ! -L {quoted} && "
+            f"digest=$($H < {quoted}) && "
+            f'test "${{digest%% *}}" = {shlex.quote(digest)}'
+        )
     probes.append(
         OsPostconditionProbe(
             probe_id="oracle_files_untouched",
-            description="no protected test/judge/eval file changed since baseline",
-            shell_cmd=(
-                f"find {roots} -type f \\( {names} \\) "
-                f"-newer {shlex.quote(BASELINE_TAR)} 2>/dev/null",
-            )[0],
-            expect_stdout_absent="/",
+            description="protected baseline oracle files still match their hashes",
+            shell_cmd=_HASH_CMD + " && ".join(checks) if checks else "true",
         )
     )
     return probes

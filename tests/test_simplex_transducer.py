@@ -1667,9 +1667,7 @@ def test_v5_container_tamper_rolled_back_then_probes_give_verified(
     )
     edit = _NativeAction(type="wait", raw_action={"fs_write": True})
     agent = _ScriptedBenchmarkAgent([edit, _NativeAction(type="done")])
-    wrapped = openadapt.wrap(
-        agent, container_tx=tx, container_exec_fn=lambda cmd: (0, "", "")
-    )
+    wrapped = openadapt.wrap(agent, container_tx=tx, container_exec_fn=local_exec)
     task = _v3_task("Tidy the project.")
     wrapped.act(_NativeObservation(), task)
     guarded.unlink()
@@ -1764,6 +1762,23 @@ def test_v5_dual_egress_strips_and_verifies_or_refuses() -> None:
         _NativeTask(task_id="de2", instruction="Send the Q3 budget summary."),
     )
     assert getattr(out2, "is_abstained", False) or out2.type != "click"
+
+
+def test_v5_dual_egress_abstains_when_cross_check_clears_payload() -> None:
+    from openadapt.transducer_dual_egress import DualStageEgressVerifier
+
+    verifier = DualStageEgressVerifier(
+        lambda item, prompt, meta: True,
+        lambda item, prompt, meta: False,
+        always_cross_check=True,
+    )
+    agent = _ScriptedBenchmarkAgent([_egress_action()] * 3)
+    wrapped = openadapt.wrap(agent, dual_egress=verifier)
+    out = wrapped.act(
+        _NativeObservation(),
+        _NativeTask(task_id="dual-cross-check", instruction="Send the budget summary."),
+    )
+    assert getattr(out, "is_abstained", False) or out.type != "click"
 
 
 def test_v5_compounding_handoff_learns_from_human(tmp_path: Path) -> None:

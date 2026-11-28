@@ -198,24 +198,57 @@ def test_permission_probe(tmp_path):
     assert not run_probes(perm, local_exec).all_passed
 
 
-def test_oracle_probe_always_present_and_detects_edit(env):
-    tx, home, ssh, tar = env
-    probes = synthesize_probes("Do something unrelated")
-    assert [p.probe_id for p in probes] == ["oracle_files_untouched"]
-    tx.begin()
-    # probe uses default roots; rewrite it to the temp roots and temp tar.
-    p = probes[0]
-    cmd = p.shell_cmd.replace("/home/user", str(home)).replace("/etc/ssh", str(ssh))
-    cmd = cmd.replace("/tmp/.oa_cow_baseline.tar.gz", str(tar))
-    probe = OsPostconditionProbe(
-        p.probe_id, p.description, cmd, expect_stdout_absent=p.expect_stdout_absent
+@pytest.mark.parametrize("change", ["edit", "delete"])
+def test_oracle_probe_checks_baseline_contents(tmp_path, change):
+    home = tmp_path / "custom home"
+    home.mkdir()
+    guarded = home / "test_app.py"
+    guarded.write_text("def test(): pass\n")
+    optional = tmp_path / "optional"
+    tx = ContainerDiffTransaction(
+        local_exec,
+        watched_roots=[str(home) + "/", str(optional)],
+        baseline_tar=str(tmp_path / "custom archive.tar.gz"),
     )
-    assert run_probes([probe], local_exec).all_passed
-    import time
+    baseline = tx.begin()
+    assert str(guarded) in baseline
+    probes = synthesize_probes(
+        "Tidy the project.",
+        baseline_files=baseline,
+        watched_roots=tx.watched_roots,
+        baseline_tar=tx.baseline_tar,
+    )
+    assert [p.probe_id for p in probes] == ["oracle_files_untouched"]
+    assert run_probes(probes, local_exec).all_passed
 
-    time.sleep(1.1)
-    (home / "project" / "test_app.py").write_text("assert True")
-    assert not run_probes([probe], local_exec).all_passed
+    # The archive and optional root are unnecessary for checking file contents.
+    Path(tx.baseline_tar).unlink()
+    guarded.touch()
+    (home / "test_new.py").write_text("assert True\n")
+    assert run_probes(probes, local_exec).all_passed
+
+    if change == "edit":
+        guarded.write_text("assert True\n")
+    else:
+        guarded.unlink()
+    assert not run_probes(probes, local_exec).all_passed
+
+
+def test_oracle_probe_with_all_optional_roots_missing(tmp_path):
+    tx = ContainerDiffTransaction(
+        local_exec,
+        watched_roots=[str(tmp_path / "optional")],
+        baseline_tar=str(tmp_path / "base.tar.gz"),
+    )
+    baseline = tx.begin()
+    assert baseline == {}
+    probes = synthesize_probes(
+        "Tidy the project.",
+        baseline_files=baseline,
+        watched_roots=tx.watched_roots,
+        baseline_tar=tx.baseline_tar,
+    )
+    assert run_probes(probes, lambda cmd: (0, "", "tar: warning")).all_passed
 
 
 def test_run_probes_empty_refuses():

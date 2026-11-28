@@ -4,8 +4,9 @@ Stage 1 asks an auditor whether each outbound item belongs to the same
 recipient sphere as the task. Unsure or conflicting items go to an optional
 tie-breaker; anything still unsure or denied is stripped.
 Stage 2 recovers required in-scope items the executor left out, only if the
-auditor approves them. Stage 3 picks the decision: a verified decision needs
-every kept item approved at or above the confidence threshold.
+auditor approves them. An attached tie-breaker also checks kept items after
+stripping or recovery, or on every call when ``always_cross_check`` is enabled.
+Stage 3 picks the decision based on auditor agreement and anchor coverage.
 
 ``containers`` maps container name to a list of item strings. Two metadata
 keys are read from it: ``recipient_hint`` (str) and ``in_scope_containers``
@@ -76,11 +77,13 @@ class DualStageEgressVerifier:
         tie_breaker_auditor: Auditor | None = None,
         completeness_checker: Completeness | None = None,
         conformal_threshold: float = 0.80,
+        always_cross_check: bool = False,
     ) -> None:
         self.sphere_auditor = sphere_auditor
         self.tie_breaker_auditor = tie_breaker_auditor
         self.completeness_checker = completeness_checker
         self.conformal_threshold = conformal_threshold
+        self.always_cross_check = always_cross_check
 
     def _ask(
         self, auditor: Auditor, item: str, task_prompt: str, meta: Mapping[str, Any]
@@ -120,6 +123,7 @@ class DualStageEgressVerifier:
         weak_kept = False
         tie_used = 0
         audited = 0
+        checked: set[int] = set()
 
         for item in candidate_items:
             audited += 1
@@ -131,6 +135,7 @@ class DualStageEgressVerifier:
                 tie_used += 1
                 second = self._ask(self.tie_breaker_auditor, item, task_prompt, meta)
                 if second.allow and second.confidence >= thr and vote.allow:
+                    checked.add(len(final))
                     final.append(item)
                     confident += 1
                 else:
@@ -183,10 +188,29 @@ class DualStageEgressVerifier:
                 final.append(cand)
                 recovered.append(cand)
                 confident += 1
+
+        total = audited + len(recovered)
+        cross_check_failed = False
+        tie_breaker = self.tie_breaker_auditor
+        if tie_breaker is not None and (
+            self.always_cross_check or stripped or recovered
+        ):
+            confirmed: list[str] = []
+            for index, item in enumerate(final):
+                if index not in checked:
+                    tie_used += 1
+                    second = self._ask(tie_breaker, item, task_prompt, meta_for(item))
+                    if not (second.allow and second.confidence >= thr):
+                        stripped.append(item)
+                        confident -= 1
+                        cross_check_failed = True
+                        continue
+                confirmed.append(item)
+            final = confirmed
+            recovered = [item for item in recovered if item in final]
         missing = [a for a in anchors if anchor_missing(a)]
 
         # Stage 3: decision.
-        total = audited + len(recovered)
         ratio = confident / total if total else 0.0
         common = dict(
             final_items=final,
@@ -195,12 +219,14 @@ class DualStageEgressVerifier:
             tie_breakers_used=tie_used,
             agreement_ratio=ratio,
         )
-        if not final:
+        if not final and not cross_check_failed:
             return DualEgressReport(
                 EgressDecision.REFUSE_ABSTAIN, reason="no items left to send", **common
             )
-        if weak_kept or missing:
+        if weak_kept or missing or cross_check_failed:
             why = []
+            if cross_check_failed:
+                why.append("kept items lacked independent approval")
             if weak_kept:
                 why.append("kept item below confidence threshold")
             if missing:
