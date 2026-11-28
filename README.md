@@ -34,6 +34,22 @@ brew install openadaptai/tap/openadapt
 
 For browser workflows with zero CLI setup, install the 1-click Chrome extension: **[OpenAdapt Co-Pilot on the Chrome Web Store](https://chromewebstore.google.com/detail/openadapt-co-pilot/bcpliibliddclnibacbjbmbpgffkjefd)**.
 
+### Wrap Any Python Agent or Tool in 2 Lines
+
+Add pinned record checks, duplicate-submit protection on uncertain writes, same-screen verification, and SHA-256 or Ed25519 receipts to any Python function, Playwright helper, MCP tool, or agent with zero YAML files:
+
+```python
+import openadapt
+
+safe_save = openadapt.wrap(
+    save_chart_note,
+    pinned={"patient_id": "PT-104"},
+    check=lambda out, *a, **kw: out.get("saved") is True,
+)
+safe_save(patient_id="PT-104", note="Follow-up scheduled")
+print(safe_save.last_receipt["outcome"], safe_save.last_receipt["checked_how"])  # confirmed same_screen
+```
+
 ### Try It in 30 Seconds
 
 Run the local smoke test against a bundled demo server (no account or API key required), or trigger a deliberate drift to inspect a halted run and its signed receipt:
